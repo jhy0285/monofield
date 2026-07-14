@@ -81,7 +81,7 @@ interface Props {
 }
 
 export function PluginMetaSections({ record, omit, compact, heading, variant = 'full' }: Props) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const [copied, setCopied] = useState(false);
 
   const manifest: PluginManifest = record.manifest ?? ({} as PluginManifest);
@@ -132,6 +132,7 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
 
   const installedLabel = formattedInstalledAt();
   const links = useMemo(() => derivePluginSourceLinks(record), [record]);
+  const sourceLocation = useMemo(() => pluginSourceLocation(record), [record]);
   const hasAuthorBlock = Boolean(
     links.authorName || links.authorProfileUrl || links.homepageUrl,
   );
@@ -139,6 +140,7 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
   const showDescription = !omit?.description && Boolean(description);
   const showQuery = !omit?.query && Boolean(query);
   const showInputs = !omit?.inputs && inputs.length > 0;
+  const showInlineLicense = variant === 'minimal' && Boolean(manifest.license);
 
   const wrapperClass = `plugin-meta-sections${compact ? ' is-compact' : ''}`;
 
@@ -195,11 +197,24 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
                     icon="external-link"
                     testId="plugin-details-author-homepage"
                   >
-                    Homepage
+                    {t('plugins.actions.openHomepage')}
                   </ExternalLink>
                 ) : null}
               </div>
             </div>
+          </div>
+        </Section>
+      ) : null}
+
+      {showInlineLicense ? (
+        <Section title="License">
+          <div className="plugin-details-modal__license-row">
+            <code
+              className="plugin-details-modal__license-code"
+              data-testid="plugin-details-license"
+            >
+              {manifest.license}
+            </code>
           </div>
         </Section>
       ) : null}
@@ -483,7 +498,7 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
       ) : null}
 
       <Section
-        title="Source"
+        title="Installed source"
         action={
           links.contributeUrl ? (
             <a
@@ -509,7 +524,7 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
       >
         <dl className="plugin-details-modal__source">
           <div>
-            <dt>Origin</dt>
+            <dt>Install origin</dt>
             <dd>
               <span className="plugin-details-modal__source-kind">
                 {links.sourceKindLabel}
@@ -529,12 +544,14 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
               )}
             </dd>
           </div>
-          <div>
-            <dt>Path</dt>
-            <dd>
-              <code>{record.fsPath}</code>
-            </dd>
-          </div>
+          {sourceLocation ? (
+            <div>
+              <dt>{sourceLocation.label}</dt>
+              <dd>
+                <code>{sourceLocation.value}</code>
+              </dd>
+            </div>
+          ) : null}
           <div>
             <dt>Version</dt>
             <dd>
@@ -565,7 +582,7 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
           ) : null}
           {record.sourceMarketplaceId ? (
             <div>
-              <dt>Marketplace ID</dt>
+              <dt>Catalog ID</dt>
               <dd>
                 <code>{record.sourceMarketplaceId}</code>
               </dd>
@@ -704,6 +721,46 @@ function githubProfileLabel(url: string): string {
   } catch {
     return url;
   }
+}
+
+function pluginSourceLocation(record: InstalledPluginRecord): {
+  label: string;
+  value: string;
+} | null {
+  if (typeof record.sourceMarketplaceEntryName === 'string' && record.sourceMarketplaceEntryName.trim()) {
+    return {
+      label: 'Package name',
+      value: record.sourceMarketplaceEntryName.trim(),
+    };
+  }
+  if (record.sourceKind === 'bundled') {
+    return {
+      label: 'Package name',
+      value: `bundled/${record.id}`,
+    };
+  }
+  if (
+    record.sourceKind === 'github' ||
+    record.sourceKind === 'url' ||
+    record.sourceKind === 'marketplace'
+  ) {
+    return {
+      label: 'Package name',
+      value: record.source,
+    };
+  }
+  const compact = basename(record.source || record.fsPath);
+  return compact
+    ? {
+        label: 'Local folder',
+        value: compact,
+      }
+    : null;
+}
+
+function basename(value: string): string {
+  const parts = value.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] ?? value;
 }
 
 interface ConnectorListProps {

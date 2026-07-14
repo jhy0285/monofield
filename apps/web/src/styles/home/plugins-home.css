@@ -1097,7 +1097,7 @@ button.plugins-home__use-menu-item:focus-visible {
    New-user templates reveal (HomeTemplatesReveal)
    Collapsed by default for users with no projects so the hero
    composer owns the first screen; a bottom hint + upward scroll
-   gesture smoothly reveals the Community gallery.
+   gesture smoothly reveals the Template Gallery.
    ============================================================ */
 .home-templates-reveal {
   display: flex;

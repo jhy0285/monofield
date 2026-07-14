@@ -133,7 +133,7 @@ const sample: InstalledPluginRecord[] = [
   makePlugin({ id: 'hidden-atom', mode: 'prototype', tags: ['dashboard'], kind: 'atom' }),
 ];
 
-describe('PluginsHomeSection (community gallery)', () => {
+describe('PluginsHomeSection (template gallery)', () => {
   it('keeps gallery tiles free of inline Use actions — Use lives in the detail modal', () => {
     renderSection(sample, { cardLayout: 'gallery' });
 
@@ -154,11 +154,11 @@ describe('PluginsHomeSection (community gallery)', () => {
 });
 
 describe('PluginsHomeSection (category bar)', () => {
-  it('frames the home shelf as community and can jump to registry', () => {
+  it('frames the home shelf as a template gallery and can jump to the full library', () => {
     const onBrowseRegistry = vi.fn();
     renderSection(sample, { onBrowseRegistry });
 
-    expect(screen.getByText('Community')).toBeTruthy();
+    expect(screen.getByText('Template Gallery')).toBeTruthy();
     fireEvent.click(screen.getByTestId('plugins-home-browse-registry'));
     expect(onBrowseRegistry).toHaveBeenCalledTimes(1);
   });
@@ -198,7 +198,7 @@ describe('PluginsHomeSection (category bar)', () => {
     expect(screen.queryByTestId('plugins-home-row-subcategory-hyperframes')).toBeNull();
   });
 
-  it('groups Live Artifact as its own flat Community category', () => {
+  it('groups Live Artifact as its own flat example category', () => {
     renderSection();
 
     fireEvent.click(screen.getByTestId('plugins-home-pill-category-live-artifact'));
@@ -253,7 +253,7 @@ describe('PluginsHomeSection (category bar)', () => {
     expect(screen.getAllByText('瑞士国际主义 Deck').length).toBeGreaterThan(0);
     expect(screen.queryByText('Swiss International Deck')).toBeNull();
 
-    fireEvent.change(screen.getByPlaceholderText('搜索插件…'), {
+    fireEvent.change(screen.getByPlaceholderText('搜索模板…'), {
       target: { value: '瑞士' },
     });
     expect(pluginIds()).toEqual(['localized-deck']);
@@ -269,7 +269,7 @@ describe('PluginsHomeSection (category bar)', () => {
     fireEvent.click(screen.getByTestId('plugins-home-pill-subcategory-video-data-explainers'));
 
     expect(screen.queryByRole('list')).toBeNull();
-    expect(screen.getByText(/No plugins match the current filters/i)).toBeTruthy();
+    expect(screen.getByText(/No templates match the current filters/i)).toBeTruthy();
     expect(screen.queryByTestId('plugins-home-contribution-card')).toBeNull();
   });
 

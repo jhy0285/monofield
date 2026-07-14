@@ -29,6 +29,7 @@ const ALLOWED_KINDS = new Set<string>([
   'code-snippet',
   'mini-app',
   'design-system',
+  'screen-spec',
 ]);
 
 const ALLOWED_RENDERERS = new Set<string>([
@@ -41,6 +42,7 @@ const ALLOWED_RENDERERS = new Set<string>([
   'code',
   'mini-app',
   'design-system',
+  'screen-spec',
 ]);
 
 const ALLOWED_EXPORTS = new Set<string>(['html', 'pdf', 'zip', 'jsx', 'md', 'svg', 'txt']);

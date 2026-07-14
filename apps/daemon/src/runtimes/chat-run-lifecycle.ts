@@ -1,6 +1,14 @@
 const DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
 const MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 24 * 60 * 60 * 1000;
-const DEFAULT_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS = 60 * 1000;
+// Post-artifact quiet window. Was 60s, which was too aggressive for the
+// interactive doc flows: an interface/screen-spec run that registers an
+// artifact and then pauses to ask the user a `<question-form>` (or is still
+// streaming a long form) could be SIGTERM'd mid-question. Raised to 10 min so
+// no timeout window is shorter than the base inactivity window. The
+// question-form watchdog pause (server.ts) still gives unlimited time once a
+// fully-rendered form is detected; this covers the streaming/pre-form gap.
+// Override with OD_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS.
+const DEFAULT_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS = 10 * 60 * 1000;
 
 export function assertValidRuntimeDefInactivityTimeoutMs(agentDefault?: number): void {
   if (agentDefault === undefined) return;

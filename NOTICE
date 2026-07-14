@@ -4,8 +4,16 @@ Open Docs started from Open Design:
 
   https://github.com/nexu-io/open-design
 
+Upstream base: commit 29b138f7a3e13ca3dbd1c1905796e57956406ef2
+(nexu-io/open-design, 2026-06-25). Open Docs modifications begin with the
+commits that follow it in this repository's history (2026-07-02 onward).
+
 Open Design is licensed under the Apache License, Version 2.0.
 The original license text is retained in LICENSE.
+
+Bundled third-party templates, plugins, and skills carry their own licenses;
+see THIRD_PARTY_NOTICES.md and the LICENSE file inside each component
+directory.
 
 This repository contains modifications that shift the product direction from
 agent-native design artifact generation toward local-first document

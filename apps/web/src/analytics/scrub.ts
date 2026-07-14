@@ -1,19 +1,11 @@
-// Single point of privacy scrubbing for outgoing PostHog events.
-// Wired in via posthog-js's `before_send` hook so every autocapture,
-// pageview, exception, web-vital, etc. passes through this function
-// before reaching the network. Returning null drops the event.
-//
-// The masking rules here intentionally over-redact rather than rely on
-// per-element `ph-no-capture` marks scattered across the codebase. A
-// single function is easier to audit and harder to forget when a new
-// sensitive surface ships.
+// Pure privacy scrubbing helpers retained for local tests and defensive
+// exception-string cleanup. Open Docs does not send product telemetry.
 
-import type { CaptureResult } from 'posthog-js';
+export type CaptureResult = {
+  event: string;
+  properties: Record<string, unknown>;
+};
 
-// Tags whose text content can carry user-typed values. PostHog autocapture
-// does not capture input/textarea `value` properties by default, but it
-// does capture `$el_text` (element.textContent) — for a <textarea> with
-// typed content that becomes the prompt body. Strip eagerly.
 const TEXT_BEARING_TAGS = new Set(['input', 'textarea']);
 
 function scrubElementsChain(
@@ -22,14 +14,12 @@ function scrubElementsChain(
   return elements.map((el) => {
     const tag = typeof el.tag_name === 'string' ? el.tag_name.toLowerCase() : '';
     const contentEditable =
-      typeof el.attr__contenteditable === 'string' &&
-      el.attr__contenteditable !== 'false';
+      typeof el.attr__contenteditable === 'string' && el.attr__contenteditable !== 'false';
     const isPasswordInput =
       tag === 'input' &&
       typeof el.attr__type === 'string' &&
       el.attr__type.toLowerCase() === 'password';
-    const shouldScrub =
-      TEXT_BEARING_TAGS.has(tag) || contentEditable || isPasswordInput;
+    const shouldScrub = TEXT_BEARING_TAGS.has(tag) || contentEditable || isPasswordInput;
     if (!shouldScrub) return el;
     const cleaned: Record<string, unknown> = { ...el };
     delete cleaned.$el_text;
@@ -41,10 +31,6 @@ function scrubElementsChain(
   });
 }
 
-// Drop query-string and fragment from URLs in pageview / pageleave / nav
-// events. Pathnames are kept (they're typically `/projects/<uuid>`,
-// non-sensitive) but any `?q=…` we accidentally introduce in the future
-// won't leak.
 function scrubUrl(url: unknown): unknown {
   if (typeof url !== 'string') return url;
   try {
@@ -55,40 +41,20 @@ function scrubUrl(url: unknown): unknown {
   }
 }
 
-// Rewrite absolute filesystem paths in exception stack traces. Packaged
-// builds expose `file:///Applications/Open Docs.app/Contents/Resources/…`
-// which leaks both the install root and the user's home dir in homebrew /
-// custom installs. Reduce to the repo-relative tail.
-//
-// Exported so error-tracking.ts can apply the same scrub to events it
-// dispatches directly to PostHog (bypassing posthog-js's before_send).
 export function scrubFilePath(value: unknown): unknown {
   if (typeof value !== 'string') return value;
-  // file:///abs/path/.../apps/web/src/foo.tsx → app://apps/web/src/foo.tsx
-  // /Users/<user>/.../apps/web/src/foo.tsx    → app://apps/web/src/foo.tsx
-  //
-  // The prefix uses `[^()\n]*?` (non-greedy, no parens/newlines) so paths
-  // that contain spaces — most notably the packaged macOS layout
-  // `/Applications/Open Docs.app/Contents/Resources/...` — get fully
-  // rewritten instead of partially leaking the install directory. The
-  // tail stops at whitespace or a closing paren so stack frames of shape
-  // `at fn (file:///.../foo.tsx:1:2)` lose only the path portion.
   return value.replace(
     /(?:file:\/\/)?[^()\n]*?\/((?:apps|packages|tools)\/[^\s)]+)/g,
     'app://$1',
   );
 }
 
-// Exported so error-tracking.ts can apply the same scrub before it sends
-// a directly-built `$exception` payload to PostHog.
 export function scrubExceptionList(
   list: Array<Record<string, unknown>>,
 ): Array<Record<string, unknown>> {
   return list.map((entry) => {
     const next = { ...entry };
-    const stack = next.stacktrace as
-      | { frames?: Array<Record<string, unknown>> }
-      | undefined;
+    const stack = next.stacktrace as { frames?: Array<Record<string, unknown>> } | undefined;
     if (stack?.frames && Array.isArray(stack.frames)) {
       next.stacktrace = {
         ...stack,
@@ -100,7 +66,6 @@ export function scrubExceptionList(
       };
     }
     if (typeof next.mechanism === 'object' && next.mechanism !== null) {
-      // Mechanism source URL can also be a file:// — same scrub.
       const mech = next.mechanism as Record<string, unknown>;
       if (typeof mech.source === 'string') {
         mech.source = scrubFilePath(mech.source);
@@ -110,24 +75,13 @@ export function scrubExceptionList(
   });
 }
 
-// Some events we don't need at all; suppressing them keeps the volume
-// below PostHog's free-tier cap and avoids capturing surfaces that don't
-// add product insight.
-const SUPPRESSED_EVENTS = new Set<string>([
-  // PostHog's $opt_in event records the act of opting in. We already
-  // emit explicit consent via the toggle handler in App.tsx; the
-  // duplicate is noise.
-  '$opt_in',
-]);
+const SUPPRESSED_EVENTS = new Set<string>(['$opt_in']);
 
 export function scrubBeforeSend(cr: CaptureResult | null): CaptureResult | null {
   if (!cr) return null;
   if (SUPPRESSED_EVENTS.has(cr.event)) return null;
 
   const props = (cr.properties ?? {}) as Record<string, unknown>;
-
-  // Autocapture / rageclick / dead-click carry $elements (legacy) or
-  // $elements_chain (newer). Both shapes get the same scrub.
   const elementBearing =
     cr.event === '$autocapture' ||
     cr.event === '$rageclick' ||
@@ -140,19 +94,13 @@ export function scrubBeforeSend(cr: CaptureResult | null): CaptureResult | null 
     }
   }
 
-  // URL-bearing events.
   if (typeof props.$current_url === 'string') {
     props.$current_url = scrubUrl(props.$current_url);
-  }
-  if (typeof props.$pathname === 'string') {
-    // Pathnames in this app are routing slugs (/projects/<uuid>) — keep
-    // as-is. Query strings live on $current_url, not $pathname.
   }
   if (typeof props.$referrer === 'string') {
     props.$referrer = scrubUrl(props.$referrer);
   }
 
-  // Exceptions: scrub file paths in stack frames.
   if (cr.event === '$exception') {
     const list = props.$exception_list;
     if (Array.isArray(list)) {

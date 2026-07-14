@@ -10,6 +10,7 @@ export type ProjectKind =
   | 'prototype'
   | 'deck'
   | 'screen-spec'
+  | 'interface-spec'
   | 'template'
   | 'other'
   | 'brand'

@@ -26,6 +26,7 @@ interface MakeArgs {
   exampleOutputs?: Array<{ path: string; title?: string }>;
   designSystemRef?: string;
   query?: string;
+  license?: string;
   pipelineStages?: Array<{ id: string; atoms: string[] }>;
   capabilities?: string[];
   inputs?: Array<{
@@ -48,6 +49,7 @@ function make(args: MakeArgs): InstalledPluginRecord {
       version: '0.1.0',
       title: args.title ?? args.id,
       ...(args.description ? { description: args.description } : {}),
+      ...(args.license ? { license: args.license } : {}),
       ...(args.tags ? { tags: args.tags } : {}),
       od: {
         kind: 'scenario',
@@ -271,7 +273,7 @@ describe('PluginDetailsModal common metadata coverage', () => {
     });
   }
 
-  it('surfaces workflow + capabilities + file path inside the media variant sidebar', () => {
+  it('surfaces workflow + capabilities + source package inside the media variant sidebar', () => {
     const html = render(
       pluginWithMeta({
         id: 'media-with-meta',
@@ -291,9 +293,11 @@ describe('PluginDetailsModal common metadata coverage', () => {
     expect(html).toContain('Workflow');
     expect(html).toContain('Capabilities');
     expect(html).toContain('fs:read');
-    expect(html).toContain('Source');
-    expect(html).toMatch(/Path<\/dt>/);
-    expect(html).toContain('/tmp');
+    expect(html).toContain('Installed source');
+    expect(html).toMatch(/Package name<\/dt>/);
+    expect(html).toContain('bundled/media-with-meta');
+    expect(html).not.toMatch(/Path<\/dt>/);
+    expect(html).not.toContain('/tmp');
   });
 
   it('collapses the example variant sidebar by default so the preview owns the stage', () => {
@@ -316,6 +320,7 @@ describe('PluginDetailsModal common metadata coverage', () => {
         <PluginMetaSections
           record={pluginWithMeta({
             id: 'minimal-meta',
+            license: 'CC-BY-4.0',
             query: 'Generate a {style} hero for {brand}.',
           })}
           omit={{ description: true }}
@@ -326,6 +331,8 @@ describe('PluginDetailsModal common metadata coverage', () => {
       </I18nProvider>,
     );
     // Designer-relevant blocks render inline (above the disclosure).
+    expect(html).toContain('plugin-details-license');
+    expect(html).toContain('CC-BY-4.0');
     expect(html).toContain('Example query');
     expect(html).toContain('Generate a {style} hero for {brand}.');
     // Developer manifest detail is collapsed inside the disclosure.
@@ -354,7 +361,7 @@ describe('PluginDetailsModal common metadata coverage', () => {
     expect(html).toContain('DESIGN.md');
     expect(html.indexOf('Plugin info')).toBeLessThan(html.indexOf('DESIGN.md'));
     expect(html).toContain('Workflow');
-    expect(html).toContain('Source');
+    expect(html).toContain('Installed source');
   });
 
   it('does not duplicate the plugin info heading inside the scenario fallback', () => {
@@ -374,7 +381,7 @@ describe('PluginDetailsModal common metadata coverage', () => {
     expect(html).not.toContain('plugin-meta-sections__heading');
   });
 
-  it('routes official plugin author and source links to the Open Design repo', () => {
+  it('routes bundled plugin source links to the Open Docs repo', () => {
     const html = render(
       pluginWithMeta({
         id: 'official-link-meta',
@@ -383,8 +390,8 @@ describe('PluginDetailsModal common metadata coverage', () => {
       }),
     );
 
-    expect(html).toContain('href="https://github.com/nexu-io/open-design"');
-    expect(html).toContain('nexu-io/open-design');
+    expect(html).toContain('href="https://github.com/jhy0285/open-docs"');
+    expect(html).toContain('jhy0285/open-docs');
     expect(html).toContain('Official');
   });
 });

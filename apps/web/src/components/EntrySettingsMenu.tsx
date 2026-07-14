@@ -283,7 +283,7 @@ export function EntrySettingsMenu({
                   setOpen(false);
                 }}
               >
-                contact email : jhy0285@gmail.com
+                Personal contact: jhy0285@gmail.com
               </a>
               <a
                 className="entry-settings-menu__contact-link"
@@ -298,7 +298,7 @@ export function EntrySettingsMenu({
                   setOpen(false);
                 }}
               >
-                company email : whdudwls0285@lgcns.com
+                Work contact: whdudwls0285@lgcns.com
               </a>
             </div>
           </section>

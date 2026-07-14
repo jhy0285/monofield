@@ -41,24 +41,28 @@ describe('PrivacySection', () => {
     vi.unstubAllGlobals();
   });
 
-  it('regenerates an installation id when telemetry is re-enabled after opt-out', () => {
-    vi.stubGlobal('crypto', { randomUUID: vi.fn(() => 'inst-new') });
-
+  it('keeps Open Docs telemetry disabled and clears legacy local privacy state', () => {
     render(
       <Harness
         initial={{
           ...baseConfig,
-          installationId: null,
+          installationId: 'legacy-inst',
           privacyDecisionAt: 1778244000000,
-          telemetry: { metrics: false, content: false, artifactManifest: false },
+          telemetry: { metrics: true, content: true, artifactManifest: true },
         }}
       />,
     );
 
-    expect((screen.getByLabelText('Anonymous ID') as HTMLInputElement).value).toBe('opted out');
+    expect(screen.getByText(/Open Docs does not send product telemetry/i)).toBeTruthy();
+    expect((screen.getByLabelText('Anonymous ID') as HTMLInputElement).value).toBe(
+      'legacy-inst',
+    );
+    expect(screen.queryByRole('button', { name: /Anonymous metrics/i })).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: /Anonymous metrics/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Clear local privacy state/i }));
 
-    expect((screen.getByLabelText('Anonymous ID') as HTMLInputElement).value).toBe('inst-new');
+    expect((screen.getByLabelText('Anonymous ID') as HTMLInputElement).value).toBe(
+      'not used',
+    );
   });
 });

@@ -129,18 +129,39 @@ describe('derivePluginSourceLinks · url + local + bundled sources', () => {
     expect(out.sourceKindLabel).toBe('Local');
   });
 
-  it('routes bundled official sources to the Open Design repo', () => {
+  it('routes bundled official sources to the Open Docs repo without inventing author links', () => {
     const out = derivePluginSourceLinks(
       makeRecord({
         sourceKind: 'bundled',
         source:     'plugins/_official/scenarios/od-code-migration',
       }),
     );
-    expect(out.sourceUrl).toBe('https://github.com/nexu-io/open-design');
+    expect(out.sourceUrl).toBe('https://github.com/jhy0285/open-docs');
     expect(out.sourceKindLabel).toBe('Official');
-    expect(out.sourceLabel).toBe('nexu-io/open-design');
-    expect(out.authorProfileUrl).toBe('https://github.com/nexu-io/open-design');
-    expect(out.homepageUrl).toBe('https://github.com/nexu-io/open-design');
+    expect(out.sourceLabel).toBe('jhy0285/open-docs');
+    expect(out.authorProfileUrl).toBeNull();
+    expect(out.homepageUrl).toBeNull();
+  });
+
+  it('preserves bundled plugin author and homepage metadata for attribution', () => {
+    const out = derivePluginSourceLinks(
+      makeRecord({
+        sourceKind: 'bundled',
+        source:     'plugins/_official/examples/acreage-farming',
+        manifest: {
+          name:     'example-acreage-farming',
+          version:  '1.0.0',
+          author:   { name: 'Eli', url: 'https://motionsites.ai' },
+          homepage: 'https://motionsites.ai/sections',
+          license:  'CC-BY-4.0',
+        } as InstalledPluginRecord['manifest'],
+      }),
+    );
+
+    expect(out.authorName).toBe('Eli');
+    expect(out.authorProfileUrl).toBe('https://motionsites.ai/');
+    expect(out.homepageUrl).toBe('https://motionsites.ai/sections');
+    expect(out.sourceUrl).toBe('https://github.com/jhy0285/open-docs');
   });
 });
 

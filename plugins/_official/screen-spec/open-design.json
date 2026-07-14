@@ -1,0 +1,104 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "od-screen-spec",
+  "title": "Screen Spec",
+  "title_i18n": {
+    "en": "Screen Spec",
+    "ko": "화면명세서",
+    "zh-CN": "界面规格书",
+    "zh-TW": "畫面規格書",
+    "ja": "画面仕様書",
+    "de": "Bildschirmspezifikation",
+    "fr": "Spécification d'écran",
+    "ru": "Спецификация экранов",
+    "es": "Especificación de pantalla",
+    "pt-BR": "Especificação de tela",
+    "it": "Specifica delle schermate",
+    "vi": "Đặc tả màn hình",
+    "pl": "Specyfikacja ekranów",
+    "id": "Spesifikasi layar",
+    "nl": "Schermspecificatie",
+    "ar": "مواصفات الشاشة",
+    "tr": "Ekran Şartnamesi",
+    "uk": "Специфікація екранів"
+  },
+  "version": "0.1.0",
+  "description": "Document existing screens into a screen-spec.json document (numbered callout markers, description rows, checkpoints, relation lines), then render the Korean SI-style screen specification deck (.pptx) with the deterministic Open Docs renderer. The agent only writes the JSON; humans review and edit the same JSON before export.",
+  "description_i18n": {
+    "en": "Document existing screens into screen-spec.json (numbered callout markers, description rows, checkpoints), then render the Korean SI-style screen specification deck (.pptx) with the deterministic Open Docs renderer.",
+    "ko": "기존 화면을 screen-spec.json 문서(번호 콜아웃 마커, Description 행, Check Point)로 문서화하고, 결정론적 Open Docs 렌더러로 한국형 SI 화면명세서(.pptx)를 생성합니다.",
+    "zh-CN": "将现有界面记录为 screen-spec.json（编号标注、说明行、检查点），再由确定性渲染器输出韩国 SI 风格的界面规格书幻灯片（.pptx）。",
+    "zh-TW": "將現有畫面記錄為 screen-spec.json（編號標註、說明列、檢查點），再由確定性渲染器輸出韓國 SI 風格的畫面規格書簡報（.pptx）。",
+    "ja": "既存画面を screen-spec.json（番号付きコールアウト、説明行、チェックポイント）として文書化し、決定論的レンダラーで韓国 SI 形式の画面仕様書（.pptx）を生成します。",
+    "de": "Dokumentiert bestehende Bildschirme in screen-spec.json (nummerierte Marker, Beschreibungszeilen, Checkpoints) und rendert daraus deterministisch die Bildschirmspezifikation im koreanischen SI-Stil (.pptx).",
+    "fr": "Documente les écrans existants dans screen-spec.json (repères numérotés, lignes de description, points de contrôle), puis génère de façon déterministe la spécification d'écran de style SI coréen (.pptx).",
+    "ru": "Документирует существующие экраны в screen-spec.json (нумерованные маркеры, строки описания, контрольные точки) и детерминированно формирует спецификацию экранов в корейском SI-стиле (.pptx).",
+    "es": "Documenta las pantallas existentes en screen-spec.json (marcadores numerados, filas de descripción, puntos de control) y genera de forma determinista la especificación de pantalla al estilo SI coreano (.pptx).",
+    "pt-BR": "Documenta telas existentes em screen-spec.json (marcadores numerados, linhas de descrição, checkpoints) e gera de forma determinística a especificação de tela no estilo SI coreano (.pptx).",
+    "it": "Documenta le schermate esistenti in screen-spec.json (marcatori numerati, righe di descrizione, checkpoint) e genera in modo deterministico la specifica delle schermate in stile SI coreano (.pptx).",
+    "vi": "Ghi lại các màn hình hiện có vào screen-spec.json (điểm đánh dấu đánh số, dòng mô tả, điểm kiểm tra), sau đó kết xuất đặc tả màn hình kiểu SI Hàn Quốc (.pptx) bằng bộ kết xuất tất định.",
+    "pl": "Dokumentuje istniejące ekrany w screen-spec.json (numerowane znaczniki, wiersze opisu, punkty kontrolne), a następnie deterministycznie generuje specyfikację ekranów w koreańskim stylu SI (.pptx).",
+    "id": "Mendokumentasikan layar yang ada ke screen-spec.json (penanda bernomor, baris deskripsi, checkpoint), lalu merender spesifikasi layar gaya SI Korea (.pptx) secara deterministik.",
+    "nl": "Documenteert bestaande schermen in screen-spec.json (genummerde markeringen, beschrijvingsrijen, checkpoints) en rendert deterministisch de schermspecificatie in Koreaanse SI-stijl (.pptx).",
+    "ar": "يوثّق الشاشات الحالية في screen-spec.json (علامات مرقّمة وصفوف وصف ونقاط فحص) ثم يولّد مواصفات الشاشة بأسلوب SI الكوري (.pptx) بشكل حتمي.",
+    "tr": "Mevcut ekranları screen-spec.json içinde belgeler (numaralı işaretler, açıklama satırları, kontrol noktaları) ve deterministik olarak Kore SI tarzı ekran şartnamesini (.pptx) üretir.",
+    "uk": "Документує наявні екрани у screen-spec.json (нумеровані маркери, рядки опису, контрольні точки) і детерміновано формує специфікацію екранів у корейському SI-стилі (.pptx)."
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Open Docs Contributors",
+    "url": "https://github.com/jhy0285/open-docs"
+  },
+  "tags": [
+    "first-party",
+    "document",
+    "screen-spec",
+    "pptx",
+    "callout",
+    "korean-si",
+    "specification"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "document",
+    "platform": "desktop",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "ko": "이 화면 캡처들을 화면명세서 PPT로 문서화해줘.",
+        "en": "Document these screen captures into the Korean SI-style screen specification deck."
+      }
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

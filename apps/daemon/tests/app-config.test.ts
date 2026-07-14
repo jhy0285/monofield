@@ -17,14 +17,13 @@ import { readAppConfig, writeAppConfig } from '../src/app-config.js';
 import { isLocalSameOrigin } from '../src/origin-validation.js';
 
 // Default telemetry preference applied when an existing config has no
-// telemetry block (fresh install, pre-disclosure). See
-// `app-config.ts#applyTelemetryDefaults` and `state/config.ts#DEFAULT_CONFIG`
-// for the matching client default. Tests that previously expected an
-// empty `{}` are now updated to expect this default; tests confirming
-// "user opted out → stays opted out" assert on `metrics: false`.
+// telemetry block (fresh install, pre-disclosure). Open Docs ships with
+// telemetry fully off by default — see `app-config.ts#applyTelemetryDefaults`
+// and `state/config.ts#DEFAULT_CONFIG` for the matching client default.
 const DEFAULT_TELEMETRY = {
-  metrics: true,
-  content: true,
+  metrics: false,
+  content: false,
+  artifactManifest: false,
 } as const;
 
 describe('app-config', () => {
@@ -746,7 +745,11 @@ describe('app-config projectLocations', () => {
     ];
     await writeAppConfig(dataDir, { projectLocations: locs });
     const cfg = await readAppConfig(dataDir);
-    expect(cfg.projectLocations).toEqual(locs);
+    // Paths round-trip through path.normalize (verbatim on unix, separator
+    // flip on Windows), so compare against the normalized form.
+    expect(cfg.projectLocations).toEqual(
+      locs.map((loc) => ({ ...loc, path: path.normalize(loc.path) })),
+    );
   });
 
   it('normalizes ~/ paths via expandHomePrefix', async () => {

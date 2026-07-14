@@ -28,7 +28,9 @@ import {
 } from '../src/server.js';
 
 const ENV_KEY = 'OD_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS';
-const ONE_MINUTE_MS = 60 * 1000;
+// Post-artifact quiet default was raised from 1min to 10min so interactive
+// doc flows aren't SIGTERM'd mid-question (see chat-run-lifecycle.ts).
+const TEN_MINUTES_MS = 10 * 60 * 1000;
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
 describe('resolveChatRunArtifactQuietPeriodMs', () => {
@@ -42,9 +44,9 @@ describe('resolveChatRunArtifactQuietPeriodMs', () => {
     }
   });
 
-  it('returns the 1-minute default when no env override is set', () => {
+  it('returns the 10-minute default when no env override is set', () => {
     delete process.env[ENV_KEY];
-    expect(resolveChatRunArtifactQuietPeriodMs()).toBe(ONE_MINUTE_MS);
+    expect(resolveChatRunArtifactQuietPeriodMs()).toBe(TEN_MINUTES_MS);
   });
 
   it('honors the env override when it is a finite number', () => {
@@ -54,7 +56,7 @@ describe('resolveChatRunArtifactQuietPeriodMs', () => {
 
   it('falls back to the default when the env value is not parseable as a number', () => {
     process.env[ENV_KEY] = 'not-a-number';
-    expect(resolveChatRunArtifactQuietPeriodMs()).toBe(ONE_MINUTE_MS);
+    expect(resolveChatRunArtifactQuietPeriodMs()).toBe(TEN_MINUTES_MS);
   });
 
   it('clamps an oversized env override to the 24-hour ceiling (so Node does not silently downgrade the timer to 1ms)', () => {

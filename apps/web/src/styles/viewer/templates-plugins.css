@@ -1202,6 +1202,29 @@
    produces before reading the workflow stages. The browser-chrome
    shell (traffic lights + URL pill) signals "this is a sandboxed
    live render" without us needing extra copy. */
+.plugin-details-modal__license-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.plugin-details-modal__license-code {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 3px 7px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .plugin-details-modal__hero {
   margin: 16px 0 4px;
   padding: 14px;

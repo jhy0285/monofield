@@ -1,4 +1,4 @@
-// New-user reveal wrapper for the Home "Community" templates.
+// New-user reveal wrapper for the Home template gallery.
 //
 // When the user has no projects yet, the entry view keeps attention on the
 // hero composer: the templates gallery is collapsed and a quiet hint pinned
@@ -48,7 +48,7 @@ export function HomeTemplatesReveal({ enabled, children }: Props) {
   // While collapsed the gallery is only height-clipped + aria-hidden, but its
   // buttons, tabs, and search input stay mounted and focusable. Mark the body
   // `inert` until revealed so a keyboard user can't Tab into the invisible
-  // Community-template controls before reaching the visible bottom hint.
+  // example-template controls before reaching the visible bottom hint.
   const bodyRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const node = bodyRef.current;

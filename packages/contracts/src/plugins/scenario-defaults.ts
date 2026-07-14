@@ -39,6 +39,8 @@ export type TaskKind = AppliedPluginSnapshot['taskKind'];
 export type DefaultScenarioPluginId =
   | 'od-default'
   | 'od-new-generation'
+  | 'od-interface-spec'
+  | 'od-screen-spec'
   | 'od-media-generation'
   | 'od-plugin-authoring'
   | 'od-figma-migration'
@@ -62,7 +64,8 @@ export const DEFAULT_SCENARIO_PLUGIN_BY_KIND: Record<ProjectKind, DefaultScenari
   deck:      'example-simple-deck',
   // Screen specification projects use the generic generation router until the
   // dedicated Screen Spec editor/renderer is ported into the Open Docs shell.
-  'screen-spec': 'od-new-generation',
+  'screen-spec': 'od-screen-spec',
+  'interface-spec': 'od-interface-spec',
   template:  'od-new-generation',
   brand:     'od-new-generation',
   image:     'od-media-generation',

@@ -14,10 +14,6 @@ import {
   cancelVelaLogin,
   forgetVelaLogin,
   mergeVelaEnv,
-  mirrorAmrEntryAnalytics,
-  mirrorAmrOnboardingProfileAnalytics,
-  parseAmrEntryAnalyticsPayload,
-  parseAmrOnboardingProfileAnalyticsPayload,
   parseVelaLoginAttribution,
   readVelaCredentialRevision,
   readVelaLoginStatus,
@@ -291,51 +287,12 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
     }
   });
 
-  app.post('/api/integrations/vela/analytics-entry', async (req, res) => {
-    const payload = parseAmrEntryAnalyticsPayload(req.body);
-    if (!payload) {
-      res.status(400).json({ error: 'invalid_amr_entry_analytics' });
-      return;
-    }
-    const analyticsContext = readAnalyticsContext(req);
-    if (!analyticsContext) {
-      res.status(202).json({ mirrored: false });
-      return;
-    }
-    const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
-    if (appConfig.telemetry?.metrics !== true) {
-      res.status(202).json({ mirrored: false });
-      return;
-    }
-    const result = await mirrorAmrEntryAnalytics(payload, {
-      analyticsContext,
-      env,
-    });
-    res.status(202).json(result);
+  app.post('/api/integrations/vela/analytics-entry', (_req, res) => {
+    res.status(202).json({ mirrored: false });
   });
 
-  app.post('/api/integrations/vela/analytics-profile', async (req, res) => {
-    const payload = parseAmrOnboardingProfileAnalyticsPayload(req.body);
-    if (!payload) {
-      res.status(400).json({ error: 'invalid_amr_profile_analytics' });
-      return;
-    }
-    const analyticsContext = readAnalyticsContext(req);
-    if (!analyticsContext) {
-      res.status(202).json({ mirrored: false });
-      return;
-    }
-    const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
-    if (appConfig.telemetry?.metrics !== true) {
-      res.status(202).json({ mirrored: false });
-      return;
-    }
-    const canonicalPayload = { ...payload, odDeviceId: analyticsContext.deviceId };
-    const result = await mirrorAmrOnboardingProfileAnalytics(canonicalPayload, {
-      analyticsContext,
-      env,
-    });
-    res.status(202).json(result);
+  app.post('/api/integrations/vela/analytics-profile', (_req, res) => {
+    res.status(202).json({ mirrored: false });
   });
 
   app.post('/api/integrations/vela/logout', async (_req, res) => {

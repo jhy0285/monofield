@@ -303,11 +303,13 @@ process.stdin.on('end', () => {
         if (effectiveCwd.startsWith('/private/var/')) {
           cwdAliases.add(effectiveCwd.replace(/^\/private\/var\//, '/var/'));
         }
+        // The daemon builds the glob keys with the platform separator
+        // (joinPermissionGlob in mcp-config.ts), so match via join().
         const allowedCwd = [...cwdAliases].find(
           (cwd) =>
             externalDirectory[cwd] === 'allow' &&
-            externalDirectory[`${cwd}/*`] === 'allow' &&
-            externalDirectory[`${cwd}/**`] === 'allow',
+            externalDirectory[join(cwd, '*')] === 'allow' &&
+            externalDirectory[join(cwd, '**')] === 'allow',
         );
         expect(allowedCwd).toBeTruthy();
       },
@@ -472,7 +474,10 @@ process.exit(1);
     );
   });
 
-  it('survives transient AMR Link catalog failures without aborting the run', async () => {
+  // Open Docs ships with the AMR runtime disabled unless OD_ENABLE_AMR=1
+  // (runtimes/registry.ts reads it at import time), so the AMR chat flow
+  // only exists when that gate was set before the daemon loaded.
+  it.skipIf(process.env.OD_ENABLE_AMR !== '1')('survives transient AMR Link catalog failures without aborting the run', async () => {
     // The run preflight resolves the AMR catalog through the shared
     // AmrModelLoadingCache, which degrades to the offline `vela model preset`
     // seed whenever the authoritative `vela model list` is momentarily
@@ -549,7 +554,7 @@ child.on('exit', (code, signal) => {
     }
   });
 
-  it('proceeds with the AMR run via the cached/preset catalog when the live model list is unavailable', async () => {
+  it.skipIf(process.env.OD_ENABLE_AMR !== '1')('proceeds with the AMR run via the cached/preset catalog when the live model list is unavailable', async () => {
     // Red spec for the packaged-prerelease "AMR model the selected model is not
     // available from Vela" report: the run preflight used to do a fresh,
     // blocking `vela model list` (authoritative remote catalog) on EVERY run
@@ -1887,7 +1892,11 @@ process.exit(1);
     );
   });
 
-  it('classifies DeepSeek TUI config guidance as typed auth failures', async () => {
+  // The DeepSeek TUI adapter passes the whole prompt as one argv element; on
+  // Windows that goes through a cmd shim and the daemon (by design) rejects
+  // prompts that would overflow the CreateProcess command line, so the auth
+  // classification under test is unreachable there. Covered on POSIX CI.
+  it.skipIf(process.platform === 'win32')('classifies DeepSeek TUI config guidance as typed auth failures', async () => {
     await withFakeAgent(
       'deepseek',
       `
@@ -2347,6 +2356,16 @@ const timer = setInterval(() => {
   });
 
   it('surfaces Claude auth diagnostics through the SSE error channel', async () => {
+    // A developer machine may point Claude Code at a custom endpoint; the
+    // daemon then classifies the 401 as a custom-endpoint failure instead of
+    // the stock `/login` guidance this test pins. Isolate those env vars.
+    const isolatedEnvKeys = ['ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_API_KEY'] as const;
+    const isolatedEnv: Record<string, string | undefined> = {};
+    for (const key of isolatedEnvKeys) {
+      isolatedEnv[key] = process.env[key];
+      delete process.env[key];
+    }
+    try {
     await withFakeAgent(
       'claude',
       `
@@ -2379,6 +2398,12 @@ process.exit(1);
         expect(statusBody.status).toBe('failed');
       },
     );
+    } finally {
+      for (const key of isolatedEnvKeys) {
+        if (isolatedEnv[key] === undefined) delete process.env[key];
+        else process.env[key] = isolatedEnv[key];
+      }
+    }
   });
 
   it('caps oversized inactivity overrides so Node does not fire the timer immediately', async () => {

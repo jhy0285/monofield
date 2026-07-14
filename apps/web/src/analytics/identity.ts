@@ -1,8 +1,6 @@
-// Browser-side identity bookkeeping for PostHog product analytics. Designed
-// so it stays SSR-safe: every entry point guards window/localStorage access
-// and falls back to a deterministic-enough fake id under jsdom and Next.js
-// pre-render. The daemon mirrors these values via the x-od-analytics-*
-// headers (see @open-design/contracts/analytics).
+// Browser-side local identity helpers retained for compatibility with older
+// call sites. Open Docs telemetry is disabled, so the provider no longer calls
+// these helpers to create product-analytics identities.
 
 import type { AnalyticsClientType } from '@open-design/contracts/analytics';
 import { detectOpenDesignHostClientType } from '@open-design/host';
@@ -54,8 +52,8 @@ export function getSessionId(): string {
   }
 }
 
-// Claim the next 0-based run turn index for the current browser analytics
-// session and advance the counter. Lives in sessionStorage so it shares the
+// Claim the next 0-based run turn index for the current browser tab.
+// The counter lives in sessionStorage so it shares the
 // exact lifetime of the `session_id` above — both reset together when the tab
 // session ends. Call this once per run that is actually being created (at the
 // create-run dispatch), so `run_created`/`run_finished` can sequence a

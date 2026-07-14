@@ -260,6 +260,8 @@ import {
   uninstallPlugin,
 } from './plugins/index.js';
 import {
+  LEGACY_OPEN_DESIGN_MARKETPLACE_MANIFEST_FILENAME,
+  OPEN_DOCS_MARKETPLACE_MANIFEST_FILENAME,
   marketplaceManifestUrlForRegistry,
   marketplaceRegistryIdFromUrl,
 } from './plugins/marketplaces.js';
@@ -755,7 +757,11 @@ function mergeMarketplaceEntries(manifestText, entries) {
 }
 
 async function marketplaceSeedManifestText(id, bundledMarketplaceEntries) {
-  const manifestPath = path.join(PLUGIN_REGISTRY_DIR, id, 'open-design-marketplace.json');
+  const preferredManifestPath = path.join(PLUGIN_REGISTRY_DIR, id, OPEN_DOCS_MARKETPLACE_MANIFEST_FILENAME);
+  const legacyManifestPath = path.join(PLUGIN_REGISTRY_DIR, id, LEGACY_OPEN_DESIGN_MARKETPLACE_MANIFEST_FILENAME);
+  const manifestPath = fs.existsSync(preferredManifestPath)
+    ? preferredManifestPath
+    : legacyManifestPath;
   if (!fs.existsSync(manifestPath)) return null;
   let manifestText = await fs.promises.readFile(manifestPath, 'utf8');
   if (id === OFFICIAL_MARKETPLACE_ID && bundledMarketplaceEntries.length > 0) {
@@ -4438,7 +4444,9 @@ export async function startServer({
       } else {
         source = typeof body.source === 'string' ? body.source : '';
         if (!source) return res.status(400).json({ error: 'source is required' });
-        const looksAbsolute = source.startsWith('/') || source.startsWith('./') || source.startsWith('~');
+        // path.isAbsolute covers Windows drive/UNC paths ("C:\…", "\\host\…")
+        // that the prefix checks alone would misroute into marketplace lookup.
+        const looksAbsolute = source.startsWith('/') || source.startsWith('./') || source.startsWith('~') || path.isAbsolute(source);
         const looksGithub = source.startsWith('github:');
         const looksHttps = /^https:\/\//i.test(source);
         if (!looksAbsolute && !looksGithub && !looksHttps) {
@@ -5997,6 +6005,14 @@ export async function startServer({
     const CLARIFYING_QUESTION_BUFFER_CAP = 256 * 1024;
     let clarifyingQuestionText = '';
     let visibleAssistantText = '';
+    // Flips true the moment the agent emits a renderable `<question-form>` /
+    // `<ask-question>` in this turn. The run is then waiting on a HUMAN, not
+    // stalling — so the inactivity watchdog is paused (see noteAgentActivity /
+    // pauseWatchdogForQuestionForm below). Previously a run that lingered on an
+    // open stdin awaiting the answer — or worse, one that had already
+    // registered an artifact and dropped to the 60s quiet window — could be
+    // SIGTERM'd while the user was still filling out the form.
+    let questionFormPending = false;
     const send = (event, data) => {
       if (
         event === 'agent' &&
@@ -6009,6 +6025,12 @@ export async function startServer({
           0,
           CLARIFYING_QUESTION_BUFFER_CAP,
         );
+        if (!questionFormPending && emittedRenderableQuestionForm(clarifyingQuestionText)) {
+          questionFormPending = true;
+          // Cancel any armed timer immediately; the guard in noteAgentActivity
+          // then keeps it from re-arming for the rest of this turn.
+          clearInactivityWatchdog();
+        }
       }
       if (
         event === 'agent' &&
@@ -6942,6 +6964,14 @@ export async function startServer({
         artifactRegistered,
       });
     const noteAgentActivity = () => {
+      // Once the agent has asked the user a question, the run is blocked on a
+      // human answer — not stalling. Keep the watchdog disarmed so the user
+      // has unbounded time to fill the form (fixes premature SIGTERM mid-answer,
+      // especially under the 60s post-artifact quiet window).
+      if (questionFormPending) {
+        clearInactivityWatchdog();
+        return;
+      }
       const delay = activeInactivityTimeoutMs();
       if (delay <= 0) return;
       clearInactivityWatchdog();

@@ -1930,7 +1930,7 @@ function PluginPromptPresetCard({
   ).text;
   // Decks ship a fixed 16:9 stage; tag them so the preset thumbnail uses a 16:9
   // frame the iframe fills natively, instead of letterboxing the stage with a
-  // dark band above it (matches the Community gallery deck treatment).
+  // dark band above it (matches the Template Gallery deck treatment).
   const odMode = (record.manifest?.od as { mode?: unknown } | undefined)?.mode;
   return (
     <span className="home-hero__plugin-preset-cell" role="listitem">
@@ -3112,7 +3112,8 @@ function homeHeroChipDescription(chipId: string, t: ReturnType<typeof useT>): st
     case 'wireframe': return t('homeHero.chip.wireframeDesc');
     case 'mobile': return t('homeHero.chip.mobileDesc');
     case 'deck': return t('homeHero.chip.deckDesc');
-    case 'screen-spec': return 'SI 화면 문서와 PPTX 명세서';
+    case 'screen-spec': return t('homeHero.chip.screenSpecDesc');
+    case 'interface-spec': return t('homeHero.chip.interfaceSpecDesc');
     case 'document': return t('homeHero.chip.documentDesc');
     case 'image': return t('homeHero.chip.imageDesc');
     case 'video': return t('homeHero.chip.videoDesc');
@@ -3132,7 +3133,8 @@ function homeHeroChipTitle(chip: HomeHeroChip, t: ReturnType<typeof useT>): stri
     case 'wireframe': return t('homeHero.chip.wireframeNext');
     case 'mobile': return t('homeHero.chip.mobileNext');
     case 'deck': return t('homeHero.chip.deckNext');
-    case 'screen-spec': return '화면 캡처, 마커, Description, Check Point를 가진 화면명세서 프로젝트를 엽니다.';
+    case 'screen-spec': return t('homeHero.chip.screenSpecNext');
+    case 'interface-spec': return t('homeHero.chip.interfaceSpecNext');
     case 'document': return t('homeHero.chip.documentNext');
     case 'image': return t('homeHero.chip.imageNext');
     case 'video': return t('homeHero.chip.videoNext');

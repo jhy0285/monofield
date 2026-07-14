@@ -410,6 +410,10 @@ describe('PluginsView', () => {
     fireEvent.click(await screen.findByTestId('plugins-available-details-remote-plugin'));
 
     const dialog = await screen.findByTestId('plugins-available-details-modal');
+    expect(within(dialog).getByText('Catalog entry')).toBeTruthy();
+    expect(within(dialog).getByText('Install source')).toBeTruthy();
+    expect(within(dialog).getByText('Catalog name')).toBeTruthy();
+    expect(within(dialog).getByText('Catalog URL')).toBeTruthy();
     expect(within(dialog).getByText('Remote Plugin')).toBeTruthy();
     expect(dialog.textContent).toContain('Remote catalog plugin.');
     expect(dialog.textContent).toContain('github:owner/repo');

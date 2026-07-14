@@ -1,18 +1,6 @@
-// Langfuse trace forwarding for completed agent runs.
-//
-// This module is intentionally dependency-free (no `langfuse` SDK). It builds
-// Langfuse ingestion batches for completed runs and sends them either to the
-// official Open Docs telemetry relay or, for local smoke tests, directly to
-// Langfuse. Without OPEN_DESIGN_TELEMETRY_RELAY_URL or LANGFUSE_PUBLIC_KEY /
-// LANGFUSE_SECRET_KEY in the env, every entry point becomes a no-op so that
-// dev runs and forks of this open-source repo do not accidentally report.
-//
-// Privacy gates are layered: `prefs.metrics` is the master switch, and
-// `prefs.content` is required for Langfuse traces because this sink is used
-// for turn-quality evals. If either is off, no network call is made.
-// Complete-context manifests are part of content telemetry: when metrics and
-// content are both enabled, Langfuse receives the trace and associated object
-// references. If either is off, no network call is made.
+// Open Docs disables run-quality telemetry. The inherited trace builders are
+// kept for type compatibility and tests, but the exported runtime entry points
+// never resolve a sink and never POST to relay or Langfuse endpoints.
 //
 // See: specs/change/20260507-langfuse-telemetry/spec.md
 
@@ -327,27 +315,9 @@ export interface FeedbackReportContext {
 }
 
 export function readLangfuseConfig(
-  env: NodeJS.ProcessEnv = process.env,
+  _env: NodeJS.ProcessEnv = process.env,
 ): LangfuseConfig | null {
-  const publicKey = env.LANGFUSE_PUBLIC_KEY?.trim();
-  const secretKey = env.LANGFUSE_SECRET_KEY?.trim();
-  if (!publicKey || !secretKey) return null;
-  const baseUrl = (env.LANGFUSE_BASE_URL?.trim() || DEFAULT_BASE_URL).replace(
-    /\/+$/,
-    '',
-  );
-  const authHeader =
-    'Basic ' +
-    Buffer.from(`${publicKey}:${secretKey}`, 'utf8').toString('base64');
-  return {
-    authHeader,
-    baseUrl,
-    timeoutMs: parsePositiveInt(
-      env.LANGFUSE_TIMEOUT_MS,
-      DEFAULT_FETCH_TIMEOUT_MS,
-    ),
-    retries: parseNonNegativeInt(env.LANGFUSE_RETRIES, DEFAULT_FETCH_RETRIES),
-  };
+  return null;
 }
 
 /**
@@ -355,26 +325,9 @@ export function readLangfuseConfig(
  * direct Langfuse credentials second for local smoke tests, disabled last.
  */
 export function readTelemetrySinkConfig(
-  env: NodeJS.ProcessEnv = process.env,
+  _env: NodeJS.ProcessEnv = process.env,
 ): TelemetrySinkConfig | null {
-  const relayUrl = env.OPEN_DESIGN_TELEMETRY_RELAY_URL?.trim();
-  if (relayUrl) {
-    return {
-      kind: 'relay',
-      relayUrl: relayUrl.replace(/\/+$/, ''),
-      timeoutMs: parsePositiveInt(
-        env.OPEN_DESIGN_TELEMETRY_TIMEOUT_MS ?? env.LANGFUSE_TIMEOUT_MS,
-        DEFAULT_FETCH_TIMEOUT_MS,
-      ),
-      retries: parseNonNegativeInt(
-        env.OPEN_DESIGN_TELEMETRY_RETRIES ?? env.LANGFUSE_RETRIES,
-        DEFAULT_FETCH_RETRIES,
-      ),
-    };
-  }
-
-  const config = readLangfuseConfig(env);
-  return config == null ? null : { kind: 'langfuse', ...config };
+  return null;
 }
 
 export function deriveLangfuseDeliveryState(
@@ -1585,73 +1538,13 @@ async function postLangfuseBatch(
   batch: unknown[],
   fetchImpl: typeof fetch,
 ): Promise<LangfuseDeliveryState> {
-  const attempts = config.retries + 1;
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    try {
-      const response = await fetchImpl(`${config.baseUrl}/api/public/ingestion`, {
-        method: 'POST',
-        headers: {
-          Authorization: config.authHeader,
-          'Content-Type': 'application/json',
-        },
-        signal: AbortSignal.timeout(config.timeoutMs),
-        body: JSON.stringify({ batch }),
-      });
-      if (!response.ok) {
-        const body = await response.text().catch(() => '');
-        if (
-          attempt < attempts &&
-          (response.status === 429 || response.status >= 500)
-        ) {
-          await waitBeforeRetry(attempt);
-          continue;
-        }
-        console.warn(
-          `[langfuse-trace] Ingestion failed ${response.status}: ${body.slice(0, 200)}`,
-        );
-        return {
-          langfuse_expected: true,
-          langfuse_delivery_status: 'failed',
-          langfuse_drop_reason: ingestionDropReasonFromStatus(
-            response.status,
-            'langfuse',
-          ),
-        };
-      }
-      // Langfuse legacy ingestion responds with HTTP 207 Multi-Status whose
-      // body shape is `{ successes: [...], errors: [...] }`. `response.ok`
-      // is true for 207, so per-event validation errors slip through unless
-      // we look at the body. Surface them so a malformed payload doesn't
-      // silently disappear server-side.
-      const body = await response.text().catch(() => '');
-      if (body && warnPerEventErrors(body, 'Per-event errors')) {
-        return {
-          langfuse_expected: true,
-          langfuse_delivery_status: 'failed',
-          langfuse_drop_reason: dropReasonFromPerEventErrors(body, 'langfuse'),
-        };
-      }
-      return {
-        langfuse_expected: true,
-        langfuse_delivery_status: 'accepted',
-      };
-    } catch (error) {
-      if (attempt < attempts) {
-        await waitBeforeRetry(attempt);
-        continue;
-      }
-      console.warn(`[langfuse-trace] Fetch error: ${String(error)}`);
-      return {
-        langfuse_expected: true,
-        langfuse_delivery_status: 'failed',
-        langfuse_drop_reason: 'network_error',
-      };
-    }
-  }
+  void config;
+  void batch;
+  void fetchImpl;
   return {
-    langfuse_expected: true,
-    langfuse_delivery_status: 'failed',
-    langfuse_drop_reason: 'network_error',
+    langfuse_expected: false,
+    langfuse_delivery_status: 'not_expected',
+    langfuse_drop_reason: 'missing_sink_config',
   };
 }
 
@@ -1660,75 +1553,13 @@ async function postRelayBatch(
   body: string,
   fetchImpl: typeof fetch,
 ): Promise<LangfuseDeliveryState> {
-  const attempts = config.retries + 1;
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    try {
-      const response = await fetchImpl(config.relayUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Open-Design-Telemetry': 'langfuse-ingestion-v1',
-        },
-        signal: AbortSignal.timeout(config.timeoutMs),
-        body,
-      });
-      if (!response.ok) {
-        const responseBody = await response.text().catch(() => '');
-        if (
-          attempt < attempts &&
-          (response.status === 429 || response.status >= 500)
-        ) {
-          await waitBeforeRetry(attempt);
-          continue;
-        }
-        console.warn(
-          `[langfuse-trace] Relay failed ${response.status}: ${responseBody.slice(0, 200)}`,
-        );
-        return {
-          langfuse_expected: true,
-          langfuse_delivery_status: 'failed',
-          langfuse_drop_reason: ingestionDropReasonFromStatus(
-            response.status,
-            'relay',
-          ),
-        };
-      }
-
-      const responseBody = await response.text().catch(() => '');
-      if (
-        responseBody &&
-        warnPerEventErrors(responseBody, 'Relay per-event errors')
-      ) {
-        return {
-          langfuse_expected: true,
-          langfuse_delivery_status: 'failed',
-          langfuse_drop_reason: dropReasonFromPerEventErrors(
-            responseBody,
-            'relay',
-          ),
-        };
-      }
-      return {
-        langfuse_expected: true,
-        langfuse_delivery_status: 'accepted',
-      };
-    } catch (error) {
-      if (attempt < attempts) {
-        await waitBeforeRetry(attempt);
-        continue;
-      }
-      console.warn(`[langfuse-trace] Relay fetch error: ${String(error)}`);
-      return {
-        langfuse_expected: true,
-        langfuse_delivery_status: 'failed',
-        langfuse_drop_reason: 'network_error',
-      };
-    }
-  }
+  void config;
+  void body;
+  void fetchImpl;
   return {
-    langfuse_expected: true,
-    langfuse_delivery_status: 'failed',
-    langfuse_drop_reason: 'network_error',
+    langfuse_expected: false,
+    langfuse_delivery_status: 'not_expected',
+    langfuse_drop_reason: 'missing_sink_config',
   };
 }
 
@@ -1818,57 +1649,8 @@ export async function reportRunCompleted(
   ctx: ReportContext,
   opts: ReportRunOpts = {},
 ): Promise<LangfuseDeliveryState> {
-  const notExpected = deriveLangfuseDeliveryState(ctx.prefs, null);
-  if (ctx.prefs.metrics !== true) return notExpected;
-  if (ctx.prefs.content !== true) return notExpected;
-
-  const config = resolveReportConfig(opts);
-  const langfuseDelivery = deriveLangfuseDeliveryState(ctx.prefs, config);
-  if (!config) {
-    if (!missingTelemetrySinkWarned) {
-      // Warn once per daemon process; packaged config is loaded at process
-      // start, so repeated run-level warnings would only add noise.
-      missingTelemetrySinkWarned = true;
-      console.warn(
-        '[langfuse-trace] Telemetry metrics are enabled but no relay or Langfuse credentials are configured',
-      );
-    }
-    return langfuseDelivery;
-  }
-
-  let batch: unknown[];
-  try {
-    batch = buildTracePayload({ ...ctx, langfuse: langfuseDelivery });
-  } catch (error) {
-    console.warn(`[langfuse-trace] Payload build error: ${String(error)}`);
-    return {
-      langfuse_expected: true,
-      langfuse_delivery_status: 'failed',
-      langfuse_drop_reason: 'payload_too_large',
-    };
-  }
-
-  const serialized = JSON.stringify({ batch });
-  // Compare actual UTF-8 byte length, not String.length (UTF-16 code units),
-  // so the cap matches the byte-oriented contract documented in the spec
-  // (and the byte-oriented limit Langfuse enforces server-side).
-  const serializedBytes = Buffer.byteLength(serialized, 'utf8');
-  if (serializedBytes > HARD_BATCH_MAX_BYTES) {
-    console.warn(
-      `[langfuse-trace] Batch too large (${serializedBytes}B > ${HARD_BATCH_MAX_BYTES}B), dropping trace ${ctx.run.runId}`,
-    );
-    return {
-      langfuse_expected: true,
-      langfuse_delivery_status: 'failed',
-      langfuse_drop_reason: 'payload_too_large',
-    };
-  }
-
-  const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
-  if (config.kind === 'relay') {
-    return postRelayBatch(config, serialized, fetchImpl);
-  }
-  return postLangfuseBatch(config, batch, fetchImpl);
+  void opts;
+  return deriveLangfuseDeliveryState(ctx.prefs, null);
 }
 
 // Build a Langfuse `score-create` batch for a user-supplied turn rating.
@@ -1942,33 +1724,6 @@ export async function reportRunFeedback(
   ctx: FeedbackReportContext,
   opts: ReportRunOpts = {},
 ): Promise<void> {
-  if (ctx.prefs.metrics !== true) return;
-  if (ctx.prefs.content !== true) return;
-
-  const config = resolveReportConfig(opts);
-  if (!config) return;
-
-  let batch: unknown[];
-  try {
-    batch = buildFeedbackPayload(ctx);
-  } catch (error) {
-    console.warn(`[langfuse-trace] Feedback payload build error: ${String(error)}`);
-    return;
-  }
-
-  const serialized = JSON.stringify({ batch });
-  const serializedBytes = Buffer.byteLength(serialized, 'utf8');
-  if (serializedBytes > HARD_BATCH_MAX_BYTES) {
-    console.warn(
-      `[langfuse-trace] Feedback batch too large (${serializedBytes}B > ${HARD_BATCH_MAX_BYTES}B), dropping feedback for ${ctx.runId}`,
-    );
-    return;
-  }
-
-  const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
-  if (config.kind === 'relay') {
-    await postRelayBatch(config, serialized, fetchImpl);
-    return;
-  }
-  await postLangfuseBatch(config, batch, fetchImpl);
+  void ctx;
+  void opts;
 }

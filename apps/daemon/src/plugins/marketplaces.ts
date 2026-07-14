@@ -76,6 +76,9 @@ const HTTPS_RE = /^https:\/\//i;
 const DEFAULT_MARKETPLACE_REPO = 'jhy0285/open-docs';
 const DEFAULT_MARKETPLACE_REPO_REF = 'main';
 const DEFAULT_MARKETPLACE_REGISTRY_PATH = 'plugins/registry';
+const LEGACY_OPEN_DESIGN_MARKETPLACE_REPO = 'nexu-io/open-design';
+export const OPEN_DOCS_MARKETPLACE_MANIFEST_FILENAME = 'open-docs-marketplace.json';
+export const LEGACY_OPEN_DESIGN_MARKETPLACE_MANIFEST_FILENAME = 'open-design-marketplace.json';
 const PUBLIC_MARKETPLACE_BASE_URL = 'https://open-design.ai/marketplace';
 const PUBLIC_PLUGINS_BASE_URL = 'https://open-design.ai/plugins';
 
@@ -98,17 +101,30 @@ export function marketplaceRegistryBaseUrl(): string {
 
 export function marketplaceManifestUrlForRegistry(id: string): string {
   const registryId = id.trim().replace(/^\/+|\/+$/g, '');
-  return `${marketplaceRegistryBaseUrl()}/${registryId}/open-design-marketplace.json`;
+  return `${marketplaceRegistryBaseUrl()}/${registryId}/${OPEN_DOCS_MARKETPLACE_MANIFEST_FILENAME}`;
+}
+
+function isMarketplaceManifestFilename(filename: string | undefined): boolean {
+  return filename === OPEN_DOCS_MARKETPLACE_MANIFEST_FILENAME
+    || filename === LEGACY_OPEN_DESIGN_MARKETPLACE_MANIFEST_FILENAME;
+}
+
+function stripMarketplaceManifestFilename(value: string): string {
+  return value
+    .replace(new RegExp(`/${OPEN_DOCS_MARKETPLACE_MANIFEST_FILENAME.replace(/\./g, '\\.')}$`), '')
+    .replace(new RegExp(`/${LEGACY_OPEN_DESIGN_MARKETPLACE_MANIFEST_FILENAME.replace(/\./g, '\\.')}$`), '');
 }
 
 function registryIdFromBaseUrl(url: string, baseUrl: string): string | null {
   const base = baseUrl.replace(/\/+$/, '');
-  if (!url.startsWith(`${base}/`) || !url.endsWith('/open-design-marketplace.json')) {
+  if (
+    !url.startsWith(`${base}/`) ||
+    (!url.endsWith(`/${OPEN_DOCS_MARKETPLACE_MANIFEST_FILENAME}`) &&
+      !url.endsWith(`/${LEGACY_OPEN_DESIGN_MARKETPLACE_MANIFEST_FILENAME}`))
+  ) {
     return null;
   }
-  const id = url
-    .slice(base.length + 1)
-    .replace(/\/open-design-marketplace\.json$/, '');
+  const id = stripMarketplaceManifestFilename(url.slice(base.length + 1));
   return id && !id.includes('/') ? id : null;
 }
 
@@ -121,11 +137,16 @@ export function marketplaceRegistryIdFromUrl(url: string): string | null {
 
   const publicBases = [PUBLIC_MARKETPLACE_BASE_URL, PUBLIC_PLUGINS_BASE_URL];
   for (const base of publicBases) {
-    if (trimmed === `${base}/open-design-marketplace.json`) return 'official';
-    if (trimmed.startsWith(`${base}/`) && trimmed.endsWith('/open-design-marketplace.json')) {
-      const id = trimmed
-        .slice(base.length + 1)
-        .replace(/\/open-design-marketplace\.json$/, '');
+    if (
+      trimmed === `${base}/${OPEN_DOCS_MARKETPLACE_MANIFEST_FILENAME}` ||
+      trimmed === `${base}/${LEGACY_OPEN_DESIGN_MARKETPLACE_MANIFEST_FILENAME}`
+    ) return 'official';
+    if (
+      trimmed.startsWith(`${base}/`) &&
+      (trimmed.endsWith(`/${OPEN_DOCS_MARKETPLACE_MANIFEST_FILENAME}`) ||
+        trimmed.endsWith(`/${LEGACY_OPEN_DESIGN_MARKETPLACE_MANIFEST_FILENAME}`))
+    ) {
+      const id = stripMarketplaceManifestFilename(trimmed.slice(base.length + 1));
       if (id && !id.includes('/')) return id;
     }
   }
@@ -138,14 +159,18 @@ export function marketplaceRegistryIdFromUrl(url: string): string | null {
     const parts = parsed.pathname.split('/').filter(Boolean);
     if (parts.length < 6) return null;
     const [owner, repo] = parts;
-    const allowedRepos = new Set([DEFAULT_MARKETPLACE_REPO, marketplaceRegistryRepo()]);
+    const allowedRepos = new Set([
+      DEFAULT_MARKETPLACE_REPO,
+      marketplaceRegistryRepo(),
+      LEGACY_OPEN_DESIGN_MARKETPLACE_REPO,
+    ]);
     if (!allowedRepos.has(`${owner}/${repo}`)) return null;
     const marker = parts.findIndex((part, index) =>
       part === 'plugins' && parts[index + 1] === 'registry',
     );
     const id = marker >= 0 ? parts[marker + 2] : undefined;
     const filename = marker >= 0 ? parts[marker + 3] : undefined;
-    return id && filename === 'open-design-marketplace.json' ? id : null;
+    return id && isMarketplaceManifestFilename(filename) ? id : null;
   } catch {
     return null;
   }

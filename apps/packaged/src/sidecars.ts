@@ -86,9 +86,9 @@ type PackagedDaemonManagedPathEnv = {
    * must outlive a namespace-scoped data-dir reset) outside the
    * `<namespace>/data/` subtree.
    *
-   * Required so PostHog person identity survives a reinstall of the same
-   * channel even when the baked namespace token changes or per-namespace
-   * data is cleared. See `apps/daemon/src/installation.ts`.
+   * Required so installation metadata survives a reinstall of the same channel
+   * even when the baked namespace token changes or per-namespace data is
+   * cleared. See `apps/daemon/src/installation.ts`.
    */
   OD_INSTALLATION_DIR: string;
 };
@@ -348,9 +348,6 @@ export type PackagedDaemonSpawnEnvOptions = {
    */
   requireDesktopAuth: boolean;
   legacyDataDir?: string | null;
-  telemetryRelayUrl?: string | null;
-  posthogKey?: string | null;
-  posthogHost?: string | null;
 };
 
 /**
@@ -383,9 +380,6 @@ export function buildPackagedDaemonSpawnEnv(
       ? {}
       : { OPEN_DESIGN_AMR_PROFILE: options.amrProfile }),
     ...(options.appVersion == null ? {} : { OD_APP_VERSION: options.appVersion }),
-    ...(options.telemetryRelayUrl == null || options.telemetryRelayUrl.length === 0
-      ? {}
-      : { OPEN_DESIGN_TELEMETRY_RELAY_URL: options.telemetryRelayUrl }),
     // OD_LEGACY_DATA_DIR is the one-shot recovery handle for users
     // upgrading from 0.3.x .od/ layouts. The daemon's startup
     // migrator (legacy-data-migrator.ts) reads it; the env-allowlist
@@ -395,17 +389,7 @@ export function buildPackagedDaemonSpawnEnv(
     ...(options.legacyDataDir == null || options.legacyDataDir.length === 0
       ? {}
       : { OD_LEGACY_DATA_DIR: options.legacyDataDir }),
-    // PostHog analytics ingest key, baked into the bundle at packaging time
-    // by tools/pack. Daemon reads this as POSTHOG_KEY at startup. Absent
     // for fork builds without the CI secret — the daemon's analytics
-    // module no-ops cleanly in that case, and /api/analytics/config
-    // returns enabled=false regardless of user consent.
-    ...(options.posthogKey == null || options.posthogKey.length === 0
-      ? {}
-      : { POSTHOG_KEY: options.posthogKey }),
-    ...(options.posthogHost == null || options.posthogHost.length === 0
-      ? {}
-      : { POSTHOG_HOST: options.posthogHost }),
   };
 }
 
@@ -501,9 +485,6 @@ export async function startPackagedSidecars(
     daemonSidecarEntry: string | null;
     electronNodeCommand: string | null;
     nodeCommand: string | null;
-    telemetryRelayUrl: string | null;
-    posthogKey: string | null;
-    posthogHost: string | null;
     /**
      * PR #974 round-5 (lefarcen P2): caller asserts whether a desktop
      * runtime is being started in this packaged process group. The
@@ -551,9 +532,6 @@ export async function startPackagedSidecars(
         daemonCliEntry: options.daemonCliEntry,
         legacyDataDir: process.env.OD_LEGACY_DATA_DIR ?? null,
         requireDesktopAuth: options.requireDesktopAuth,
-        telemetryRelayUrl: options.telemetryRelayUrl,
-        posthogKey: options.posthogKey,
-        posthogHost: options.posthogHost,
       }),
       electronNodeCommand: options.electronNodeCommand,
       nodeCommand: options.nodeCommand,

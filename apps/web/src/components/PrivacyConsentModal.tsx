@@ -24,9 +24,9 @@ interface Props {
  * it stretches to a bottom-edge bar (see `.privacy-consent-banner` in
  * index.css) so it doesn't crowd content on phones.
  *
- * Single "I get it" action: the product runs with telemetry off by default.
- * The banner explains the difference between model-provider input and optional
- * Open Docs telemetry. Settings → Privacy exposes opt-in controls.
+ * Single "I get it" action: Open Docs product telemetry is disabled.
+ * The banner explains that model-provider input is governed by the selected
+ * CLI/provider policy, while Open Docs itself does not send telemetry.
  *
  * Stays mounted until the user clicks I get it — there is no
  * dismiss-without-acknowledgement button on purpose. The downstream
@@ -37,7 +37,7 @@ export function PrivacyConsentModal({ onAccept }: Props): JSX.Element {
   const t = useT();
   const analytics = useAnalytics();
   // The first-launch privacy banner only records that the disclosure was
-  // acknowledged; it does not opt the user into optional telemetry.
+  // acknowledged; it does not opt the user into Open Docs telemetry.
   return (
     <div className="privacy-consent-banner" role="region" aria-labelledby="privacy-consent-title">
       <div className="privacy-consent-banner-head">

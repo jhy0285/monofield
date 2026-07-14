@@ -18,8 +18,6 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-const OPEN_DOCS_GITHUB_STARS_FALLBACK = 40_000;
-
 export function registerOpenDocsPublicMetadataRoutes(
   app: Express,
   ctx: RegisterOpenDocsPublicMetadataRoutesDeps,
@@ -37,13 +35,7 @@ export function registerOpenDocsPublicMetadataRoutes(
       };
       res.json(payload);
     } catch (error) {
-      const payload: OpenDocsGithubRepoResponse = {
-        repo: 'jhy0285/open-docs',
-        stargazers_count: OPEN_DOCS_GITHUB_STARS_FALLBACK,
-        fetchedAt: Date.now(),
-        stale: true,
-      };
-      res.json(payload);
+      res.status(502).json({ error: errorMessage(error) });
     }
   });
 

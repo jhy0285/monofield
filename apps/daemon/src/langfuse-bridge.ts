@@ -182,19 +182,8 @@ function mergeTraceSafeManifests(
   };
 }
 
-function inferObjectRegistrationRelayUrl(env: NodeJS.ProcessEnv = process.env): string | null {
-  const objectRelayUrl = env.OPEN_DESIGN_OBJECT_RELAY_URL?.trim();
-  if (!objectRelayUrl) {
-    const telemetryRelayUrl = env.OPEN_DESIGN_TELEMETRY_RELAY_URL?.trim();
-    return telemetryRelayUrl ? telemetryRelayUrl.replace(/\/+$/, '') : null;
-  }
-  try {
-    const url = new URL(objectRelayUrl);
-    url.pathname = url.pathname.replace(/\/api\/objects\/batch\/?$/, '/api/langfuse');
-    return url.toString().replace(/\/+$/, '');
-  } catch {
-    return objectRelayUrl.replace(/\/api\/objects\/batch\/?$/, '/api/langfuse').replace(/\/+$/, '');
-  }
+function inferObjectRegistrationRelayUrl(_env: NodeJS.ProcessEnv = process.env): string | null {
+  return null;
 }
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {

@@ -19,7 +19,10 @@ const REPO_ROOT = path.resolve(__dirname, '../../..');
 const CLI_SRC = path.join(__dirname, '../src/cli.ts');
 const TSX_CLI = path.join(REPO_ROOT, 'node_modules', 'tsx', 'dist', 'cli.mjs');
 
-describe('Phase 2C CLI wrappers', () => {
+// Each runCli() spawn cold-compiles the CLI through tsx (~5-8s on slower
+// Windows hosts), and several tests chain 3+ spawns — give the suite more
+// headroom than vitest's 20s default.
+describe('Phase 2C CLI wrappers', { timeout: 90_000 }, () => {
   let server: http.Server;
   let baseUrl: string;
   let shutdown: (() => Promise<void> | void) | undefined;
@@ -196,7 +199,11 @@ describe('Phase 2C CLI wrappers', () => {
 
     try {
       const ipcRoot = makeFolder();
-      const ipcPath = path.join(ipcRoot, 'daemon.sock');
+      // Windows cannot listen on filesystem socket paths — use a named pipe
+      // there, matching how the production sidecar resolves its IPC path.
+      const ipcPath = process.platform === 'win32'
+        ? `\\\\.\\pipe\\od-cli-phase2c-${randomBytes(6).toString('hex')}`
+        : path.join(ipcRoot, 'daemon.sock');
       const sidecar = await createJsonIpcServer({
         socketPath: ipcPath,
         handler: async (message) => {

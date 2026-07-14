@@ -1,7 +1,7 @@
 // Shared GitHub star-count hook backing the topbar pill
 // (`GithubStarBadge`). The browser talks only to the local daemon,
-// which caches GitHub metadata and can return stale-on-error values
-// when the upstream API flakes. This keeps Electron / prerelease builds
+// which caches GitHub metadata and can return stale values only when
+// the daemon has a previously fetched value. This keeps Electron / prerelease builds
 // out of the business of making unauthenticated GitHub requests from
 // the renderer.
 
@@ -9,10 +9,10 @@ import { useEffect, useState } from 'react';
 import type { OpenDocsGithubRepoResponse } from '@open-design/contracts';
 
 const API = '/api/github/open-docs';
-const REPO = 'https://github.com/jhy0285/open-docs.git';
-const LS_KEY = 'open-docs:gh-stars';
-const FAILURE_LS_KEY = 'open-docs:gh-stars:last-failure';
-export const GITHUB_STARS_FALLBACK_LABEL = '40K+';
+const REPO = 'https://github.com/jhy0285/open-docs';
+const LS_KEY = 'open-docs:gh-stars:v2';
+const FAILURE_LS_KEY = 'open-docs:gh-stars:last-failure:v2';
+export const GITHUB_STARS_FALLBACK_LABEL = '-';
 
 // One-hour soft cache — long enough to dodge GitHub's 60/hr
 // unauthenticated quota when the same user reopens the app several

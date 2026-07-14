@@ -72,6 +72,8 @@ export type IconName =
   | 'send'
   | 'settings'
   | 'share'
+  | 'screen-spec'
+  | 'interface-spec'
   | 'sliders'
   | 'smartphone'
   | 'spinner'
@@ -637,6 +639,31 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
           <path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7" />
           <path d="m16 6-4-4-4 4" />
           <path d="M12 2v13" />
+        </svg>
+      );
+    case 'screen-spec':
+      return (
+        <svg {...common}>
+          <rect x="2" y="4" width="20" height="16" rx="2" />
+          <path d="M2 8.5h20" />
+          <path d="M13 12h5.5" />
+          <path d="M13 15.5h4" />
+          <circle cx="7.5" cy="14" r="3" />
+          <path d="M10.5 14h1.5" />
+        </svg>
+      );
+    case 'interface-spec':
+      // Spreadsheet with request/response arrows — the API interface
+      // specification workbook. Sibling of the screen-spec sheet icon.
+      return (
+        <svg {...common}>
+          <rect x="2" y="4" width="20" height="16" rx="2" />
+          <path d="M2 8.5h20" />
+          <path d="M8.5 8.5V20" />
+          <path d="M11.5 12.5H18" />
+          <path d="M16 10.5l2 2-2 2" />
+          <path d="M18 16.5h-6.5" />
+          <path d="M13.5 14.5l-2 2 2 2" />
         </svg>
       );
     case 'sliders':

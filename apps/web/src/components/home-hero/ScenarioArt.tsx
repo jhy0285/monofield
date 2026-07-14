@@ -94,6 +94,24 @@ function DeckArt() {
   );
 }
 
+function ScreenSpecArt() {
+  // Screen specification sheet: annotated screen on the left, description
+  // table on the right, and an accent callout marker connecting them.
+  return (
+    <Frame>
+      <rect x="6" y="7" width="48" height="28" rx="4" fill={SURFACE} stroke={INK} strokeWidth="2" />
+      <line x1="6" y1="14" x2="54" y2="14" stroke={INK} strokeWidth="2" strokeOpacity="0.45" />
+      <rect x="11" y="18" width="19" height="12" rx="2" fill={INK} fillOpacity="0.16" />
+      <circle cx="20" cy="24" r="4" fill={SURFACE} stroke={ACCENT} strokeWidth="2" />
+      <path d="M19 22.2H20.2V25.8" stroke={ACCENT} strokeWidth="1.8" />
+      <path d="M23.8 24H34" stroke={ACCENT} strokeWidth="2" />
+      <line x1="36" y1="19" x2="49" y2="19" stroke={INK} strokeWidth="2" />
+      <line x1="36" y1="24" x2="47" y2="24" stroke={INK} strokeWidth="2" />
+      <line x1="36" y1="29" x2="44" y2="29" stroke={INK} strokeWidth="2" />
+    </Frame>
+  );
+}
+
 function DocumentArt() {
   // Portrait page with a folded corner, accent title line, body lines.
   return (
@@ -184,11 +202,35 @@ function AudioArt() {
   );
 }
 
+function InterfaceSpecArt() {
+  // Interface specification workbook: API block on the left exchanging
+  // request/response arrows with a spreadsheet grid on the right.
+  return (
+    <Frame>
+      <rect x="6" y="12" width="13" height="18" rx="3" fill={INK} fillOpacity="0.16" stroke={INK} strokeWidth="2" />
+      <line x1="10" y1="18" x2="15" y2="18" stroke={INK} strokeWidth="2" />
+      <line x1="10" y1="23" x2="15" y2="23" stroke={INK} strokeWidth="2" />
+      <path d="M21 17.5H29" stroke={ACCENT} strokeWidth="2" />
+      <path d="M27.5 15.5l2.5 2-2.5 2" stroke={ACCENT} strokeWidth="2" fill="none" />
+      <path d="M29 24.5H21" stroke={ACCENT} strokeWidth="2" />
+      <path d="M22.5 22.5L20 24.5l2.5 2" stroke={ACCENT} strokeWidth="2" fill="none" />
+      <rect x="32" y="7" width="22" height="28" rx="3" fill={SURFACE} stroke={INK} strokeWidth="2" />
+      <line x1="32" y1="13" x2="54" y2="13" stroke={INK} strokeWidth="2" strokeOpacity="0.45" />
+      <line x1="39" y1="13" x2="39" y2="35" stroke={INK} strokeWidth="2" strokeOpacity="0.45" />
+      <line x1="42" y1="19" x2="51" y2="19" stroke={INK} strokeWidth="2" />
+      <line x1="42" y1="24" x2="49" y2="24" stroke={INK} strokeWidth="2" />
+      <line x1="42" y1="29" x2="51" y2="29" stroke={INK} strokeWidth="2" />
+    </Frame>
+  );
+}
+
 const ART_BY_CHIP: Record<string, () => ReactElement> = {
   prototype: PrototypeArt,
   wireframe: WireframeArt,
   mobile: MobileArt,
   deck: DeckArt,
+  'screen-spec': ScreenSpecArt,
+  'interface-spec': InterfaceSpecArt,
   document: DocumentArt,
   'create-brand-kit': BrandKitArt,
   hyperframes: HyperFramesArt,

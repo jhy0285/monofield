@@ -106,6 +106,7 @@ export type TrackingProjectKind =
   | 'live_artifact'
   | 'slide_deck'
   | 'screen_spec'
+  | 'interface_spec'
   | 'template'
   | 'image'
   | 'video'
@@ -3218,6 +3219,9 @@ export function projectKindToTracking(
     case 'screen-spec':
     case 'screen_spec':
       return 'screen_spec';
+    case 'interface-spec':
+    case 'interface_spec':
+      return 'interface_spec';
     case 'template':
       return 'template';
     case 'other':

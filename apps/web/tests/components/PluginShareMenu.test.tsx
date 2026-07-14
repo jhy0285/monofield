@@ -238,7 +238,7 @@ describe('PluginShareMenu', () => {
     expect(labels).toContain('复制插件 ID');
     expect(labels).toContain('复制 README 徽章');
     expect(labels).toContain('在 GitHub 打开源码');
-    expect(labels).toContain('打开项目主页');
+    expect(labels).toContain('原始来源');
     expect(labels).toContain('在插件市场打开');
     expect(labels.some((label) => label.includes('Copy install command'))).toBe(false);
   });
@@ -361,12 +361,12 @@ describe('PluginShareMenu', () => {
     const items = Array.from(
       container.querySelectorAll('.plugin-share-item'),
     ) as HTMLElement[];
-    expect(items.some((b) => b.textContent?.includes('Open homepage'))).toBe(
+    expect(items.some((b) => b.textContent?.includes('Original source'))).toBe(
       true,
     );
     const homepageLink = Array.from(
       container.querySelectorAll<HTMLAnchorElement>('a.plugin-share-item'),
-    ).find((link) => link.textContent?.includes('Open homepage'));
+    ).find((link) => link.textContent?.includes('Original source'));
     expect(homepageLink).toBeTruthy();
     expect(homepageLink?.getAttribute('href')).toBe('https://example.test/plugin-home');
   });
@@ -382,7 +382,7 @@ describe('PluginShareMenu', () => {
     openPopover();
     const repoLinks = Array.from(
       container.querySelectorAll<HTMLAnchorElement>(
-        'a.plugin-share-item[href="https://github.com/nexu-io/open-design"]',
+        'a.plugin-share-item[href="https://github.com/jhy0285/open-docs"]',
       ),
     );
     expect(repoLinks.length).toBeGreaterThan(0);

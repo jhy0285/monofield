@@ -1213,11 +1213,11 @@ function AvailablePluginDetailsModal({
 
           <section className="plugin-details-modal__section">
             <div className="plugin-details-modal__section-head">
-              <h3 className="plugin-details-modal__section-title">Catalog</h3>
+              <h3 className="plugin-details-modal__section-title">Catalog entry</h3>
             </div>
             <dl className="plugin-details-modal__source">
               <div>
-                <dt>Source</dt>
+                <dt>Install source</dt>
                 <dd>
                   <code>{selectedVersionInfo?.source ?? plugin.entry.source}</code>
                 </dd>
@@ -1239,7 +1239,7 @@ function AvailablePluginDetailsModal({
                 </div>
               ) : null}
               <div>
-                <dt>Catalog</dt>
+                <dt>Catalog name</dt>
                 <dd>{sourceName}</dd>
               </div>
               <div>
@@ -1272,7 +1272,7 @@ function AvailablePluginDetailsModal({
               ) : null}
               {plugin.entry.homepage ? (
                 <div>
-                  <dt>Homepage</dt>
+                  <dt>{t('plugins.actions.openHomepage')}</dt>
                   <dd>
                     <a href={plugin.entry.homepage} target="_blank" rel="noreferrer">
                       {plugin.entry.homepage}
@@ -1422,7 +1422,7 @@ function SourcesPanel({
               onSourceUrlInput?.();
             }}
             onChange={(event) => setUrl(event.target.value)}
-            placeholder="https://example.com/open-design-marketplace.json"
+            placeholder="https://example.com/open-docs-marketplace.json"
             disabled={pendingAction === 'add'}
           />
           <select

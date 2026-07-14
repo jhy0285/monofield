@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OpenDocsGithubRepoResponse } from '@open-design/contracts';
 
 const originalFetch = globalThis.fetch;
-const FAILURE_LS_KEY = 'open-docs:gh-stars:last-failure';
+const FAILURE_LS_KEY = 'open-docs:gh-stars:last-failure:v2';
+const IMPORT_TEST_TIMEOUT_MS = 10_000;
 
 describe('GithubStarBadge', () => {
   beforeEach(() => {
@@ -27,14 +28,14 @@ describe('GithubStarBadge', () => {
     render(<GithubStarBadge />);
 
     expect(screen.getByText('Star')).toBeTruthy();
-    expect(screen.getByText('40K+')).toBeTruthy();
+    expect(screen.getByText('-')).toBeTruthy();
     await waitFor(() =>
       expect(globalThis.fetch).toHaveBeenCalledWith(
         '/api/github/open-docs',
         expect.objectContaining({ signal: expect.any(AbortSignal) }),
       ),
     );
-  });
+  }, IMPORT_TEST_TIMEOUT_MS);
 
   it('backs off after an offline failure instead of retrying on every remount', async () => {
     globalThis.fetch = vi.fn().mockRejectedValue(new Error('offline')) as typeof fetch;
@@ -48,7 +49,7 @@ describe('GithubStarBadge', () => {
 
     render(<GithubStarBadge />);
 
-    expect(screen.getByText('40K+')).toBeTruthy();
+    expect(screen.getByText('-')).toBeTruthy();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
   });
@@ -65,7 +66,7 @@ describe('GithubStarBadge', () => {
 
     render(<GithubStarBadge />);
 
-    expect(screen.getByText('40K+')).toBeTruthy();
+    expect(screen.getByText('-')).toBeTruthy();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
   });

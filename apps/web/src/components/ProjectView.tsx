@@ -241,7 +241,7 @@ type ProjectChatSendMeta = ChatSendMeta & {
   sessionMode?: ChatSessionMode;
   /** Overrides the run_created / run_finished `entry_from` analytics prop for
    *  this send (e.g. 'resume_continue' from the resumable-failure Continue
-   *  action). Behavior never depends on it; it only shapes PostHog props. */
+   *  action). Behavior never depends on it; it only shapes analytics props. */
   entryFrom?: ChatAnalyticsEntryFrom;
 };
 
@@ -1682,9 +1682,37 @@ export function ProjectView({
     const status = last.runStatus;
     if (status !== 'succeeded' && status !== 'failed') return;
 
+    // A turn that ended by asking the user a `<question-form>` settles as
+    // `succeeded` at the run level, but for the user it means "come back and
+    // answer" — surface it as a distinct question notification instead of a
+    // generic completion one so the run doesn't silently wait.
+    const askedQuestion =
+      status === 'succeeded' &&
+      /<(?:question-form|ask-question)\b/.test(last.content ?? '');
+
     const cfg = config.notifications ?? DEFAULT_NOTIFICATIONS;
     if (cfg.soundEnabled) {
       playSound(status === 'succeeded' ? cfg.successSoundId : cfg.failureSoundId);
+    }
+
+    if (askedQuestion) {
+      if (cfg.desktopEnabled) {
+        const isHidden = typeof document !== 'undefined' && document.hidden;
+        const isFocused = typeof document === 'undefined' ? true : document.hasFocus();
+        // Match success gating: only interrupt when the user is looking
+        // elsewhere. If the form is on-screen and focused they already see it.
+        if (isHidden || !isFocused) {
+          void showCompletionNotification({
+            status: 'succeeded',
+            title: t('notify.questionTitle'),
+            body: t('notify.questionBody'),
+            onClick: () => {
+              if (typeof window !== 'undefined') window.focus();
+            },
+          });
+        }
+      }
+      return;
     }
 
     if (cfg.desktopEnabled) {
@@ -2632,9 +2660,9 @@ export function ProjectView({
               },
         true,
       );
-      // Forward affirmative ratings to the daemon → Langfuse `score-create`.
-      // Clears (change=null) are skipped — Langfuse scores are append-only,
-      // and the rating is also captured by the PostHog event so a clear is
+      // Forward affirmative ratings to the daemon → local feedback bridge.
+      // Clears (change=null) are skipped — feedback records are append-only,
+      // and the rating is also captured by the local event so a clear is
       // recoverable downstream if we ever need it.
       const runId = assistantMessage.runId;
       if (change && runId && activeConversationId) {

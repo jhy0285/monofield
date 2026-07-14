@@ -146,36 +146,19 @@ export function syncAmrAttributionWithOnboardingProfile(
   return next;
 }
 
-// Resolves the device id to forward to AMR on a handoff, ONLY when the user has
-// opted into metrics; otherwise null. Prefers `config.installationId` from the
-// current render, falling back to the resolved telemetry device id, then null.
-//
-// In steady state these two are the same value (the analytics client seeds its
-// resolved id from `cfg.installationId`), so the AMR join key still matches the
-// telemetry / PostHog / Langfuse device identity. The precedence matters only
-// during a `Delete my data` rotation: `config.installationId` is the fresh
-// source-of-truth in the current render, while `resolvedDeviceId` (a module
-// global in the analytics client) only catches up later when the App-level
-// `setIdentity(...)` effect runs `applyIdentity()`. Reading `installationId`
-// first forwards the rotated id immediately instead of the stale pre-rotation
-// one, so the cross-product join never points at a deleted identity. Neither
-// input is the mount-time bootstrap UUID, so this never regresses to that.
+// Open Docs does not mirror AMR attribution into product telemetry. This helper
+// therefore returns null unless a later AMR task introduces an explicit,
+// user-approved handoff identifier.
 export function amrHandoffDeviceId(input: {
   metricsConsent: boolean;
   resolvedDeviceId: string | null;
   installationId: string | null | undefined;
 }): string | null {
-  if (!input.metricsConsent) return null;
-  return input.installationId ?? input.resolvedDeviceId ?? null;
+  void input;
+  return null;
 }
 
-// Builds the AMR handoff URL with Open Docs attribution params. When
-// `deviceId` is provided it is added as `od_device_id`, so AMR can link the
-// landing/registration directly back to this Open Docs install instead of
-// only through the one-shot entry id. The caller passes it ONLY when the user
-// has consented to metrics: AMR is Open Docs's official model service, so
-// this is a same-owner cross-product link, but it still respects the telemetry
-// opt-in. Pass null/undefined to omit it.
+// Builds the AMR handoff URL with non-identifying entry context only.
 export function attributedAmrUrl(
   baseUrl: string,
   attribution: AmrEntryAttribution,
@@ -250,80 +233,16 @@ function readReusableAmrAttribution(
 }
 
 async function mirrorAmrEntryToAmrAnalytics(
-  attribution: AmrEntryAttribution,
+  _attribution: AmrEntryAttribution,
 ): Promise<void> {
-  if (typeof fetch !== 'function') return;
-  const sourcePageName = ENTRY_PAGE_BY_SOURCE[attribution.sourceDetail];
-  try {
-    await fetch('/api/integrations/vela/analytics-entry', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        payload: {
-          pageName: 'open_design',
-          sourcePageName,
-          area: 'amr_entry',
-          element: attribution.sourceDetail,
-          action: 'click_amr_entry',
-          entryId: attribution.entryId,
-          sourceProduct: attribution.sourceProduct,
-          sourceDetail: attribution.sourceDetail,
-          entryOccurredAt: attribution.occurredAt,
-          // Self-reported onboarding profile (optional). Anchored to entryId on
-          // the AMR side for paid-conversion segmentation. Not added to the
-          // redirect URL — kept to the consent-gated mirror channel only.
-          ...(attribution.odRole ? { odRole: attribution.odRole } : {}),
-          ...(attribution.odOrgSize ? { odOrgSize: attribution.odOrgSize } : {}),
-          ...(attribution.odUseCase && attribution.odUseCase.length > 0
-            ? { odUseCase: attribution.odUseCase }
-            : {}),
-          ...(attribution.odSource ? { odSource: attribution.odSource } : {}),
-        },
-      }),
-    });
-  } catch {
-    // AMR analytics mirroring must never block the primary Open Docs action.
-  }
+  // Open Docs does not mirror AMR analytics in the MVP.
 }
-
 async function mirrorAmrOnboardingProfileToAmrAnalytics(
-  attribution: AmrEntryAttribution,
-  now: Date,
+  _attribution: AmrEntryAttribution,
+  _now: Date,
 ): Promise<void> {
-  if (typeof fetch !== 'function') return;
-  try {
-    await fetch('/api/integrations/vela/analytics-profile', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        payload: {
-          pageName: 'open_design',
-          sourcePageName: 'onboarding',
-          area: 'onboarding',
-          element: 'about_you_submit',
-          action: 'submit_profile',
-          entryId: attribution.entryId,
-          sourceProduct: attribution.sourceProduct,
-          sourceDetail: attribution.sourceDetail,
-          entryOccurredAt: attribution.occurredAt,
-          profileOccurredAt: now.toISOString(),
-          ...(attribution.odDeviceId
-            ? { odDeviceId: attribution.odDeviceId }
-            : {}),
-          ...(attribution.odRole ? { odRole: attribution.odRole } : {}),
-          ...(attribution.odOrgSize ? { odOrgSize: attribution.odOrgSize } : {}),
-          ...(attribution.odUseCase && attribution.odUseCase.length > 0
-            ? { odUseCase: attribution.odUseCase }
-            : {}),
-          ...(attribution.odSource ? { odSource: attribution.odSource } : {}),
-        },
-      }),
-    });
-  } catch {
-    // AMR analytics mirroring must never block onboarding completion.
-  }
+  // Open Docs does not mirror AMR analytics in the MVP.
 }
-
 function isValidAmrAttribution(value: Partial<AmrEntryAttribution>): value is AmrEntryAttribution {
   return value.sourceProduct === 'open_design'
     && typeof value.entryId === 'string'

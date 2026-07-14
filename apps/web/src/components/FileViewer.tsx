@@ -148,6 +148,7 @@ import {
 } from '../edit-mode/source-patches';
 import { MANUAL_EDIT_STYLE_PROPS, type ManualEditBridgeMessage, type ManualEditHistoryEntry, type ManualEditPatch, type ManualEditStyles, type ManualEditTarget } from '../edit-mode/types';
 import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
+import { ScreenSpecEditor } from './screen-spec/ScreenSpecEditor';
 
 function resolveChromeActionsHost(): HTMLElement | null {
   return document.querySelector<HTMLElement>(APP_CHROME_FILE_ACTIONS_SELECTOR)
@@ -1051,6 +1052,9 @@ export function FileViewer({
   if (rendererMatch?.renderer.id === 'svg') {
     return <SvgViewer projectId={projectId} file={file} />;
   }
+  if (rendererMatch?.renderer.id === 'screen-spec') {
+    return <ScreenSpecEditor projectId={projectId} file={file} onFileSaved={onFileSaved} />;
+  }
   if (file.kind === 'image') {
     return <ImageViewer projectId={projectId} file={file} />;
   }
@@ -1263,7 +1267,7 @@ export function LiveArtifactViewer({
 
   // Instrument the live-artifact iframe so failed loads — usually a
   // missing artifact file or a stuck `od://` resolver — surface in
-  // PostHog. iframe load errors don't propagate to window.error, so
+  // the local event facade. iframe load errors don't propagate to window.error, so
   // observability/install.ts cannot catch them globally.
   useEffect(() => {
     if (mode !== 'preview') return undefined;
@@ -4459,7 +4463,7 @@ function HtmlViewer({
   // Shared helper for the share menu: emit studio_click share_option on
   // entry and artifact_export_result on resolution. Sync exports report
   // success immediately after the call returns; async exports get .then
-  // / .catch. The same request_id threads both events so PostHog can
+  // / .catch. The same request_id threads both events so legacy telemetry can
   // stitch click → result via $insert_id correlation.
   const fireShareExport = (
     format:

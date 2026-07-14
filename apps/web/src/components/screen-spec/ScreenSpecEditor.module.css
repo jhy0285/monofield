@@ -1,0 +1,479 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.body {
+  overflow: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+@media (max-width: 980px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.leftColumn,
+.rightColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* Screen tab strip in the toolbar */
+.screenTabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  min-width: 0;
+}
+
+.screenTab {
+  padding: 3px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.screenTab:hover {
+  color: var(--text);
+}
+
+.screenTabActive {
+  color: var(--accent-strong);
+  background: var(--accent-tint);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
+/* Banners */
+.noticeBanner,
+.warnBanner,
+.errorBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.noticeBanner {
+  background: var(--accent-tint);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+}
+
+.warnBanner {
+  background: color-mix(in srgb, #d92d20 8%, var(--bg-panel));
+  border-color: color-mix(in srgb, #d92d20 30%, var(--border));
+  color: #b42318;
+}
+
+.errorBanner {
+  background: color-mix(in srgb, #d92d20 12%, var(--bg-panel));
+  border-color: #d92d20;
+  color: #b42318;
+}
+
+.errorBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 32px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* Panels */
+.panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.panelHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.panelHeading h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.panelHint {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.emptyMessage,
+.emptyCell {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 8px;
+}
+
+.smallButton {
+  padding: 3px 10px;
+  font-size: 12px;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.smallButton:hover:not(:disabled) {
+  background: var(--accent-tint);
+}
+
+.smallButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Canvas */
+.canvasSection {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.canvasToolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.uploadButton {
+  padding: 3px 10px;
+  font-size: 12px;
+  color: var(--accent-strong);
+  background: var(--accent-tint);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.uploadButton input {
+  display: none;
+}
+
+.heightControl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.uploadError {
+  margin: 0;
+  font-size: 12px;
+  color: #b42318;
+}
+
+.canvasFrame {
+  position: relative;
+  height: var(--ss-canvas-height, 520px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(color-mix(in srgb, var(--border) 40%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--border) 40%, transparent) 1px, transparent 1px);
+  background-size: 32px 32px;
+  overflow: hidden;
+  cursor: crosshair;
+}
+
+.canvasImage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.emptyImage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.emptyImage strong {
+  font-size: 16px;
+  color: var(--text);
+}
+
+.marker {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #d92d20;
+  color: #fff;
+  border: 1.5px solid #fff;
+  border-radius: 50%;
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  cursor: grab;
+  z-index: 2;
+  padding: 0;
+  touch-action: none;
+}
+
+.marker:active {
+  cursor: grabbing;
+}
+
+.markerSelected {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.relationLayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.relationPath {
+  stroke: #d92d20;
+  fill: none;
+}
+
+.relationArrow {
+  fill: #d92d20;
+}
+
+.relationText {
+  font-size: 11px;
+  fill: #b42318;
+  paint-order: stroke;
+  stroke: var(--bg-panel);
+  stroke-width: 3px;
+}
+
+/* Callout table */
+.tableScroll {
+  overflow-x: auto;
+}
+
+.calloutTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.calloutTable th,
+.calloutTable td {
+  border: 1px solid var(--border);
+  padding: 4px 6px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.calloutTable thead th {
+  background: color-mix(in srgb, var(--border) 30%, var(--bg-panel));
+}
+
+.calloutTable input,
+.calloutTable textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 12px;
+}
+
+.numCell {
+  text-align: center;
+  color: #b42318;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.rowSelected td {
+  background: var(--accent-tint);
+}
+
+/* Relations */
+.relationList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.relationRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.relationRow label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.relationRow select,
+.relationRow input {
+  font-size: 12px;
+}
+
+.relationLabelInput {
+  flex: 1;
+  min-width: 140px;
+}
+
+.relationLabelInput input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.styleControls {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.styleControls label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Checkpoints */
+.checkpointList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.checkpointRow {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.checkpointRow textarea {
+  flex: 1;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+
+.checkpointAddRow {
+  display: flex;
+  gap: 6px;
+}
+
+.checkpointAddRow input {
+  flex: 1;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+
+/* Metadata */
+.fieldGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fieldGrid label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.fieldGrid input,
+.fieldGrid textarea {
+  font-size: 12px;
+  box-sizing: border-box;
+}
+
+.fieldRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.levelEditor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fieldHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.levelRow {
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.levelRow label {
+  flex: 1;
+}
+
+.levelRow input {
+  width: 100%;
+}

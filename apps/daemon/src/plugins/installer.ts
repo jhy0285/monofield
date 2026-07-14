@@ -165,6 +165,7 @@ async function* installFromGithub(
 
   let lastError: string | undefined;
   const triedUrls: string[] = [];
+  const failedAttempts: string[] = [];
   for (const candidate of parsed.candidates) {
     if (candidate.subpath) {
       const contentsUrl = githubContentsUrl(parsed.owner, parsed.repo, candidate.subpath, candidate.ref);
@@ -174,6 +175,7 @@ async function* installFromGithub(
         buffered.push(ev);
         if (ev.kind === 'error') {
           lastError = ev.message;
+          failedAttempts.push(`${contentsUrl}: ${ev.message}`);
           break;
         }
         if (ev.kind === 'success') {
@@ -194,6 +196,7 @@ async function* installFromGithub(
       buffered.push(ev);
       if (ev.kind === 'error') {
         lastError = ev.message;
+        failedAttempts.push(`${tarballUrl}: ${ev.message}`);
         break;
       }
       if (ev.kind === 'success') {
@@ -207,7 +210,7 @@ async function* installFromGithub(
   yield {
     kind: 'error',
     message: lastError
-      ? `GitHub install failed: ${lastError}. Tried GitHub fetch URL(s): ${triedUrls.join(', ')}`
+      ? `GitHub install failed: ${lastError}. Tried GitHub fetch URL(s): ${triedUrls.join(', ')}${failedAttempts.length > 0 ? `. Attempt failures: ${failedAttempts.join(' | ')}` : ''}`
       : `GitHub source ${opts.source} did not produce an installable archive`,
     warnings: [],
   };

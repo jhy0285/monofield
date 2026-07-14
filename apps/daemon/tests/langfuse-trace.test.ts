@@ -105,96 +105,27 @@ describe('readLangfuseConfig', () => {
     ).toBeNull();
   });
 
-  it('builds Basic auth header from public:secret', () => {
+  it('ignores legacy Langfuse keys because Open Docs telemetry is disabled', () => {
     const cfg = readLangfuseConfig({
       LANGFUSE_PUBLIC_KEY: 'pk-lf-abc',
       LANGFUSE_SECRET_KEY: 'sk-lf-xyz',
     });
-    expect(cfg).not.toBeNull();
-    const expected =
-      'Basic ' + Buffer.from('pk-lf-abc:sk-lf-xyz').toString('base64');
-    expect(cfg!.authHeader).toBe(expected);
-  });
-
-  it('uses default US base URL when LANGFUSE_BASE_URL is absent', () => {
-    const cfg = readLangfuseConfig({
-      LANGFUSE_PUBLIC_KEY: 'pk',
-      LANGFUSE_SECRET_KEY: 'sk',
-    });
-    expect(cfg!.baseUrl).toBe('https://us.cloud.langfuse.com');
-  });
-
-  it('honours LANGFUSE_BASE_URL and strips trailing slashes', () => {
-    const cfg = readLangfuseConfig({
-      LANGFUSE_PUBLIC_KEY: 'pk',
-      LANGFUSE_SECRET_KEY: 'sk',
-      LANGFUSE_BASE_URL: 'https://cloud.langfuse.com//',
-    });
-    expect(cfg!.baseUrl).toBe('https://cloud.langfuse.com');
-  });
-
-  it('reads optional timeout and retry tuning from env', () => {
-    const cfg = readLangfuseConfig({
-      LANGFUSE_PUBLIC_KEY: 'pk',
-      LANGFUSE_SECRET_KEY: 'sk',
-      LANGFUSE_TIMEOUT_MS: '45000',
-      LANGFUSE_RETRIES: '2',
-    });
-    expect(cfg!.timeoutMs).toBe(45_000);
-    expect(cfg!.retries).toBe(2);
-  });
-
-  it('falls back when timeout and retry env values are invalid', () => {
-    const cfg = readLangfuseConfig({
-      LANGFUSE_PUBLIC_KEY: 'pk',
-      LANGFUSE_SECRET_KEY: 'sk',
-      LANGFUSE_TIMEOUT_MS: '-1',
-      LANGFUSE_RETRIES: '-2',
-    });
-    expect(cfg!.timeoutMs).toBe(20_000);
-    expect(cfg!.retries).toBe(1);
+    expect(cfg).toBeNull();
   });
 });
 
 describe('readTelemetrySinkConfig', () => {
-  it('prefers the Open Design telemetry relay when configured', () => {
+  it('ignores legacy relay and Langfuse env because Open Docs telemetry is disabled', () => {
     const cfg = readTelemetrySinkConfig({
       OPEN_DESIGN_TELEMETRY_RELAY_URL: 'https://telemetry.open-design.ai/api/langfuse//',
       LANGFUSE_PUBLIC_KEY: 'pk',
       LANGFUSE_SECRET_KEY: 'sk',
-    });
-    expect(cfg).toEqual({
-      kind: 'relay',
-      relayUrl: 'https://telemetry.open-design.ai/api/langfuse',
-      timeoutMs: 20_000,
-      retries: 1,
-    });
-  });
-
-  it('uses relay-specific timeout and retry tuning when present', () => {
-    const cfg = readTelemetrySinkConfig({
-      OPEN_DESIGN_TELEMETRY_RELAY_URL: 'https://telemetry.open-design.ai/api/langfuse',
       OPEN_DESIGN_TELEMETRY_TIMEOUT_MS: '30000',
       OPEN_DESIGN_TELEMETRY_RETRIES: '3',
       LANGFUSE_TIMEOUT_MS: '1',
       LANGFUSE_RETRIES: '0',
     });
-    expect(cfg).toMatchObject({
-      kind: 'relay',
-      timeoutMs: 30_000,
-      retries: 3,
-    });
-  });
-
-  it('falls back to direct Langfuse config for local smoke tests', () => {
-    const cfg = readTelemetrySinkConfig({
-      LANGFUSE_PUBLIC_KEY: 'pk',
-      LANGFUSE_SECRET_KEY: 'sk',
-    });
-    expect(cfg).toMatchObject({
-      kind: 'langfuse',
-      baseUrl: 'https://us.cloud.langfuse.com',
-    });
+    expect(cfg).toBeNull();
   });
 });
 
@@ -1621,7 +1552,26 @@ describe('reportRunCompleted', () => {
     });
   });
 
-  it('POSTs to /api/public/ingestion with Basic auth and a JSON batch body', async () => {
+  it('does not send network traces even when a legacy Langfuse config is supplied', async () => {
+    const fetchSpy = vi.fn();
+    const result = await reportRunCompleted(
+      makeCtx({
+        prefs: { metrics: true, content: true, artifactManifest: false },
+      }),
+      {
+        config: TEST_CONFIG,
+        fetchImpl: fetchSpy as any,
+      },
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      langfuse_expected: false,
+      langfuse_delivery_status: 'not_expected',
+      langfuse_drop_reason: 'missing_sink_config',
+    });
+  });
+
+  it.skip('POSTs to /api/public/ingestion with Basic auth and a JSON batch body', async () => {
     const fetchSpy = vi.fn().mockResolvedValue(
       new Response('{}', { status: 200 }),
     );
@@ -1657,7 +1607,7 @@ describe('reportRunCompleted', () => {
     });
   });
 
-  it('keeps a max-budget prompt stack under the hard batch cap', async () => {
+  it.skip('keeps a max-budget prompt stack under the hard batch cap', async () => {
     const maxBudgetSection = 'x'.repeat(64 * 1024);
     const promptTelemetry = buildPromptStackTelemetry({
       composedPrompt: maxBudgetSection.repeat(8),
@@ -1731,7 +1681,7 @@ describe('reportRunCompleted', () => {
     expect(JSON.stringify(batch)).not.toContain('sk-raw');
   });
 
-  it('POSTs serialized ingestion batches to the Open Design telemetry relay', async () => {
+  it.skip('POSTs serialized ingestion batches to the Open Design telemetry relay', async () => {
     const relayConfig: TelemetrySinkConfig = {
       kind: 'relay',
       relayUrl: 'https://telemetry.open-design.ai/api/langfuse',
@@ -1767,7 +1717,7 @@ describe('reportRunCompleted', () => {
     });
   });
 
-  it('warns when the relay returns per-event errors', async () => {
+  it.skip('warns when the relay returns per-event errors', async () => {
     const relayConfig: TelemetrySinkConfig = {
       kind: 'relay',
       relayUrl: 'https://telemetry.open-design.ai/api/langfuse',
@@ -1800,7 +1750,7 @@ describe('reportRunCompleted', () => {
   });
 
 
-  it('classifies relay 413 responses as relay_413', async () => {
+  it.skip('classifies relay 413 responses as relay_413', async () => {
     const relayConfig: TelemetrySinkConfig = {
       kind: 'relay',
       relayUrl: 'https://telemetry.open-design.ai/api/langfuse',
@@ -1826,7 +1776,7 @@ describe('reportRunCompleted', () => {
     });
   });
 
-  it('classifies relay 5xx responses as relay_5xx', async () => {
+  it.skip('classifies relay 5xx responses as relay_5xx', async () => {
     const relayConfig: TelemetrySinkConfig = {
       kind: 'relay',
       relayUrl: 'https://telemetry.open-design.ai/api/langfuse',
@@ -1852,7 +1802,7 @@ describe('reportRunCompleted', () => {
     });
   });
 
-  it('classifies direct Langfuse 5xx responses as langfuse_5xx', async () => {
+  it.skip('classifies direct Langfuse 5xx responses as langfuse_5xx', async () => {
     const fetchSpy = vi.fn().mockResolvedValue(
       new Response('server error', { status: 503 }),
     );
@@ -1872,7 +1822,7 @@ describe('reportRunCompleted', () => {
     });
   });
 
-  it('classifies relay per-event 429s separately from generic 4xx', async () => {
+  it.skip('classifies relay per-event 429s separately from generic 4xx', async () => {
     const relayConfig: TelemetrySinkConfig = {
       kind: 'relay',
       relayUrl: 'https://telemetry.open-design.ai/api/langfuse',
@@ -1901,7 +1851,7 @@ describe('reportRunCompleted', () => {
     });
   });
 
-  it('classifies direct Langfuse per-event 5xx responses as langfuse_5xx', async () => {
+  it.skip('classifies direct Langfuse per-event 5xx responses as langfuse_5xx', async () => {
     const fetchSpy = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({ successes: [], errors: [{ id: 'lf-down', status: 503 }] }),
@@ -1924,7 +1874,7 @@ describe('reportRunCompleted', () => {
     });
   });
 
-  it('warns and drops when serialized batch exceeds the hard cap', async () => {
+  it.skip('warns and drops when serialized batch exceeds the hard cap', async () => {
     // Per-field truncation already caps prompt/output, so we overflow the
     // hard cap by stuffing 50 artifact entries with very long slugs while
     // artifactManifest is on (50 × 30 KB ≈ 1.5 MB > 1 MB cap).
@@ -1952,7 +1902,7 @@ describe('reportRunCompleted', () => {
     });
   });
 
-  it('only warns (does not throw) when fetch rejects', async () => {
+  it.skip('only warns (does not throw) when fetch rejects', async () => {
     const fetchSpy = vi.fn().mockRejectedValue(new Error('network down'));
     await expect(
       reportRunCompleted(
@@ -1974,7 +1924,7 @@ describe('reportRunCompleted', () => {
     );
   });
 
-  it('retries once when fetch rejects before warning', async () => {
+  it.skip('retries once when fetch rejects before warning', async () => {
     const fetchSpy = vi
       .fn()
       .mockRejectedValueOnce(new Error('timeout'))
@@ -1996,7 +1946,7 @@ describe('reportRunCompleted', () => {
     });
   });
 
-  it('only warns (does not throw) when ingestion responds non-2xx', async () => {
+  it.skip('only warns (does not throw) when ingestion responds non-2xx', async () => {
     const fetchSpy = vi.fn().mockResolvedValue(
       new Response('rate limited', { status: 429 }),
     );
@@ -2019,7 +1969,7 @@ describe('reportRunCompleted', () => {
     });
   });
 
-  it('warns when 207 Multi-Status body lists per-event errors', async () => {
+  it.skip('warns when 207 Multi-Status body lists per-event errors', async () => {
     // Langfuse legacy ingestion always responds with 207. response.ok is
     // true, but malformed events show up in body.errors instead of as a
     // top-level non-2xx. Without parsing them they'd be silently dropped.
@@ -2057,7 +2007,7 @@ describe('reportRunCompleted', () => {
     });
   });
 
-  it('does not warn when 207 body has empty errors array', async () => {
+  it.skip('does not warn when 207 body has empty errors array', async () => {
     const fetchSpy = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -2175,21 +2125,12 @@ describe('reportRunFeedback', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('posts a score-create batch to /api/public/ingestion when consent is on', async () => {
-    const fetchSpy = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ successes: [], errors: [] }), { status: 207 }),
-    );
+  it('does not send feedback even when legacy Langfuse config is supplied', async () => {
+    const fetchSpy = vi.fn();
     await reportRunFeedback(
       makeFeedbackCtx({ reasonCodes: ['matched_request'] }),
       { config: TEST_CONFIG, fetchImpl: fetchSpy as any },
     );
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchSpy.mock.calls[0]!;
-    expect(url).toBe('https://us.cloud.langfuse.com/api/public/ingestion');
-    expect(init.method).toBe('POST');
-    const body = JSON.parse(init.body);
-    expect(body.batch).toHaveLength(2);
-    expect(body.batch[0].type).toBe('score-create');
-    expect(body.batch[0].body.value).toBe(1);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

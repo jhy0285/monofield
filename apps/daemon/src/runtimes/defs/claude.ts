@@ -3,14 +3,21 @@ import { DEFAULT_MODEL_OPTION } from './shared.js';
 import { loadMmdRouteModels } from '../mmd-routes.js';
 import type { RuntimeAgentDef } from '../types.js';
 
+// Current Claude Code model line-up. Each `id` is passed verbatim to
+// `claude --model <id>` (see buildArgs), so it must be a model id the
+// installed CLI accepts. `claude` has no list-models subcommand, so this
+// static list is what the picker shows unless MMS/mmd routes are configured.
+// Aliases (opus/sonnet/haiku) follow the CLI's own mapping (not reproducible);
+// the explicit ids below pin a specific model.
 const CLAUDE_FALLBACK_MODELS = [
   DEFAULT_MODEL_OPTION,
-  { id: 'sonnet', label: 'Sonnet (alias)' },
-  { id: 'opus', label: 'Opus (alias)' },
-  { id: 'haiku', label: 'Haiku (alias)' },
-  { id: 'claude-opus-4-5', label: 'claude-opus-4-5' },
-  { id: 'claude-sonnet-4-5', label: 'claude-sonnet-4-5' },
-  { id: 'claude-haiku-4-5', label: 'claude-haiku-4-5' },
+  { id: 'claude-opus-4-8', label: 'Opus 4.8' },
+  { id: 'claude-fable-5', label: 'Fable 5' },
+  { id: 'claude-sonnet-5', label: 'Sonnet 5' },
+  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' },
+  { id: 'opus', label: 'Opus (alias → CLI default)' },
+  { id: 'sonnet', label: 'Sonnet (alias → CLI default)' },
+  { id: 'haiku', label: 'Haiku (alias → CLI default)' },
 ];
 
 export const claudeAgentDef = {
@@ -42,6 +49,17 @@ export const claudeAgentDef = {
     // picker, then keep the built-in aliases as fallback hints.
     fallbackModels: CLAUDE_FALLBACK_MODELS,
     fetchModels: async (_resolvedBin, env) => loadMmdRouteModels(env, CLAUDE_FALLBACK_MODELS),
+    // Claude Code exposes reasoning depth via `--effort <level>`
+    // (low|medium|high|xhigh|max). `default` means "don't pass --effort" so
+    // the CLI keeps its own per-session default. buildArgs gates on this.
+    reasoningOptions: [
+      { id: 'default', label: 'Default' },
+      { id: 'low', label: 'Low' },
+      { id: 'medium', label: 'Medium' },
+      { id: 'high', label: 'High' },
+      { id: 'xhigh', label: 'XHigh' },
+      { id: 'max', label: 'Max' },
+    ],
     // Prompt delivered via stdin to avoid both Linux `spawn E2BIG`
     // (MAX_ARG_STRLEN caps a single argv entry at ~128 KB) and Windows
     // `spawn ENAMETOOLONG` (CreateProcess caps the full command line at
@@ -65,6 +83,13 @@ export const claudeAgentDef = {
       }
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
+      }
+      // Reasoning depth. `--effort` is model-independent on the CLI, so it
+      // applies to every model in the picker. `default` is omitted so the
+      // CLI keeps its own default effort for the chosen model.
+      const CLAUDE_EFFORT_LEVELS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
+      if (options.reasoning && CLAUDE_EFFORT_LEVELS.has(options.reasoning)) {
+        args.push('--effort', options.reasoning);
       }
       const dirs = (extraAllowedDirs || []).filter(
         (d) => typeof d === 'string' && d.length > 0,

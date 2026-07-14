@@ -1,4 +1,4 @@
-// Sticky 'Star · <count>' pill in the entry top bar.
+// Sticky GitHub star-count pill in the entry top bar.
 //
 // Mirrors the marketing landing-page header: fetches the live star
 // count via `useGithubStars` (shared module-scoped cache) and
@@ -34,7 +34,7 @@ export function GithubStarBadge() {
       <Icon name="github-filled" size={16} className="entry-star-badge__icon" />
       <span className="entry-star-badge__label">{t('entry.githubStarLabel')}</span>
       <span className="entry-star-badge__sep" aria-hidden>
-        ·
+        &middot;
       </span>
       <span className="entry-star-badge__count">
         {countLabel}

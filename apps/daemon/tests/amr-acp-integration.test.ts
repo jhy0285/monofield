@@ -93,14 +93,25 @@ async function waitForExit(child: ChildProcess): Promise<void> {
   });
 }
 
+// The fake vela stubs below are shebang scripts spawned directly as the
+// agent binary, which Windows cannot exec (EFTYPE) — those cases only run
+// on POSIX hosts. The parse/classify tests still run everywhere.
+const IS_WINDOWS = process.platform === 'win32';
+
 describe('AMR runtime def', () => {
-  it('is registered with the expected ACP wiring', () => {
+  it('is gated behind OD_ENABLE_AMR but keeps the expected ACP wiring', () => {
+    // Open Docs ships with the AMR runtime disabled unless OD_ENABLE_AMR=1
+    // (see runtimes/registry.ts). The def itself stays intact for opt-in use.
     const def = getAgentDef('amr');
-    expect(def).toBeTruthy();
-    expect(def?.id).toBe('amr');
-    expect(def?.name).toBe('AMR');
-    expect(def?.bin).toBe('vela');
-    expect(def?.streamFormat).toBe('acp-json-rpc');
+    if (process.env.OD_ENABLE_AMR === '1') {
+      expect(def).toBeTruthy();
+    } else {
+      expect(def).toBeNull();
+    }
+    expect(amrAgentDef.id).toBe('amr');
+    expect(amrAgentDef.name).toBe('AMR');
+    expect(amrAgentDef.bin).toBe('vela');
+    expect(amrAgentDef.streamFormat).toBe('acp-json-rpc');
   });
 
   it('builds the documented `vela agent run --runtime opencode` argv', () => {
@@ -191,7 +202,7 @@ describe('AMR runtime def', () => {
       .toThrow(/expected remote/);
   });
 
-  it('fetches AMR preset models from `vela model preset --format json`', async () => {
+  it.skipIf(IS_WINDOWS)('fetches AMR preset models from `vela model preset --format json`', async () => {
     const models = await fetchVelaPresetModels(FAKE_VELA, process.env);
     expect(models).toEqual([
       { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
@@ -201,7 +212,7 @@ describe('AMR runtime def', () => {
     ]);
   });
 
-  it('fetches AMR authoritative models from `vela model list --format json`', async () => {
+  it.skipIf(IS_WINDOWS)('fetches AMR authoritative models from `vela model list --format json`', async () => {
     const models = await amrAgentDef.fetchModels?.(FAKE_VELA, process.env);
     expect(models).toEqual([
       { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
@@ -220,7 +231,7 @@ describe('AMR runtime def', () => {
     ]);
   });
 
-  it('retries transient `vela model list --format json` failures before succeeding', async () => {
+  it.skipIf(IS_WINDOWS)('retries transient `vela model list --format json` failures before succeeding', async () => {
     const tempDir = mkdtempSync(path.join(tmpdir(), 'od-amr-retry-'));
     const stateFile = path.join(tempDir, 'retry-state.json');
     const wrapperPath = path.join(tempDir, 'vela-wrapper');
@@ -275,7 +286,7 @@ child.on('exit', (code) => {
     }
   });
 
-  it('does not retry credential failures from `vela model list --format json`', async () => {
+  it.skipIf(IS_WINDOWS)('does not retry credential failures from `vela model list --format json`', async () => {
     const tempDir = mkdtempSync(path.join(tmpdir(), 'od-amr-invalid-key-'));
     const stateFile = path.join(tempDir, 'invalid-key-state.json');
     const wrapperPath = path.join(tempDir, 'vela-wrapper');

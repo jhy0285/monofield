@@ -948,12 +948,10 @@ export function trackAssistantFeedbackReasonSubmit(
 
 // ---- Onboarding ---------------------------------------------------------
 //
-// `trackOnboardingClick` is the catch-all for the welcome flow's
-// runtime-pick / about-you / continue / skip / back buttons. The same
-// shape still supports historical and future design-system intake
-// clicks; the discriminator combo (area + element + action) narrows
-// the row down inside PostHog so the dashboard can split each step's
-// funnel cleanly without a separate event name per button. Lifecycle
+// `trackOnboardingClick` is the catch-all wrapper for the welcome flow's
+// runtime-pick / about-you / continue / skip / back buttons. Open Docs product
+// telemetry is disabled, so these wrappers currently resolve through a no-op
+// provider while preserving call-site shape. Lifecycle
 // events that don't fit a click — CLI scan finishing, onboarding
 // wrapping up — get their own `onboarding_*_result` shape.
 

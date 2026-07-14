@@ -51,7 +51,7 @@ interface Props {
   subtitle?: string;
   emptyMessage?: string;
   // 'gallery' renders each card as a minimal live example.html preview
-  // tile (Community); 'rich' keeps the hover-overlay metadata card.
+  // tile (Template Gallery); 'rich' keeps the hover-overlay metadata card.
   cardLayout?: 'rich' | 'gallery';
 }
 
@@ -181,7 +181,7 @@ export function PluginsHomeSection({
               totalVisible={totalVisible}
               onPick={pickCategory}
               // The Saved collection lives on the rich management surface
-              // (PluginsView). The minimal Community gallery has no per-card
+              // (PluginsView). The minimal Template Gallery has no per-card
               // save affordance, so the orthogonal Saved chip is hidden there.
               showSaved={cardLayout === 'rich'}
               savedCount={savedList.length}
@@ -265,7 +265,7 @@ interface CategoryRowProps {
   totalVisible: number;
   onPick: (slug: string | null) => void;
   // The Saved override chip only renders on the rich management surface
-  // (PluginsView); the minimal Community gallery hides it.
+  // (PluginsView); the minimal Template Gallery hides it.
   showSaved: boolean;
   savedCount: number;
   savedActive: boolean;

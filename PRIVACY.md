@@ -1,86 +1,123 @@
 # Privacy
 
-This page describes what data the Open Design desktop and web app collects,
-when it collects it, and how you stay in control. It documents the behavior
-shipped in the app — the same controls live under **Settings → Privacy**.
+This page describes the current Open Docs data handling policy. Open Docs is
+local-first and is intended to run without an Open Docs cloud account.
 
-Open Design is **local-first**. Your projects, generated files, and BYOK API
-keys stay on your machine, and the app works fully offline. Usage telemetry,
-described below, is the one category of data the app may send — it is **on by
-default**, and you can turn it off at any time under **Settings → Privacy**.
+Open Docs is based on the Apache-2.0 Open Design codebase, but this policy
+describes Open Docs behavior and product direction, not the original Open
+Design cloud or AMR service.
 
-## Telemetry is opt-out
+## Short Version
 
-Usage telemetry is **on by default**. On first run the app shows a privacy
-disclosure banner so you can see what is collected before doing anything else.
-It is an informed-disclosure notice with a single **I get it** acknowledgement,
-not an opt-in gate — and because telemetry is already enabled, the app may begin
-sending events (such as onboarding and UI-interaction events) from first launch.
+- Open Docs does not send product telemetry.
+- Open Docs does not send product analytics, startup reports, reliability
+  events, quality traces, artifact manifests, screenshots, prompts, responses,
+  tool input, or tool output to an Open Docs-operated telemetry service.
+- Open Docs does not store your conversation, tool content, projects, generated
+  files, screenshots, or BYOK keys on an Open Docs server.
+- Projects, generated files, app settings, and BYOK/provider credentials are
+  stored locally on your machine.
+- When you run an agent, the prompt and required context are sent only to the
+  local CLI, BYOK/model provider, local model endpoint, or external integration
+  you selected for that task. That runtime's own policy applies.
 
-You stay in control: the banner footer tells you sharing is on and points you to
-**Settings → Privacy**, where you can turn telemetry off and toggle each category
-below — and you can change your decision at any time.
+## Local Data
 
-## What is collected
+Open Docs may store local runtime data on your machine, including:
 
-When telemetry is enabled, the app may send the following to the Open Design
-team. Each category is independently controllable in Settings.
+- app settings
+- selected local agent or BYOK provider configuration
+- project metadata
+- generated artifacts and exports
+- local daemon state
+- plugin or template state
 
-- **Anonymous metrics** — run counts, token usage, error rate, and duration.
-  No prompts and no project data.
-- **Conversation and tool content** — your prompts, assistant responses, tool
-  inputs, and tool outputs (truncated before send). API keys, tokens, JWTs,
-  emails, IP addresses, and credit-card numbers are stripped automatically
-  before anything leaves your machine.
-- **Project artifacts manifest** — filenames, types, and sizes of generated
-  files. The **contents** of those files are never sent.
+These files are local application data. They are not uploaded to an Open Docs
+server.
 
-## What is never collected
+BYOK keys and local CLI credentials are used only to talk to the provider or CLI
+you configured. Open Docs does not send those secrets to an Open Docs-operated
+service.
 
-- The contents of your generated artifact files.
-- Your BYOK API keys, tokens, or other secrets — these are redacted before
-  send and are never part of telemetry.
-- Anything at all while telemetry is turned off.
+## Model And Agent Input
 
-## How telemetry is sent
+Open Docs does not provide a managed model router in the current MVP.
 
-Redacted telemetry batches are sent to a Cloudflare Worker relay operated by
-the Open Design team, which forwards them to [Langfuse](https://langfuse.com)
-for analysis. The relay holds the Langfuse write credentials server-side, so
-packaged clients only ever ship a public relay URL — no secret keys. If the
-relay is unavailable the app retries quietly and keeps working; telemetry
-never blocks your workflow.
+When you ask an agent to work, Open Docs sends the required input to the runtime
+you selected, for example:
 
-## Your anonymous ID
+- a local coding agent CLI such as Codex, Claude Code, Cursor Agent, OpenCode,
+  or another configured local agent
+- a BYOK or OpenAI-compatible endpoint you configured
+- a local model endpoint such as Ollama, LM Studio, vLLM, or a compatible local
+  server
+- an external integration that you explicitly configure and invoke
 
-When telemetry is enabled the app generates a random, opaque installation ID
-so related events can be grouped. It is not tied to your name, email, or
-account, and it carries no personal information.
+Open Docs itself does not control whether that external runtime stores,
+retains, trains on, or logs the input. You must check the policy and settings of
+the selected CLI, model provider, local model server, or integration.
 
-## Deleting your data
+## Product Telemetry
 
-**Settings → Privacy → Delete my data** rotates your anonymous ID and stops
-sending. Telemetry already received ages out under the team's retention
+Open Docs product telemetry is disabled and has no active Open Docs telemetry
+sink.
+
+The current code disables the inherited telemetry surfaces at the application
+boundaries:
+
+- browser analytics facade: no-op
+- browser exception and safety reporting: no-op
+- daemon analytics service: no-op
+- daemon public analytics config: always disabled
+- run-quality trace reporting: no-op
+- object/artifact manifest relay: no-op
+- AMR/Vela analytics mirroring: no-op
+- packaged desktop startup failure capture: no-op
+- packaged daemon spawn environment: does not forward telemetry relay or
+  legacy telemetry keys
+- packaging config: does not bake runtime telemetry keys
+
+Because these paths are disabled, setting legacy telemetry environment variables
+should not cause Open Docs telemetry to be sent.
+
+## What Open Docs Does Not Send
+
+Open Docs does not send these categories to an Open Docs telemetry service:
+
+- BYOK API keys, auth tokens, JWTs, or local CLI credentials
+- prompts, assistant responses, or conversation history
+- tool input, tool output, command output, or error traces for product review
+- project files, generated artifacts, screenshots, or exported documents
+- artifact manifest metadata
+- startup failure or crash reports
+- anonymous product metrics
+- raw local filesystem paths
+
+## Clearing Local Privacy State
+
+Settings -> Privacy -> Clear local privacy state removes any legacy anonymous
+identifier and keeps Open Docs telemetry disabled.
+
+Data already sent to an external model provider, local CLI, local model server,
+or external integration is governed by that provider or integration's retention
 policy.
 
-## Bring your own key
+## Open Docs Cloud And AMR
 
-Open Design is BYOK at every layer. The API keys you configure for coding
-agents and model providers are stored locally and used only to talk to those
-providers directly. They are never sent to the Open Design team.
+Open Docs does not currently provide Open Docs Cloud, Open Design AMR, Vela
+login, wallet, credits, or a managed model-router service in the MVP.
 
-## Open Design AMR
+If a future Open Docs Cloud, managed model-router service, telemetry program, or
+hosted quality-review system is introduced, this policy and the code paths must
+be updated before that feature is shipped.
 
-“Open Design AMR” is Open Design’s official, first-party model service. Because
-the two are part of the same product family operated by the same team, we may
-share information between them as needed to provide, connect, and improve the
-combined experience — for example, to recognize that you arrived from Open
-Design, to help you get set up, and to keep the products working well together.
-This sharing is between our own products, not with unrelated third parties, and
-any data involved still follows the controls described on this page.
+## Changes To This Page
 
-## Changes to this page
+This document should be updated whenever Open Docs data handling, model routing,
+cloud-service behavior, telemetry behavior, or external integration behavior
+changes.
 
-This document tracks the data handling of the shipped app. When the telemetry
-behavior changes, this page is updated alongside it. For questions, open a
-[GitHub Discussion](https://github.com/nexu-io/open-design/discussions).
+For privacy questions, contact:
+
+- Contact email: jhy0285@gmail.com
+- Company email: whdudwls0285@lgcns.com

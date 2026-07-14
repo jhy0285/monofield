@@ -1,0 +1,125 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "od-interface-spec",
+  "title": "Interface Spec",
+  "title_i18n": {
+    "en": "Interface Spec",
+    "ko": "인터페이스 명세서",
+    "zh-CN": "接口规格书",
+    "zh-TW": "介面規格書",
+    "ja": "インターフェース仕様書",
+    "de": "Schnittstellenspezifikation",
+    "fr": "Spécification d'interface",
+    "ru": "Спецификация интерфейса",
+    "es": "Especificación de interfaz",
+    "pt-BR": "Especificação de interface",
+    "it": "Specifica di interfaccia",
+    "vi": "Đặc tả giao diện",
+    "pl": "Specyfikacja interfejsu",
+    "id": "Spesifikasi antarmuka",
+    "nl": "Interfacespecificatie",
+    "ar": "مواصفات الواجهة",
+    "tr": "Arayüz Şartnamesi",
+    "uk": "Специфікація інтерфейсу"
+  },
+  "version": "0.1.0",
+  "description": "Collect API endpoints from any codebase (Spring, NestJS, Express, FastAPI, Django, Go, ...) into an interface-spec.json document, then render the Korean SI-style interface specification workbook (.xlsx) with the deterministic Open Docs renderer. The agent only writes the JSON; humans review and edit the same JSON before export.",
+  "description_i18n": {
+    "en": "Collect API endpoints from any codebase into interface-spec.json, then render the Korean SI-style interface specification workbook (.xlsx) with the deterministic Open Docs renderer.",
+    "ko": "임의의 코드베이스에서 API 엔드포인트를 수집해 interface-spec.json 문서를 만들고, 결정론적 Open Docs 렌더러로 한국형 SI 인터페이스 명세서 워크북(.xlsx)을 생성합니다.",
+    "zh-CN": "从任意代码库收集 API 端点生成 interface-spec.json，再由确定性渲染器输出韩国 SI 风格的接口规格书工作簿（.xlsx）。",
+    "zh-TW": "從任意程式碼庫收集 API 端點生成 interface-spec.json，再由確定性渲染器輸出韓國 SI 風格的介面規格書活頁簿（.xlsx）。",
+    "ja": "任意のコードベースから API エンドポイントを収集して interface-spec.json を作成し、決定論的レンダラーで韓国 SI 形式のインターフェース仕様書ワークブック（.xlsx）を生成します。",
+    "de": "Sammelt API-Endpunkte aus beliebigen Codebasen in interface-spec.json und rendert daraus deterministisch die Schnittstellenspezifikation im koreanischen SI-Stil (.xlsx).",
+    "fr": "Collecte les points d'accès API de toute base de code dans interface-spec.json, puis génère de façon déterministe le classeur de spécification d'interface de style SI coréen (.xlsx).",
+    "ru": "Собирает API-эндпоинты из любой кодовой базы в interface-spec.json и детерминированно формирует книгу спецификации интерфейса в корейском SI-стиле (.xlsx).",
+    "es": "Recopila los endpoints de API de cualquier base de código en interface-spec.json y genera de forma determinista el libro de especificación de interfaz al estilo SI coreano (.xlsx).",
+    "pt-BR": "Coleta endpoints de API de qualquer base de código em interface-spec.json e gera de forma determinística a pasta de trabalho de especificação de interface no estilo SI coreano (.xlsx).",
+    "it": "Raccoglie gli endpoint API da qualsiasi codebase in interface-spec.json e genera in modo deterministico la cartella di lavoro della specifica di interfaccia in stile SI coreano (.xlsx).",
+    "vi": "Thu thập các endpoint API từ bất kỳ codebase nào vào interface-spec.json, sau đó kết xuất sổ đặc tả giao diện kiểu SI Hàn Quốc (.xlsx) bằng bộ kết xuất tất định.",
+    "pl": "Zbiera endpointy API z dowolnej bazy kodu do interface-spec.json, a następnie deterministycznie generuje skoroszyt specyfikacji interfejsu w koreańskim stylu SI (.xlsx).",
+    "id": "Mengumpulkan endpoint API dari basis kode apa pun ke interface-spec.json, lalu merender buku kerja spesifikasi antarmuka gaya SI Korea (.xlsx) secara deterministik.",
+    "nl": "Verzamelt API-endpoints uit elke codebase in interface-spec.json en rendert deterministisch de interfacespecificatie-werkmap in Koreaanse SI-stijl (.xlsx).",
+    "ar": "يجمع نقاط نهاية API من أي قاعدة شيفرة في interface-spec.json ثم يولّد مصنّف مواصفات الواجهة بأسلوب SI الكوري (.xlsx) بشكل حتمي.",
+    "tr": "Herhangi bir kod tabanından API uç noktalarını interface-spec.json içine toplar ve deterministik olarak Kore SI tarzı arayüz şartname çalışma kitabını (.xlsx) üretir.",
+    "uk": "Збирає API-ендпоінти з будь-якої кодової бази в interface-spec.json і детерміновано формує книгу специфікації інтерфейсу в корейському SI-стилі (.xlsx)."
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Open Docs Contributors",
+    "url": "https://github.com/jhy0285/open-docs"
+  },
+  "tags": [
+    "first-party",
+    "document",
+    "interface-spec",
+    "api-spec",
+    "excel",
+    "xlsx",
+    "korean-si",
+    "specification"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "document",
+    "platform": "desktop",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "ko": "이 코드베이스의 API를 분석해서 인터페이스 명세서 엑셀을 만들어줘.",
+        "en": "Scan this codebase's APIs and produce the Korean SI-style interface specification workbook."
+      }
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./references/naming_dictionary.json",
+        "./scripts/scan_spring.py",
+        "./scripts/scan_fastapi.py",
+        "./scripts/scan_nestjs.py",
+        "./scripts/scan_express.py",
+        "./scripts/scan_django.py",
+        "./scripts/scan_go.py",
+        "./scripts/probe_check.py",
+        "./scripts/tools/__init__.py",
+        "./scripts/tools/excel_generator/__init__.py",
+        "./scripts/tools/excel_generator/models.py",
+        "./scripts/tools/excel_generator/collector/__init__.py",
+        "./scripts/tools/excel_generator/collector/controller_scanner.py",
+        "./scripts/tools/excel_generator/collector/dto_expander.py",
+        "./scripts/tools/excel_generator/rules/__init__.py",
+        "./scripts/tools/excel_generator/rules/naming.py",
+        "./scripts/tools/excel_generator/rules/audit_fields.py",
+        "./scripts/tools/excel_generator/rules/page_object.py"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

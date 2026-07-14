@@ -368,7 +368,7 @@ export function HomeView({
       area: 'plugin_replacement_modal',
     });
   }, [pendingReplacement, analytics.track]);
-  // Community gallery analytics. Opening a tile fires both a ui_click on
+  // Template Gallery analytics. Opening a tile fires both a ui_click on
   // the card (the funnel's denominator) and a surface_view on the detail
   // modal it reveals (the numerator); the ↗ that jumps straight to the
   // real example page is its own ui_click so "go to the finished thing"

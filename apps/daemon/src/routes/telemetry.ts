@@ -33,14 +33,9 @@ export function registerTelemetryRoutes(app: Express, deps: RegisterTelemetryRou
   const analyticsService = createAnalyticsService({ dataDir });
   let cachedAppVersion: any = null;
 
-  // PostHog runtime config.
-  //
-  // - `enabled` reflects ONLY the user's consent toggle (Privacy -> "Share
-  //   usage data"). When false, posthog-js's full autocapture/$pageview/
-  //   $autocapture pipeline must stay off.
-  // - `key` and `host` are populated whenever the server has a build-time
-  //   POSTHOG_KEY, regardless of consent, so safety/error tracking can run.
-  // - Without a build-time key, every telemetry client remains a no-op.
+  // Open Docs exposes the inherited analytics config shape for compatibility,
+  // but the response is always disabled because Open Docs does not send product
+  // telemetry.
   app.get('/api/analytics/config', async (_req, res) => {
     const baseline = readPublicConfigResponse();
     if (!baseline.enabled) {

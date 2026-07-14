@@ -21,7 +21,7 @@ describe('defaultScenarioPluginIdForKind', () => {
       // generic od-new-generation router. See scenario-defaults.ts.
       prototype: 'example-web-prototype',
       deck:      'example-simple-deck',
-      'screen-spec': 'od-new-generation',
+      'screen-spec': 'od-screen-spec',
       template:  'od-new-generation',
       brand:     'od-new-generation',
       image:     'od-media-generation',

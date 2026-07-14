@@ -5,6 +5,7 @@ import { basename } from 'node:path';
 import { runDaemonCliStartup, startDaemonRuntime } from './daemon-startup.js';
 import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
 import { runArtifactsCli } from './artifacts-cli.js';
+import { runDocsCli } from './docs-cli.js';
 import { runProjectHandoff } from './handoff-cli.js';
 import { runConnectorsToolCli } from './tools-connectors-cli.js';
 import { runDesignSystemsToolCli } from './tools-design-systems-cli.js';
@@ -313,6 +314,7 @@ const SUBCOMMAND_MAP = {
   automation: runAutomation,
   automations: runAutomation,
   memory: runMemory,
+  docs: runDocs,
   run: runRun,
   files: runFiles,
   templates: runTemplates,
@@ -446,14 +448,42 @@ if (argv[0] === 'mcp' && argv[1] === 'live-artifacts') {
   }
 }
 const first = argv.find((a) => !a.startsWith('-'));
-if (first && SUBCOMMAND_MAP[first]) {
+const dispatchedSubcommand = Boolean(first && SUBCOMMAND_MAP[first]);
+if (dispatchedSubcommand) {
+  // Windows + Node 24 crashes at process.exit() while undici keep-alive
+  // sockets are still pooled (libuv `!(handle->flags & UV_HANDLE_CLOSING)`
+  // assertion, exit code 0xC0000409). Thin-client subcommands are one-shot
+  // HTTP calls to the local daemon, so keep-alive buys nothing here — force
+  // each request's socket closed to leave nothing behind at exit. Daemon
+  // mode (no subcommand) is untouched.
+  if (process.platform === 'win32') {
+    const baseFetch = globalThis.fetch;
+    globalThis.fetch = (input, init) => {
+      const headers = new Headers(init?.headers);
+      if (!headers.has('connection')) headers.set('connection', 'close');
+      return baseFetch(input, { ...init, headers });
+    };
+  }
   const idx = argv.indexOf(first);
   const rest = [...argv.slice(0, idx), ...argv.slice(idx + 1)];
   await SUBCOMMAND_MAP[first](rest);
-  process.exit(0);
+  if (process.platform === 'win32') {
+    // Companion to the fetch wrapper above: on Windows, process.exit()
+    // while libuv is still tearing down request handles trips an internal
+    // assertion (exit code 0xC0000409) even after the JS-visible sockets
+    // are gone. With connection: close on every request nothing keeps the
+    // event loop alive, so let the process drain naturally; the timer is a
+    // hang backstop, unref'd so it cannot itself keep the process alive.
+    process.exitCode = 0;
+    setTimeout(() => process.exit(0), 5000).unref();
+  } else {
+    process.exit(0);
+  }
 }
 
-if (argv[0] === 'tools' && argv[1] === 'live-artifacts') {
+if (dispatchedSubcommand) {
+  // Natural exit is in flight (see above); skip the daemon-startup chain.
+} else if (argv[0] === 'tools' && argv[1] === 'live-artifacts') {
   runLiveArtifactsToolCli(argv.slice(2))
     .then(({ exitCode }) => {
       process.exitCode = exitCode;
@@ -686,6 +716,11 @@ async function runResearchSearch(rawArgs) {
 
 async function runArtifacts(args) {
   const { exitCode } = await runArtifactsCli(args);
+  process.exit(exitCode);
+}
+
+async function runDocs(args) {
+  const { exitCode } = await runDocsCli(args);
   process.exit(exitCode);
 }
 

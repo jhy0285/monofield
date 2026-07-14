@@ -87,6 +87,17 @@ export const SvgRenderer: ArtifactRenderer = {
   },
 };
 
+export const ScreenSpecRenderer: ArtifactRenderer = {
+  id: 'screen-spec',
+  supportsStreaming: false,
+  canRender: ({ file }) => {
+    if (/\.screen-spec\.json$/i.test(file.name)) return true;
+    const manifest = resolveManifest(file);
+    if (!manifest) return false;
+    return manifest.kind === 'screen-spec' || manifest.renderer === 'screen-spec';
+  },
+};
+
 export class RendererRegistry {
   constructor(private readonly renderers: ArtifactRenderer[]) {}
 
@@ -100,6 +111,7 @@ export class RendererRegistry {
 }
 
 export const artifactRendererRegistry = new RendererRegistry([
+  ScreenSpecRenderer,
   ReactComponentRenderer,
   DeckHtmlRenderer,
   HtmlRenderer,

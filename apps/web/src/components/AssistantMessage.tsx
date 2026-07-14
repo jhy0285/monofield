@@ -1346,7 +1346,7 @@ function AssistantFeedback({
       { requestId },
     );
     // P0 feedback_submit_result — paired with the click via requestId so
-    // PostHog dashboards can correlate intent → persistence. onFeedback in
+    // local tracking callers can correlate intent → persistence. onFeedback in
     // our app currently completes synchronously, so we emit `success`
     // optimistically; a future error-aware host can flip this to `failed`.
     trackFeedbackSubmitResult(
@@ -1374,7 +1374,7 @@ function AssistantFeedback({
     );
     // Dedicated assistant_feedback_reason_click + reason_submit paired with
     // the umbrella ui_click + feedback_submit_result above. Both fire under
-    // the same `requestId` so PostHog can stitch click → result per the
+    // the same `requestId` so callers can stitch click → result per the
     // tracking spec.
     if (projectId && projectKind && conversationId) {
       const reasons = reasonCodes as TrackingFeedbackReasonCode[];

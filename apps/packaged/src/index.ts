@@ -42,15 +42,10 @@ let packagedLogger: PackagedDesktopLogger | null = null;
 let pendingSecondInstanceFocus = false;
 let showExistingDesktop: (() => void) | null = null;
 
-// Telemetry context for the fatal-exit path. Populated once config + launcher
-// runtime are resolved so the `main().catch` below can report a startup failure
-// even though the daemon (the PostHog host) never came up. Null until then —
-// failures earlier than config resolution simply skip telemetry. See
-// `startup-telemetry.ts` for the zero-startup-side-effect contract.
-let startupTelemetryContext:
+// Local startup-failure context for the fatal-exit path. Open Docs does not
+// send product telemetry; this only keeps enough context for local diagnostics.
+let startupFailureContext:
   | {
-      posthogKey: string | null;
-      posthogHost: string | null;
       appVersion: string | null;
       namespace: string;
       source: string;
@@ -120,9 +115,7 @@ async function main(): Promise<void> {
   // Arm fatal-exit telemetry now that we know the channel key/version. The
   // startPackagedSidecars call below is THE failure this covers (daemon/web
   // dying before reporting status, e.g. issue #4638's missing better-sqlite3).
-  startupTelemetryContext = {
-    posthogKey: activeConfig.posthogKey,
-    posthogHost: activeConfig.posthogHost,
+  startupFailureContext = {
     appVersion: activeConfig.appVersion,
     namespace,
     source: SIDECAR_SOURCES.PACKAGED,
@@ -172,9 +165,6 @@ async function main(): Promise<void> {
     daemonSidecarEntry: activeConfig.daemonSidecarEntry,
     electronNodeCommand: launcherRuntime.electronNodeCommand,
     nodeCommand: activeConfig.nodeCommand,
-    telemetryRelayUrl: activeConfig.telemetryRelayUrl,
-    posthogKey: activeConfig.posthogKey,
-    posthogHost: activeConfig.posthogHost,
     // PR #974 round-5 (lefarcen P2): the Electron entry runs desktop
     // main alongside the daemon, so the import-folder gate must be
     // pinned ON from request 0. See `apps/packaged/src/headless.ts` for
@@ -266,24 +256,19 @@ void main().catch(async (error: unknown) => {
   }
   packagedLogger?.error("packaged runtime failed", { error });
   console.error("packaged runtime failed", error);
-  // Best-effort crash telemetry on the way out. This is the ONLY new behavior
-  // on the failure path; the happy path never reaches here. reportStartupFailure
-  // self-caps its runtime (Promise.race timeout) and swallows all errors, so it
-  // can neither block nor crash the exit. No-op when telemetry isn't armed yet
-  // or the build has no PostHog key.
-  if (startupTelemetryContext) {
+  // Best-effort local classification on the way out. This does not send data
+  // and swallows all errors so it cannot block or crash the exit.
+  if (startupFailureContext) {
     await reportStartupFailure({
       error,
       isPathAccess,
-      posthogKey: startupTelemetryContext.posthogKey,
-      posthogHost: startupTelemetryContext.posthogHost,
       distinctId: resolveStartupDistinctId(
-        startupTelemetryContext.namespace,
-        startupTelemetryContext.installationRoot,
+        startupFailureContext.namespace,
+        startupFailureContext.installationRoot,
       ),
-      appVersion: startupTelemetryContext.appVersion,
-      namespace: startupTelemetryContext.namespace,
-      source: startupTelemetryContext.source,
+      appVersion: startupFailureContext.appVersion,
+      namespace: startupFailureContext.namespace,
+      source: startupFailureContext.source,
     });
   }
   process.exit(1);

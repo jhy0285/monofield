@@ -23,10 +23,7 @@ function fakeConfig(): PackagedConfig {
     namespace: "release-stable-win",
     namespaceBaseRoot: join("C:", "Users", "Fred", "AppData", "Roaming", "Open Design", "namespaces"),
     nodeCommand: null,
-    posthogHost: null,
-    posthogKey: null,
     resourceRoot: join("C:", "Program Files", "Open Design", "resources", "open-design"),
-    telemetryRelayUrl: null,
     updateMetadataUrl: null,
     webOutputMode: "server",
     webSidecarEntry: null,
@@ -65,10 +62,7 @@ describe("resolvePackagedNamespacePaths", () => {
       namespaceBaseRoot: "/tmp/open-design-packaged/namespaces",
       nodeCommand: null,
       resourceRoot: "/tmp/open-design-packaged/resources",
-      telemetryRelayUrl: null,
       updateMetadataUrl: null,
-      posthogKey: null,
-      posthogHost: null,
       webSidecarEntry: null,
       webStandaloneRoot: null,
       webOutputMode: "server",
@@ -201,7 +195,9 @@ describe("resolvePackagedNamespacePaths", () => {
     expect(err.message).toMatch(/absolute path/);
   });
 
-  it("rejects Windows-style OD_DATA_DIR values on non-Windows hosts so the absolute-path guard is platform-correct", () => {
+  it.skipIf(process.platform === "win32")(
+    "rejects Windows-style OD_DATA_DIR values on non-Windows hosts so the absolute-path guard is platform-correct",
+    () => {
     const config = fakeConfig();
     const restore = stubPlatform("linux");
     try {

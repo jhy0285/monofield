@@ -316,7 +316,7 @@ export interface ChatSendMeta {
   skillIds?: string[];
   /** Overrides the run_created / run_finished `entry_from` analytics prop for
    *  this send (e.g. 'mark' when the turn is sent from the Mark draw overlay).
-   *  Behavior never depends on it; it only shapes PostHog props. */
+   *  Behavior never depends on it; it only shapes analytics props. */
   entryFrom?: ChatAnalyticsEntryFrom;
 }
 

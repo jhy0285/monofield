@@ -136,7 +136,7 @@ describe('HomeView plugin i18n', () => {
   });
 
   // The "Use with query" affordance was an inline rich-card control. The Home
-  // Community gallery has no inline plugin actions (use goes through the detail
+  // Template Gallery has no inline plugin actions (use goes through the detail
   // modal, which routes plain `use`), so use-with-query + its localized-query
   // hydration is now exercised by the rich-card surface (PluginsView.test.tsx)
   // and the query localization itself by state/projects.test.ts.

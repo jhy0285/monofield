@@ -18,6 +18,7 @@ import {
   authorInitials,
   derivePluginSourceLinks,
 } from '../../runtime/plugin-source';
+import { useT } from '../../i18n';
 
 interface Props {
   record: InstalledPluginRecord;
@@ -25,6 +26,7 @@ interface Props {
 }
 
 export function PluginByline({ record, variant = 'default' }: Props) {
+  const t = useT();
   const links = derivePluginSourceLinks(record);
   const version = record.version;
 
@@ -71,7 +73,7 @@ export function PluginByline({ record, variant = 'default' }: Props) {
                 rel="noreferrer"
               >
                 <Icon name="external-link" size={11} />
-                <span>Homepage</span>
+                <span>{t('plugins.actions.openHomepage')}</span>
               </a>
             ) : null}
             {links.contributeUrl ? (

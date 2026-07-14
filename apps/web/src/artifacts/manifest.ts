@@ -17,6 +17,7 @@ const ALLOWED_KINDS: ReadonlySet<ArtifactKind> = new Set([
   'code-snippet',
   'mini-app',
   'design-system',
+  'screen-spec',
 ]);
 const ALLOWED_RENDERERS: ReadonlySet<ArtifactRendererId> = new Set([
   'html',
@@ -28,6 +29,7 @@ const ALLOWED_RENDERERS: ReadonlySet<ArtifactRendererId> = new Set([
   'code',
   'mini-app',
   'design-system',
+  'screen-spec',
 ]);
 const ALLOWED_EXPORTS: ReadonlySet<ArtifactExportKind> = new Set([
   'html',
@@ -51,6 +53,7 @@ function inferKindFromEntry(entry: string): ArtifactKind | null {
   if (ext === '.svg') return 'svg';
   if (ext === '.md') return 'markdown-document';
   if (['.jsx', '.tsx'].includes(ext)) return 'react-component';
+  if (/\.screen-spec\.json$/i.test(entry)) return 'screen-spec';
   if (['.js', '.ts', '.json', '.css'].includes(ext)) return 'code-snippet';
   return null;
 }
@@ -61,6 +64,9 @@ function exportsForKind(kind: ArtifactKind): ArtifactExportKind[] {
   if (kind === 'markdown-document') return ['md', 'html', 'pdf', 'zip'];
   if (kind === 'svg' || kind === 'diagram') return ['svg', 'zip'];
   if (kind === 'code-snippet') return ['txt', 'zip'];
+  // screen-spec: the JSON itself is the artifact; PPTX export runs through
+  // the daemon renderer (od docs render-screen-spec), not the export menu.
+  if (kind === 'screen-spec') return ['txt', 'zip'];
   return ['html', 'pdf', 'zip'];
 }
 

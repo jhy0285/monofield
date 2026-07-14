@@ -180,22 +180,33 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   },
   {
     id: 'screen-spec',
-    label: '화면명세서',
-    icon: 'file-text',
+    label: 'Screen spec',
+    icon: 'screen-spec',
     group: 'create',
     description: 'Korean enterprise screen specs',
     hint: 'Document existing screens with metadata, callouts, descriptions, checkpoints, and PPTX export.',
     action: {
       kind: 'apply-scenario',
-      pluginId: 'od-new-generation',
+      pluginId: 'od-screen-spec',
       projectKind: 'screen-spec',
-      inputs: {
-        artifactKind: 'Korean enterprise screen specification document',
-        audience: 'SI project teams, planners, developers, QA, and client reviewers',
-        topic: 'documenting existing screens with metadata, callout markers, descriptions, checkpoints, and PPTX export',
-      },
       projectMetadata: {
         kind: 'screen-spec',
+      },
+    },
+  },
+  {
+    id: 'interface-spec',
+    label: 'Interface spec',
+    icon: 'interface-spec',
+    group: 'create',
+    description: 'API interface spec workbooks',
+    hint: 'Scan a codebase, collect endpoints into interface-spec.json, and export the Korean SI-style XLSX workbook.',
+    action: {
+      kind: 'apply-scenario',
+      pluginId: 'od-interface-spec',
+      projectKind: 'interface-spec',
+      projectMetadata: {
+        kind: 'interface-spec',
       },
     },
   },
@@ -352,6 +363,7 @@ export function chipsForGroup(group: ChipGroup): HomeHeroChip[] {
 export const CREATE_RAIL_ORDER = [
   'deck',
   'screen-spec',
+  'interface-spec',
   'prototype',
   'wireframe',
   'mobile',

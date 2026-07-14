@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PrivacyConsentModal } from '../../src/components/PrivacyConsentModal';
 import { I18nProvider } from '../../src/i18n';
 
-const PRIVACY_POLICY_HREF = 'https://github.com/nexu-io/open-design/blob/main/PRIVACY.md';
+const PRIVACY_POLICY_HREF = 'https://github.com/jhy0285/open-docs/blob/main/PRIVACY.md';
 
 function renderModal(overrides?: { onAccept?: () => void }) {
   const onAccept = overrides?.onAccept ?? vi.fn();
@@ -31,16 +31,13 @@ describe('PrivacyConsentModal', () => {
     expect(screen.queryByRole('button', { name: "Don't share" })).toBeNull();
   });
 
-  it('tells the user data sharing is on by default and toggleable in Settings', () => {
+  it('tells the user Open Docs telemetry is disabled and model provider policy applies', () => {
     renderModal();
-    // The single-button banner replaces the binary consent picker, so the
-    // disclosure must say plainly that telemetry defaults on and point the
-    // user at the off switch in Settings. Without this hint the surface
-    // would feel like a dark pattern.
-    const footer = screen.getByText(/Data sharing is on by default/i);
-    expect(footer.textContent ?? '').toMatch(/Settings/);
-    expect(footer.textContent ?? '').toMatch(/Privacy/);
-    expect(footer.textContent ?? '').toMatch(/turn it off any time/i);
+    expect(screen.getAllByText(/Open Docs does not send product telemetry/i).length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.getByText(/Model and agent input/i)).toBeTruthy();
+    expect(screen.queryByText(/Data sharing is on by default/i)).toBeNull();
   });
 
   it('exposes the privacy policy via an obvious external link', () => {
