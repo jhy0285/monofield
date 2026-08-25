@@ -80,23 +80,91 @@
           </div>
 
           <div class="project-mode-panel is-active" id="mode-development" role="tabpanel" data-project-mode-panel="development">
-            <figure class="real-mode-frame">
-              <div class="real-mode-meta"><span data-en="Software development" data-ko="소프트웨어 개발">Software development</span><small data-en="Select a working folder and start with code, builds, browser checks, and approved data." data-ko="작업 폴더를 선택하고 코드, 빌드, 브라우저 검증, 승인된 데이터와 함께 시작합니다.">Select a working folder and start with code, builds, browser checks, and approved data.</small></div>
-              <div class="real-mode-viewport">
-                <img src="/monofield-development.png" width="1899" height="1295" alt="MonoField software development mode" decoding="async" fetchpriority="high">
+            <div class="mode-demo-meta"><span data-en="Guided product demo" data-ko="제품 기능 데모">Guided product demo</span><small data-en="A staged project using MonoField's actual workspace structure and implemented controls." data-ko="MonoField의 실제 작업 구조와 구현된 기능을 샘플 프로젝트에 구성했습니다.">A staged project using MonoField's actual workspace structure and implemented controls.</small></div>
+            <div class="product-demo-window demo-development" aria-label="MonoField software development demo">
+              <header class="demo-appbar">
+                <strong><img src="/mark.svg" width="15" height="15" alt=""> monofield</strong>
+                <span class="demo-home">⌂ <b data-en="Home" data-ko="홈">Home</b></span>
+                <span class="demo-project-tab"><i></i><b>commerce-platform</b><small>C:\work\commerce</small><em>×</em></span>
+                <span class="demo-new-tab">＋</span>
+                <span class="demo-appbar-space"></span>
+                <button type="button">VS Code⌄</button><button type="button" aria-label="Settings">⚙</button>
+              </header>
+              <div class="demo-appbody">
+                <aside class="demo-chat-panel">
+                  <header><span>←</span><b data-en="Checkout improvement" data-ko="주문 화면 개선">Checkout improvement</b><small data-en="Ask" data-ko="질문">Ask</small></header>
+                  <div class="demo-chat-thread">
+                    <div class="demo-user-message" data-en="Reduce the order card spacing and make the primary action clearer. Build it and verify the real interaction in the browser." data-ko="주문 카드의 간격을 줄이고 주요 버튼을 더 명확하게 수정해줘. 빌드한 뒤 브라우저에서 실제 동작까지 검증해.">Reduce the order card spacing and make the primary action clearer. Build it and verify the real interaction in the browser.</div>
+                    <div class="demo-agent-label"><i></i><b>Codex</b><span data-en="working" data-ko="작업 중">working</span></div>
+                    <ol class="demo-run-list">
+                      <li class="is-done"><i>✓</i><span><b data-en="Source updated" data-ko="소스 수정">Source updated</b><small>OrderCard.tsx · orders.css</small></span></li>
+                      <li class="is-done"><i>✓</i><span><b data-en="Build passed" data-ko="빌드 통과">Build passed</b><small>18 tests · 0 failed</small></span></li>
+                      <li class="is-live"><i></i><span><b data-en="Browser verification" data-ko="브라우저 검증">Browser verification</b><small>localhost:3000/orders</small></span></li>
+                    </ol>
+                  </div>
+                  <div class="demo-composer"><span data-en="Request the next change…" data-ko="다음 수정 사항을 입력하세요…">Request the next change…</span><footer><i>＋</i><b data-en="Ask" data-ko="질문">Ask</b><button type="button">↗</button></footer></div>
+                  <div class="demo-working-dir">▱ <span>C:\work\commerce</span>⌄</div>
+                </aside>
+                <section class="demo-main-panel">
+                  <div class="demo-file-tabs"><b data-en="Browser" data-ko="브라우저">Browser</b><span data-en="Changes 2" data-ko="변경사항 2">Changes 2</span><span data-en="Documents 1" data-ko="문서 1">Documents 1</span><i>＋</i></div>
+                  <div class="demo-dev-toolbar"><button type="button">Spring Boot · Maven⌄</button><button class="is-primary" type="button">▷ <span data-en="Run" data-ko="실행">Run</span></button><button type="button">↻</button><button type="button">⌘ <span data-en="Changes" data-ko="변경사항">Changes</span></button><span></span><button type="button"><i></i> DB · Read⌄</button><button class="is-checked" type="button">✓ <span data-en="Auto verify" data-ko="자동 검증">Auto verify</span></button></div>
+                  <div class="demo-browser-toolbar">
+                    <div class="demo-browser-actions"><button type="button" data-en="View" data-ko="보기">View</button><button class="is-selected mark" type="button" data-en="Mark" data-ko="표시">Mark</button><button class="draw" type="button" data-en="Draw" data-ko="화면에 그리기">Draw</button><button type="button" data-en="Inspect" data-ko="검사">Inspect</button><button type="button" data-en="Adjust" data-ko="조정">Adjust</button></div>
+                    <div class="demo-address"><span>←</span><span>→</span><span>↻</span><b>localhost:3000/orders</b><em data-en="Approved" data-ko="승인됨">Approved</em></div>
+                  </div>
+                  <div class="demo-browser-canvas">
+                    <div class="demo-site-header"><strong>ACME / OPS</strong><nav><span data-en="Overview" data-ko="개요">Overview</span><span class="is-active" data-en="Orders" data-ko="주문">Orders</span><span data-en="Customers" data-ko="고객">Customers</span></nav><button type="button">YK</button></div>
+                    <div class="demo-site-content">
+                      <header><div><small data-en="OPERATIONS" data-ko="운영">OPERATIONS</small><h3 data-en="Orders" data-ko="주문 관리">Orders</h3></div><button class="demo-target" type="button"><span data-en="Create order" data-ko="주문 생성">Create order</span><i>1</i></button></header>
+                      <div class="demo-metrics"><span><small data-en="Today" data-ko="오늘">Today</small><b>128</b><em>+12%</em></span><span><small data-en="Pending" data-ko="처리 대기">Pending</small><b>14</b><em>3 urgent</em></span><span><small data-en="Completed" data-ko="완료">Completed</small><b>1,284</b><em>98.4%</em></span></div>
+                      <div class="demo-draw-region"><i>2</i><div><b data-en="Search orders" data-ko="주문 검색">Search orders</b><span data-en="Status: all" data-ko="상태: 전체">Status: all</span><span data-en="Last 30 days" data-ko="최근 30일">Last 30 days</span></div></div>
+                      <div class="demo-orders-table"><header><span>ID</span><span data-en="Customer" data-ko="고객">Customer</span><span data-en="Status" data-ko="상태">Status</span><span data-en="Total" data-ko="금액">Total</span></header><p><span>#ORD-1048</span><span>Hellenic Rail</span><span><i></i>Processing</span><span>€1,240</span></p><p><span>#ORD-1047</span><span>Northwind</span><span><i></i>Ready</span><span>€892</span></p><p><span>#ORD-1046</span><span>Contoso</span><span><i></i>Delivered</span><span>€2,410</span></p></div>
+                      <div class="demo-inspect-card"><i>3</i><small>DOM</small><b>button.order-create</b><span>40 × 124 · #111111</span></div>
+                      <div class="demo-adjust-chip"><i>4</i><span data-en="Card gap" data-ko="카드 간격">Card gap</span><b>24px → 16px</b></div>
+                    </div>
+                    <div class="demo-review-bar"><strong><span data-en="Review items" data-ko="검토 항목">Review items</span> <b>4</b></strong><span>[DOM] <em data-en="Primary action" data-ko="주요 버튼">Primary action</em></span><span>[AREA] <em data-en="Filter spacing" data-ko="필터 간격">Filter spacing</em></span><span>[ADJUST] 24px → 16px</span><button type="button" data-en="Request all changes" data-ko="한 번에 수정 요청">Request all changes</button></div>
+                  </div>
+                </section>
               </div>
-              <figcaption><span data-en="Development starts from the project folder." data-ko="개발은 프로젝트 폴더에서 시작합니다.">Development starts from the project folder.</span><b data-en="folder → diff → build → browser → data" data-ko="폴더 → 변경사항 → 빌드 → 브라우저 → 데이터">folder → diff → build → browser → data</b></figcaption>
-            </figure>
+            </div>
+            <footer class="mode-demo-caption"><span data-en="Mark the target. Change the code. Build and verify the interaction." data-ko="대상을 표시하고, 코드를 수정하고, 빌드와 실제 동작을 검증합니다.">Mark the target. Change the code. Build and verify the interaction.</span><b>folder → diff → build → browser → data</b></footer>
           </div>
 
           <div class="project-mode-panel" id="mode-creative" role="tabpanel" data-project-mode-panel="creative" hidden>
-            <figure class="real-mode-frame">
-              <div class="real-mode-meta"><span data-en="Documents / design" data-ko="문서/디자인 제작">Documents / design</span><small data-en="Choose the result format, connect references, and move from a structured draft to review and export." data-ko="결과 형식을 고르고 참고 자료를 연결해 구조화된 초안부터 검토와 내보내기까지 진행합니다.">Choose the result format, connect references, and move from a structured draft to review and export.</small></div>
-              <div class="real-mode-viewport">
-                <img src="/monofield-documents-design.png" width="1920" height="1009" alt="MonoField documents and design mode" loading="lazy" decoding="async">
+            <div class="mode-demo-meta"><span data-en="Guided product demo" data-ko="제품 기능 데모">Guided product demo</span><small data-en="References, structured generation, preview, review, comments, validation, and export in one project." data-ko="참고 자료, 구조화 생성, 미리보기, 검토, 댓글, 검증, export를 한 프로젝트에서 보여줍니다.">References, structured generation, preview, review, comments, validation, and export in one project.</small></div>
+            <div class="product-demo-window demo-creative" aria-label="MonoField documents and design demo">
+              <header class="demo-appbar"><strong><img src="/mark.svg" width="15" height="15" alt=""> monofield</strong><span class="demo-home">⌂ <b data-en="Home" data-ko="홈">Home</b></span><span class="demo-project-tab"><i></i><b>Order API specification</b><small>C:\work\commerce</small><em>×</em></span><span class="demo-new-tab">＋</span><span class="demo-appbar-space"></span><button type="button">Codex⌄</button><button type="button" aria-label="Settings">⚙</button></header>
+              <div class="demo-appbody">
+                <aside class="demo-chat-panel">
+                  <header><span>←</span><b data-en="Order API specification" data-ko="주문 API 명세서">Order API specification</b><small>Docs</small></header>
+                  <div class="demo-source-strip"><span>API-guideline.pdf</span><span>terms.xlsx</span><span>schema.sql</span></div>
+                  <div class="demo-chat-thread">
+                    <div class="demo-user-message" data-en="Create an interface specification from the attached references and approved schema. Use our terminology and export the reviewed version to XLSX." data-ko="첨부 자료와 승인된 스키마를 근거로 인터페이스 명세서를 만들어줘. 사내 용어를 적용하고 검토본을 XLSX로 내보내.">Create an interface specification from the attached references and approved schema. Use our terminology and export the reviewed version to XLSX.</div>
+                    <div class="demo-agent-label"><i></i><b>Codex</b><span data-en="complete" data-ko="완료">complete</span></div>
+                    <ol class="demo-run-list"><li class="is-done"><i>✓</i><span><b data-en="References analyzed" data-ko="참고 자료 분석">References analyzed</b><small>3 files · 42 terms</small></span></li><li class="is-done"><i>✓</i><span><b data-en="Specification validated" data-ko="명세 검증 완료">Specification validated</b><small>7 / 7 checks</small></span></li><li class="is-done"><i>✓</i><span><b data-en="Preview ready" data-ko="미리보기 준비">Preview ready</b><small>interface-spec.xlsx</small></span></li></ol>
+                  </div>
+                  <div class="demo-composer"><span data-en="Request a revision or attach a reference…" data-ko="수정 요청이나 참고 자료를 추가하세요…">Request a revision or attach a reference…</span><footer><i>＋</i><b>Docs</b><button type="button">↗</button></footer></div><div class="demo-working-dir">▱ <span>C:\work\commerce</span>⌄</div>
+                </aside>
+                <section class="demo-main-panel">
+                  <div class="demo-file-tabs"><b data-en="Document files" data-ko="문서 파일">Document files</b><span data-en="Interface spec" data-ko="인터페이스 명세">Interface spec</span><span data-en="Screen spec" data-ko="화면명세서">Screen spec</span><i>＋</i></div>
+                  <div class="demo-doc-toolbar"><button type="button" data-en="Document style" data-ko="문서 스타일">Document style</button><span></span><button class="is-selected" type="button" data-en="Preview" data-ko="미리보기">Preview</button><button type="button" data-en="Edit" data-ko="편집">Edit</button><button type="button" data-en="Mark" data-ko="표시">Mark</button><button type="button" data-en="Comment" data-ko="댓글">Comment</button><button class="is-primary" type="button" data-en="Export XLSX" data-ko="XLSX 내보내기">Export XLSX</button></div>
+                  <div class="demo-doc-workspace">
+                    <aside class="demo-page-rail"><b>01</b><span class="is-active">IF-ORD-001</span><span>IF-ORD-002</span><span>IF-PAY-001</span><small>3 pages</small></aside>
+                    <div class="demo-doc-canvas">
+                      <article class="demo-spec-sheet">
+                        <header><div><small>INTERFACE SPECIFICATION</small><h3 data-en="Create order" data-ko="주문 생성">Create order</h3><span>IF-ORD-001 · v1.4</span></div><b>POST</b></header>
+                        <div class="demo-spec-summary"><span><small>Endpoint</small><b>/api/orders</b></span><span><small>Auth</small><b>Bearer</b></span><span><small>Owner</small><b>Commerce API</b></span></div>
+                        <section><h4>REQUEST</h4><div class="demo-spec-table"><b>Field</b><b>Type</b><b>Required</b><b>Description</b><span>customerId</span><span>string</span><span>Y</span><span data-en="Customer identifier" data-ko="고객 식별자">Customer identifier</span><span>items[]</span><span>array</span><span>Y</span><span data-en="Order line items" data-ko="주문 품목 목록">Order line items</span></div></section>
+                        <section><h4>RESPONSE</h4><div class="demo-spec-table"><b>Field</b><b>Type</b><b>Required</b><b>Description</b><span>orderId</span><span>string</span><span>Y</span><span data-en="Created order ID" data-ko="생성된 주문 ID">Created order ID</span><span>status</span><span>enum</span><span>Y</span><span>CREATED | PENDING</span></div></section>
+                        <footer><span>✓ <b data-en="Validated" data-ko="검증 완료">Validated</b></span><small data-en="Code + browser + approved schema + glossary" data-ko="코드 + 브라우저 + 승인된 스키마 + 용어사전">Code + browser + approved schema + glossary</small></footer><i class="demo-doc-marker">1</i>
+                      </article>
+                    </div>
+                    <aside class="demo-doc-review"><header><b data-en="Review" data-ko="검토">Review</b><span>7 / 7</span></header><section><small data-en="EVIDENCE" data-ko="근거">EVIDENCE</small><p><i></i> OrderController.java</p><p><i></i> localhost / orders</p><p><i></i> commerce-dev schema</p></section><section><small data-en="CHECKS" data-ko="검증">CHECKS</small><p>✓ <span data-en="Required fields" data-ko="필수 항목">Required fields</span></p><p>✓ <span data-en="Terminology" data-ko="용어 일치">Terminology</span></p><p>✓ <span data-en="Schema types" data-ko="스키마 타입">Schema types</span></p></section><section class="demo-comment"><small data-en="COMMENTS · 2" data-ko="댓글 · 2">COMMENTS · 2</small><b data-en="Clarify the PENDING condition" data-ko="PENDING 조건을 명확히 설명">Clarify the PENDING condition</b><span data-en="Ready for export after review" data-ko="검토 후 export 가능">Ready for export after review</span></section></aside>
+                  </div>
+                </section>
               </div>
-              <figcaption><span data-en="Production starts by choosing the deliverable." data-ko="제작은 만들 결과물을 고르는 것부터 시작합니다.">Production starts by choosing the deliverable.</span><b data-en="sources → compose → preview → review → export" data-ko="자료 → 제작 → 미리보기 → 검토 → 내보내기">sources → compose → preview → review → export</b></figcaption>
-            </figure>
+            </div>
+            <footer class="mode-demo-caption"><span data-en="Connect evidence. Generate a structured draft. Review, validate, and export." data-ko="근거를 연결하고 구조화된 초안을 만든 뒤 검토, 검증, export합니다.">Connect evidence. Generate a structured draft. Review, validate, and export.</span><b>sources → compose → preview → review → export</b></footer>
           </div>
         </div>
       </section>
