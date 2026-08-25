@@ -1,8 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect width="1200" height="630" fill="#08090a"/>
   <g stroke="#ffffff" stroke-opacity=".08"><path d="M0 126h1200M0 252h1200M0 378h1200M0 504h1200M200 0v630M400 0v630M600 0v630M800 0v630M1000 0v630"/></g>
-  <rect x="88" y="76" width="42" height="42" fill="none" stroke="#f7f7f4" stroke-width="3"/>
-  <rect x="101" y="89" width="16" height="16" fill="none" stroke="#8da4ff" stroke-width="3"/>
+  <g transform="translate(88 76) scale(.0945946)">
+    <rect width="444" height="444" rx="104" fill="#090909"/>
+    <path d="M92 312V138L222 306L352 138V312" fill="none" stroke="#FAFAF8" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
   <text x="148" y="110" fill="#f7f7f4" font-family="Arial, sans-serif" font-size="34" font-weight="700">monofield</text>
   <text x="88" y="308" fill="#f7f7f4" font-family="Arial, sans-serif" font-size="90" font-weight="500" letter-spacing="-5">One workspace</text>
   <text x="88" y="402" fill="#777d83" font-family="Arial, sans-serif" font-size="90" font-weight="500" letter-spacing="-5">Every kind of work</text>
