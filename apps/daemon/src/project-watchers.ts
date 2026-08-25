@@ -40,7 +40,17 @@ export function makeIgnored(rootDir: string): (absPath: string) => boolean {
   return (absPath: string): boolean => {
     const rel = path.relative(rootDir, absPath);
     if (!rel || rel === '' || rel.startsWith('..')) return false; // never ignore root itself
-    return rel.split(/[\\/]/).some((seg) => {
+    const segments = rel.split(/[\\/]/);
+    if (
+      segments.some((segment) => segment.toLowerCase() === '.live-artifacts') &&
+      segments.some((segment) => segment.startsWith('tmp-') || segment.startsWith('.tmp-'))
+    ) {
+      // Live-artifact writes stage under .live-artifacts/tmp-* then rename the
+      // completed directory. Recursively watching that staging directory can
+      // hold a Windows handle that rejects the rename with EPERM.
+      return true;
+    }
+    return segments.some((seg) => {
       const normalized = seg.toLowerCase();
       return WATCHER_ONLY_IGNORE_NAMES.has(normalized) || isIgnoredProjectDirName(normalized);
     });

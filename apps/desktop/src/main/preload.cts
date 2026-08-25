@@ -4,8 +4,21 @@ import type {
   OpenDesignHostBridge,
   OpenDesignHostActionResult,
   OpenDesignHostBrowserClearDataOptions,
+  OpenDesignHostBrowserAutomationBeginInput,
+  OpenDesignHostBrowserAutomationBeginResult,
+  OpenDesignHostBrowserAutomationEvent,
+  OpenDesignHostBrowserAutomationLinkInput,
+  OpenDesignHostBrowserAutomationListener,
+  OpenDesignHostBrowserAutomationStopResult,
+  OpenDesignHostBrowserPopup,
+  OpenDesignHostBrowserPopupListener,
   OpenDesignHostCaptureOptions,
   OpenDesignHostCaptureResult,
+  OpenDesignHostDatabaseConnection,
+  OpenDesignHostDatabaseConnectionInput,
+  OpenDesignHostDatabaseReadApproval,
+  OpenDesignHostDatabaseReadRequest,
+  OpenDesignHostDatabaseWritePolicy,
   OpenDesignHostFailure,
   OpenDesignHostProjectImportResult,
   OpenDesignHostProjectReplaceWorkingDirResult,
@@ -19,6 +32,8 @@ const OPEN_DESIGN_HOST_GLOBAL: typeof import('@open-design/host').OPEN_DESIGN_HO
 const OPEN_DESIGN_HOST_VERSION: typeof import('@open-design/host').OPEN_DESIGN_HOST_VERSION = 2;
 const UPDATER_STATUS_EVENT = 'od:update:status-changed';
 const APP_CONFIG_CHANGED_IPC_CHANNEL = 'od:app-config-changed';
+const BROWSER_POPUP_EVENT = 'od:browser:popup';
+const BROWSER_AUTOMATION_EVENT = 'od:browser:automation-event';
 const APP_CONFIG_CHANGED_EVENT = 'open-design:app-config-changed';
 
 // Mirror of the argv prefix used by main's `applyOsLocaleSwitch` and
@@ -179,12 +194,12 @@ const project = {
     ipcRenderer.invoke('dialog:pick-and-import', init ?? null)
       .then(normalizeProjectImportResult)
       .catch((error: unknown) => importFailure(reasonFromError(error))),
-  pickAndReplaceWorkingDir: (projectId: string): Promise<OpenDesignHostProjectReplaceWorkingDirResult> =>
-    ipcRenderer.invoke('dialog:pick-and-replace-working-dir', { projectId })
+  pickAndReplaceWorkingDir: (projectId: string, suggestedPath?: string): Promise<OpenDesignHostProjectReplaceWorkingDirResult> =>
+    ipcRenderer.invoke('dialog:pick-and-replace-working-dir', { projectId, suggestedPath })
       .then(normalizeProjectReplaceWorkingDirResult)
       .catch((error: unknown) => replaceWorkingDirFailure(reasonFromError(error))),
-  pickWorkingDir: (): Promise<OpenDesignHostPickWorkingDirResult> =>
-    ipcRenderer.invoke('dialog:pick-working-dir')
+  pickWorkingDir: (suggestedPath?: string): Promise<OpenDesignHostPickWorkingDirResult> =>
+    ipcRenderer.invoke('dialog:pick-working-dir', { suggestedPath })
       .then(normalizePickWorkingDirResult)
       .catch((error: unknown) => pickWorkingDirFailure(reasonFromError(error))),
 };
@@ -220,12 +235,51 @@ const shell = {
 };
 
 const browser = {
+  automation: {
+    begin: async (input: OpenDesignHostBrowserAutomationBeginInput): Promise<OpenDesignHostBrowserAutomationBeginResult> => {
+      try {
+        return await ipcRenderer.invoke('browser:automation:begin', input);
+      } catch (error) {
+        return failure(reasonFromError(error));
+      }
+    },
+    link: async (input: OpenDesignHostBrowserAutomationLinkInput): Promise<OpenDesignHostBrowserAutomationBeginResult> => {
+      try {
+        return await ipcRenderer.invoke('browser:automation:link', input);
+      } catch (error) {
+        return failure(reasonFromError(error));
+      }
+    },
+    stop: async (sessionId: string): Promise<OpenDesignHostBrowserAutomationStopResult> => {
+      try {
+        return await ipcRenderer.invoke('browser:automation:stop', sessionId);
+      } catch (error) {
+        return failure(reasonFromError(error));
+      }
+    },
+    subscribe: (listener: OpenDesignHostBrowserAutomationListener): (() => void) => {
+      const handler = (_event: unknown, automationEvent: OpenDesignHostBrowserAutomationEvent): void => {
+        listener(automationEvent);
+      };
+      ipcRenderer.on(BROWSER_AUTOMATION_EVENT, handler);
+      return () => ipcRenderer.removeListener(BROWSER_AUTOMATION_EVENT, handler);
+    },
+  },
   clearData: async (options?: OpenDesignHostBrowserClearDataOptions): Promise<OpenDesignHostActionResult> => {
     try {
       return await ipcRenderer.invoke('browser:clear-data', options ?? null);
     } catch (error) {
       return actionFailure(reasonFromError(error));
     }
+  },
+  subscribePopup: (listener: OpenDesignHostBrowserPopupListener): (() => void) => {
+    const handler = (_event: unknown, popup: OpenDesignHostBrowserPopup): void => {
+      listener(popup);
+    };
+    ipcRenderer.on(BROWSER_POPUP_EVENT, handler);
+    return () => {
+      ipcRenderer.removeListener(BROWSER_POPUP_EVENT, handler);
+    };
   },
 };
 
@@ -235,6 +289,32 @@ const capture = {
       return await ipcRenderer.invoke('od:capture-page', options ?? null);
     } catch (error) {
       return failure(reasonFromError(error));
+    }
+  },
+};
+
+const database = {
+  list: (): Promise<OpenDesignHostDatabaseConnection[]> => ipcRenderer.invoke('od:database:list'),
+  request: (input: OpenDesignHostDatabaseReadRequest): Promise<unknown> =>
+    ipcRenderer.invoke('od:database:request', input),
+  save: (input: OpenDesignHostDatabaseConnectionInput): Promise<OpenDesignHostDatabaseConnection> =>
+    ipcRenderer.invoke('od:database:save', input),
+  setAccessPolicy: (connectionId: string, writePolicy: OpenDesignHostDatabaseWritePolicy): Promise<OpenDesignHostDatabaseConnection> =>
+    ipcRenderer.invoke('od:database:set-access-policy', { connectionId, writePolicy }),
+  setReadApproval: (connectionId: string, readApproval: OpenDesignHostDatabaseReadApproval): Promise<OpenDesignHostDatabaseConnection> =>
+    ipcRenderer.invoke('od:database:set-read-approval', { connectionId, readApproval }),
+  test: async (input: OpenDesignHostDatabaseConnectionInput): Promise<OpenDesignHostActionResult> => {
+    try {
+      return await ipcRenderer.invoke('od:database:test', input);
+    } catch (error) {
+      return actionFailure(reasonFromError(error));
+    }
+  },
+  remove: async (connectionId: string): Promise<OpenDesignHostActionResult> => {
+    try {
+      return await ipcRenderer.invoke('od:database:remove', connectionId);
+    } catch (error) {
+      return actionFailure(reasonFromError(error));
     }
   },
 };
@@ -289,6 +369,7 @@ const hostBridge = {
   shell,
   browser,
   capture,
+  database,
   project,
   pdf: {
     print: async (html: string, nonce?: string, options?: PrintPdfOptions): Promise<OpenDesignHostActionResult> => {

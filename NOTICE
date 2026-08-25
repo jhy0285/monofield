@@ -1,11 +1,11 @@
-Open Docs
+MonoField
 
-Open Docs started from Open Design:
+This product contains software derived from Open Design:
 
   https://github.com/nexu-io/open-design
 
 Upstream base: commit 29b138f7a3e13ca3dbd1c1905796e57956406ef2
-(nexu-io/open-design, 2026-06-25). Open Docs modifications begin with the
+(nexu-io/open-design, 2026-06-25). MonoField modifications begin with the
 commits that follow it in this repository's history (2026-07-02 onward).
 
 Open Design is licensed under the Apache License, Version 2.0.
@@ -15,10 +15,10 @@ Bundled third-party templates, plugins, and skills carry their own licenses;
 see THIRD_PARTY_NOTICES.md and the LICENSE file inside each component
 directory.
 
-This repository contains modifications that shift the product direction from
-agent-native design artifact generation toward local-first document
-specification authoring, including screen specifications, interface
-specifications, API specifications, Excel-style artifacts, and PPTX decks.
+This repository contains modifications that create a local-first workbench for
+designers and developers, with model-independent agent runtimes, permissioned
+code/browser/database context, reusable workflows, and editable output formats
+including specifications, prototypes, pages, images, and slide decks.
 
-Open Docs is an independent project and is not affiliated with, endorsed by, or
+MonoField is an independent project and is not affiliated with, endorsed by, or
 maintained by the Open Design project.

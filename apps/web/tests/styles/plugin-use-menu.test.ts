@@ -93,7 +93,7 @@ describe('plugin use menu contrast', () => {
     const hover = cssDeclarations(pluginsHomeCss, hoverSelector);
     const focus = cssDeclarations(pluginsHomeCss, focusSelector);
 
-    expect(ruleValue(globalHover, 'background')).toBe('var(--bg-subtle)');
+    expect(ruleValue(globalHover, 'background')).toBe('var(--control-hover)');
     expect(compareSpecificity(specificity(hoverSelector), specificity(globalHoverSelector))).toBeGreaterThan(0);
 
     for (const block of [hover, focus]) {

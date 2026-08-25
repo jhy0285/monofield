@@ -8,7 +8,7 @@ export interface AmrAccountFailure {
 }
 
 // `source=open_design` tags the wallet landing page_view so vela analytics can
-// attribute the recharge visit to Open Docs.
+// attribute the recharge visit to MonoField.
 export const DEFAULT_AMR_RECHARGE_URL =
   'https://open-design.ai/amr/wallet?source=open_design';
 

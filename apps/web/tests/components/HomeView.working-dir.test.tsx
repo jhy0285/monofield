@@ -9,7 +9,7 @@ vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
 
 import { HomeView } from '../../src/components/HomeView';
 import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
-import { openFolderDialog } from '../../src/providers/registry';
+import { fetchRecentLinkedDirs, openFolderDialog } from '../../src/providers/registry';
 
 vi.mock('@open-design/host', async () => {
   const actual = await vi.importActual<typeof import('@open-design/host')>('@open-design/host');
@@ -27,6 +27,7 @@ vi.mock('../../src/providers/registry', async () => {
   return {
     ...actual,
     openFolderDialog: vi.fn(),
+    fetchRecentLinkedDirs: vi.fn(),
     fetchProjectFiles: vi.fn().mockResolvedValue([]),
   };
 });
@@ -34,6 +35,7 @@ vi.mock('../../src/providers/registry', async () => {
 const mockedIsHostAvailable = vi.mocked(isOpenDesignHostAvailable);
 const mockedPickHostWorkingDir = vi.mocked(pickHostWorkingDir);
 const mockedOpenFolderDialog = vi.mocked(openFolderDialog);
+const mockedFetchRecentLinkedDirs = vi.mocked(fetchRecentLinkedDirs);
 
 function renderHome() {
   return render(
@@ -50,6 +52,7 @@ describe('HomeView working-dir picker host fallback', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockedOpenFolderDialog.mockResolvedValue(null);
+    mockedFetchRecentLinkedDirs.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -110,6 +113,23 @@ describe('HomeView working-dir picker host fallback', () => {
     await waitFor(() => {
       expect(mockedPickHostWorkingDir).toHaveBeenCalledTimes(1);
     });
+    expect(mockedOpenFolderDialog).not.toHaveBeenCalled();
+  });
+
+  it('opens the trusted picker at a selected recent code folder', async () => {
+    const recent = 'C:\\Users\\Ada\\code\\aopserver-be';
+    mockedIsHostAvailable.mockReturnValue(true);
+    mockedFetchRecentLinkedDirs.mockResolvedValue([recent]);
+    mockedPickHostWorkingDir.mockResolvedValue({ ok: false, canceled: true });
+
+    renderHome();
+
+    await waitFor(() => expect(mockedFetchRecentLinkedDirs).toHaveBeenCalled());
+    fireEvent.click(screen.getByTestId('working-dir-trigger'));
+    fireEvent.click(screen.getByTestId('working-dir-recent'));
+    fireEvent.click(await screen.findByTitle(recent));
+
+    await waitFor(() => expect(mockedPickHostWorkingDir).toHaveBeenCalledWith(recent));
     expect(mockedOpenFolderDialog).not.toHaveBeenCalled();
   });
 });

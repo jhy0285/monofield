@@ -26,10 +26,12 @@
     "@open-design/platform": "workspace:*",
     "@open-design/release": "workspace:*",
     "@open-design/sidecar": "workspace:*",
-    "@open-design/sidecar-proto": "workspace:*"
+    "@open-design/sidecar-proto": "workspace:*",
+    "pg": "8.22.0"
   },
   "devDependencies": {
     "@types/node": "24.12.2",
+    "@types/pg": "8.20.0",
     "electron": "41.3.0",
     "typescript": "6.0.3",
     "vitest": "4.1.6"

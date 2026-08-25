@@ -86,7 +86,7 @@ export async function exportPlugin(input: ExportInput): Promise<ExportResult> {
   }
 
   if (input.target === 'od') {
-    const manifest = buildPortableManifest(snapshot);
+    const manifest = buildPortableManifest(snapshot, plugin?.manifest.license);
     const manifestPath = path.join(folder, 'open-design.json');
     await fsp.writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
     written.push(manifestPath);
@@ -174,7 +174,8 @@ async function readSkillBody(
   ].join('\n');
 }
 
-function buildPortableManifest(snapshot: AppliedPluginSnapshot): Record<string, unknown> {
+function buildPortableManifest(snapshot: AppliedPluginSnapshot, sourceLicense?: string): Record<string, unknown> {
+  const license = typeof sourceLicense === 'string' && sourceLicense.trim() ? sourceLicense.trim() : null;
   return {
     $schema:     'https://open-design.ai/schemas/plugin.v1.json',
     specVersion: snapshot.pluginSpecVersion ?? '1.0.0',
@@ -182,7 +183,7 @@ function buildPortableManifest(snapshot: AppliedPluginSnapshot): Record<string, 
     title:       snapshot.pluginTitle ?? snapshot.pluginId,
     version:     snapshot.pluginVersion,
     description: snapshot.pluginDescription ?? '',
-    license:     'MIT',
+    ...(license ? { license } : {}),
     od: {
       kind:     'skill',
       taskKind: snapshot.taskKind,

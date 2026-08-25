@@ -1256,15 +1256,17 @@ def load_bundled_name_dict() -> dict[str, str]:
 
 @lru_cache(maxsize=1)
 def _effective_token_map() -> dict[str, str]:
-    return load_bundled_name_dict()
+    return {}
 
 
 
 
 
 def load_name_dict(path: Path | None = None) -> dict[str, str]:
+    # The interface-spec flow defaults to the collector's AI/domain judgment.
+    # A dictionary is applied only when the user selects or uploads one.
     if path is None:
-        path = _BUNDLED_NAME_DICT_PATH
+        return {}
     text = path.read_text(encoding="utf-8").strip()
     if not text:
         return {}

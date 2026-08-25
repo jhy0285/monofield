@@ -62,7 +62,7 @@
   white-space: nowrap;
 }
 .df-breadcrumb-btn:hover { color: var(--text); background: var(--bg-subtle); }
-.df-breadcrumb-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.df-breadcrumb-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 .df-breadcrumb-segment { display: inline-flex; align-items: center; min-width: 0; }
 .df-breadcrumb-sep { padding: 0 2px; color: var(--text-faint); font-size: 12px; user-select: none; }
 .df-breadcrumb-current {
@@ -229,7 +229,7 @@
   background: var(--red-bg);
   color: var(--red);
 }
-.df-batch-clear { color: var(--text-faint); }
+.df-batch-clear { color: var(--text-muted); }
 .df-section { display: flex; flex-direction: column; gap: 0; }
 .df-section + .df-section { margin-top: 0; }
 .df-section-label {
@@ -295,7 +295,7 @@
   border-color: transparent;
 }
 .df-row-name-btn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
   border-radius: 2px;
 }
@@ -390,10 +390,12 @@
 .df-row.active:not(.selected) { background: var(--blue-bg); color: var(--text); }
 .df-row.active:not(.selected) .df-row-name { color: var(--text-strong); }
 .df-row.selected { background: var(--blue); }
-.df-row.selected .df-row-name { color: #fff; }
+.df-row.selected .df-row-name { color: var(--blue-contrast); }
 .df-row.selected .df-row-sub,
-.df-row.selected .df-row-time { color: rgba(255, 255, 255, 0.82); }
-.df-row.selected .df-row-check { color: #fff; }
+.df-row.selected .df-row-time {
+  color: color-mix(in srgb, var(--blue-contrast) 82%, transparent);
+}
+.df-row.selected .df-row-check { color: var(--blue-contrast); }
 
 .df-row-check {
   display: inline-flex;
@@ -632,13 +634,13 @@
   color: var(--text);
 }
 .df-empty-cta:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
 /* Static useful-info footer pinned above the drop zone. */
 /* Footer cluster pinned to the bottom: drag hint above the useful-info. */
-/* Footer band pinned to the bottom, mirroring Open Docs' empty-state
+/* Footer band pinned to the bottom, mirroring MonoField' empty-state
    hint strip: a faint warm band carrying the drag hint above a typewriter
    "tip" line. */
 .df-footer-info {
@@ -831,7 +833,7 @@
   cursor: pointer;
 }
 .df-preview-thumb-open:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -3px;
 }
 .df-preview-thumb iframe,
@@ -890,7 +892,7 @@
   color: var(--accent);
 }
 .df-preview-open-cta:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 .df-preview-download {

@@ -19,7 +19,7 @@ vi.mock('posthog-node', () => ({
   PostHog: posthogCtor,
 }));
 
-// Open Docs disables product telemetry at the daemon boundary (see
+// MonoField disables product telemetry at the daemon boundary (see
 // src/analytics.ts). These tests guard that boundary: even with a PostHog key
 // in the environment, the public config must report disabled and no PostHog
 // client may ever be constructed or receive events.

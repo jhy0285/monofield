@@ -432,7 +432,7 @@ export interface AppConfig {
   // rotate or clear the anonymous id without re-opening the disclosure.
   privacyDecisionAt?: number | null;
   // Privacy preferences governing what (if anything) is shipped to the
-  // PostHog / Langfuse telemetry endpoints. Open Docs defaults these off;
+  // PostHog / Langfuse telemetry endpoints. MonoField defaults these off;
   // Settings -> Privacy is the explicit opt-in surface. Complete-context
   // object manifests follow the content switch. A daemon-stored override
   // always wins over these client defaults once persisted.

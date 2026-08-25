@@ -44,7 +44,7 @@ const CONNECTORS_USAGE = `Usage:
 
 Environment:
   OD_NODE_BIN     Node-compatible runtime for agent wrapper invocations
-  OD_BIN          Open Docs CLI script for agent wrapper invocations
+  OD_BIN          MonoField CLI script for agent wrapper invocations
   OD_DAEMON_URL   Daemon base URL injected into agent runs
   OD_TOOL_TOKEN   Bearer token injected into agent runs
 
@@ -1444,7 +1444,7 @@ function renderGithubDesignEvidenceMarkdown(evidence: GithubDesignEvidence): str
     '## Next Design-System Work',
     '',
     '- Use these source paths and snapshots as evidence before writing `DESIGN.md`.',
-    '- Convert the inventory above into a Open Docs-style package: `README.md`, `SKILL.md`, `colors_and_type.css`, `preview/colors-*`, `preview/typography-specimens.html`, `preview/spacing-*`, `preview/components-*`, `preview/brand-assets.html`, `ui_kits/app/`, and preserved `assets/`, `build/`, or `fonts/` when evidence exists.',
+    '- Convert the inventory above into a MonoField-style package: `README.md`, `SKILL.md`, `colors_and_type.css`, `preview/colors-*`, `preview/typography-specimens.html`, `preview/spacing-*`, `preview/components-*`, `preview/brand-assets.html`, `ui_kits/app/`, and preserved `assets/`, `build/`, or `fonts/` when evidence exists.',
     '- `ui_kits/app/index.html` must be a browser-reviewable component entry: load `../../colors_and_type.css`, load or import at least three files from `ui_kits/app/components/`, and mount the composed UI through ReactDOM/Babel or compiled browser-ready JavaScript. Do not duplicate a static HTML mock when modular component files exist.',
     '- `ui_kits/app/components/App.jsx` (or equivalent app shell) must compose source-backed role components such as Sidebar, AssistantsList, ChatArea, InputBar, and MessageBubble, not merely list their filenames.',
     ...UI_KIT_ENTRY_GUIDANCE,
@@ -1521,7 +1521,7 @@ function renderLocalDesignEvidenceMarkdown(evidence: LocalDesignEvidence): strin
     '## Next Design-System Work',
     '',
     '- Use these local source paths and snapshots as evidence before writing `DESIGN.md`.',
-    '- Convert the inventory above into a Open Docs-style package: `README.md`, `SKILL.md`, `colors_and_type.css`, `preview/colors-*`, `preview/typography-specimens.html`, `preview/spacing-*`, `preview/components-*`, `preview/brand-assets.html`, `ui_kits/app/`, and preserved `assets/`, `build/`, or `fonts/` when evidence exists.',
+    '- Convert the inventory above into a MonoField-style package: `README.md`, `SKILL.md`, `colors_and_type.css`, `preview/colors-*`, `preview/typography-specimens.html`, `preview/spacing-*`, `preview/components-*`, `preview/brand-assets.html`, `ui_kits/app/`, and preserved `assets/`, `build/`, or `fonts/` when evidence exists.',
     '- `ui_kits/app/index.html` must be a browser-reviewable component entry: load `../../colors_and_type.css`, load or import at least three files from `ui_kits/app/components/`, and mount the composed UI through ReactDOM/Babel or compiled browser-ready JavaScript. Do not duplicate a static HTML mock when modular component files exist.',
     '- `ui_kits/app/components/App.jsx` (or equivalent app shell) must compose source-backed role components such as Sidebar, AssistantsList, ChatArea, InputBar, and MessageBubble, not merely list their filenames.',
     ...UI_KIT_ENTRY_GUIDANCE,
@@ -1759,14 +1759,14 @@ export async function auditDesignSystemPackage(
 
   if (options.referencePackage === true) {
     if (!fileSet.has('DESIGN.md')) {
-      addIssue('warning', 'missing_open_design_rules', 'Reference packages may omit DESIGN.md, but generated Open Docs packages must include it as the canonical rules file.', 'DESIGN.md');
+      addIssue('warning', 'missing_open_design_rules', 'Reference packages may omit DESIGN.md, but generated MonoField packages must include it as the canonical rules file.', 'DESIGN.md');
     }
   } else {
-    requireFile('DESIGN.md', 'Open Docs-style packages need DESIGN.md as the canonical system rules.');
+    requireFile('DESIGN.md', 'MonoField-style packages need DESIGN.md as the canonical system rules.');
   }
-  requireFile('README.md', 'Open Docs-style packages need README.md so the system is reusable outside the current run.');
-  requireFile('SKILL.md', 'Open Docs-style packages need SKILL.md with agent-facing usage instructions.');
-  requireFile('colors_and_type.css', 'Open Docs-style packages need colors_and_type.css for reusable color, type, spacing, radius, and state tokens.');
+  requireFile('README.md', 'MonoField-style packages need README.md so the system is reusable outside the current run.');
+  requireFile('SKILL.md', 'MonoField-style packages need SKILL.md with agent-facing usage instructions.');
+  requireFile('colors_and_type.css', 'MonoField-style packages need colors_and_type.css for reusable color, type, spacing, radius, and state tokens.');
   await requireContent('DESIGN.md', 800, 'thin_design_rules', 'DESIGN.md is too thin to be a reusable rules document; include source-backed context, foundations, tokens, components, motion, voice, and anti-patterns.', validateDesignRules);
   await requireContent('README.md', 600, 'thin_readme', 'README.md is too thin to explain the package, source evidence, generated files, and reuse workflow.', requireMarkdownHeading);
   await requireContent('SKILL.md', 500, 'thin_skill', 'SKILL.md is too thin to guide future agents on how to use this design system.', validateSkillInstructions);
@@ -1785,7 +1785,7 @@ export async function auditDesignSystemPackage(
       addIssue(
         'warning',
         'skill_missing_reuse_sections',
-        'SKILL.md should read like a reusable Open Docs skill package: include What is inside, Source context, When to use, How to use, and design-system highlights grounded in source evidence.',
+        'SKILL.md should read like a reusable MonoField skill package: include What is inside, Source context, When to use, How to use, and design-system highlights grounded in source evidence.',
         'SKILL.md',
       );
     }
@@ -1804,7 +1804,7 @@ export async function auditDesignSystemPackage(
       addIssue(
         'warning',
         'readme_missing_package_reuse_guide',
-        'README.md should work as a Open Docs package guide: list source/context references, package contents, preview cards, preserved assets/fonts/build artifacts, ui_kits/app, and a concrete reuse or review workflow.',
+        'README.md should work as a MonoField package guide: list source/context references, package contents, preview cards, preserved assets/fonts/build artifacts, ui_kits/app, and a concrete reuse or review workflow.',
         'README.md',
       );
     }
@@ -1860,7 +1860,7 @@ export async function auditDesignSystemPackage(
     addIssue(level, 'old_generated_interface', 'Replace ui_kits/generated_interface/ with the reusable Claude-style ui_kits/app/ package.', 'ui_kits/generated_interface/');
   }
 
-  requireFile('ui_kits/app/index.html', 'Open Docs-style packages need an applied interface kit at ui_kits/app/index.html.');
+  requireFile('ui_kits/app/index.html', 'MonoField-style packages need an applied interface kit at ui_kits/app/index.html.');
   await requireContent('ui_kits/app/index.html', 900, 'thin_ui_kit', 'ui_kits/app/index.html is too thin; include an applied interface example with real layout, components, and states.', validateHtmlDocument);
   if (!fileSet.has('ui_kits/app/README.md')) {
     addIssue('warning', 'missing_ui_kit_readme', 'Add ui_kits/app/README.md so future projects know how to reuse the applied UI kit.', 'ui_kits/app/README.md');
@@ -1870,7 +1870,7 @@ export async function auditDesignSystemPackage(
       addIssue(
         'warning',
         'ui_kit_readme_missing_reuse_guide',
-        'ui_kits/app/README.md should document the applied kit structure, component files, usage workflow, design notes, and source basis so future agents can reuse it like a Open Docs package.',
+        'ui_kits/app/README.md should document the applied kit structure, component files, usage workflow, design notes, and source basis so future agents can reuse it like a MonoField package.',
         'ui_kits/app/README.md',
       );
     }
@@ -2051,7 +2051,7 @@ export async function auditDesignSystemPackage(
     addIssue(
       'warning',
       'missing_source_component_examples',
-      `Source evidence includes ${evidenceComponentNames.length} component snapshots, but the package preserves only ${sourceExampleAnchors.length} source-backed component example(s) outside context/. Copy at least 3 high-signal examples such as ${suggestedComponentNames.slice(0, 5).join(', ')} into source_examples/, a component examples folder, or root/nested TSX files like Open Docs exports.`,
+      `Source evidence includes ${evidenceComponentNames.length} component snapshots, but the package preserves only ${sourceExampleAnchors.length} source-backed component example(s) outside context/. Copy at least 3 high-signal examples such as ${suggestedComponentNames.slice(0, 5).join(', ')} into source_examples/, a component examples folder, or root/nested TSX files like MonoField exports.`,
       'source_examples/',
     );
   }
@@ -2061,7 +2061,7 @@ export async function auditDesignSystemPackage(
       addIssue(
         'warning',
         'thin_source_component_examples',
-        `Source examples should preserve substantive component code, not filename-only stubs. Found ${sourceExampleAnchors.length} source-backed example file(s) totaling ${sourceExampleBytes} bytes; preserve larger high-signal examples from the original evidence, similar to Open Docs exports.`,
+        `Source examples should preserve substantive component code, not filename-only stubs. Found ${sourceExampleAnchors.length} source-backed example file(s) totaling ${sourceExampleBytes} bytes; preserve larger high-signal examples from the original evidence, similar to MonoField exports.`,
         'source_examples/',
       );
     }
@@ -2100,7 +2100,7 @@ export async function auditDesignSystemPackage(
     addIssue(
       'warning',
       'missing_build_assets',
-      `Source evidence includes ${evidenceBuildAssetFiles.length} build/runtime icon asset(s); preserve representative app, installer, tray, or wordmark files under build/ like Open Docs exports instead of collapsing them into prose.`,
+      `Source evidence includes ${evidenceBuildAssetFiles.length} build/runtime icon asset(s); preserve representative app, installer, tray, or wordmark files under build/ like MonoField exports instead of collapsing them into prose.`,
       'build/',
     );
   }

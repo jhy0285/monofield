@@ -4,9 +4,16 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ProjectFile } from '../../src/types';
 
-const { captureHostIframeSnapshotMock, copyImageDataUrlToClipboardMock } = vi.hoisted(() => ({
+const {
+  captureHostIframeSnapshotMock,
+  captureSandboxedHtmlSnapshotMock,
+  copyImageDataUrlToClipboardMock,
+  requestPreviewSnapshotMock,
+} = vi.hoisted(() => ({
   captureHostIframeSnapshotMock: vi.fn(),
+  captureSandboxedHtmlSnapshotMock: vi.fn(),
   copyImageDataUrlToClipboardMock: vi.fn(),
+  requestPreviewSnapshotMock: vi.fn(),
 }));
 
 vi.mock('../../src/runtime/exports', async () => {
@@ -16,7 +23,9 @@ vi.mock('../../src/runtime/exports', async () => {
   return {
     ...actual,
     captureHostIframeSnapshot: captureHostIframeSnapshotMock,
+    captureSandboxedHtmlSnapshot: captureSandboxedHtmlSnapshotMock,
     copyImageDataUrlToClipboard: copyImageDataUrlToClipboardMock,
+    requestPreviewSnapshot: requestPreviewSnapshotMock,
   };
 });
 
@@ -103,5 +112,32 @@ describe('FileViewer screenshot tooltip guard', () => {
     });
     // By the time the frame is captured, the tooltip is gone from the DOM.
     expect(document.body.querySelector('.od-tooltip-layer')).toBeNull();
+  });
+
+  it('uses the browser DOM fallback when the snapshot bridge cannot render the preview', async () => {
+    captureHostIframeSnapshotMock.mockResolvedValue(null);
+    requestPreviewSnapshotMock.mockResolvedValue(null);
+    captureSandboxedHtmlSnapshotMock.mockResolvedValue({
+      dataUrl: 'data:image/png;base64,fallback',
+      w: 800,
+      h: 600,
+    });
+    copyImageDataUrlToClipboardMock.mockResolvedValue('copied');
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlFile()}
+        liveHtml="<html><body><main>Workspace</main></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('screenshot-copy-button'));
+
+    await waitFor(() => {
+      expect(captureSandboxedHtmlSnapshotMock).toHaveBeenCalledTimes(1);
+      expect(copyImageDataUrlToClipboardMock).toHaveBeenCalledWith('data:image/png;base64,fallback');
+    });
   });
 });

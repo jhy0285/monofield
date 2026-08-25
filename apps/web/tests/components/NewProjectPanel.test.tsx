@@ -418,7 +418,7 @@ describe('NewProjectPanel design system defaults', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('tab', { name: 'From template' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Saved preset' }));
     const createFromTemplate = screen.getByTestId('create-project') as HTMLButtonElement;
     expect(createFromTemplate.disabled).toBe(true);
     fireEvent.click(createFromTemplate);
@@ -438,7 +438,7 @@ describe('NewProjectPanel design system defaults', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('tab', { name: 'From template' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Saved preset' }));
     fireEvent.change(screen.getByTestId('new-project-name'), {
       target: { value: 'Template creation payload' },
     });
@@ -698,6 +698,36 @@ describe('NewProjectPanel design system defaults', () => {
 });
 
 describe('NewProjectPanel working directory picker', () => {
+  it('starts a development project in Ask mode after its working folder is selected', async () => {
+    const onCreate = vi.fn();
+    mockedIsHostAvailable.mockReturnValue(false);
+    mockedOpenFolderDialog.mockResolvedValue('/Users/me/software-project');
+
+    render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={templates}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={onCreate}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('work-mode-development'));
+    fireEvent.click(screen.getByRole('button', { name: 'Local storage' }));
+    await screen.findByRole('button', { name: /software-project/i });
+    fireEvent.click(screen.getByTestId('create-project'));
+
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationMode: 'chat',
+        metadata: expect.objectContaining({ workMode: 'development' }),
+      }),
+    );
+  });
+
   it('includes a browser-picked working directory in the create payload', async () => {
     const onCreate = vi.fn();
     mockedIsHostAvailable.mockReturnValue(false);
@@ -880,14 +910,14 @@ describe('NewProjectPanel template deletion', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('tab', { name: 'From template' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Saved preset' }));
     fireEvent.click(screen.getByLabelText(/delete template/i));
     expect(onDelete).not.toHaveBeenCalled();
 
     const dialog = await screen.findByRole('alertdialog');
     expect(dialog.textContent).toContain('Landing Page');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete template' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete preset' }));
     expect(onDelete).toHaveBeenCalledWith('tmpl-landing');
   });
 
@@ -905,7 +935,7 @@ describe('NewProjectPanel template deletion', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('tab', { name: 'From template' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Saved preset' }));
     fireEvent.click(screen.getByLabelText(/delete template/i));
     await screen.findByRole('alertdialog');
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -928,12 +958,12 @@ describe('NewProjectPanel template deletion', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('tab', { name: 'From template' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Saved preset' }));
     fireEvent.click(screen.getByLabelText(/delete template/i));
     await screen.findByRole('alertdialog');
-    fireEvent.click(screen.getByRole('button', { name: 'Delete template' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete preset' }));
 
-    await screen.findByText('Could not delete this template. Please try again.');
+    await screen.findByText('Could not delete this preset. Please try again.');
     expect(screen.queryByRole('alertdialog')).not.toBeNull();
     expect(onDelete).toHaveBeenCalledWith('tmpl-landing');
   });
@@ -955,10 +985,10 @@ describe('NewProjectPanel template deletion', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('tab', { name: 'From template' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Saved preset' }));
     fireEvent.click(screen.getByLabelText(/delete template/i));
     const dialog = await screen.findByRole('alertdialog');
-    fireEvent.click(screen.getByRole('button', { name: 'Delete template' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete preset' }));
 
     const backdrop = dialog.parentElement!;
     fireEvent.click(backdrop);

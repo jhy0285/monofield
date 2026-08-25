@@ -1,4 +1,4 @@
-// Open Docs disables run-quality telemetry. The inherited trace builders are
+// MonoField disables run-quality telemetry. The inherited trace builders are
 // kept for type compatibility and tests, but the exported runtime entry points
 // never resolve a sink and never POST to relay or Langfuse endpoints.
 //
@@ -229,7 +229,7 @@ export interface RuntimeInfo {
   osRelease?: string;
   /** CPU architecture (`os.arch()`, e.g. 'arm64' | 'x64'). */
   arch?: string;
-  /** Open Docs app version reported by the daemon. */
+  /** MonoField app version reported by the daemon. */
   appVersion?: string;
   /** Build channel (development / prerelease / beta / stable). */
   appChannel?: string;

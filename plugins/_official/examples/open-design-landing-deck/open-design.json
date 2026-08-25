@@ -2,29 +2,29 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-open-design-landing-deck",
-  "title": "Open Design Landing Deck",
+  "title": "Atelier Zero Editorial Deck",
   "title_i18n": {
-    "zh-CN": "Open Design 着陆演示套件",
-    "zh-TW": "Open Design 著陸簡報套件",
-    "ja": "Open Design ランディングデッキ",
-    "ko": "Open Design 랜딩 덱",
-    "de": "Open Design Landing Deck",
-    "fr": "Open Design Landing Deck",
-    "ru": "Open Design Landing Deck",
-    "es": "Open Design Landing Deck",
-    "pt-BR": "Open Design Landing Deck",
-    "it": "Open Design Landing Deck",
-    "vi": "Open Design Landing Deck",
-    "pl": "Open Design Landing Deck",
-    "id": "Open Design Landing Deck",
-    "nl": "Open Design Landing Deck",
-    "ar": "Open Design Landing Deck",
-    "tr": "Open Design Landing Deck",
-    "uk": "Open Design Landing Deck",
-    "en": "Open Design Landing Deck"
+    "zh-CN": "Atelier Zero 编辑演示文稿",
+    "zh-TW": "Atelier Zero 編輯簡報",
+    "ja": "Atelier Zero エディトリアルデッキ",
+    "ko": "Atelier Zero 에디토리얼 덱",
+    "de": "Atelier Zero Editorial-Deck",
+    "fr": "Deck éditorial Atelier Zero",
+    "ru": "Редакционная презентация Atelier Zero",
+    "es": "Deck editorial Atelier Zero",
+    "pt-BR": "Deck editorial Atelier Zero",
+    "it": "Deck editoriale Atelier Zero",
+    "vi": "Bộ slide biên tập Atelier Zero",
+    "pl": "Editorial deck Atelier Zero",
+    "id": "Deck editorial Atelier Zero",
+    "nl": "Atelier Zero editorial-deck",
+    "ar": "عرض تحريري Atelier Zero",
+    "tr": "Atelier Zero Editoryal Sunum",
+    "uk": "Редакційна презентація Atelier Zero",
+    "en": "Atelier Zero Editorial Deck"
   },
   "version": "0.1.0",
-  "description": "Produce a single-file slide deck in the Atelier Zero visual language (warm-paper background, italic-serif emphasis spans, coral terminating dots, surreal collage plates) — Open Design's brand deck recipe. The deck uses **horizontal magazine-style swipe pagination** (←/→, wheel, swipe), a per-slide chrome strip with brand mark and slide counter, an ESC overview grid, a coral progress bar, and inherits the canonical stylesheet + 16-slot image library from the sister `open-design-landing` skill.",
+  "description": "Produce a single-file slide deck in the Atelier Zero visual language (warm-paper background, italic-serif emphasis spans, coral terminating dots, surreal collage plates). The deck uses **horizontal magazine-style swipe pagination** (←/→, wheel, swipe), a per-slide chrome strip with brand mark and slide counter, an ESC overview grid, a coral progress bar, and inherits the canonical stylesheet + 16-slot image library from the companion editorial-landing skill.",
   "description_i18n": {
     "zh-CN": "使用 Atelier Zero 视觉语言（暖纸背景、斜体衬线强调、珊瑚色终止点、超现实拼贴板）生成单文件幻灯片。支持横向杂志式滑动翻页（←/→、滚轮、滑动），包含品牌标识、页码条、ESC 概览网格、珊瑚色进度条，继承自姊妹技能 open-design-landing 的标准样式表和 16 槽图片库。",
     "zh-TW": "使用 Atelier Zero 視覺語言（溫紙背景、斜體襯線強調、珊瑚色終止點、超現實拼貼板）產生單檔案幻燈片。支援橫向雜誌式滑動翻頁（←/→、滾輪、滑動），包含品牌標誌、頁碼條、ESC 概覽網格、珊瑚色進度條，繼承自姊妹技能 open-design-landing 的標準樣式表和 16 槽圖片庫。",
@@ -43,11 +43,11 @@
     "ar": "ينتج عرض شرائح بملف واحد بلغة Atelier Zero البصرية (خلفية ورقية دافئة، تأكيدات serif مائلة، نقاط نهاية مرجانية، لوحات كولاج سريالية). مع ترقيم أفقي بنمط المجلات (←/→، عجلة، تمرير)، شريط chrome بعلامة تجارية وعداد شرائح، شبكة نظرة عامة ESC، شريط تقدم مرجاني، ويرث ورقة الأنماط القياسية + مكتبة صور 16 فتحة من المهارة الشقيقة open-design-landing.",
     "tr": "Atelier Zero görsel dilinde (sıcak kağıt arkaplan, italik serif vurgu, mercan rengi bitiş noktaları, sürreal kolaj levhaları) tek dosyalı slayt sunumu üretir. Yatay dergi tarzı kaydırmalı sayfalama (←/→, tekerlek, kaydırma), marka işareti ve slayt sayacı ile chrome şerit, ESC genel bakış ızgarası, mercan rengi ilerleme çubuğu ve kardeş beceri open-design-landing'den kanonik stil sayfası + 16 yuvalı görsel kütüphanesini miras alır.",
     "uk": "Створює однофайлову презентацію в візуальній мові Atelier Zero (теплий паперовий фон, курсивні засічки для акценту, коралові завершальні точки, сюрреалістичні колажі). З горизонтальною журнальною пагінацією (←/→, колесо миші, свайп), хромованою смугою з логотипом та лічильником слайдів, оглядовою сіткою по ESC, кораловим прогрес-баром та успадковує стилі + бібліотеку з 16 зображень від споріднного навику open-design-landing.",
-    "en": "Produce a single-file slide deck in the Atelier Zero visual language (warm-paper background, italic-serif emphasis spans, coral terminating dots, surreal collage plates) — Open Design's brand deck recipe. The deck uses **horizontal magazine-style swipe pagination** (←/→, wheel, swipe), a per-slide chrome strip with brand mark and slide counter, an ESC overview grid, a coral progress bar, and inherits the canonical stylesheet + 16-slot image library from the sister `open-design-landing` skill."
+    "en": "Produce a single-file slide deck in the Atelier Zero visual language (warm-paper background, italic-serif emphasis spans, coral terminating dots, surreal collage plates). The deck uses **horizontal magazine-style swipe pagination** (←/→, wheel, swipe), a per-slide chrome strip with brand mark and slide counter, an ESC overview grid, a coral progress bar, and inherits the canonical stylesheet + 16-slot image library from the companion editorial-landing skill."
   },
   "license": "MIT",
   "author": {
-    "name": "Open Design",
+    "name": "MonoField contributors",
     "url": "https://github.com/nexu-io"
   },
   "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/open-design-landing-deck",
@@ -91,7 +91,7 @@
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Open Design Landing Deck"
+          "title": "Atelier Zero Editorial Deck"
         }
       ]
     },

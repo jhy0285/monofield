@@ -1952,7 +1952,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     );
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
-    fireEvent.click(screen.getByRole('button', { name: /^Open Docs AMR\b/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^MonoField AMR\b/ }));
 
     const modelPickers = screen.getAllByRole('combobox', {
       name: en['settings.modelPicker'],
@@ -2249,7 +2249,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
 
-    expect(screen.getByRole('button', { name: /^Open Docs AMR\b/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^MonoField AMR\b/ })).toBeTruthy();
     expect(screen.queryByText('1.0.0')).toBeNull();
     expect(screen.queryByText(/AMR \(vela\)/i)).toBeNull();
     expect(screen.queryByText(/vela/i)).toBeNull();
@@ -2289,10 +2289,10 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     );
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*2 installed/i }));
-    expect(screen.getByRole('button', { name: /^Open Docs AMR\b/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^MonoField AMR\b/ })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Authorize' })).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: /^Open Docs AMR\b/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^MonoField AMR\b/ }));
 
     expect(await screen.findByRole('button', { name: 'Authorize' })).toBeTruthy();
   });
@@ -2328,7 +2328,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     );
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
-    const amrCardButton = screen.getByRole('button', { name: /^Open Docs AMR\b/ });
+    const amrCardButton = screen.getByRole('button', { name: /^MonoField AMR\b/ });
     const amrCard = amrCardButton.closest('.agent-card') as HTMLElement;
     expect(amrCard).toBeTruthy();
     expect(await screen.findByText('Signing in…')).toBeTruthy();
@@ -2392,7 +2392,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     );
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
-    const amrCard = screen.getByRole('button', { name: /^Open Docs AMR\b/ }).closest('.agent-card') as HTMLElement;
+    const amrCard = screen.getByRole('button', { name: /^MonoField AMR\b/ }).closest('.agent-card') as HTMLElement;
     expect(await screen.findByText('Signing in…')).toBeTruthy();
 
     fireEvent.mouseEnter(amrCard);
@@ -2457,7 +2457,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     );
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
-    const amrCard = screen.getByRole('button', { name: /^Open Docs AMR\b/ }).closest('.agent-card') as HTMLElement;
+    const amrCard = screen.getByRole('button', { name: /^MonoField AMR\b/ }).closest('.agent-card') as HTMLElement;
     expect(await screen.findByText('Signing in…')).toBeTruthy();
 
     fireEvent.mouseEnter(amrCard);
@@ -2538,7 +2538,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     );
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
-    const amrCard = screen.getByRole('button', { name: /^Open Docs AMR\b/ }).closest('.agent-card') as HTMLElement;
+    const amrCard = screen.getByRole('button', { name: /^MonoField AMR\b/ }).closest('.agent-card') as HTMLElement;
     expect(await screen.findByText('Signing in…')).toBeTruthy();
 
     fireEvent.mouseEnter(amrCard);
@@ -2594,7 +2594,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
 
     expect(await screen.findByRole('button', { name: 'Sign out' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^Open Docs AMR\b/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^MonoField AMR\b/ })).toBeTruthy();
     expect(screen.getByText('signed-in@example.com')).toBeTruthy();
     expect(screen.queryByText(/AMR \(vela\)/i)).toBeNull();
     expect(screen.queryByText(/^vela$/i)).toBeNull();
@@ -2632,7 +2632,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
 
     expect(await screen.findByRole('button', { name: 'Sign out' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^Open Docs AMR\b/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^MonoField AMR\b/ })).toBeTruthy();
     expect(screen.queryByText(/@/i)).toBeNull();
     expect(screen.queryByText(/AMR \(vela\)/i)).toBeNull();
   });
@@ -2729,12 +2729,12 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
     expect(await screen.findByRole('button', { name: 'Sign out' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^Open Docs AMR\b/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^MonoField AMR\b/ })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
 
     expect(await screen.findByRole('button', { name: 'Authorize' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^Open Docs AMR\b/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^MonoField AMR\b/ })).toBeTruthy();
     expect(
       onPersist.mock.calls.some(
         ([nextConfig]) =>
@@ -2771,18 +2771,18 @@ describe('SettingsDialog media providers interactions', () => {
     expect(names.slice(0, 2)).toEqual(['MiniMax', 'OpenAI']);
   });
 
-  it('renders non-integrated providers in the coming-soon section without input fields', () => {
+  it('omits unavailable media providers instead of presenting inert controls', () => {
     renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex' },
       { initialSection: 'media' },
     );
 
-    // Non-integrated providers (e.g. Fal.ai, Black Forest Labs) are shown in
-    // a separate "Coming soon" disclosure without editable inputs.
+    // Roadmap-only providers must not look configurable until their daemon
+    // adapters are available.
     expect(screen.queryByLabelText('Black Forest Labs API key')).toBeNull();
     expect(screen.queryByLabelText('Black Forest Labs Base URL')).toBeNull();
-    expect(document.querySelector('.media-provider-coming-soon')).toBeTruthy();
-    expect(screen.getByText('ComfyUI')).toBeTruthy();
+    expect(document.querySelector('.media-provider-coming-soon')).toBeNull();
+    expect(screen.queryByText('ComfyUI')).toBeNull();
   });
 
   it('renders ElevenLabs as an integrated media provider with enabled inputs', () => {
@@ -3212,7 +3212,7 @@ describe('SettingsDialog MCP server interactions', () => {
       expect(screen.getByText(/claude mcp add-json --scope user open-docs/i)).toBeTruthy();
     });
     expect(screen.getByText(/Restart your client to pick up the new server/i)).toBeTruthy();
-    expect(screen.getByText(/Open Docs must be running for MCP tool calls to succeed/i)).toBeTruthy();
+    expect(screen.getByText(/MonoField must be running for MCP tool calls to succeed/i)).toBeTruthy();
   });
 
   it('switches client instructions and snippet content when a different MCP client is selected', async () => {
@@ -3466,36 +3466,50 @@ describe('SettingsDialog appearance interactions', () => {
   afterEach(() => {
     cleanup();
     document.documentElement.removeAttribute('data-theme');
-    document.documentElement.style.removeProperty('--accent');
-    document.documentElement.style.removeProperty('--accent-strong');
-    document.documentElement.style.removeProperty('--accent-soft');
-    document.documentElement.style.removeProperty('--accent-tint');
-    document.documentElement.style.removeProperty('--accent-hover');
+    document.documentElement.removeAttribute('style');
   });
 
-  it('treats Light as the selected appearance mode when theme is unset or legacy system', () => {
+  it('shows System as a first-class appearance mode', () => {
     renderSettingsDialog(
       { theme: 'system' },
       { initialSection: 'appearance' },
     );
 
-    expect(screen.queryByRole('button', { name: 'System' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Light' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'System' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Light' }).getAttribute('aria-pressed')).toBe('false');
     expect(screen.getByRole('button', { name: 'Dark' }).getAttribute('aria-pressed')).toBe('false');
-    expect(screen.getByRole('button', { name: 'Cyberpunk' }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.queryByRole('button', { name: 'Cyberpunk' })).toBeNull();
   });
 
-  it('applies the first accent color as the default appearance color', () => {
+  it('applies the saved accent to primary, selected, and focus tokens', () => {
     renderSettingsDialog(
-      { theme: 'system' },
+      { theme: 'light', accentColor: '#2563eb' },
       { initialSection: 'appearance' },
     );
 
-    expect(screen.getByRole('radio', { name: 'Default accent color' }).getAttribute('aria-checked')).toBe('true');
-    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#c96442');
+    expect(screen.getByRole('radiogroup', { name: 'Accent color' })).toBeTruthy();
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#2563eb');
+    expect(document.documentElement.style.getPropertyValue('--selected')).toBe('#2563eb');
+    expect(document.documentElement.style.getPropertyValue('--focus-ring')).toBe('#2563eb');
+    expect(screen.getByText('Component preview')).toBeTruthy();
   });
 
-  it('live previews explicit Light, Dark, and Cyberpunk themes', () => {
+  it('live previews a preset and accepts a custom HEX accent', () => {
+    renderSettingsDialog(
+      { theme: 'light', accentColor: '#111111' },
+      { initialSection: 'appearance' },
+    );
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Accent preset #2563eb' }));
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#2563eb');
+
+    const hex = screen.getByRole('textbox', { name: 'HEX value' });
+    fireEvent.change(hex, { target: { value: '#7c3aed' } });
+    fireEvent.keyDown(hex, { key: 'Enter' });
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#7c3aed');
+  });
+
+  it('live previews explicit Light and Dark themes', () => {
     renderSettingsDialog(
       { theme: 'dark' },
       { initialSection: 'appearance' },
@@ -3506,8 +3520,8 @@ describe('SettingsDialog appearance interactions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Light' }));
     expect(document.documentElement.getAttribute('data-theme')).toBe('light');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cyberpunk' }));
-    expect(document.documentElement.getAttribute('data-theme')).toBe('cyberpunk');
+    fireEvent.click(screen.getByRole('button', { name: 'Dark' }));
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
   });
 
   it('reverts an unsaved appearance preview back to the saved theme when the dialog closes', () => {
@@ -3527,20 +3541,23 @@ describe('SettingsDialog appearance interactions', () => {
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
   });
 
-  it('persists Cyberpunk mode explicitly and preserves accent variables', async () => {
+  it('maps a legacy Cyberpunk config to Dark and persists the supported theme', async () => {
     const { onPersist } = renderSettingsDialog(
-      { mode: 'daemon', agentId: 'codex', theme: 'dark', accentColor: '#2563eb' },
+      { mode: 'daemon', agentId: 'codex', theme: 'cyberpunk', accentColor: '#2563eb' },
       { initialSection: 'appearance' },
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cyberpunk' }));
-    expect(document.documentElement.getAttribute('data-theme')).toBe('cyberpunk');
-    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#2563eb');
+    expect(screen.getByRole('button', { name: 'Dark' }).getAttribute('aria-pressed')).toBe('true');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    expect(document.documentElement.style.getPropertyValue('--accent')).not.toBe('');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Light' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Dark' }));
 
     await waitForPersist(
       onPersist,
       expect.objectContaining({
-        theme: 'cyberpunk',
+        theme: 'dark',
         accentColor: '#2563eb',
       }),
       {},
@@ -3676,100 +3693,17 @@ describe('SettingsDialog appearance interactions', () => {
     });
   });
 
-  it('switches back to the default accent color and persists it explicitly', async () => {
-    const { onPersist } = renderSettingsDialog(
-      { mode: 'daemon', agentId: 'codex', theme: 'light', accentColor: '#2563eb' },
-      { initialSection: 'appearance' },
-    );
-
-    fireEvent.click(screen.getByRole('radio', { name: 'Default accent color' }));
-
-    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#c96442');
-
-    await waitForPersist(
-      onPersist,
-      expect.objectContaining({
-        accentColor: '#c96442',
-      }),
-      {},
-    );
-  });
-
-  it('keeps an autosaved accent color applied after the dialog closes', async () => {
+  it('keeps the saved custom accent after the dialog closes', () => {
     const view = renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex', theme: 'light', accentColor: '#2563eb' },
       { initialSection: 'appearance' },
-    );
-
-    fireEvent.click(screen.getByRole('radio', { name: '#059669' }));
-
-    await waitForPersist(
-      view.onPersist,
-      expect.objectContaining({
-        accentColor: '#059669',
-      }),
-      {},
     );
 
     fireEvent.click(view.container.querySelector('.settings-close') as HTMLElement);
     expect(view.onClose).toHaveBeenCalledTimes(1);
 
     view.unmount();
-    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#059669');
-  });
-
-  it('live previews and autosaves preset and custom accent colors', async () => {
-    const { onPersist } = renderSettingsDialog(
-      { mode: 'daemon', agentId: 'codex', theme: 'light' },
-      { initialSection: 'appearance' },
-    );
-
-    fireEvent.click(screen.getByRole('radio', { name: '#059669' }));
-    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#059669');
-
-    await waitForPersist(
-      onPersist,
-      expect.objectContaining({
-        accentColor: '#059669',
-      }),
-      {},
-    );
-
-    fireEvent.change(screen.getByLabelText('Custom color'), {
-      target: { value: '#123456' },
-    });
-    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#123456');
-
-    await waitForPersist(
-      onPersist,
-      expect.objectContaining({
-        accentColor: '#123456',
-      }),
-      {},
-    );
-  });
-
-  it('localizes the accent color controls in Chinese', () => {
-    render(
-      <I18nProvider initial="zh-CN">
-        <SettingsDialog
-          initial={{ ...baseConfig, theme: 'light' }}
-          agents={availableAgents}
-          daemonLive={true}
-          appVersionInfo={null}
-          initialSection="appearance"
-          onPersist={vi.fn()}
-          onPersistComposioKey={vi.fn()}
-          onClose={vi.fn()}
-          onRefreshAgents={vi.fn()}
-        />
-      </I18nProvider>,
-    );
-
-    expect(screen.getByText('主题色')).toBeTruthy();
-    expect(screen.getByRole('radiogroup', { name: '主题色' })).toBeTruthy();
-    expect(screen.getByRole('radio', { name: '默认主题色' })).toBeTruthy();
-    expect(screen.getByLabelText('自定义颜色')).toBeTruthy();
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#2563eb');
   });
 });
 
@@ -4201,7 +4135,7 @@ describe('SettingsDialog about interactions', () => {
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
     fetchLatestGithubReleaseInfoMock.mockResolvedValue({
       tagName: 'v0.4.1',
-      htmlUrl: 'https://github.com/jhy0285/open-docs/releases/tag/v0.4.1',
+      htmlUrl: 'https://github.com/jhy0285/monofield/releases/tag/v0.4.1',
       stale: true,
     });
 
@@ -4223,7 +4157,7 @@ describe('SettingsDialog about interactions', () => {
 
     await waitFor(() => {
       expect(openSpy).toHaveBeenCalledWith(
-        'https://github.com/jhy0285/open-docs/releases',
+        'https://github.com/jhy0285/monofield/releases',
         '_blank',
         'noopener,noreferrer',
       );

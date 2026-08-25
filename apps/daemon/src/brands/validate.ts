@@ -2,7 +2,7 @@
 //
 // Ported from the branding-agent schema, retargeted onto the '@open-design/
 // contracts' Brand type and BRAND_COLOR_ROLES. The SeedToken / seed-override
-// path from the source is dropped — Open Docs brands carry no Ant seed.
+// path from the source is dropped — MonoField brands carry no Ant seed.
 
 import {
   BRAND_COLOR_ROLES,

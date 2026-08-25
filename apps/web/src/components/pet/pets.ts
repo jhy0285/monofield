@@ -242,7 +242,7 @@ export function pickAmbientRow(
 
 // A short pool of "ambient" prompts that the overlay rotates through on
 // hover so the speech bubble feels alive after the initial greeting.
-// Keep these brand-neutral and product-relevant to Open Docs.
+// Keep these brand-neutral and product-relevant to MonoField.
 export function ambientLines(name: string): string[] {
   return [
     `${name}: nudge me when you want a fresh idea.`,

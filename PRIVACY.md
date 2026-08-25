@@ -1,20 +1,16 @@
 # Privacy
 
-This page describes the current Open Docs data handling policy. Open Docs is
-local-first and is intended to run without an Open Docs cloud account.
-
-Open Docs is based on the Apache-2.0 Open Design codebase, but this policy
-describes Open Docs behavior and product direction, not the original Open
-Design cloud or AMR service.
+This page describes the current MonoField data handling policy. MonoField is
+local-first and is intended to run without a MonoField cloud account.
 
 ## Short Version
 
-- Open Docs does not send product telemetry.
-- Open Docs does not send product analytics, startup reports, reliability
+- MonoField does not send product telemetry.
+- MonoField does not send product analytics, startup reports, reliability
   events, quality traces, artifact manifests, screenshots, prompts, responses,
-  tool input, or tool output to an Open Docs-operated telemetry service.
-- Open Docs does not store your conversation, tool content, projects, generated
-  files, screenshots, or BYOK keys on an Open Docs server.
+  tool input, or tool output to a MonoField-operated telemetry service.
+- MonoField does not store your conversation, tool content, projects, generated
+  files, screenshots, or BYOK keys on a MonoField server.
 - Projects, generated files, app settings, and BYOK/provider credentials are
   stored locally on your machine.
 - When you run an agent, the prompt and required context are sent only to the
@@ -23,7 +19,7 @@ Design cloud or AMR service.
 
 ## Local Data
 
-Open Docs may store local runtime data on your machine, including:
+MonoField may store local runtime data on your machine, including:
 
 - app settings
 - selected local agent or BYOK provider configuration
@@ -32,18 +28,18 @@ Open Docs may store local runtime data on your machine, including:
 - local daemon state
 - plugin or template state
 
-These files are local application data. They are not uploaded to an Open Docs
+These files are local application data. They are not uploaded to a MonoField
 server.
 
 BYOK keys and local CLI credentials are used only to talk to the provider or CLI
-you configured. Open Docs does not send those secrets to an Open Docs-operated
+you configured. MonoField does not send those secrets to a MonoField-operated
 service.
 
 ## Model And Agent Input
 
-Open Docs does not provide a managed model router in the current MVP.
+MonoField does not provide a managed model router in the current MVP.
 
-When you ask an agent to work, Open Docs sends the required input to the runtime
+When you ask an agent to work, MonoField sends the required input to the runtime
 you selected, for example:
 
 - a local coding agent CLI such as Codex, Claude Code, Cursor Agent, OpenCode,
@@ -53,13 +49,13 @@ you selected, for example:
   server
 - an external integration that you explicitly configure and invoke
 
-Open Docs itself does not control whether that external runtime stores,
+MonoField itself does not control whether that external runtime stores,
 retains, trains on, or logs the input. You must check the policy and settings of
 the selected CLI, model provider, local model server, or integration.
 
 ## Product Telemetry
 
-Open Docs product telemetry is disabled and has no active Open Docs telemetry
+MonoField product telemetry is disabled and has no active MonoField telemetry
 sink.
 
 The current code disables the inherited telemetry surfaces at the application
@@ -78,11 +74,11 @@ boundaries:
 - packaging config: does not bake runtime telemetry keys
 
 Because these paths are disabled, setting legacy telemetry environment variables
-should not cause Open Docs telemetry to be sent.
+should not cause MonoField telemetry to be sent.
 
-## What Open Docs Does Not Send
+## What MonoField Does Not Send
 
-Open Docs does not send these categories to an Open Docs telemetry service:
+MonoField does not send these categories to a MonoField telemetry service:
 
 - BYOK API keys, auth tokens, JWTs, or local CLI credentials
 - prompts, assistant responses, or conversation history
@@ -96,28 +92,27 @@ Open Docs does not send these categories to an Open Docs telemetry service:
 ## Clearing Local Privacy State
 
 Settings -> Privacy -> Clear local privacy state removes any legacy anonymous
-identifier and keeps Open Docs telemetry disabled.
+identifier and keeps MonoField telemetry disabled.
 
 Data already sent to an external model provider, local CLI, local model server,
 or external integration is governed by that provider or integration's retention
 policy.
 
-## Open Docs Cloud And AMR
+## Managed Cloud Services
 
-Open Docs does not currently provide Open Docs Cloud, Open Design AMR, Vela
-login, wallet, credits, or a managed model-router service in the MVP.
+MonoField does not currently provide a managed cloud account, managed model
+router, hosted wallet, or hosted credit service.
 
-If a future Open Docs Cloud, managed model-router service, telemetry program, or
+If a future MonoField Cloud, managed model-router service, telemetry program, or
 hosted quality-review system is introduced, this policy and the code paths must
 be updated before that feature is shipped.
 
 ## Changes To This Page
 
-This document should be updated whenever Open Docs data handling, model routing,
+This document should be updated whenever MonoField data handling, model routing,
 cloud-service behavior, telemetry behavior, or external integration behavior
 changes.
 
 For privacy questions, contact:
 
 - Contact email: jhy0285@gmail.com
-- Company email: whdudwls0285@lgcns.com

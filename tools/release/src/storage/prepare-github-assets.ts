@@ -46,16 +46,16 @@ function findRequiredAsset(files: string[], name: string): string {
 }
 
 const allowedNames = [
-  `open-design-${releaseVersion}-mac-arm64.dmg`,
-  `open-design-${releaseVersion}-mac-arm64.dmg.sha256`,
-  `open-design-${releaseVersion}-mac-x64.dmg`,
-  `open-design-${releaseVersion}-mac-x64.dmg.sha256`,
-  `open-design-${releaseVersion}-win-x64-setup.exe`,
-  `open-design-${releaseVersion}-win-x64-setup.exe.sha256`,
+  `monofield-${releaseVersion}-mac-arm64.dmg`,
+  `monofield-${releaseVersion}-mac-arm64.dmg.sha256`,
+  `monofield-${releaseVersion}-mac-x64.dmg`,
+  `monofield-${releaseVersion}-mac-x64.dmg.sha256`,
+  `monofield-${releaseVersion}-win-x64-setup.exe`,
+  `monofield-${releaseVersion}-win-x64-setup.exe.sha256`,
   ...(enableLinux
     ? [
-        `open-design-${releaseVersion}-linux-x64.AppImage`,
-        `open-design-${releaseVersion}-linux-x64.AppImage.sha256`,
+        `monofield-${releaseVersion}-linux-x64.AppImage`,
+        `monofield-${releaseVersion}-linux-x64.AppImage.sha256`,
       ]
     : []),
 ];

@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog } from '@open-design/components';
 import {
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
+  STRICT_ENTERPRISE_MARKETPLACE_POLICY,
   resolveLocalizedText,
   type ApplyResult,
   type InstalledPluginRecord,
+  type MarketplaceSecurityPolicy,
   type PluginSourceKind,
 } from '@open-design/contracts';
 import { useAnalytics } from '../analytics/provider';
@@ -23,6 +25,7 @@ import {
   addPluginMarketplace,
   applyPlugin,
   installPluginSource,
+  getPluginMarketplaceInstallMode,
   listPluginMarketplaces,
   listPlugins,
   refreshPluginMarketplace,
@@ -79,22 +82,22 @@ const PLUGIN_SHARE_DETAILS: Record<PluginShareAction, {
     eyebrow: 'GitHub repository',
     fallbackTitle: 'Publish Plugin to GitHub',
     fallbackDescription:
-      'Creates a public GitHub repository for this local Open Docs plugin.',
+      'Creates a public GitHub repository for this local MonoField plugin.',
     confirmLabel: 'Start publishing',
     steps: [
-      'Create a new Open Docs project for the publish workflow.',
+      'Create a new MonoField project for the publish workflow.',
       'Copy this plugin into that project as isolated source context.',
       'Run the official publish action plugin against the local daemon.',
     ],
   },
   'contribute-open-design': {
-    eyebrow: 'Open Docs pull request',
-    fallbackTitle: 'Contribute Plugin to Open Docs',
+    eyebrow: 'MonoField pull request',
+    fallbackTitle: 'Contribute Plugin to MonoField',
     fallbackDescription:
-      'Opens a pull request that adds this plugin to the Open Docs community catalog.',
+      'Opens a pull request that adds this plugin to the MonoField community catalog.',
     confirmLabel: 'Start contribution',
     steps: [
-      'Create a new Open Docs project for the contribution workflow.',
+      'Create a new MonoField project for the contribution workflow.',
       'Copy this plugin into that project as isolated source context.',
       'Run the official contribution action plugin against the local daemon.',
     ],
@@ -127,6 +130,7 @@ export function PluginsView({
   const [plugins, setPlugins] = useState<InstalledPluginRecord[]>([]);
   const [allInstalledPlugins, setAllInstalledPlugins] = useState<InstalledPluginRecord[]>([]);
   const [marketplaces, setMarketplaces] = useState<PluginMarketplace[]>([]);
+  const [managedInstallOnly, setManagedInstallOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<PluginsTab>('installed');
   const [importOpen, setImportOpen] = useState(false);
@@ -152,14 +156,16 @@ export function PluginsView({
 
   async function refresh() {
     setLoading(true);
-    const [rows, allRows, catalogs] = await Promise.all([
+    const [rows, allRows, catalogs, installMode] = await Promise.all([
       listPlugins(),
       listPlugins({ includeHidden: true }),
       listPluginMarketplaces(),
+      getPluginMarketplaceInstallMode(),
     ]);
     setPlugins(rows);
     setAllInstalledPlugins(allRows);
     setMarketplaces(catalogs);
+    setManagedInstallOnly(installMode === 'managed');
     setLoading(false);
   }
 
@@ -168,6 +174,12 @@ export function PluginsView({
     window.addEventListener('open-design:plugins-changed', refresh);
     return () => window.removeEventListener('open-design:plugins-changed', refresh);
   }, []);
+
+  useEffect(() => {
+    if (!managedInstallOnly) return;
+    if (activeTab === 'sources') setActiveTab('team');
+    setShareConfirm(null);
+  }, [activeTab, managedInstallOnly]);
 
   const userPlugins = useMemo(
     () => plugins.filter((plugin) => USER_SOURCE_KINDS.has(plugin.sourceKind)),
@@ -309,23 +321,25 @@ export function PluginsView({
             <Icon name="edit" size={13} />
             <span>{t('homeHero.chip.createPlugin')}</span>
           </button>
-          <button
-            type="button"
-            className="plugins-view__secondary"
-            onClick={() => {
-              trackPluginsTopClick(analytics.track, {
-                page_name: 'plugins',
-                area: 'plugins',
-                element: 'import_plugin',
-              });
-              setImportOpen(true);
-            }}
-            aria-haspopup="dialog"
-            data-testid="plugins-import-button"
-          >
-            <Icon name="plus" size={13} />
-            <span>{t('pluginsView.importPlugin')}</span>
-          </button>
+          {!managedInstallOnly ? (
+            <button
+              type="button"
+              className="plugins-view__secondary"
+              onClick={() => {
+                trackPluginsTopClick(analytics.track, {
+                  page_name: 'plugins',
+                  area: 'plugins',
+                  element: 'import_plugin',
+                });
+                setImportOpen(true);
+              }}
+              aria-haspopup="dialog"
+              data-testid="plugins-import-button"
+            >
+              <Icon name="plus" size={13} />
+              <span>{t('pluginsView.importPlugin')}</span>
+            </button>
+          ) : null}
           <div className="plugins-view__badge" aria-hidden="true">
             <Icon name="grid" size={15} />
             <span>{t('pluginsView.agentContext')}</span>
@@ -340,7 +354,9 @@ export function PluginsView({
       </div>
 
       <nav className="plugins-view__tabs" role="tablist" aria-label={t('pluginsView.areasAria')}>
-        {PLUGINS_TABS.map((tab) => {
+        {PLUGINS_TABS.filter(
+          (tab) => !managedInstallOnly || tab.id !== 'sources',
+        ).map((tab) => {
           const active = tab.id === activeTab;
           return (
             <button
@@ -420,7 +436,7 @@ export function PluginsView({
               });
               setDetailsRecord(record);
             }}
-            onPluginShareAction={(record, action) => {
+            onPluginShareAction={managedInstallOnly ? undefined : (record, action) => {
               trackPluginsInstalledTabClick(analytics.track, {
                 page_name: 'plugins',
                 area: 'installed_tab',
@@ -489,7 +505,7 @@ export function PluginsView({
           />
         ) : null}
 
-        {!loading && activeTab === 'sources' ? (
+        {!loading && !managedInstallOnly && activeTab === 'sources' ? (
           <SourcesPanel
             marketplaces={marketplaces}
             pendingAction={pendingSourceAction}
@@ -537,7 +553,34 @@ export function PluginsView({
           />
         ) : null}
 
-        {activeTab === 'team' ? <TeamPanel t={t} /> : null}
+        {activeTab === 'team' ? (
+          <TeamPanel
+            locale={locale}
+            managedInstallOnly={managedInstallOnly}
+            marketplaces={marketplaces.filter((marketplace) => marketplace.visibility === 'enterprise')}
+            pendingAction={pendingSourceAction}
+            onAdd={(url, authEnv, policy) =>
+              void handleMarketplaceMutation('add-enterprise', () => addPluginMarketplace({
+                url,
+                trust: 'trusted',
+                visibility: 'enterprise',
+                ...(authEnv ? { authEnv } : {}),
+                policy,
+              }))
+            }
+            onRefresh={(marketplace) =>
+              void handleMarketplaceMutation(`refresh:${marketplace.id}`, () =>
+                refreshPluginMarketplace(marketplace.id),
+              )
+            }
+            onRemove={(marketplace) =>
+              void handleMarketplaceMutation(`remove:${marketplace.id}`, () =>
+                removePluginMarketplace(marketplace.id),
+              )
+            }
+            t={t}
+          />
+        ) : null}
       </div>
 
       <AnimatePresence>
@@ -1136,7 +1179,7 @@ function AvailablePluginDetailsModal({
                 </h3>
               </div>
               <p className="plugin-details-modal__section-hint">
-                This official catalog entry is bundled with Open Docs and is ready to use.
+                This official catalog entry is bundled with MonoField and is ready to use.
               </p>
             </section>
           ) : (
@@ -2051,19 +2094,241 @@ function normalizePluginName(name: string): string {
   return name.trim().toLowerCase();
 }
 
-function TeamPanel({ t }: { t: ReturnType<typeof useI18n>['t'] }) {
+function TeamPanel({
+  locale,
+  managedInstallOnly,
+  marketplaces,
+  pendingAction,
+  onAdd,
+  onRefresh,
+  onRemove,
+  t,
+}: {
+  locale: string;
+  managedInstallOnly: boolean;
+  marketplaces: PluginMarketplace[];
+  pendingAction: string | null;
+  onAdd: (url: string, authEnv: string, policy: MarketplaceSecurityPolicy) => void;
+  onRefresh: (marketplace: PluginMarketplace) => void;
+  onRemove: (marketplace: PluginMarketplace) => void;
+  t: ReturnType<typeof useI18n>['t'];
+}) {
+  const copy = enterpriseMarketplaceCopy(locale);
+  const [url, setUrl] = useState('');
+  const [authEnv, setAuthEnv] = useState('OD_MARKETPLACE_TOKEN');
+  const [allowedLicenses, setAllowedLicenses] = useState(
+    'Apache-2.0, MIT, BSD-2-Clause, BSD-3-Clause, ISC, CC-BY-4.0',
+  );
+  const [assurance, setAssurance] = useState<'standard' | 'high'>('standard');
+  const trimmedUrl = url.trim();
+  let allowedHost = '';
+  try {
+    allowedHost = new URL(trimmedUrl).hostname.toLowerCase();
+  } catch {
+    // The submit button stays disabled until this is a valid HTTPS URL.
+  }
+  const canSubmit = trimmedUrl.startsWith('https://') && Boolean(allowedHost);
+  const licenseAllowlist = allowedLicenses
+    .split(',')
+    .map((license) => license.trim())
+    .filter(Boolean);
+
   return (
-    <section className="plugins-view__team" aria-labelledby="plugins-team-title">
-      <span className="plugins-view__future-icon" aria-hidden>
-        <Icon name="sparkles" size={18} />
-      </span>
-      <div>
-        <p className="plugins-view__kicker">{t('tasks.comingSoon')}</p>
-        <h2 id="plugins-team-title">{t('pluginsView.teamTitle')}</h2>
-        <p>
-          {t('pluginsView.teamBody')}
-        </p>
+    <section className="plugins-view__section plugins-view__enterprise" aria-labelledby="plugins-team-title">
+      <div className="plugins-view__section-head">
+        <div>
+          <p className="plugins-view__kicker">{copy.kicker}</p>
+          <h2 id="plugins-team-title">{t('pluginsView.teamTitle')}</h2>
+          <p>{t('pluginsView.teamBody')}</p>
+        </div>
+        <span className="plugins-view__section-count">{marketplaces.length}</span>
       </div>
+      {managedInstallOnly ? (
+        <div className="plugins-view__enterprise-flow is-enforced">
+          <strong>{copy.managedModeTitle}</strong>
+          <span>{copy.managedModeBody}</span>
+        </div>
+      ) : null}
+
+      {!managedInstallOnly ? (
+        <form
+          className="plugins-view__source-manager plugins-view__enterprise-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!canSubmit) return;
+            onAdd(trimmedUrl, authEnv.trim(), {
+              ...STRICT_ENTERPRISE_MARKETPLACE_POLICY,
+              allowedHosts: [allowedHost],
+              allowedLicenses: licenseAllowlist,
+              requireSignature: assurance === 'high',
+              requireProvenance: assurance === 'high',
+              requireSbom: assurance === 'high',
+              requireApproval: assurance === 'high',
+            });
+            setUrl('');
+          }}
+        >
+        <label htmlFor="enterprise-marketplace-url">{copy.endpoint}</label>
+        <input
+          id="enterprise-marketplace-url"
+          value={url}
+          onChange={(event) => setUrl(event.target.value)}
+          placeholder="https://marketplace.company.example/open-docs-marketplace.json"
+          disabled={pendingAction === 'add-enterprise'}
+        />
+        <label htmlFor="enterprise-marketplace-auth-env">{copy.credentialEnv}</label>
+        <input
+          id="enterprise-marketplace-auth-env"
+          value={authEnv}
+          onChange={(event) => setAuthEnv(event.target.value.toUpperCase())}
+          placeholder="OD_MARKETPLACE_TOKEN"
+          disabled={pendingAction === 'add-enterprise'}
+        />
+        <p className="plugins-view__source-help">{copy.credentialHint}</p>
+        <label htmlFor="enterprise-marketplace-licenses">{copy.allowedLicenses}</label>
+        <input
+          id="enterprise-marketplace-licenses"
+          value={allowedLicenses}
+          onChange={(event) => setAllowedLicenses(event.target.value)}
+          disabled={pendingAction === 'add-enterprise'}
+        />
+        <label htmlFor="enterprise-marketplace-assurance">{copy.assurance}</label>
+        <select
+          id="enterprise-marketplace-assurance"
+          value={assurance}
+          onChange={(event) => setAssurance(event.target.value as 'standard' | 'high')}
+          disabled={pendingAction === 'add-enterprise'}
+        >
+          <option value="standard">{copy.assuranceStandard}</option>
+          <option value="high">{copy.assuranceHigh}</option>
+        </select>
+        <p className="plugins-view__source-help">
+          {assurance === 'high'
+            ? copy.assuranceHighHint
+            : copy.assuranceStandardHint}
+        </p>
+        <div className="plugins-view__policy-summary" aria-label={copy.policyLabel}>
+          {[
+            copy.policyDigest,
+            ...(assurance === 'high' ? [
+              copy.policySignature,
+              copy.policyProvenance,
+              copy.policySbom,
+              copy.policyApproval,
+            ] : []),
+          ].map((label) => <span key={label}>{label}</span>)}
+        </div>
+        <button
+          type="submit"
+          className="plugins-view__primary"
+          disabled={!canSubmit || licenseAllowlist.length === 0 || pendingAction === 'add-enterprise'}
+        >
+          {pendingAction === 'add-enterprise'
+            ? t('pluginsView.adding')
+            : copy.connect}
+        </button>
+        </form>
+      ) : null}
+
+      <div className="plugins-view__enterprise-flow">
+        <strong>{copy.publishFlowTitle}</strong>
+        <span>{copy.publishFlow}</span>
+      </div>
+
+      {marketplaces.length === 0 ? (
+        <div className="plugins-view__empty">{copy.empty}</div>
+      ) : (
+        <div className="plugins-view__marketplaces">
+          {marketplaces.map((marketplace) => (
+            <article key={marketplace.id} className="plugins-view__marketplace">
+              <div>
+                <h3>{marketplace.manifest.name ?? marketplace.url}</h3>
+                <a href={marketplace.url} target="_blank" rel="noreferrer">{marketplace.url}</a>
+                <div className="plugins-view__meta">
+                  <TrustBadge trust={marketplace.trust} />
+                  <span>{t('pluginsView.pluginsCount', { n: marketplace.manifest.plugins?.length ?? 0 })}</span>
+                  <span>{marketplace.authEnv || copy.integratedAuth}</span>
+                </div>
+              </div>
+              <div className="plugins-view__source-actions">
+                <button
+                  type="button"
+                  className="plugins-view__secondary"
+                  onClick={() => onRefresh(marketplace)}
+                  disabled={pendingAction === `refresh:${marketplace.id}`}
+                >
+                  {pendingAction === `refresh:${marketplace.id}` ? t('pluginsView.refreshing') : t('designFiles.refresh')}
+                </button>
+                {!managedInstallOnly ? (
+                  <button
+                    type="button"
+                    className="plugins-view__danger"
+                    onClick={() => onRemove(marketplace)}
+                    disabled={pendingAction === `remove:${marketplace.id}`}
+                  >
+                    {pendingAction === `remove:${marketplace.id}` ? t('pluginsView.removing') : t('chat.comments.remove')}
+                  </button>
+                ) : null}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
     </section>
   );
+}
+
+function enterpriseMarketplaceCopy(locale: string) {
+  if (locale.toLowerCase().startsWith('ko')) {
+    return {
+      kicker: '회사 관리형',
+      endpoint: '사내 카탈로그 주소',
+      credentialEnv: 'Bearer 토큰 환경 변수 이름(선택)',
+      credentialHint: 'MonoField는 토큰이 아니라 환경 변수 이름만 저장합니다. 회사 프록시가 통합 인증을 제공하면 비워 두세요.',
+      allowedLicenses: '허용할 SPDX 라이선스 식별자(쉼표로 구분)',
+      assurance: '검증 프로필',
+      assuranceStandard: '표준 — 지금 사용 가능',
+      assuranceHigh: '고보증 — 검증 실패 시 차단',
+      assuranceStandardHint: 'HTTPS, 허용 호스트·라이선스, 카탈로그에 고정된 해시를 요구하며 압축 해제 전에 MonoField가 해시를 직접 검증합니다.',
+      assuranceHighHint: '로컬에서 검증된 서명, provenance, SBOM, 배포 승인 증거도 요구합니다. 호환 검증 어댑터가 구성되기 전에는 설치를 차단합니다.',
+      policyLabel: '필수 사내 검증 정책',
+      policyDigest: '해시 고정',
+      policySignature: '서명 검증',
+      policyProvenance: '빌드 출처',
+      policySbom: 'SBOM 첨부',
+      policyApproval: '배포 승인',
+      connect: '사내 카탈로그 연결',
+      publishFlowTitle: '게시 흐름',
+      publishFlow: '플러그인 또는 템플릿 작성 → 사내 CI 검사·서명 → 검토자 승인 → 변경 불가능한 릴리스를 카탈로그에 공개합니다.',
+      empty: '연결된 사내 마켓플레이스가 없습니다. 플랫폼 관리자에게 승인된 HTTPS 카탈로그 주소를 요청하세요.',
+      integratedAuth: '통합 인증',
+      managedModeTitle: '관리형 설치 정책 적용 중',
+      managedModeBody: '직접 URL, GitHub, ZIP, 로컬 폴더 설치가 차단되며 승인된 사내 카탈로그의 패키지 이름으로만 설치할 수 있습니다.',
+    };
+  }
+  return {
+    kicker: 'Company managed',
+    endpoint: 'Company catalog endpoint',
+    credentialEnv: 'Bearer token environment variable (optional)',
+    credentialHint: 'MonoField stores only this variable name, never the token. Leave it blank when your company proxy provides integrated authentication.',
+    allowedLicenses: 'Allowed SPDX license identifiers (comma-separated)',
+    assurance: 'Verification profile',
+    assuranceStandard: 'Standard — usable now',
+    assuranceHigh: 'High assurance — fail closed',
+    assuranceStandardHint: 'Requires HTTPS, an allowlisted host and license, and a catalog-pinned digest that MonoField verifies before extraction.',
+    assuranceHighHint: 'Also requires locally verified signature, provenance, SBOM, and release approval evidence. Installation stays blocked until a compatible verifier adapter is configured.',
+    policyLabel: 'Required enterprise verification',
+    policyDigest: 'Digest pinned',
+    policySignature: 'Signature verified',
+    policyProvenance: 'Build provenance',
+    policySbom: 'SBOM attached',
+    policyApproval: 'Release approved',
+    connect: 'Connect company catalog',
+    publishFlowTitle: 'Publishing path',
+    publishFlow: 'Author plugin or template → company CI scans and signs it → reviewer approves it → catalog exposes the immutable release.',
+    empty: 'No company marketplace is connected yet. Ask your platform administrator for the approved HTTPS catalog endpoint.',
+    integratedAuth: 'Integrated authentication',
+    managedModeTitle: 'Managed install policy is enforced',
+    managedModeBody: 'Direct URL, GitHub, ZIP, and local-folder installs are blocked. Users can install only package names resolved by an approved company catalog.',
+  };
 }

@@ -266,6 +266,8 @@ export function BoardComposerPopover({
   sending,
   queueOnSend = false,
   sendDisabled = false,
+  hideSendAction = false,
+  saveLabel,
   t,
   scale = 1,
   bounds,
@@ -296,6 +298,8 @@ export function BoardComposerPopover({
   sending: boolean;
   queueOnSend?: boolean;
   sendDisabled?: boolean;
+  hideSendAction?: boolean;
+  saveLabel?: string;
   t: TranslateFn;
   scale?: number;
   bounds?: PopoverBounds;
@@ -566,34 +570,34 @@ export function BoardComposerPopover({
                   >
                     {t('chat.comments.addNote')}
                   </Button>
-                  <Button
+                  {!hideSendAction ? <Button
                     variant="primary"
                     data-testid="comment-add-send"
                     disabled={sendBlocked}
                     onClick={() => void onSendBatch()}
                   >
                     {primaryLabel}
-                  </Button>
+                  </Button> : null}
                 </>
               ) : (
                 <>
                   {/* Element: comment (save) is the primary CTA (also Enter);
                       send-to-chat is secondary. */}
-                  <Button
+                  {!hideSendAction ? <Button
                     variant="ghost"
                     data-testid="comment-add-send"
                     disabled={sendBlocked}
                     onClick={() => void onSendBatch()}
                   >
                     {primaryLabel}
-                  </Button>
+                  </Button> : null}
                   <Button
                     variant="primary"
                     data-testid="comment-popover-save"
                     disabled={saveDisabled}
                     onClick={() => void onSaveComment()}
                   >
-                    {t('chat.comments.comment')}
+                    {saveLabel || t('chat.comments.comment')}
                   </Button>
                 </>
               )}

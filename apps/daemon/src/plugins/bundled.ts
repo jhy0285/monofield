@@ -47,6 +47,10 @@ export interface RegisterBundledPluginsInput {
     marketplaceTrust: MarketplaceTrust;
     entryNamePrefix: string;
   };
+  // Managed enterprise builds can expose only extensions that have passed
+  // the organization's legal and security review. Undefined preserves the
+  // open distribution; an empty set deliberately registers none.
+  allowedPluginIds?: ReadonlySet<string>;
 }
 
 export interface RegisterBundledPluginsResult {
@@ -57,6 +61,15 @@ export interface RegisterBundledPluginsResult {
 }
 
 const SAFE_BASENAME = /^[a-z0-9][a-z0-9._-]*$/;
+
+export function parseBundledPluginAllowlist(value: string | undefined): Set<string> {
+  const ids = new Set<string>();
+  for (const raw of value?.split(',') ?? []) {
+    const id = raw.trim().toLowerCase();
+    if (SAFE_BASENAME.test(id)) ids.add(id);
+  }
+  return ids;
+}
 
 export async function registerBundledPlugins(
   input: RegisterBundledPluginsInput,
@@ -93,6 +106,7 @@ export async function registerBundledPlugins(
     const tierManifest = path.join(tierAbs, 'open-design.json');
     if (await pathExists(tierManifest)) {
       // Direct: <bundledRoot>/<plugin-id>/open-design.json
+      if (!isBundledPluginAllowed(tier.name, input.allowedPluginIds)) continue;
       await registerOne({ folder: tierAbs, folderId: tier.name, out, warnings, seenFolderIds, input });
       continue;
     }
@@ -104,6 +118,7 @@ export async function registerBundledPlugins(
     }
     for (const entry of inner) {
       if (!entry.isDirectory()) continue;
+      if (!isBundledPluginAllowed(entry.name, input.allowedPluginIds)) continue;
       const folder = path.join(tierAbs, entry.name);
       const manifest = path.join(folder, 'open-design.json');
       if (!(await pathExists(manifest))) continue;
@@ -113,6 +128,14 @@ export async function registerBundledPlugins(
 
   const pruned = pruneRemovedBundledPlugins(input.db, seenFolderIds);
   return { registered: out, pruned, warnings };
+}
+
+function isBundledPluginAllowed(
+  folderId: string,
+  allowlist: ReadonlySet<string> | undefined,
+): boolean {
+  if (allowlist === undefined) return true;
+  return allowlist.has(folderId.trim().toLowerCase());
 }
 
 // Bundled rows mirror the bundled tree: spec §23 promises that bundled

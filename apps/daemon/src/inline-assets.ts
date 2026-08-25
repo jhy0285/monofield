@@ -4,7 +4,7 @@
 // inlines TOP-LEVEL relative `<link rel=stylesheet>` and
 // `<script src=...>` tags into the response HTML; the viewer itself
 // stays URL-load by default since PR #384 (Part 1 of
-// jhy0285/open-docs#368).
+// jhy0285/monofield#368).
 //
 // Scope: this helper handles two tag families only. The following are
 // NOT rewritten and remain external in the response:

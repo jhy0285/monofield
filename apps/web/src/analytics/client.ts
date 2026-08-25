@@ -1,4 +1,4 @@
-// Open Docs disables product telemetry in the browser. This module preserves
+// MonoField disables product telemetry in the browser. This module preserves
 // the inherited analytics facade so UI code can keep calling `track`, but every
 // operation is a no-op and no external analytics endpoint is loaded.
 
@@ -45,7 +45,7 @@ export function setConfigureGlobals(next: AnalyticsConfigureGlobals): void {
 }
 
 export function setAnalyticsUserId(_userId: string | null): void {
-  // No Open Docs telemetry identity is registered.
+  // No MonoField telemetry identity is registered.
 }
 
 export async function bootstrapExceptionTracking(
@@ -80,5 +80,5 @@ export function capture(
     requestId?: string | null;
   },
 ): void {
-  // Intentionally empty: Open Docs does not send browser analytics.
+  // Intentionally empty: MonoField does not send browser analytics.
 }

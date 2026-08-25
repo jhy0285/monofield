@@ -29,6 +29,7 @@ const ALLOWED_KINDS = new Set<string>([
   'code-snippet',
   'mini-app',
   'design-system',
+  'interface-spec',
   'screen-spec',
 ]);
 
@@ -42,10 +43,11 @@ const ALLOWED_RENDERERS = new Set<string>([
   'code',
   'mini-app',
   'design-system',
+  'interface-spec',
   'screen-spec',
 ]);
 
-const ALLOWED_EXPORTS = new Set<string>(['html', 'pdf', 'zip', 'jsx', 'md', 'svg', 'txt']);
+const ALLOWED_EXPORTS = new Set<string>(['html', 'pdf', 'zip', 'jsx', 'md', 'svg', 'xlsx', 'pptx', 'txt']);
 const ALLOWED_STATUS = new Set<string>(['streaming', 'complete', 'error']);
 
 function isPlainObject(value: unknown): value is JsonRecord {
@@ -303,6 +305,30 @@ export function inferLegacyManifest(entry: string): JsonRecord | null {
       renderer: 'svg',
       status: 'complete',
       exports: ['svg', 'zip'],
+      metadata: { inferred: true },
+    };
+  }
+  if (/(?:^|\.)screen-spec\.json$/i.test(lower)) {
+    return {
+      version: MANIFEST_VERSION,
+      kind: 'screen-spec',
+      title: entry,
+      entry,
+      renderer: 'screen-spec',
+      status: 'complete',
+      exports: ['pptx', 'txt', 'zip'],
+      metadata: { inferred: true },
+    };
+  }
+  if (/(?:^|\.)interface-spec\.json$/i.test(lower)) {
+    return {
+      version: MANIFEST_VERSION,
+      kind: 'interface-spec',
+      title: entry,
+      entry,
+      renderer: 'interface-spec',
+      status: 'complete',
+      exports: ['xlsx', 'txt', 'zip'],
       metadata: { inferred: true },
     };
   }

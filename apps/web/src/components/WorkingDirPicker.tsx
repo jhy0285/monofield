@@ -22,6 +22,8 @@ interface Props {
   className?: string;
   /** The selected directory no longer exists on disk — flag it in red. */
   invalid?: boolean;
+  /** A source folder is required before the current workflow can continue. */
+  required?: boolean;
   /**
    * Panel direction. `'down'` (default) suits the Home composer where there
    * is room below; `'up'` suits the in-project composer whose trigger sits at
@@ -38,11 +40,10 @@ function basename(dir: string): string {
 
 /**
  * Working-directory picker: a borderless trigger that opens a panel with
- * "Choose folder" and a "Recent folders" submenu. Picking a directory grants
- * the agent read-only awareness of those local files (via the project's
- * `linkedDirs` → `--add-dir`); it does NOT import the folder into Design
- * Files. Shared by the Home composer and the in-project composer; layout is
- * left to the host via `className`.
+ * "Choose folder" and a "Recent folders" submenu. The selected directory is
+ * the project's real agent cwd for reading, editing, builds, and tests; it is
+ * not copied into project-managed files. Shared by the Home composer and the
+ * in-project composer; layout is left to the host via `className`.
  */
 export function WorkingDirPicker({
   workingDir,
@@ -53,6 +54,7 @@ export function WorkingDirPicker({
   className,
   placement = 'down',
   invalid = false,
+  required = false,
   onOpen,
 }: Props) {
   const t = useT();
@@ -89,10 +91,17 @@ export function WorkingDirPicker({
       <div className={styles.triggerRow}>
         <button
           type="button"
-          className={`${styles.trigger}${invalid ? ` ${styles.triggerInvalid}` : ''}`}
+          className={`${styles.trigger}${invalid || required ? ` ${styles.triggerInvalid}` : ''}`}
           data-testid="working-dir-trigger"
+          data-required={required ? 'true' : 'false'}
           aria-expanded={open}
-          title={invalid ? t('homeWorkingDir.missing') : (workingDir ?? t('homeWorkingDir.hint'))}
+          title={
+            invalid
+              ? t('homeWorkingDir.missing')
+              : required
+                ? t('homeWorkingDir.hint')
+                : (workingDir ?? t('homeWorkingDir.hint'))
+          }
           onClick={() =>
             setOpen((v) => {
               if (!v) onOpen?.();

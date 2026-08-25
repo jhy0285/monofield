@@ -36,7 +36,7 @@ function targetedAuditRepairActions(issues: DesignSystemPackageAuditIssue[]): st
     actions.push('- Rewrite `SKILL.md` as a discoverable skill package with YAML frontmatter (`name`, `description`, `user-invocable`) and sections for What is inside, Source context, When to use this skill, How to use, and Design system highlights.');
   }
   if (hasAny('readme_missing_product_overview', 'readme_missing_package_reuse_guide', 'readme_missing_preview_manifest')) {
-    actions.push('- Rewrite `README.md` as a Open Docs package guide with Product Overview/Product Context, source/context references, Package Contents, preview-card manifest, preserved assets/fonts/build/source examples, `ui_kits/app/`, and a concrete reuse or review workflow.');
+    actions.push('- Rewrite `README.md` as a MonoField package guide with Product Overview/Product Context, source/context references, Package Contents, preview-card manifest, preserved assets/fonts/build/source examples, `ui_kits/app/`, and a concrete reuse or review workflow.');
   }
   if (hasAny('readme_missing_preview_manifest')) {
     actions.push('- Add a `## Preview Manifest` section to `README.md` that lists every generated `preview/*.html` card with the exact path, review purpose, and source-backed components or assets it demonstrates.');
@@ -93,7 +93,7 @@ export function buildDesignSystemPackageAuditRepairPrompt(
     '- If runtime/build assets are reported, preserve representative originals under root `build/` with their original filenames, copy them byte-for-byte from captured context snapshots, and make `preview/brand-assets.html` visibly reference the preserved files.',
     '- If source examples are reported, copy substantive original component snapshots into `source_examples/` or equivalent package source files; do not create tiny stubs that only share component names.',
     '- If UI-kit findings are reported, make `ui_kits/app/index.html` load `../../colors_and_type.css`, load/import modular files from `ui_kits/app/components/`, and mount a composed interface.',
-    '- If README or SKILL findings are reported, keep them in sync with the final file structure and include Open Docs-style reusable package guidance.',
+    '- If README or SKILL findings are reported, keep them in sync with the final file structure and include MonoField-style reusable package guidance.',
     '',
     ...(targetedActions.length > 0 ? [
       'Targeted repair actions:',

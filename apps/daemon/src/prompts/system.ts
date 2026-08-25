@@ -38,6 +38,7 @@ import { IMAGE_MODELS } from '../media/models.js';
 import { renderPanelPrompt } from './panel.js';
 import { defaultCritiqueConfig, type CritiqueConfig } from '@open-design/contracts/critique';
 import {
+  DATABASE_DEVELOPMENT_CONTEXT,
   executionProfileFromStreamFormat,
   type ChatSessionMode,
   type ExecutionProfile,
@@ -92,7 +93,7 @@ function renderUiLocalePrompt(locale: string | undefined): string {
   const lines = [
     '# UI locale override',
     '',
-    `The Open Docs UI locale for this run is \`${normalized}\` (${languageName}). All user-visible chat prose and generated UI controls must follow this locale, especially \`<question-form>\` titles, descriptions, labels, placeholders, helper text, and option labels. Keep machine-readable ids and object option \`value\` fields exact and unlocalized.`,
+    `The MonoField UI locale for this run is \`${normalized}\` (${languageName}). All user-visible chat prose and generated UI controls must follow this locale, especially \`<question-form>\` titles, descriptions, labels, placeholders, helper text, and option labels. Keep machine-readable ids and object option \`value\` fields exact and unlocalized.`,
     `The artifacts you generate must also be in ${languageName}: every piece of user-visible copy in the HTML/React/page/deck you produce — headings, body text, navigation, button and link labels, captions, alt text, and form fields — is written in this language by default. This holds even when a chosen template, plugin, or design system ships its reference/example content in another language: treat that copy as a layout and style reference and translate/adapt it into ${languageName}, do not ship its wording verbatim. Keep brand names, code, and technical identifiers as-is, and honor an explicit user request for a different output language.`,
     'Exception: for the default task-type form, keep the `taskType` option labels as the canonical routing choices: `Prototype`, `Live artifact`, `Slide deck`, `Image`, `Video`, `HyperFrames`, `Audio`, `Other`. Do not translate, reorder, or rewrite those option labels.',
   ];
@@ -175,6 +176,10 @@ type ProjectMetadata = {
   brandId?: string | null;
   brandSourceUrl?: string | null;
   brandDesignSystemId?: string | null;
+  databaseContext?: {
+    connectionId?: string | null;
+    useForDevelopment?: boolean | null;
+  } | null;
   promptTemplate?: {
     id?: string | null;
     surface?: 'image' | 'video' | null;
@@ -320,7 +325,7 @@ const FILESYSTEM_HANDOFF_OVERRIDE = `
 
 ## Filesystem handoff
 
-This run uses Open Docs's filesystem execution profile. Project files are the source of truth for generated artifacts.
+This run uses MonoField's filesystem execution profile. Project files are the source of truth for generated artifacts.
 
 Normal rhythm for artifact work:
 1. Start with a short ordinary assistant message or compact \`<od-card>\` that states the locked direction.
@@ -330,7 +335,7 @@ Normal rhythm for artifact work:
 
 Never type a tool invocation into assistant text as XML, markdown, JSON, or prose; if the runtime cannot call the tool, briefly explain that instead of simulating it.
 
-This tool-call rule does not apply to Open Docs UI markup. \`<question-form>\` and \`<od-card>\` are assistant text blocks that the host renders in the UI, not tool calls. When you need to ask structured questions, emit the complete \`<question-form>...</question-form>\` block directly in assistant text; do not route it through a native tool call and do not stop after an introductory sentence.
+This tool-call rule does not apply to MonoField UI markup. \`<question-form>\` and \`<od-card>\` are assistant text blocks that the host renders in the UI, not tool calls. When you need to ask structured questions, emit the complete \`<question-form>...</question-form>\` block directly in assistant text; do not route it through a native tool call and do not stop after an introductory sentence.
 
 When you write or edit an HTML file in the project folder through the native file tool, that file is already visible in the user's file panel and preview.
 
@@ -592,6 +597,10 @@ export function composeSystemPrompt({
   const resolvedExclusiveSurface = resolveExclusiveSurface({ metadata, skillMode, skillModes });
   const resolvedExecutionProfile =
     executionProfile ?? executionProfileFromStreamFormat(streamFormat);
+  const isLeanChatMode = sessionMode === 'chat';
+  const hasConnectedProjectDatabase =
+    typeof metadata?.databaseContext?.connectionId === 'string'
+    && metadata.databaseContext.connectionId.trim().length > 0;
 
   // API/BYOK mode (streamFormat === 'plain'): mirrors the same fix from
   // `@open-design/contracts`'s composer. The daemon hits this path for
@@ -608,6 +617,16 @@ export function composeSystemPrompt({
 
   if (sessionMode === 'chat') {
     parts.push(CHAT_MODE_OVERRIDE);
+    parts.push('\n\n---\n\n');
+  }
+
+  if (sessionMode === 'docs') {
+    parts.push(DOCS_MODE_OVERRIDE);
+    parts.push('\n\n---\n\n');
+  }
+
+  if (resolvedExecutionProfile === 'filesystem' && hasConnectedProjectDatabase) {
+    parts.push(DATABASE_DEVELOPMENT_CONTEXT);
     parts.push('\n\n---\n\n');
   }
 
@@ -640,7 +659,7 @@ export function composeSystemPrompt({
     parts.push('\n\n---\n\n');
   }
 
-  if (!isMediaSurfaceEarly) {
+  if (!isMediaSurfaceEarly && !isLeanChatMode) {
     parts.push(renderDiscoveryAndPhilosophy(resolvedExecutionProfile), '\n\n---\n\n');
     // Direction library is only useful when the agent must pick a visual
     // direction itself. When an active design system is present it is the
@@ -668,10 +687,12 @@ export function composeSystemPrompt({
     }
   }
 
-  parts.push(
-    '# Identity and workflow charter (background)\n\n',
-    renderOfficialDesignerPrompt(resolvedExecutionProfile),
-  );
+  if (!isLeanChatMode) {
+    parts.push(
+      '# Identity and workflow charter (background)\n\n',
+      renderOfficialDesignerPrompt(resolvedExecutionProfile),
+    );
+  }
 
   if (memoryBody && memoryBody.trim().length > 0) {
     parts.push(
@@ -684,21 +705,23 @@ export function composeSystemPrompt({
     // is present. Each loop is independently gated by its config flag; an
     // absent flag defaults ON. The card JSON examples below intentionally
     // use no backticks so they stay literal inside the template strings.
-    if ((memoryHooks?.rewrite ?? true)) {
+    if (!isLeanChatMode && (memoryHooks?.rewrite ?? true)) {
       parts.push(
         `\n\n## Intent gateway — turn short asks into a brief\n\nWhen the user's request is short or underspecified AND memory gives you enough to expand it, silently build an internal task brief (task type, audience, files/artifacts in play, delivery preferences, constraints, and what "done" means) before acting. Surface it as ONE collapsed card at the very start of your reply, then continue with the work without waiting for confirmation:\n\n<od-card type="task-brief">\n{ "summary": "<one line restating the expanded intent>", "fields": [ {"label": "Audience", "value": "…"}, {"label": "Deliverable", "value": "…"}, {"label": "Done means", "value": "…"} ] }\n</od-card>\n\nEmit at most one task-brief per turn. Skip it entirely when the request is already explicit or trivial (a greeting, a yes/no, a tiny edit). If you applied memory but skipped the brief, you may instead emit one compact chip: <od-card type="memory-applied">{ "summary": "Applied your profile and 2 rules", "used": [ {"type": "profile", "name": "Work profile"} ] }</od-card>. Never dump the brief as prose — only as the card.\n\nThe task-brief card REPLACES the turn-1 discovery question-form when memory already makes the intent clear — it does NOT replace the rest of the build flow. On every artifact-producing turn you STILL open with a TodoWrite plan (RULE 3) before writing files and update it live as you work, then run the anti-slop / brand self-check before shipping. The brief only expands intent; it is never the deliverable and never stands in for the TodoWrite plan or the self-check. Skipping the discovery form when intent is already understood is correct; skipping TodoWrite or the anti-slop gate is not.`,
       );
     }
 
-    if ((memoryHooks?.verify ?? true)) {
+    if (!isLeanChatMode && (memoryHooks?.verify ?? true)) {
       parts.push(
         `\n\n## Self-verify against your verified rules\n\nThe **Verified rules** above are enforceable checks, not soft preferences. After you finish producing or editing an artifact, evaluate it against every active rule, FIX any failure in place before ending your turn, then emit one scorecard:\n\n<od-card type="verify-scorecard">\n{ "status": "pass|partial|fail", "summary": "5/6 checks passed · 1 auto-fixed", "rows": [ {"rule": "<the check>", "status": "pass|fail|fixed", "note": "<what was wrong / what you fixed>"} ] }\n</od-card>\n\nPrefer fixing silently over asking. Leave a row as "fail" only when fixing it needs a decision you genuinely cannot make from the request plus memory. The daemon programmatically checks this scorecard after your turn — a missing scorecard or a rule left uncovered on an artifact turn is recorded as an enforcement failure — so always emit it when verified rules apply. Skip the scorecard entirely only when there are no verified rules or the turn produced no artifact.\n\nThe scorecard is ADDITIVE to — never a replacement for — the rest of the end-of-run flow. On an artifact turn you still run the existing anti-slop / brand self-check (the "N/N brand checks passed" gate) and still close with the normal handoff. Order the end of your turn as: (1) finish the anti-slop / brand self-check and fix any failure in place, (2) emit the verify-scorecard card, (3) close with the normal handoff — a single <artifact> block when this turn wrote a new canonical HTML file, otherwise a brief file-operation summary of what changed and what is still open. The scorecard only checks your verified rules; it does not absorb the anti-slop gate or the end-of-run summary.`,
       );
     }
 
-    parts.push(
-      `\n\n## Propose new verified rules from corrections\n\nWhen the user corrects your output in a way that implies a reusable, checkable rule, PROPOSE it — never save it silently. Emit a proposal card the user can Keep, Edit, or Discard:\n\n<od-card type="rule-proposal">\n{ "name": "<short name>", "description": "<one line>", "assertion": "<what must hold>", "check": "<how to verify it>", "rationale": "<why you inferred it>" }\n</od-card>\n\nPropose at most one rule per turn, and only when confident it generalizes beyond the current artifact.`,
-    );
+    if (!isLeanChatMode) {
+      parts.push(
+        `\n\n## Propose new verified rules from corrections\n\nWhen the user corrects your output in a way that implies a reusable, checkable rule, PROPOSE it — never save it silently. Emit a proposal card the user can Keep, Edit, or Discard:\n\n<od-card type="rule-proposal">\n{ "name": "<short name>", "description": "<one line>", "assertion": "<what must hold>", "check": "<how to verify it>", "rationale": "<why you inferred it>" }\n</od-card>\n\nPropose at most one rule per turn, and only when confident it generalizes beyond the current artifact.`,
+      );
+    }
   }
 
   if (userInstructions && userInstructions.trim().length > 0) {
@@ -832,7 +855,7 @@ export function composeSystemPrompt({
     !!skillBody && /assets\/template\.html/.test(skillBody);
   if (isDeckProject && !hasSkillSeed) {
     parts.push(`\n\n---\n\n${DECK_FRAMEWORK_DIRECTIVE}`);
-  } else if (isFreeformProject && !hasSkillSeed) {
+  } else if (!isLeanChatMode && isFreeformProject && !hasSkillSeed) {
     // Freeform / kind=other projects skip the kind picker entirely and
     // land here. If the user's brief is a deck/keynote/slides ("讲解",
     // "presentation", "make a deck"), the agent used to invent its own
@@ -853,7 +876,7 @@ export function composeSystemPrompt({
     || resolvedExclusiveSurface === 'audio';
   if (isMediaSurface) {
     parts.push(renderMediaGenerationContract(mediaExecution));
-  } else {
+  } else if (!isLeanChatMode) {
     // Non-media projects (prototype, deck, etc.): inject a lightweight hint
     // so the agent uses `od media generate` if the user asks for an image/video
     // mid-session, rather than hunting for provider API keys in the environment.
@@ -894,7 +917,7 @@ export function composeSystemPrompt({
 
   if (agentId === 'gemini') {
     parts.push(
-      "\n\n---\n\n## Gemini todo tool mapping\n\nWhen an Open Docs instruction says to call `TodoWrite`, use Gemini CLI's native `write_todos` tool only if it is present in the current tool list. Pass the full task list as `todos`, with each item using `description` for the task text and `status` set to `pending`, `in_progress`, `completed`, `cancelled`, or `blocked`.\n\nIf `write_todos` is not present, do not simulate it with markdown, plan-mode files, JSON files, TODO files, or shell commands. Continue the work normally without a todo tool.",
+      "\n\n---\n\n## Gemini todo tool mapping\n\nWhen an MonoField instruction says to call `TodoWrite`, use Gemini CLI's native `write_todos` tool only if it is present in the current tool list. Pass the full task list as `todos`, with each item using `description` for the task text and `status` set to `pending`, `in_progress`, `completed`, `cancelled`, or `blocked`.\n\nIf `write_todos` is not present, do not simulate it with markdown, plan-mode files, JSON files, TODO files, or shell commands. Continue the work normally without a todo tool.",
     );
   }
 
@@ -907,9 +930,11 @@ export function composeSystemPrompt({
   // questions surface: the chat shows a banner, the form renders in the
   // right-hand Questions tab, and answers return as the next user message.
   // Applies to every agent — question-form is UI-parsed markup, not a tool.
-  parts.push(
-    "\n\n---\n\n## Clarifying questions mid-conversation\n\nWhen you need a clarification AFTER turn 1 and the natural answer is one of a small finite set of choices (2-4 options per question), emit a `<question-form>` block — the same markup turn-1 discovery uses — instead of writing a bulleted list of options in markdown. The host renders it as a Questions banner the user opens in the side tab; a markdown list renders as plain text and forces the user to type a reply. Use free-form prose questions only when the answer is naturally open-ended, needs more than ~4 options, or is a single yes/no. Do NOT also duplicate the form's questions as markdown text alongside it.\n\n`<question-form>` is assistant text for the Open Docs UI, not a native tool call. If you need to clarify direction, emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call. Do not stop after an introductory sentence such as \"先确认一下方向：\"; the same message must include the full form.",
-  );
+  if (!isLeanChatMode) {
+    parts.push(
+      "\n\n---\n\n## Clarifying questions mid-conversation\n\nWhen you need a clarification AFTER turn 1 and the natural answer is one of a small finite set of choices (2-4 options per question), emit a `<question-form>` block — the same markup turn-1 discovery uses — instead of writing a bulleted list of options in markdown. The host renders it as a Questions banner the user opens in the side tab; a markdown list renders as plain text and forces the user to type a reply. Use free-form prose questions only when the answer is naturally open-ended, needs more than ~4 options, or is a single yes/no. Do NOT also duplicate the form's questions as markdown text alongside it.\n\n`<question-form>` is assistant text for the MonoField UI, not a native tool call. If you need to clarify direction, emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call. Do not stop after an introductory sentence such as \"先确认一下方向：\"; the same message must include the full form.",
+    );
+  }
 
   // Pinned LAST so recency bias reinforces the role-marker prohibition.
   // This is the canonical anti-roleplay instruction;
@@ -958,13 +983,22 @@ Every later instruction in this prompt that tells you to "call TodoWrite", "run 
 
 If the rules below tell you to plan with TodoWrite, write the plan as prose instead. If they tell you to read skill side files before writing, describe in one sentence which patterns/conventions you're going to apply and proceed. If they tell you to run brand-spec extraction via Bash + Read + WebFetch, ask the user the missing brand questions in the discovery form instead.`;
 
-const CHAT_MODE_OVERRIDE = `# Chat mode — standard conversation (read first — overrides every rule below)
+const CHAT_MODE_OVERRIDE = `# Ask / software development mode
 
-This conversation is in Open Docs Chat mode. Open Docs is a local-first document specification workspace for creating, maintaining, and exporting screen, interface, API, Excel, and slide-deck artifacts. Official repository: https://github.com/jhy0285/open-docs.
+MonoField connects the selected working folder, files, browser context, approved database connection, and local CLI agent. Answer directly and keep tool use proportional to the request.
 
-Use the same available context, files, attachments, connectors, MCP servers, project memory, and model capabilities as Design mode. The difference is behavior: answer like a fast, direct, multi-turn desktop chat assistant. Prefer concise prose, explanations, comparisons, debugging help, and follow-up questions only when needed.
+- For explanations, reviews, greetings, or comparisons, respond concisely without a discovery form or planning ceremony.
+- For implementation, debugging, build, test, or verification requests, inspect the working folder and use the CLI's native tools. Read before editing and verify changes in proportion to risk.
+- Do not create document, deck, media, or design artifacts unless the user explicitly asks for them. If they do, use the selected skill, plugin, design system, and project context supplied below.
+- Never claim to have read a file, queried a database, or verified a browser state unless the corresponding tool actually succeeded.`;
 
-Override artifact-first discovery rules below: do not emit a default discovery \`<question-form>\`, do not call TodoWrite just to plan a chat answer, and do not create or edit project files, HTML, PPT, slide decks, images, video, or audio unless the user explicitly asks you to generate/build/design/export/modify something. When the user does ask for a design artifact or file change, you may use the normal Open Docs agent workflow and the same tools/capabilities available in Design mode.`;
+const DOCS_MODE_OVERRIDE = `# Docs mode — distinguish guidance from generation (read first — overrides every rule below)
+
+This conversation is in MonoField Docs mode. Use the document and specification workflow only when the user explicitly asks you to create, generate, write, collect, edit, validate, render, export, or modify a document or specification.
+
+If the user asks how to do something, asks what a document/specification is, asks for an explanation, meaning, comparison, guide, or general usage instructions, answer directly in clear prose. Do not emit a discovery or artifact-options \`<question-form>\`, do not inspect files, do not call collection tools, and do not create an artifact for that explanatory turn.
+
+For an explicit interface-spec generation request, first determine its source mode. An explicit no-codebase/manual/new-design request does not require a Working folder: do not inspect files or call database tools, and use the Interface Spec Collector's \`interface-spec-manual-draft\` form. An explicit codebase-reading request still requires a selected, validated Working folder before \`interface-spec-options\`; never replace it with the managed project directory, a database-only sample, or guessed context. If the request is genuinely ambiguous and no valid source folder is linked, emit only the collector's \`interface-spec-source-mode\` choice form instead of forcing folder selection or guessing.`;
 
 // Defense-in-depth against Claude Code's synthetic OAuth tools.
 //
@@ -1496,7 +1530,7 @@ function renderMediaMetadataAction(
   const article = surface === 'audio' ? 'an' : 'a';
   const mode = mediaExecution?.mode ?? 'enabled';
   if (mode === 'disabled') {
-    return `This is ${article} **${surface}** project, but Open Docs-owned media execution is disabled for this run. Plan the creative brief only unless an external MCP media tool is explicitly configured. Do NOT call OD media generation tools and do NOT emit \`<artifact>\` HTML for media surfaces.`;
+    return `This is ${article} **${surface}** project, but MonoField-owned media execution is disabled for this run. Plan the creative brief only unless an external MCP media tool is explicitly configured. Do NOT call OD media generation tools and do NOT emit \`<artifact>\` HTML for media surfaces.`;
   }
   return `This is ${article} **${surface}** project. Plan the creative brief carefully, then dispatch via the **media generation contract** using ${command}. Do NOT emit \`<artifact>\` HTML for media surfaces.`;
 }

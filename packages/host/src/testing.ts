@@ -6,7 +6,7 @@ import {
   type OpenDesignHostUpdaterStatusSnapshot,
 } from "./index.js";
 
-export type MockOpenDesignHost = Partial<Omit<OpenDesignHostBridge, "capture" | "client" | "pdf" | "pet" | "project" | "shell" | "updater">> & {
+export type MockOpenDesignHost = Partial<Omit<OpenDesignHostBridge, "browser" | "capture" | "client" | "pdf" | "pet" | "project" | "shell" | "updater">> & {
   browser?: Partial<OpenDesignHostBridge["browser"]>;
   capture?: Partial<OpenDesignHostBridge["capture"]>;
   client?: Partial<OpenDesignHostBridge["client"]>;
@@ -43,6 +43,7 @@ function defaultHost(): OpenDesignHostBridge {
     version: OPEN_DESIGN_HOST_VERSION,
     browser: {
       clearData: async () => ({ ok: true }),
+      subscribePopup: () => () => undefined,
     },
     capture: {
       page: async () => ({ ok: true, dataUrl: "data:image/png;base64,", h: 1, w: 1 }),

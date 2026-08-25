@@ -24,12 +24,28 @@ type SpawnEnvOptions = {
 const RUNTIME_MODULE_PROJECT_ROOT = resolveProjectRootFromNestedModule(
   path.dirname(fileURLToPath(import.meta.url)),
 );
+const MARKETPLACE_SECRET_ENV_RE = /^(?:OD|OPEN_DOCS)_MARKETPLACE_TOKEN(?:_[A-Z0-9_]+)?$/i;
+
+/**
+ * Marketplace bearer credentials belong to the daemon's registry client.
+ * They must not be inherited by local CLI agents or helper subprocesses,
+ * where generated code or an extension could read and exfiltrate them.
+ */
+export function envWithoutMarketplaceSecrets(
+  source: RuntimeEnvMap,
+): NodeJS.ProcessEnv {
+  const sanitized: NodeJS.ProcessEnv = { ...source };
+  for (const key of Object.keys(sanitized)) {
+    if (MARKETPLACE_SECRET_ENV_RE.test(key)) delete sanitized[key];
+  }
+  return sanitized;
+}
 
 // Build the env passed to spawn() for a given agent adapter.
 //
 // Auth/config precedence for Local CLI launches:
 //
-// 1. Provider BYOK is separate. It is used by Open Docs's direct provider
+// 1. Provider BYOK is separate. It is used by MonoField's direct provider
 //    API calls and is not automatically mapped into Local CLI launches.
 // 2. The inherited launch env represents the user's local CLI setup
 //    (OAuth/login files, CLI homes, or user-owned API-key env). Preserve it
@@ -83,6 +99,9 @@ export function spawnEnvForAgent(
     baseEnv,
     expandedConfiguredEnv,
   );
+  for (const key of Object.keys(env)) {
+    if (MARKETPLACE_SECRET_ENV_RE.test(key)) delete env[key];
+  }
   if (agentId === 'amr') {
     Object.assign(env, amrVelaProfileEnv(env));
     Object.assign(env, amrAnalyticsIdentityEnv(env));
@@ -99,7 +118,7 @@ export function spawnEnvForAgent(
       const home = os.homedir();
       if (home) env.HOME = home;
     }
-    // Identify Open Docs as the host so the vela CLI tags its command +
+    // Identify MonoField as the host so the vela CLI tags its command +
     // model_request analytics with source=open_design (revenue attribution).
     // Not PII (unlike the installation id above), so set it regardless of the
     // telemetry-consent gate that amrAnalyticsIdentityEnv applies.

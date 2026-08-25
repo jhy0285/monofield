@@ -152,6 +152,7 @@ function reviveTab(value: unknown): WorkspaceChromeTab | null {
     if (
       view === 'home'
       || view === 'projects'
+      || view === 'open-work'
       || view === 'tasks'
       || view === 'plugins'
       || view === 'design-systems'
@@ -986,10 +987,10 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
           type="button"
           className="workspace-tabs-new-btn od-tooltip"
           onClick={createNewTab}
-          title="New tab"
-          data-tooltip="New tab"
+          title={t('workspace.newTab')}
+          data-tooltip={t('workspace.newTab')}
           data-tooltip-placement="bottom"
-          aria-label="New tab"
+          aria-label={t('workspace.newTab')}
           data-testid="workspace-tabs-new-tab"
           disabled={onboardingActive}
         >
@@ -1002,10 +1003,10 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
           type="button"
           className={`workspace-tabs-icon-btn od-tooltip${tabsMenuOpen ? ' is-active' : ''}`}
           onClick={() => setTabsMenuOpen((open) => !open)}
-          title="Search tabs"
-          data-tooltip="Search tabs"
+          title={t('workspace.searchFilesPlaceholder')}
+          data-tooltip={t('workspace.searchFilesPlaceholder')}
           data-tooltip-placement="bottom"
-          aria-label="Search tabs"
+          aria-label={t('workspace.searchFilesPlaceholder')}
           aria-haspopup="dialog"
           aria-expanded={tabsMenuOpen}
         >
@@ -1017,7 +1018,7 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
               <div
                 className="workspace-tabs-popover"
                 role="dialog"
-                aria-label="Search tabs"
+                aria-label={t('workspace.searchFilesPlaceholder')}
                 ref={popoverRef}
               >
                 <div className="workspace-tabs-search">
@@ -1026,15 +1027,15 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
                     ref={searchInputRef}
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Search tabs"
-                    aria-label="Search tabs"
+                    placeholder={t('workspace.searchFilesPlaceholder')}
+                    aria-label={t('workspace.searchFilesPlaceholder')}
                   />
                 </div>
                 <div className="workspace-tabs-popover__section">
-                  <span>Open tabs</span>
+                  <span>{t('workspace.openTabs')}</span>
                   <span>{state.tabs.length}</span>
                 </div>
-                <div className="workspace-tabs-list" role="listbox" aria-label="Open tabs">
+                <div className="workspace-tabs-list" role="listbox" aria-label={t('workspace.openTabs')}>
                   {filteredTabs.length > 0 ? (
                     filteredTabs.map((display) => {
                       const active = display.id === state.activeTabId;
@@ -1078,7 +1079,7 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
                       );
                     })
                   ) : (
-                    <div className="workspace-tabs-empty">No tabs found</div>
+                    <div className="workspace-tabs-empty">{t('workspace.noFilesMatch')}</div>
                   )}
                 </div>
               </div>,
@@ -1174,6 +1175,7 @@ function displayTabFor(
     home: t('entry.navHome'),
     onboarding: t('settings.welcomeTitle'),
     projects: t('entry.navProjects'),
+    'open-work': t('entry.navOpenWork'),
     tasks: t('entry.navTasks'),
     plugins: t('entry.navPlugins'),
     'design-systems': t('entry.navDesignSystems'),
@@ -1185,6 +1187,7 @@ function displayTabFor(
     home: 'home',
     onboarding: 'sparkles',
     projects: 'folder',
+    'open-work': 'globe',
     tasks: 'kanban',
     plugins: 'grid',
     'design-systems': 'blocks',

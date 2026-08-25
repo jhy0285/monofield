@@ -601,7 +601,7 @@ function filterAllowedKeys(obj: Record<string, unknown>): AppConfigPrefs {
 }
 
 // Fill in telemetry defaults when the saved config has no `telemetry`
-// field at all. Open Docs is local-first, so product telemetry is opt-in and
+// field at all. MonoField is local-first, so product telemetry is opt-in and
 // defaults to off until the user explicitly enables it.
 function applyTelemetryDefaults(prefs: AppConfigPrefs): AppConfigPrefs {
   if (prefs.telemetry === undefined) {

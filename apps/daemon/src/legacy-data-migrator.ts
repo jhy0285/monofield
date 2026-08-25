@@ -1,7 +1,7 @@
 /**
  * One-shot legacy `.od/` data migrator.
  *
- * Open Docs 0.3.x ran from the repo and wrote runtime state to
+ * MonoField 0.3.x ran from the repo and wrote runtime state to
  * `<repo>/.od/` (SQLite at `app.sqlite`, agent CWDs under `projects/`,
  * saved renders under `artifacts/`, credentials at `media-config.json`).
  * The 0.4.x packaged Desktop app moved the data root to a per-namespace
@@ -11,7 +11,7 @@
  * binary at a fresh, empty data root and watched their chats and designs
  * disappear. The data was never lost (the 0.3.x `.od/` folder is still
  * on disk wherever they used to run from), but the new daemon had no
- * way to know about it. See https://github.com/jhy0285/open-docs/issues/710.
+ * way to know about it. See https://github.com/jhy0285/monofield/issues/710.
  *
  * This module gives operators a recovery path. When `OD_LEGACY_DATA_DIR`
  * is set on daemon boot, the migrator:
@@ -37,7 +37,7 @@
  * and either silently lose the migration or corrupt the new file.
  *
  * @see specs/current/spec.md (storage section)
- * @see https://github.com/jhy0285/open-docs/issues/710
+ * @see https://github.com/jhy0285/monofield/issues/710
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -337,7 +337,7 @@ export function migrateLegacyDataDirSync(
     // migration ran when it hadn't (this is the original #710 footgun).
     throw new LegacyMigrationError(
       'legacy_dir_invalid',
-      `OD_LEGACY_DATA_DIR="${legacyDir}" is not a usable legacy data dir (expected app.sqlite directly inside it). Quit Open Docs, fix the path, and relaunch.`,
+      `OD_LEGACY_DATA_DIR="${legacyDir}" is not a usable legacy data dir (expected app.sqlite directly inside it). Quit MonoField, fix the path, and relaunch.`,
     );
   }
 

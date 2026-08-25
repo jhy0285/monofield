@@ -1,4 +1,4 @@
-// Open Docs does not send browser exception, safety, or reliability telemetry.
+// MonoField does not send browser exception, safety, or reliability telemetry.
 // The inherited observability call sites remain wired to this facade, but the
 // facade is intentionally inert.
 
@@ -28,7 +28,7 @@ export function patchExceptionTrackingAppVersion(_version: string): void {
 }
 
 export function installErrorHandlers(): void {
-  // No-op: Open Docs does not install telemetry-oriented global error hooks.
+  // No-op: MonoField does not install telemetry-oriented global error hooks.
 }
 
 export function reportHandledException(

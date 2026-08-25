@@ -77,6 +77,7 @@ export type AnalyticsEventName =
 export type TrackingPageName =
   | 'home'
   | 'projects'
+  | 'open_work'
   | 'automations'
   | 'plugins'
   | 'design_systems'
@@ -157,7 +158,7 @@ export interface AmrEntryAttribution {
   sourceProduct: 'open_design';
   sourceDetail: TrackingAmrEntrySource;
   occurredAt: string;
-  // Open Docs install/device id forwarded only on consent-gated AMR handoffs.
+  // MonoField install/device id forwarded only on consent-gated AMR handoffs.
   odDeviceId?: string;
   // Self-reported onboarding profile, forwarded to AMR (anchored to entryId) so
   // AMR can segment paid conversion by who the visitor is. Open strings, not a
@@ -1066,6 +1067,7 @@ export interface HomeNavClickProps {
   element:
     | 'home'
     | 'projects'
+    | 'open_work'
     | 'automations'
     | 'plugins'
     | 'design_systems'
@@ -1119,7 +1121,7 @@ export interface ExecutionSettingsPopoverClickProps {
 
 // Items inside the header gear settings popover (EntrySettingsMenu): the
 // interface-language select, the appearance (system/light/dark) radio row,
-// the "Share Open Docs" social grid, the Discord / follow-on-X links and
+// the "Share MonoField" social grid, the Discord / follow-on-X links and
 // the Settings → details entry. The same popover is mounted both on the home
 // header and the in-project artifact header, hence the two-value page_name.
 export interface SettingsPopoverClickProps {
@@ -1133,6 +1135,7 @@ export interface SettingsPopoverClickProps {
     | 'follow_x'
     | 'contact_email'
     | 'company_email'
+    | 'contact_github'
     | 'open_settings';
   // element=language_select → snake_cased locale (e.g. en, zh_cn, pt_br);
   // element=appearance → system | light | dark.
@@ -2080,7 +2083,7 @@ export interface HandoffClickProps {
     | 'open_editor'
     // Copy the hand-off prompt for a specific CLI agent.
     | 'copy_cli_prompt'
-    // Open the Open Docs AMR website link.
+    // Open the MonoField AMR website link.
     | 'amr_website';
   // Bounded enum id of the editor / CLI target, present for `open_editor`,
   // `copy_cli_prompt`, and for `trigger` when it directly launches the
@@ -3188,14 +3191,14 @@ export type AnalyticsEventPayload =
 
 // ---- Enum mapping helpers (code ↔ CSV wire format) -----------------------
 
-// Map the wire `ChatSessionMode` ('design' | 'chat') to the analytics enum.
+// Map the wire `ChatSessionMode` ('docs' | 'chat') to the analytics enum.
 // The composer's "Ask" mode is `chat` on the wire; analytics uses `ask` so
 // the dashboards read in the product's own language. Anything that isn't a
 // recognized design mode buckets into `ask` (the lighter default).
 export function sessionModeToTracking(
   mode: string | null | undefined,
 ): TrackingSessionMode {
-  return mode === 'design' ? 'design' : 'ask';
+  return mode === 'docs' || mode === 'design' ? 'design' : 'ask';
 }
 
 // Code `ProjectKind` from packages/contracts/src/api/projects.ts:

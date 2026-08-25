@@ -6,7 +6,7 @@
 
 // AMR model-gateway console wallet (account, balance, recharge).
 // `source=open_design` tags the landing page_view so vela analytics can
-// attribute the visit to Open Docs (per-product revenue/traffic attribution).
+// attribute the visit to MonoField (per-product revenue/traffic attribution).
 export const AMR_CONSOLE_URL =
   'https://open-design.ai/amr/wallet?source=open_design';
 export const AMR_RECHARGE_URL = AMR_CONSOLE_URL;
@@ -126,7 +126,7 @@ export function resolveRunFailureUi(
         primaryAction: 'authorize',
         // PRD「需要登录」type — shared title with the non-AMR sign-in case.
         titleKey: 'chat.runError.title.signInRequired',
-        // "Open Docs 智能体尚未登录，前往登录即可正常使用" — single CTA, no
+        // "MonoField 智能体尚未登录，前往登录即可正常使用" — single CTA, no
         // AMR promotion (the agent already IS AMR). The authorize action reuses
         // the inline AmrLoginPill (sign-in + auto-retry on success).
         messageKey: 'chat.runError.signInMessage.amr',

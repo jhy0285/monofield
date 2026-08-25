@@ -21,7 +21,7 @@ export const PT_BR_SKILL_COPY: Record<string, { description?: string; examplePro
   },
   'agent-browser': {
     description:
-      'CLI de automação de navegador para agentes de IA. Use quando o usuário precisar inspecionar,\ntestar ou automatizar o comportamento do navegador: navegar por páginas, preencher formulários,\nclicar em botões, capturar screenshots, extrair dados de páginas, ler o contexto selecionado\nda aba de navegador do Open Docs, testar aplicativos web, fazer dogfooding de pré-visualizações\ndo Open Docs, QA, caça a bugs ou revisão da qualidade do aplicativo. Prefira URLs locais de\npré-visualização do Open Docs, a menos que o usuário peça explicitamente navegação externa.',
+      'CLI de automação de navegador para agentes de IA. Use quando o usuário precisar inspecionar,\ntestar ou automatizar o comportamento do navegador: navegar por páginas, preencher formulários,\nclicar em botões, capturar screenshots, extrair dados de páginas, ler o contexto selecionado\nda aba de navegador do MonoField, testar aplicativos web, fazer dogfooding de pré-visualizações\ndo MonoField, QA, caça a bugs ou revisão da qualidade do aplicativo. Prefira URLs locais de\npré-visualização do MonoField, a menos que o usuário peça explicitamente navegação externa.',
     examplePrompt:
       'CLI de automação de navegador para agentes de IA.',
   },
@@ -849,7 +849,7 @@ export const PT_BR_SKILL_COPY: Record<string, { description?: string; examplePro
   },
   'ui-ux-pro-max': {
     description:
-      'Entrada UI/UX Pro Max somente de catálogo. Os templates upstream completos, os dados e o fluxo de busca não estão incluídos no Open Docs.',
+      'Entrada UI/UX Pro Max somente de catálogo. Os templates upstream completos, os dados e o fluxo de busca não estão incluídos no MonoField.',
     examplePrompt:
       'Entrada UI/UX Pro Max somente de catálogo.',
   },

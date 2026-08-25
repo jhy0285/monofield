@@ -1,229 +1,145 @@
-# Design Jury (Critique Theater)
+# MonoField 문서 배심원단 사용 가이드
 
-A built-in design panel that reviews every generation before it ships. Five
-specialists (Designer, Critic, Brand, Accessibility, Copy) score the artifact
-across each round, and the run keeps iterating until the composite clears the
-threshold or the orchestrator gives up.
+문서 배심원단은 에이전트가 만든 결과물을 한 번 더 검토하고, 기준 점수에 도달할 때까지 수정 라운드를 진행하는 선택 기능입니다. 내부 구현 이름은 `Critique Theater`이지만, MonoField 화면에서는 **문서 배심원단**으로 표시합니다.
 
-The product label is **Design Jury**. The internal feature name (code paths,
-metrics, env vars) stays **Critique Theater**: `apps/daemon/src/critique/`,
-`apps/web/src/components/Theater/`, SSE channels `critique.*`, env vars
-`OD_CRITIQUE_*`. The user-facing label is sourced from a single i18n key,
-`critiqueTheater.userFacingName`, so the product name can be renamed without
-touching code.
+## 먼저 답: 켜면 그냥 동작하나요?
 
-## 1. What is Design Jury
+아니요. 설정의 토글은 **배심원단 사용 의사와 프로젝트 설정을 켜는 첫 단계**입니다. 실제 실행은 아래 조건을 모두 만족하는 요청에서만 시작합니다.
 
-When an agent emits an `<artifact>` block, the Critique Theater wraps the
-artifact in a structured review cycle. Five panelists vote on independent
-dimensions, the orchestrator composites their scores, and the run either
-ships (composite ≥ threshold) or runs another round. The user sees:
+1. 프로젝트를 연 상태에서 문서 배심원단을 켠다.
+2. 프로젝트에 문서 스타일(현재 구현에서는 디자인 시스템 원본)이 연결되어 있다.
+3. 요청에 적용할 skill이 있다.
+4. 선택한 에이전트가 plain-text stream을 지원한다.
+5. 결과가 이미지, 비디오, 오디오 전용 작업이 아니다.
 
-- A **live panel** while the run is in flight: one lane per panelist with
-  the current round's score, the cumulative must-fix count, and a sparkline
-  of per-dim scores.
-- A **score ticker** showing the composite trajectory across rounds, with a
-  horizontal threshold marker so it is obvious whether the latest round
-  cleared the bar.
-- A **collapsed badge** once the run settles: "Shipped at round 2, composite
-  8.6" for the happy path, with status variants for `below_threshold`,
-  `timed_out`, and `interrupted`.
+조건 중 하나라도 빠지면 일반 에이전트 실행으로 진행하며, 배심원단 패널은 나타나지 않습니다. 이는 모델에게 배심원 프로토콜을 지시했는데 서버가 이를 해석하지 못하는 상황을 막기 위한 안전 장치입니다.
 
-The Theater runs inside the same CLI session the agent already uses (no
-second process, no second transport). All five panelists are turns in the
-same conversation, which keeps the model context coherent and prevents the
-"panelist disagrees with itself across processes" failure mode.
+## 일반 사용자 사용 방법
 
-## 2. How it works
+### 1. 홈이 아니라 프로젝트를 먼저 엽니다
 
-### The five panelists
+홈 화면에서 토글을 켜면 현재 브라우저 화면의 표시 상태만 바뀔 수 있습니다. 실제 에이전트 실행에 적용하려면 대상 프로젝트를 연 뒤 설정해야 합니다.
 
-| Role | What it scores |
-|---|---|
-| **Designer** | Layout, composition, hierarchy. The "is this beautiful and balanced" lens. |
-| **Critic** | Whether the artifact actually meets the brief. Contrast, weight, readability. |
-| **Brand** | Token compliance, voice, on-brand color use. |
-| **Accessibility** | WCAG conformance, focus rings, semantic structure, alt text. |
-| **Copy** | Voice, tone, terseness, error message quality. |
+### 2. 문서 스타일과 skill을 확인합니다
 
-The cast is fixed in v1. Per-skill cast configuration is reserved for v2
-(see roadmap).
+프로젝트에 문서 스타일을 연결하고, 해당 요청에 적용할 skill이 있는지 확인합니다. 현재 배심원단은 스타일 원본과 skill 정보를 평가 프롬프트에 함께 사용합니다.
 
-### Auto-converging rounds
+현재 구현상 문서 스타일이 `없음`이면 배심원단은 실행되지 않습니다. interface-spec의 내장 skill이 적용되는 경우에도 문서 스타일이 없거나 지원되지 않는 에이전트를 쓰면 일반 실행으로 넘어갑니다.
 
-The orchestrator runs up to **3 rounds** by default. After each round the
-composite is computed from the per-panelist weights:
+### 3. 설정에서 문서 배심원단을 켭니다
 
+프로젝트 화면에서 **설정 → 문서 배심원단 → 에이전트 실행 중 문서 배심원단 표시**를 켭니다.
+
+이 설정은 다음 에이전트 실행부터 프로젝트 metadata에 저장되어 서버 측 실행 조건에 반영됩니다. 실행 중인 요청에는 소급 적용되지 않으므로, 토글을 바꾼 뒤 새 요청을 보내야 합니다.
+
+### 4. 지원되는 에이전트를 선택합니다
+
+v1 배심원단은 현재 plain-text stream을 사용하는 adapter만 처리합니다. 현재 코드 기준으로 Aider, Antigravity, DeepSeek, Grok Build, Qwen adapter가 이 형식으로 등록되어 있습니다.
+
+Codex, Claude Code, Cursor Agent처럼 JSON/구조화 stream을 사용하는 adapter는 현재 배심원단을 통과하지 않고 일반 실행으로 처리됩니다. 모델 품질의 문제가 아니라 v1 parser가 구조화 stream을 아직 해석하지 않기 때문입니다.
+
+### 5. 문서 생성 요청을 보냅니다
+
+예를 들어 스타일과 skill이 연결된 프로젝트에서 다음과 같이 요청합니다.
+
+> 고객 주문 관리용 HTML 운영 가이드를 만들고, 접근성·문구·스타일 일관성까지 검토해줘.
+
+배심원단이 시작되면 실행 중에 역할별 진행 상태, 점수, 수정 필요 항목이 표시됩니다. 종료되면 결과는 접힌 상태의 배지로 남습니다.
+
+## 배심원단이 하는 일
+
+현재는 한 에이전트 세션 안에서 다음 다섯 역할이 순서대로 검토합니다.
+
+| 역할            | 현재 평가 관점                  |
+| ------------- | ------------------------- |
+| Designer      | 결과물 초안과 수정 방향             |
+| Critic        | 구조, 가독성, 요청 충족도           |
+| Brand         | 연결된 스타일·토큰 준수             |
+| Accessibility | 대비, 구조, alt text, focus 등 |
+| Copy          | 문구의 명확성, 톤, 장황함           |
+
+기본 동작은 최대 3라운드입니다. Critic 40%, Brand 20%, Accessibility 20%, Copy 20%의 가중 평균이 8.0/10 이상이고 필수 수정 항목이 없어야 통과합니다. Designer는 초안 작성 역할이라 점수 가중치는 0입니다.
+
+3라운드 안에 기준에 못 미치면 기본 정책은 가장 높은 점수의 결과를 남기는 `ship_best`입니다. 따라서 결과 배지의 상태가 `Shipped`인지, `Below threshold`인지 반드시 확인해야 합니다.
+
+## 결과 읽는 법
+
+| 상태 | 의미 | 권장 행동 |
+| --- | --- | --- |
+| Shipped | 기준 점수를 충족한 결과 | 결과를 검토하고 export 또는 후속 편집 |
+| Below threshold | 라운드를 모두 썼지만 기준에 미달, 최선 결과를 반환 | 요청을 구체화하거나 직접 수정 후 다시 실행 |
+| Timed out | 제한 시간 안에 완료하지 못함 | 요청 범위를 줄이고 다시 실행 |
+| Interrupted | 사용자가 중단함 | 새 요청으로 다시 실행 |
+| Degraded | 모델 출력이 배심원 프로토콜을 따르지 못함 | 지원 adapter인지 확인하고 일반 실행 또는 재시도 |
+
+각 실행의 transcript와 최종 artifact는 프로젝트에 연결되며, 종료 배지에서 Replay로 검토 과정을 다시 볼 수 있습니다.
+
+## interface-spec에서의 현실적인 사용 범위
+
+현재 문서 배심원단은 HTML·프로토타입처럼 스타일과 문구 품질이 중요한 결과물에 더 맞춰져 있습니다. interface-spec의 XLSX와 JSON 명세에 대해 다음을 전문적으로 검사하지는 않습니다.
+
+- HTTP method, path, 인터페이스 ID
+- 인증 방식과 오류 코드
+- request/response 필드 타입, 필수 여부, 최소·최대 길이
+- 용어사전과 필드 정의의 충돌
+- Excel template의 열·시트 구조
+- JSON과 XLSX export 사이의 일관성
+
+따라서 현재 interface-spec 작업에서는 배심원단을 품질 보증의 필수 단계로 사용하지 마세요. 인터페이스 명세 전용 배심원단이 추가되기 전까지는 기존의 deterministic validation, template preview, XLSX export 검증을 기준으로 사용해야 합니다.
+
+향후에는 문서 종류별로 역할과 인원수를 설정할 수 있는 구조가 필요합니다. 예를 들어 interface-spec에는 API 계약, 보안, 데이터 모델, 용어사전, Excel 품질 검토자를 두는 방식이 적합합니다.
+
+## 운영자가 전체 사용자에게 켜는 방법
+
+개별 프로젝트 토글 대신 사내 배포 환경에서 다음 환경변수를 주입하면, 적격한 실행에 배심원단을 기본 활성화할 수 있습니다.
+
+```text
+OD_CRITIQUE_ENABLED=1
+OD_CRITIQUE_MAX_ROUNDS=3
+OD_CRITIQUE_SCORE_THRESHOLD=8
+OD_CRITIQUE_PER_ROUND_TIMEOUT_MS=90000
+OD_CRITIQUE_TOTAL_TIMEOUT_MS=240000
+OD_CRITIQUE_FALLBACK_POLICY=ship_best
 ```
-composite = designer × 0.0
-          + critic × 0.4
-          + brand × 0.2
-          + a11y × 0.2
-          + copy × 0.2
-```
 
-(Designer is weighted at zero in v1 because their dimensions are aesthetic
-preferences rather than ship gates. The slot exists so the Designer's
-qualitative notes still travel into the transcript, and a future config
-release can bump the weight without changing the schema.)
+환경변수 변경은 Daemon과 Desktop을 모두 재시작한 뒤 적용됩니다. 이 설정도 지원되지 않는 adapter, 문서 스타일이 없는 프로젝트, skill이 없는 요청을 강제로 배심원단에 넣지는 않습니다.
 
-If the composite meets the **threshold (8.0 / 10)** the run ships. Otherwise
-the orchestrator emits the round summary, the agent revises, and the next
-round begins. After 3 rounds without convergence the run takes the
-`fallbackPolicy` path (`ship_best` by default, falling back to whichever
-round had the highest composite).
-
-### One CLI session, one transport
-
-The orchestrator does not spawn extra processes per panelist. Each panelist
-is a turn in the same agent session, separated by `<PANELIST role="...">`
-tags in the protocol stream. The parser converts those into `panelist_*`
-events that the web reducer consumes via SSE. This keeps the operational
-contract identical to a normal generation: same auth, same env, same logs.
-
-## 3. Settings reference
-
-### Enable / disable
-
-The feature is gated by a four-tier resolver on the daemon side:
-
-1. **Per-skill `od.critique.policy`** (highest priority). A skill that
-   sets `policy: required` forces the panel on for every generation
-   that uses it; `policy: opt-out` forces it off; `policy: opt-in`
-   lets the panel run only at M2 and above.
-2. **Per-project override.** The web's `setCritiqueTheaterEnabled`
-   setter (Phase 15.2) writes the toggle to `localStorage` for the
-   in-session UI and, when called with a `projectId`, performs a
-   read-merge-write through the existing `PATCH /api/projects/:id`
-   settings endpoint: GET the current project, merge
-   `critiqueTheaterEnabled` into the existing metadata blob, PATCH
-   the merged object so other metadata fields (`kind`, `templateId`,
-   `linkedDirs`, etc.) survive. If the prefetch GET fails the setter
-   skips the PATCH entirely instead of stomping the row. The daemon
-   reads `metadata.critiqueTheaterEnabled` on the next spawn. A
-   dedicated Settings panel control that wires the `projectId`-aware
-   call lands in a follow-up PR; integrators embedding the Theater
-   can already call the setter directly today.
-3. **`OD_CRITIQUE_ENABLED` env override.** Power-user lane / CI
-   fixtures.
-4. **Rollout phase default** (lowest priority). M0 / M1 = `false`,
-   M2 = true for `policy: opt-in` skills, M3 = `true` everywhere.
-
-The web hook (`useCritiqueTheaterEnabled`) reads localStorage and
-governs whether the Theater UI renders for the active session; the
-daemon-side resolver makes the actual routing decision per
-generation. The two layers share the same toggle but answer
-different questions.
-
-Defaults: **disabled** during M0 dark-launch and M1 settings-toggle phases.
-Enabled by default per skill during M2, then globally during M3 after
-≥ 90% of production adapters maintain conformance for 14 consecutive days
-(see `docs/agent-adapters.md`).
-
-### Per-skill override
-
-A skill can opt in or out via `od.critique.policy` in its `SKILL.md`
-frontmatter:
+skill 작성자는 `SKILL.md` frontmatter에 아래 정책을 둘 수 있습니다.
 
 ```yaml
 od:
   critique:
-    policy: required  # or 'opt-in', 'opt-out'
+    policy: required # required | opt-in | opt-out
 ```
 
-Skills that publish a deterministic artifact (e.g. `od-export-pdf`) usually
-set `opt-out`; skills that generate net-new design output (`magazine-poster`,
-`saas-landing`) set `required`.
+우선순위는 `opt-out` skill 차단 → `required` skill 강제 → 프로젝트 토글 → 환경변수 → rollout 기본값 순서입니다.
 
-### Score threshold and weights
+## 알려진 제한과 운영 주의사항
 
-The threshold (8.0) and per-role weights (designer 0 / critic 0.4 / brand
-0.2 / a11y 0.2 / copy 0.2) are read-only in v1. v2 will expose them in the
-Settings panel.
+- 기본값은 꺼져 있습니다.
+- v1의 패널 인원과 역할은 고정 5명입니다.
+- 점수 기준과 역할별 가중치는 UI에서 변경할 수 없습니다.
+- 실제로는 한 모델 세션이 역할을 나누어 답하는 구조이지, 독립적인 다섯 모델이 토론하는 구조는 아닙니다.
+- Windows에서 artifact symlink를 거부해야 하는 보안 회귀 테스트 1건이 현재 실패합니다. Windows 배포 전에는 이 파일 경계 검사를 보완해야 합니다.
+- 실제 운영 모델과 각 adapter 조합은 사내 대표 문서로 conformance 검증 후 rollout해야 합니다.
 
-## 4. Reading the score badge
+## 문제 해결
 
-After a run settles the Theater collapses to a single chip. The chip
-displays:
+**토글을 켰는데 패널이 보이지 않습니다.**
 
-- **composite** — the final score on the 0 / 10 scale.
-- **round** — which round closed the run.
-- **status badge** — colored token explaining how the run ended:
-  - `Shipped`: composite ≥ threshold (the happy path, accent-tinted).
-  - `Below threshold`: composite < threshold after all rounds (amber-tinted).
-  - `Timed out`: total run exceeded `totalTimeoutMs` (amber-tinted).
-  - `Interrupted`: user pressed Esc or clicked Interrupt mid-run.
-  - `Degraded`: the panel was offline this run (adapter could not produce
-    a valid critique). See troubleshooting below.
+프로젝트 안에서 토글을 켰는지, 문서 스타일과 skill이 연결됐는지, adapter가 plain-text stream인지 순서대로 확인합니다. Codex, Claude Code, Cursor Agent의 현재 adapter는 배심원단 v1 대상이 아닙니다.
 
-The `interrupted` chip uses a distinct copy ("Interrupted at round N, best
-composite X.X") so the user is not told the run shipped when it did not.
+**`Degraded` 상태가 나옵니다.**
 
-## 5. Replay
+모델이 정해진 배심원 태그 형식을 지키지 못했거나 출력이 너무 큰 경우입니다. 일반 실행으로 다시 시도하거나 지원되는 adapter로 바꿉니다.
 
-Every run writes a structured transcript (`.ndjson`, optionally `.gz`).
-Opening the chip's **Replay** button mounts a read-only Theater that plays
-the transcript at the chosen speed:
+**`Below threshold`인데 결과가 있습니다.**
 
-- `Instant`: flushes every event synchronously. Useful when reopening a
-  finished run.
-- `Live`: paces events at the original cadence (Phase 7+ follow-up; v1
-  treats this the same as a 0-ms `intervalMs`).
-- `{ intervalMs: N }`: fixed N-ms delay between events.
-- `Paused`: holds the cursor in place. Resuming picks up exactly where the
-  pause landed (no re-flush of prior events).
+실패한 결과가 아니라, 제한된 라운드 안에서 가장 높은 점수의 결과입니다. 최종 사용 전에는 반드시 수정 필요 항목을 확인합니다.
 
-The replay surface is keyboard-scrubbable: `J` / `K` jump round-by-round,
-`Esc` exits the replay.
+## 관련 구현
 
-## 6. Troubleshooting
-
-### "Panel offline this run"
-
-The orchestrator emits a `degraded` event when one of these happens:
-
-| Reason | Cause | Remediation |
-|---|---|---|
-| `malformed_block` | The adapter emitted a `<CRITIQUE>` block the parser rejects. | Re-run the conformance harness locally (`pnpm --filter @open-design/daemon vitest run tests/critique-conformance.test.ts`) to confirm the adapter's transcript shape. The Phase 12 dashboard surfaces this status as a Prometheus series once that PR lands; until then the harness is the authoritative source. |
-| `oversize_block` | The block exceeded `parserMaxBlockBytes`. | Usually a runaway model; retry once or raise the budget. |
-| `adapter_unsupported` | The adapter is marked `critique:degraded` for the 24h TTL window. | Wait for the TTL to elapse. The adapter-degraded registry exposes `clearDegraded(adapterId)` from `apps/daemon/src/critique/adapter-degraded.ts` for programmatic resets; a `od adapters clear-degraded <id>` CLI wrapper is planned in a follow-up. |
-| `protocol_version_mismatch` | The adapter is on an older protocol. | Update the adapter or pin protocol negotiation. |
-| `missing_artifact` | The run finished but no `<artifact>` body landed. | Almost always a prompt bug; check the skill template. |
-
-### "Below threshold after 3 rounds"
-
-The run shipped under the bar with `fallbackPolicy: ship_best`. Tune the
-brief (more specific guidance, tighter token constraints), switch to a
-skill whose DESIGN.md aligns better with the brief, or raise `maxRounds`.
-
-### "Interrupted at round N"
-
-The user pressed Esc or clicked Interrupt. The chip surfaces the best
-composite seen so far. You can resume by re-issuing the brief.
-
-## 7. FAQ
-
-**Why five panelists, why fixed?** The five-role cast is the smallest set
-that covers the lenses every artifact reviewer uses in practice
-(composition, intent, brand, accessibility, voice). Locking the set keeps
-the SSE wire shape, the SQLite schema, and the metrics dashboard stable.
-Per-skill cast configuration is reserved for v2.
-
-**Why is my adapter marked degraded for 24h?** The conformance harness
-runs every adapter prerelease against 10 brief templates. If an adapter
-drops under the 90% shipped or 95% clean-parse thresholds for two
-consecutive cycles, it gets marked `critique:degraded` for 24h. The mark
-auto-clears on the next clean cycle.
-
-**Can I add my own panelist?** Not in v1. v2 plans a panelist plug-in
-contract; see `docs/roadmap.md` for the timeline.
-
-## Related
-
-- `docs/spec.md` — protocol v1 wire format.
-- `docs/architecture.md` — orchestrator + parser layout.
-- `docs/skills-protocol.md` — `od.critique.policy` frontmatter contract.
-- `docs/agent-adapters.md` — conformance contract and adapter responsibilities.
-- `docs/roadmap.md` — v2 panelist extensions.
-- `apps/daemon/src/critique/AGENTS.md` — daemon-side module map.
-- `apps/web/src/components/Theater/AGENTS.md` — web-side module map.
+- `apps/daemon/src/critique/` — 실행, 점수, 저장, 중단 처리
+- `apps/daemon/src/prompts/panel.ts` — 배심원 프롬프트와 역할 정의
+- `apps/web/src/components/Theater/` — 실시간 패널과 replay UI
+- `apps/web/src/components/SettingsDialog.tsx` — 프로젝트별 토글

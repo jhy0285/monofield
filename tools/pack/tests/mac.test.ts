@@ -174,10 +174,20 @@ describe("copyResourceTree", () => {
       for (const name of resourceNames) {
         await mkdir(join(root, name), { recursive: true });
       }
+      await writeFile(join(root, "LICENSE"), "license text\n", "utf8");
+      await writeFile(join(root, "NOTICE"), "notice text\n", "utf8");
+      await writeFile(
+        join(root, "THIRD_PARTY_NOTICES.md"),
+        "third-party notices\n",
+        "utf8",
+      );
 
       await copyResourceTree(config, paths);
 
       expect(await pathExists(join(paths.resourceRoot, "bin", "node"))).toBe(false);
+      await expect(readFile(join(paths.resourceRoot, "LICENSE"), "utf8")).resolves.toBe(
+        "license text\n",
+      );
     } finally {
       await rm(root, { force: true, recursive: true });
     }

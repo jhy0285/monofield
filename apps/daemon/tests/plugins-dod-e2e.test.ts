@@ -358,6 +358,80 @@ describe('Plan §8 e2e — daemon-side anchors', () => {
     }
   });
 
+  it('managed policy blocks both an installed plugin and an older pinned snapshot', async () => {
+    await installLocal(FIXTURE_DIR);
+    db.prepare(`INSERT INTO projects (id, name) VALUES (?, ?)`).run(
+      'managed-project',
+      'managed project',
+    );
+
+    const created = resolvePluginSnapshot({
+      db,
+      body: { pluginId: 'sample-plugin', pluginInputs: { topic: 'demo' } },
+      projectId: 'managed-project',
+      registry: REGISTRY_VIEW,
+    });
+    expect(created?.ok).toBe(true);
+
+    const direct = resolvePluginSnapshot({
+      db,
+      body: { pluginId: 'sample-plugin', pluginInputs: { topic: 'demo' } },
+      projectId: 'managed-project',
+      registry: REGISTRY_VIEW,
+      isPluginAllowed: () => false,
+    });
+    expect(direct?.ok).toBe(false);
+    if (direct && !direct.ok) {
+      expect(direct.status).toBe(403);
+      expect(direct.body.error.code).toBe('managed-plugin-not-approved');
+    }
+
+    const pinned = resolvePluginSnapshot({
+      db,
+      body: { projectId: 'managed-project' },
+      projectId: 'managed-project',
+      registry: REGISTRY_VIEW,
+      isPluginAllowed: () => false,
+    });
+    expect(pinned?.ok).toBe(false);
+    if (pinned && !pinned.ok) {
+      expect(pinned.status).toBe(403);
+      expect(pinned.body.error.code).toBe('managed-plugin-not-approved');
+      expect(pinned.body.error.data?.snapshotId).toBe(
+        created && created.ok ? created.snapshotId : '',
+      );
+    }
+  });
+
+  it('managed policy rejects request-scoped capability grants before apply', async () => {
+    await installLocal(FIXTURE_DIR);
+    const before = (db.prepare(
+      `SELECT COUNT(*) AS n FROM applied_plugin_snapshots`,
+    ).get() as { n: number }).n;
+
+    const result = resolvePluginSnapshot({
+      db,
+      body: {
+        pluginId: 'sample-plugin',
+        pluginInputs: { topic: 'demo' },
+        grantCaps: ['connector:github'],
+      },
+      projectId: 'project-1',
+      registry: REGISTRY_VIEW,
+      allowRequestedCapabilities: false,
+    });
+
+    expect(result?.ok).toBe(false);
+    if (result && !result.ok) {
+      expect(result.status).toBe(403);
+      expect(result.body.error.code).toBe('managed-capability-grant-blocked');
+    }
+    const after = (db.prepare(
+      `SELECT COUNT(*) AS n FROM applied_plugin_snapshots`,
+    ).get() as { n: number }).n;
+    expect(after).toBe(before);
+  });
+
   it('capabilitiesRequiredError envelope shape stays stable for code agents', () => {
     const err = capabilitiesRequiredError({
       pluginId: 'sample',

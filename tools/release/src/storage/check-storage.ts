@@ -2,13 +2,13 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { required, storageConfigFromEnv, writeText } from "./common.ts";
+import { required, requiredPublicOrigin, storageConfigFromEnv, writeText } from "./common.ts";
 import { putStorageObject } from "./s3-upload.ts";
 
+const publicOrigin = requiredPublicOrigin();
 const storage = storageConfigFromEnv();
 const releaseChannel = required("RELEASE_CHANNEL");
 const probeName = required("R2_ACCESS_PROBE_NAME");
-const publicOrigin = required("RELEASE_PUBLIC_ORIGIN").replace(/\/+$/, "");
 const runId = required("GITHUB_RUN_ID");
 const commit = required("GITHUB_SHA");
 

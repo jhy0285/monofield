@@ -8,6 +8,7 @@ import {
   OPEN_DESIGN_HOST_GLOBAL,
   OPEN_DESIGN_HOST_VERSION,
   clearHostBrowserData,
+  beginHostBrowserAutomation,
   checkHostUpdater,
   detectOpenDesignHostClientType,
   getHostUpdaterStatus,
@@ -15,6 +16,8 @@ import {
   installHostUpdater,
   isOpenDesignHostAvailable,
   isOpenDesignHostBridge,
+  hostBrowserAutomationAvailable,
+  linkHostBrowserAutomation,
   normalizeOpenDesignHostProjectImportResult,
   openHostExternalUrl,
   pickAndImportHostProject,
@@ -22,6 +25,9 @@ import {
   openHostProjectPath,
   quitHostAfterUpdaterInstallerOpen,
   setHostPetVisible,
+  subscribeHostBrowserPopup,
+  stopHostBrowserAutomation,
+  subscribeHostBrowserAutomation,
   subscribeHostUpdater,
 } from "../src/index.js";
 import { createMockOpenDesignHost, installMockOpenDesignHost } from "../src/testing.js";
@@ -97,6 +103,59 @@ describe("open-design host contract", () => {
     expect(getOpenDesignHost({})).toBeNull();
     expect(isOpenDesignHostAvailable({})).toBe(false);
     expect(detectOpenDesignHostClientType({})).toBe("web");
+  });
+
+  it("subscribes to embedded-browser popup events when the desktop host provides them", () => {
+    const subscribePopup = vi.fn(() => () => undefined);
+    const scope: Record<string, unknown> = {};
+    scope[OPEN_DESIGN_HOST_GLOBAL] = createMockOpenDesignHost({
+      browser: { subscribePopup },
+    });
+    const listener = vi.fn();
+
+    const unsubscribe = subscribeHostBrowserPopup(listener, scope);
+
+    expect(subscribePopup).toHaveBeenCalledWith(listener);
+    expect(typeof unsubscribe).toBe("function");
+    expect(typeof subscribeHostBrowserPopup(listener, {})).toBe("function");
+  });
+
+  it("feature-detects and wraps the optional approved browser automation host", async () => {
+    const begin = vi.fn(async (input: { origin: string }) => ({
+      expiresAt: "2030-01-01T00:10:00.000Z",
+      ok: true as const,
+      origin: input.origin,
+      scopes: ["page:read"] as const,
+      sessionId: "browser_session_1234567890",
+    }));
+    const stop = vi.fn(async () => ({ ok: true as const, stopped: true }));
+    const link = vi.fn(async (input: { origin: string }) => ({
+      expiresAt: null,
+      ok: true as const,
+      origin: input.origin,
+      scopes: ["page:read"] as const,
+      sessionId: "browser_session_0987654321",
+    }));
+    const subscribe = vi.fn(() => () => undefined);
+    const scope: Record<string, unknown> = {};
+    scope[OPEN_DESIGN_HOST_GLOBAL] = createMockOpenDesignHost({
+      browser: { automation: { begin, link, stop, subscribe } },
+    });
+    expect(hostBrowserAutomationAvailable(scope)).toBe(true);
+    await expect(beginHostBrowserAutomation({ guestWebContentsId: 1, origin: "https://example.com", projectId: "p1" }, scope))
+      .resolves.toMatchObject({ ok: true, sessionId: "browser_session_1234567890" });
+    await expect(stopHostBrowserAutomation("browser_session_1234567890", scope))
+      .resolves.toEqual({ ok: true, stopped: true });
+    await expect(linkHostBrowserAutomation({
+      guestWebContentsId: 2,
+      origin: "https://example.com",
+      parentSessionId: "browser_session_1234567890",
+      projectId: "p1",
+    }, scope)).resolves.toMatchObject({ ok: true, sessionId: "browser_session_0987654321" });
+    const listener = vi.fn();
+    expect(typeof subscribeHostBrowserAutomation(listener, scope)).toBe("function");
+    expect(subscribe).toHaveBeenCalledWith(listener);
+    expect(hostBrowserAutomationAvailable({})).toBe(false);
   });
 
   it("wraps host action throws into structured failures", async () => {

@@ -249,9 +249,47 @@ describe('renderInterfaceSpecXlsx', () => {
     expect(jsonBlocks[1]).not.toContain('"resultCode": 0');
     expect(jsonBlocks[0]).toContain('"useYn": "Y"');
   });
+
+  it('labels static-analysis examples as not executed', async () => {
+    const parsed = parseInterfaceSpecDocument({
+      schemaVersion: 1,
+      kind: 'interface-spec',
+      source: { codebaseName: 'static-example' },
+      endpoints: [
+        {
+          method: 'POST',
+          path: '/users',
+          interfaceName: 'Static example',
+          exampleSource: 'static-analysis',
+          requestExample: { body: { userId: 42 } },
+          responseExample: { resultCode: 0, resultMsg: 'SUCCESS', result: { userId: 42 } },
+        },
+      ],
+    });
+    if (!parsed.ok) throw new Error(parsed.error);
+    const result = await renderInterfaceSpecXlsx(parsed.doc);
+    const wb = await readBack(result.buffer);
+    const detail = wb.getWorksheet(result.sheetTitles[3]!)!;
+    const values: string[] = [];
+    detail.eachRow((row) => {
+      const value = row.getCell(1).value;
+      if (typeof value === 'string') values.push(value);
+    });
+    expect(values.some((value) => value.includes('static analysis; not executed'))).toBe(true);
+  });
 });
 
 describe('renderInterfaceSpecXlsx style override', () => {
+  it('applies the selected built-in template while preserving the sheet layout', async () => {
+    const doc = sampleDocument();
+    doc.templatePreset = 'review';
+    const result = await renderInterfaceSpecXlsx(doc);
+    const wb = await readBack(result.buffer);
+    expect(result.sheetTitles.slice(0, 3)).toEqual(['문서표지', '인터페이스 목록', '인터페이스 목록(Generated)']);
+    expect((wb.getWorksheet('인터페이스 목록')!.getCell('A5').fill as { fgColor?: { argb?: string } }).fgColor?.argb).toBe('FFFFE699');
+    expect((wb.getWorksheet('사용자 상세 조회')!.getCell('A10').fill as { fgColor?: { argb?: string } }).fgColor?.argb).toBe('FFFFF2CC');
+  });
+
   it('applies fills/border/font overrides while defaults stay intact elsewhere', async () => {
     const styled = await renderInterfaceSpecXlsx(sampleDocument(), {
       style: {
@@ -333,6 +371,13 @@ describe('renderInterfaceSpecXlsx auth scheme (no more hardcoded Bearer)', () =>
     const row = await authRowOf(docWithAuth({ type: 'bearer' }));
     expect(row.nameEn).toBe('Authorization');
     expect(String(row.note)).toBe('Bearer {accessToken}');
+  });
+
+  it('keeps an undecided manual auth choice visible as TBD', async () => {
+    const row = await authRowOf(docWithAuth({ type: 'undecided' }));
+    expect(row.nameEn).toBe('(auth)');
+    expect(row.nameKo).toBe('인증 여부');
+    expect(row.note).toBe('인증 방식 확인 필요');
   });
 
   it('renders a custom header row (X-Session-Id)', async () => {

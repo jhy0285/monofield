@@ -7,6 +7,7 @@ import { PluginsView } from '../../src/components/PluginsView';
 import {
   addPluginMarketplace,
   applyPlugin,
+  getPluginMarketplaceInstallMode,
   installPluginSource,
   listPluginMarketplaces,
   listPlugins,
@@ -25,6 +26,7 @@ vi.mock('../../src/router', () => ({
 vi.mock('../../src/state/projects', () => ({
   addPluginMarketplace: vi.fn(),
   applyPlugin: vi.fn(),
+  getPluginMarketplaceInstallMode: vi.fn(),
   installPluginSource: vi.fn(),
   listPluginMarketplaces: vi.fn(),
   listPlugins: vi.fn(),
@@ -83,10 +85,12 @@ const mockedRefreshMarketplace = vi.mocked(refreshPluginMarketplace);
 const mockedRemoveMarketplace = vi.mocked(removePluginMarketplace);
 const mockedSetMarketplaceTrust = vi.mocked(setPluginMarketplaceTrust);
 const mockedApplyPlugin = vi.mocked(applyPlugin);
+const mockedMarketplaceInstallMode = vi.mocked(getPluginMarketplaceInstallMode);
 const mockedUploadPluginFolder = vi.mocked(uploadPluginFolder);
 const mockedUploadPluginZip = vi.mocked(uploadPluginZip);
 
 beforeEach(() => {
+  mockedMarketplaceInstallMode.mockResolvedValue('open');
   mockedListPlugins.mockResolvedValue([
     makePlugin('official-plugin', 'bundled', 'bundled'),
     makePlugin('user-plugin', 'github', 'restricted'),
@@ -691,6 +695,55 @@ describe('PluginsView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
     await waitFor(() => expect(mockedRemoveMarketplace).toHaveBeenCalledWith('catalog-1'));
+  });
+
+  it('connects a company marketplace with a fail-closed local policy and no stored token value', async () => {
+    render(<PluginsView />);
+
+    fireEvent.click(await screen.findByTestId('plugins-tab-team'));
+    fireEvent.change(screen.getByLabelText('Company catalog endpoint'), {
+      target: { value: 'https://packages.company.example/open-docs-marketplace.json' },
+    });
+    fireEvent.change(screen.getByLabelText('Verification profile'), {
+      target: { value: 'high' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Connect company catalog' }));
+
+    await waitFor(() => expect(mockedAddMarketplace).toHaveBeenCalledWith({
+      url: 'https://packages.company.example/open-docs-marketplace.json',
+      trust: 'trusted',
+      visibility: 'enterprise',
+      authEnv: 'OD_MARKETPLACE_TOKEN',
+      policy: expect.objectContaining({
+        allowedVisibilities: ['enterprise', 'private'],
+        allowedHosts: ['packages.company.example'],
+        allowedLicenses: expect.arrayContaining(['Apache-2.0', 'MIT']),
+        requireDigest: true,
+        requireSignature: true,
+        requireProvenance: true,
+        requireSbom: true,
+        requireApproval: true,
+        allowDirectUrlInstall: false,
+      }),
+    }));
+    expect(JSON.stringify(mockedAddMarketplace.mock.calls[0]?.[0])).not.toContain('Bearer ');
+  });
+
+  it('hides direct imports and explains the enforced company catalog in managed mode', async () => {
+    mockedMarketplaceInstallMode.mockResolvedValue('managed');
+
+    render(<PluginsView />);
+
+    await waitFor(() => expect(screen.queryByTestId('plugins-import-button')).toBeNull());
+    expect(screen.queryByTestId('plugins-tab-sources')).toBeNull();
+    expect(screen.queryByTestId('plugins-home-publish-github-user-plugin')).toBeNull();
+    expect(screen.queryByTestId('plugins-home-contribute-open-design-user-plugin')).toBeNull();
+    fireEvent.click(await screen.findByTestId('plugins-tab-team'));
+
+    expect(screen.getByText('Managed install policy is enforced')).toBeTruthy();
+    expect(screen.getByText(/Direct URL, GitHub, ZIP, and local-folder installs are blocked/i)).toBeTruthy();
+    expect(screen.queryByLabelText('Company catalog endpoint')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Connect company catalog' })).toBeNull();
   });
 
   it('uploads zip and folder plugins from the import dialog', async () => {

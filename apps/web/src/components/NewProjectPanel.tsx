@@ -10,7 +10,8 @@ import {
   trackNewProjectModalSurfaceView,
   trackNewProjectModalTabClick,
 } from '../analytics/events';
-import type { ConnectorDetail } from '@open-design/contracts';
+import type { ChatSessionMode, ConnectorDetail, ProjectWorkMode } from '@open-design/contracts';
+import { defaultConversationModeForWorkMode } from '@open-design/contracts';
 import type {
   TrackingDesignSystemApplyTargetKind,
   TrackingDesignSystemOrigin,
@@ -60,6 +61,7 @@ import { Icon } from './Icon';
 import { Skeleton } from './Loading';
 import { Toast } from './Toast';
 import { useOpenFolderImport } from './useOpenFolderImport';
+import { ProjectWorkModeToggle } from './ProjectWorkModeToggle';
 
 // Snapshot of a curated prompt template, captured at New Project time and
 // folded into ProjectMetadata.promptTemplate. The user may have edited the
@@ -120,6 +122,7 @@ export interface CreateInput {
   skillId: string | null;
   designSystemId: string | null;
   metadata: ProjectMetadata;
+  conversationMode?: ChatSessionMode;
   userWorkingDirToken?: string;
 }
 
@@ -287,6 +290,7 @@ export function NewProjectPanel({
   const [workingDirError, setWorkingDirError] = useState<
     { message: string; details?: string } | null
   >(null);
+  const [workMode, setWorkMode] = useState<ProjectWorkMode>('creation');
   const [tab, setTab] = useState<CreateTab>(initialTab);
   // P0 analytics — fire surface_view once per (panel mount, tab) pair so the
   // funnel sees both initial open and tab switches without double-counting on
@@ -657,6 +661,11 @@ export function NewProjectPanel({
 
   function handleCreate() {
     if (!canCreate) return;
+    if (workMode === 'development' && !workingDir) {
+      setWorkingDirError({ message: t('workMode.developmentFolderRequired') });
+      void handlePickWorkingDir();
+      return;
+    }
     // Media surfaces don't carry a design system pick. Force the primary
     // and inspiration ids to empty there so the New Project panel can't
     // accidentally bind a stale DS that the user can no longer see in the
@@ -718,9 +727,14 @@ export function NewProjectPanel({
       designSystemId: primaryDs,
       metadata: {
         ...metadata,
+        workMode,
+        ...(workMode === 'development'
+          ? { development: { ...metadata.development, autoVerify: metadata.development?.autoVerify ?? true } }
+          : {}),
         nameSource: trimmedName ? 'user' : 'generated',
         ...(workingDir ? { userWorkingDir: workingDir } : {}),
       },
+      conversationMode: defaultConversationModeForWorkMode(workMode),
       ...(workingDirToken ? { userWorkingDirToken: workingDirToken } : {}),
       requestId,
     });
@@ -732,7 +746,7 @@ export function NewProjectPanel({
     setWorkingDirError(null);
     try {
       if (isOpenDesignHostAvailable()) {
-        const result = await pickHostWorkingDir();
+        const result = await pickHostWorkingDir(workingDir ?? undefined);
         if (result.ok) {
           setWorkingDir(result.baseDir);
           setWorkingDirToken(result.token);
@@ -740,7 +754,7 @@ export function NewProjectPanel({
         }
         if ('canceled' in result && result.canceled) return;
         setWorkingDirError({
-          message: `Couldn't open the folder picker (${'reason' in result ? result.reason : 'host unavailable'}). Please update Open Docs and try again.`,
+          message: `Couldn't open the folder picker (${'reason' in result ? result.reason : 'host unavailable'}). Please update MonoField and try again.`,
         });
         return;
       }
@@ -785,6 +799,15 @@ export function NewProjectPanel({
 
   return (
     <div className="newproj" data-testid="new-project-panel">
+      <ProjectWorkModeToggle
+        value={workMode}
+        onChange={(next) => {
+          setWorkMode(next);
+          if (next === 'development') setTab('other');
+        }}
+        compact
+      />
+      {workMode === 'creation' ? (
       <div className={`newproj-tabs-shell${tabScroll.left ? ' can-left' : ''}${tabScroll.right ? ' can-right' : ''}`}>
         <button
           type="button"
@@ -829,15 +852,12 @@ export function NewProjectPanel({
           <Icon name="chevron-right" size={16} strokeWidth={2} />
         </button>
       </div>
+      ) : null}
       <div className="newproj-body">
         <h3 className="newproj-title">
-          <span className="newproj-title-text">{titleForTab(tab, mediaSurface, t)}</span>
-          {tab === 'live-artifact' ? (
-            // "Beta" is an internationally adopted brand-style status marker;
-            // intentionally not run through t() (consistent with short product
-            // status pills that read the same across our supported locales).
-            <span className="newproj-title-badge" aria-label="Beta feature">Beta</span>
-          ) : null}
+          <span className="newproj-title-text">
+            {workMode === 'development' ? t('workMode.development') : titleForTab(tab, mediaSurface, t)}
+          </span>
         </h3>
 
         <div className="newproj-name-row">

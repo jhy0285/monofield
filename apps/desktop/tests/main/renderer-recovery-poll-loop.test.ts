@@ -11,6 +11,8 @@ const runtimeSource = readFileSync(new URL("../../src/main/runtime.ts", import.m
 
 const markRendererFailedBlock =
   /const markRendererFailed = \(\) => \{([\s\S]*?)\n  \};/.exec(runtimeSource)?.[0] ?? "";
+const petLoadBlock =
+  /const nextPetUrl = desktopPetUrl\(url\);([\s\S]*?)\n        if \(!revealed\)/.exec(runtimeSource)?.[0] ?? "";
 
 describe("desktop renderer-recovery poll loop", () => {
   test("tracks whether a tick is in flight", () => {
@@ -38,5 +40,14 @@ describe("desktop renderer-recovery poll loop", () => {
     // The catch still backs off and re-polls; we only removed the duplicate
     // timer from the failure handler, not the loop's own recovery.
     expect(runtimeSource).toMatch(/catch \(error\) \{[\s\S]*?schedule\(PENDING_POLL_MS\);/);
+  });
+
+  test("an optional desktop pet failure cannot keep the main app behind the splash", () => {
+    expect(petLoadBlock).toContain("void petWindow.loadURL(nextPetUrl)");
+    expect(petLoadBlock).toContain("optional desktop pet failed to load");
+    expect(petLoadBlock).not.toContain("await petWindow.loadURL(nextPetUrl)");
+    expect(runtimeSource).toMatch(
+      /void petWindow\.loadURL\(nextPetUrl\)[\s\S]*?if \(!revealed\) \{\s*void revealWhenReady\(\);/,
+    );
   });
 });

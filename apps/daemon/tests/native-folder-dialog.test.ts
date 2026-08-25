@@ -32,6 +32,13 @@ describe('native folder dialog helpers', () => {
     expect(script).toContain('$owner.Dispose();');
   });
 
+  it('starts code-folder selection on Desktop instead of reusing an export folder', () => {
+    const script = buildWindowsFolderDialogCommand().args[3] ?? '';
+
+    expect(script).toContain("[Environment]::GetFolderPath('Desktop')");
+    expect(script).toContain('$dialog.SelectedPath = $desktop;');
+  });
+
   it('parses a selected folder path from stdout', () => {
     expect(parseFolderDialogStdout(null, 'C:\\Users\\Ada\\Project\r\n')).toBe('C:\\Users\\Ada\\Project');
   });

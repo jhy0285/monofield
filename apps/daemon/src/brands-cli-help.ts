@@ -31,7 +31,7 @@ Output:
   extract prints "<id>\\t<projectId>" to stdout; finalize prints "<id>\\t<name>".
 
 Common options:
-  --daemon-url <url>   Open Docs daemon HTTP base.`;
+  --daemon-url <url>   MonoField daemon HTTP base.`;
 
 // `help`, `--help`, and `-h` all route to the usage text above.
 export function isBrandHelpArg(arg: string | undefined): boolean {

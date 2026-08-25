@@ -13,6 +13,7 @@ import { useT } from '../i18n';
 import { isTodoWriteToolName, parseTodoWriteInput } from '../runtime/todos';
 import { getToolRenderer, toRenderProps } from '../runtime/tool-renderers';
 import type { AgentEvent } from '../types';
+import { redactSensitiveText } from '../utils/redactSensitiveText';
 import { Icon } from './Icon';
 
 interface Props {
@@ -455,9 +456,9 @@ function BashCard({ input, result, runStreaming, runSucceeded }: { input: unknow
       <div className={`accordion-collapsible${open ? ' open' : ''}`}>
         <div className="accordion-collapsible-inner">
           <div className="op-card-detail">
-            <pre className="op-command">{truncate(command, 400)}</pre>
+            <pre className="op-command">{truncate(redactSensitiveText(command), 400)}</pre>
             {result?.content ? (
-              <pre className="op-output">{truncate(result.content, 4000)}</pre>
+              <pre className="op-output">{truncate(redactSensitiveText(result.content), 4000)}</pre>
             ) : null}
           </div>
         </div>
@@ -551,26 +552,26 @@ function ResultBadge({ result, runStreaming, runSucceeded }: { result?: Props['r
   const t = useT();
   if (!result && runStreaming) return <span className="op-status op-status-running" title={t('tool.running')}><Icon name="spinner" size={14} /></span>;
   if (!result && !runSucceeded) return <span className="op-status op-status-error" title={t('tool.error')}><Icon name="close" size={14} /></span>;
-  if (result?.isError) return <span className="op-status op-status-error" title={result.content || t('tool.error')}><Icon name="close" size={14} /></span>;
+  if (result?.isError) return <span className="op-status op-status-error" title={result.content ? redactSensitiveText(result.content) : t('tool.error')}><Icon name="close" size={14} /></span>;
   return <span className="op-status op-status-ok" title={t('tool.done')}><Icon name="check" size={14} /></span>;
 }
 
 function FileErrorDetail({ result }: { result?: Props['result'] }) {
   if (!result?.isError || !result.content.trim()) return null;
-  return <pre className="op-output">{truncate(result.content, 1200)}</pre>;
+  return <pre className="op-output">{truncate(redactSensitiveText(result.content), 1200)}</pre>;
 }
 
 function describeInput(input: unknown): string {
   if (input == null) return '';
-  if (typeof input === 'string') return input;
+  if (typeof input === 'string') return redactSensitiveText(input);
   if (typeof input !== 'object') return String(input);
   const obj = input as Record<string, unknown>;
   for (const key of ['file_path', 'path', 'pattern', 'url', 'query', 'name', 'command']) {
     const v = obj[key];
-    if (typeof v === 'string') return v;
+    if (typeof v === 'string') return redactSensitiveText(v);
   }
   try {
-    return JSON.stringify(obj);
+    return redactSensitiveText(JSON.stringify(obj));
   } catch {
     return '';
   }

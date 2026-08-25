@@ -31,9 +31,10 @@ import type {
   DesignToolboxClickProps,
 } from '@open-design/contracts/analytics';
 import { deriveUploadCohort } from '../analytics/upload-tracking';
-import { projectRawUrl, uploadProjectFiles, openFolderDialog, fetchRecentLinkedDirs, pushRecentLinkedDir, dirExists, applyLibraryAsset, fetchLibraryAssetElementHtml } from "../providers/registry";
+import { projectRawUrl, uploadProjectFiles, openFolderDialog, fetchRecentLinkedDirs, pushRecentLinkedDir, dirExists, applyLibraryAsset, fetchLibraryAssetElementHtml, replaceProjectWorkingDir } from "../providers/registry";
 import { WorkingDirPicker } from './WorkingDirPicker';
 import { patchProject } from "../state/projects";
+import { isOpenDesignHostAvailable, pickAndReplaceHostProjectWorkingDir } from '@open-design/host';
 import { fetchMcpServers } from "../state/mcp";
 import type { McpServerConfig, McpTemplate } from "../state/mcp";
 import { listPlugins } from "../state/projects";
@@ -49,6 +50,10 @@ import type {
   ResearchOptions,
   RunContextSelection,
   WorkspaceContextItem,
+} from '@open-design/contracts';
+import {
+  classifyInterfaceSpecSourceIntent,
+  isInterfaceSpecGenerationRequest,
 } from '@open-design/contracts';
 import { buildVisualAnnotationAttachment, commentTargetDisplayName } from '../comments';
 import { Icon, type IconName } from "./Icon";
@@ -314,6 +319,12 @@ export interface ChatSendMeta {
   // for this run only is composed with the extra skill bodies, without
   // touching the project's persistent `skillId`.
   skillIds?: string[];
+  // Set once after an interface-spec project's working folder changes. The
+  // next generation turn must collect fresh options instead of reusing the
+  // prior codebase's DB/sample context.
+  interfaceSpecCollectionReset?: {
+    workingDir: string;
+  };
   /** Overrides the run_created / run_finished `entry_from` analytics prop for
    *  this send (e.g. 'mark' when the turn is sent from the Mark draw overlay).
    *  Behavior never depends on it; it only shapes analytics props. */
@@ -336,7 +347,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       projectFiles,
       activeProjectFileName = null,
       streaming,
-      sessionMode = 'design',
+      sessionMode = 'docs',
       onSessionModeChange,
       sendDisabled = false,
       initialDraft,
@@ -495,12 +506,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // next `sendComposedTurn` (then cleared). An explicit meta.entryFrom always
     // wins over this pending value.
     const pendingEntryFromRef = useRef<ChatAnalyticsEntryFrom | null>(null);
+    const pendingInterfaceSpecCollectionResetRef = useRef<string | null>(null);
     const petEnabled = Boolean(onAdoptPet && onTogglePet);
     const linkedDirs = projectMetadata?.linkedDirs ?? [];
-    // The project's working directory: the local folder the agent can read
-    // (via `linkedDirs` → `--add-dir`). Shown in the WorkingDirPicker below
-    // the input, mirroring Home. We treat it as a single primary folder.
-    const workingDir = linkedDirs[0] ?? null;
+    const projectBaseDir = typeof projectMetadata?.baseDir === 'string' && projectMetadata.baseDir.trim()
+      ? projectMetadata.baseDir
+      : null;
+    // Folder-opened projects run the CLI with baseDir as cwd. Linked folders
+    // remain supplemental read-only references, not the primary edit root.
+    const workingDir = projectBaseDir ?? linkedDirs[0] ?? null;
     const [recentDirs, setRecentDirs] = useState<string[]>([]);
     useEffect(() => {
       let cancelled = false;
@@ -521,6 +535,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // Re-checked when the dir changes, when the window/tab regains focus
     // (e.g. after deleting it in Finder), and when the picker is opened.
     const [workingDirMissing, setWorkingDirMissing] = useState(false);
+    const [workingDirRequired, setWorkingDirRequired] = useState(false);
     const checkWorkingDir = useCallback(async () => {
       if (!workingDir) {
         setWorkingDirMissing(false);
@@ -977,6 +992,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
 
     function reset() {
       setDraft("");
+      draftRef.current = '';
       setStaged([]);
       nextAttachmentOrderRef.current = 0;
       setStagedVisualComments([]);
@@ -996,6 +1012,35 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
 
     function currentCommentAttachments(extra: ChatCommentAttachment[] = []): ChatCommentAttachment[] {
       return sortChatCommentAttachmentsByOrder([...commentAttachments, ...stagedVisualComments, ...extra]);
+    }
+
+    // Visual marks render as rich cards below the composer. Keep their backing
+    // screenshot out of the generic attachment chip row so each capture is
+    // represented once in the UI while still being sent as a file attachment.
+    const visibleStagedAttachments = staged.filter(
+      (attachment) => !stagedVisualComments.some((comment) => comment.screenshotPath === attachment.path),
+    );
+
+    // Keep the human-readable mark lines in the main prompt in lockstep with
+    // the structured cards. The structured comment context remains the source
+    // of truth for the agent, while these lines make the pending request easy
+    // to review before sending.
+    function syncVisualAnnotationDraft(visualComments: ChatCommentAttachment[]) {
+      const baseLines = draftRef.current
+        .split('\n')
+        .filter((line) => !/^\s*\[#\d+\]\s/.test(line));
+      const markLines = visualComments
+        .map((attachment, index) => {
+          const note = attachment.comment && attachment.comment !== attachment.intent
+            ? attachment.comment.trim()
+            : '';
+          return note ? `[#${index + 1}] ${note}` : null;
+        })
+        .filter((line): line is string => Boolean(line));
+      const nextDraft = [...baseLines, ...markLines].filter((line) => line.trim()).join('\n');
+      draftRef.current = nextDraft;
+      setDraft(nextDraft);
+      editorRef.current?.setText(nextDraft);
     }
 
     function setStreamingAnnotationSendPending(value: boolean) {
@@ -1045,6 +1090,21 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     ): boolean {
       setStreamingAnnotationSendPending(false);
       if (!prompt && attachments.length === 0 && nextCommentAttachments.length === 0) return false;
+      const interfaceSpecSourceIntent = classifyInterfaceSpecSourceIntent(prompt);
+      if (
+        projectMetadata?.kind === 'interface-spec' &&
+        !workingDir &&
+        isInterfaceSpecGenerationRequest(prompt) &&
+        interfaceSpecSourceIntent === 'codebase'
+      ) {
+        // Keep the request in the editor. Source selection is a prerequisite
+        // for collection, so no form, agent run, or project-root fallback may
+        // happen before the user selects a folder.
+        setWorkingDirRequired(true);
+        onShowToast?.(`${t('homeWorkingDir.trigger')}: ${t('homeWorkingDir.hint')}`);
+        void handlePickWorkingDir();
+        return false;
+      }
       const nextAttachments =
         activeFileContext && !attachments.some((attachment) => attachment.path === activeFileContext)
           ? [
@@ -1060,10 +1120,24 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       // entry_from, then clear it so it only colours the immediate next send.
       const pendingEntryFrom = pendingEntryFromRef.current;
       pendingEntryFromRef.current = null;
-      const effectiveMeta: ChatSendMeta | undefined =
+      let effectiveMeta: ChatSendMeta | undefined =
         pendingEntryFrom && !meta?.entryFrom
           ? { ...(meta ?? {}), entryFrom: pendingEntryFrom }
           : meta;
+      const resetWorkingDir = pendingInterfaceSpecCollectionResetRef.current;
+      if (
+        resetWorkingDir &&
+        prompt.trim().length > 0 &&
+        meta?.entryFrom !== 'question_answer' &&
+        isInterfaceSpecGenerationRequest(prompt) &&
+        interfaceSpecSourceIntent !== 'manual'
+      ) {
+        effectiveMeta = {
+          ...(effectiveMeta ?? {}),
+          interfaceSpecCollectionReset: { workingDir: resetWorkingDir },
+        };
+        pendingInterfaceSpecCollectionResetRef.current = null;
+      }
       onSend(prompt, nextAttachments, nextCommentAttachments, effectiveMeta);
       reset();
       return true;
@@ -1544,24 +1618,28 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               if (uploaded.length > 0) {
                 appendOrderedStagedAttachments(uploaded);
               }
-              if (visualAttachmentInput) {
+              const stagedVisualAttachment = visualAttachmentInput
+                ? buildVisualAnnotationAttachment({
+                    ...visualAttachmentInput,
+                  })
+                : null;
+              if (stagedVisualAttachment) {
                 setStagedVisualComments((current) => [
                   ...current,
-                  buildVisualAnnotationAttachment({
-                    ...visualAttachmentInput!,
-                  }),
+                  stagedVisualAttachment,
                 ]);
               }
-              if (detail.note) {
-                // Accumulate through draftRef so two annotations resolving
-                // concurrently compose (each reads the other's write) instead
-                // of both starting from the same stale closure. Mirror the
-                // result into the editor with setText so the now-non-empty
-                // editor does not fire an onChange('') that would clobber the
-                // accumulated draft back to empty.
+              if (stagedVisualAttachment) {
+                syncVisualAnnotationDraft([
+                  ...stagedVisualComments,
+                  stagedVisualAttachment,
+                ]);
+              } else if (detail.note.trim()) {
+                // Accumulate a non-visual annotation note in the prompt when
+                // there is no structured screenshot target to attach.
                 const nextDraft = draftRef.current
-                  ? `${draftRef.current}\n${detail.note}`
-                  : detail.note;
+                  ? `${draftRef.current}\n${detail.note.trim()}`
+                  : detail.note.trim();
                 draftRef.current = nextDraft;
                 setDraft(nextDraft);
                 editorRef.current?.setText(nextDraft);
@@ -1704,28 +1782,52 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       if (result?.metadata) onProjectMetadataChange?.(result.metadata);
     }
 
-    // The WorkingDirPicker treats the project's working directory as a single
-    // primary folder, so selecting one replaces `linkedDirs`. The folder is
-    // read-only awareness for the agent (→ `--add-dir`), not a Design Files
-    // import, and `baseDir` is never touched.
+    function applyWorkingDirectoryMetadata(
+      baseDir: string,
+      entryFile: string | null,
+      metadata: ProjectMetadata | undefined,
+    ) {
+      const next = metadata ?? {
+        ...(projectMetadata ?? { kind: 'prototype' as const }),
+        baseDir,
+        importedFrom: 'folder',
+        ...(entryFile ? { entryFile } : {}),
+        fromTrustedPicker: true as const,
+      };
+      onProjectMetadataChange?.(next);
+      setWorkingDirRequired(false);
+      if (next.kind === 'interface-spec' && baseDir !== workingDir) {
+        // Source selection changes the CLI cwd. Reset collection context so
+        // interface specifications cannot reuse a previous repository.
+        pendingInterfaceSpecCollectionResetRef.current = baseDir;
+      }
+      void rememberRecentDir(baseDir);
+    }
+
+    // The browser-only runtime validates the chosen absolute path before it
+    // becomes the project root. Desktop uses the atomic host picker below.
     async function setWorkingDirFolder(dir: string) {
       if (!projectId) return;
-      const base = projectMetadata ?? { kind: 'prototype' as const };
-      const metadata: ProjectMetadata = { ...base, linkedDirs: [dir] };
-      const result = await patchProject(projectId, { metadata });
-      // The daemon rejects stale/inaccessible/system dirs with
-      // INVALID_LINKED_DIR (patchProject → null). Only commit the selection
-      // and promote it in recents when the project accepted it; otherwise
-      // surface the failure and leave recents untouched so a rejected path
-      // isn't re-promoted to the top of the menu.
-      if (!result?.metadata) {
+      try {
+        const result = await replaceProjectWorkingDir(projectId, dir);
+        applyWorkingDirectoryMetadata(result.baseDir, result.entryFile, result.project.metadata);
+      } catch {
         onShowToast?.(t('homeWorkingDir.applyFailed'));
+      }
+    }
+    async function handlePickWorkingDir(suggestedPath?: string) {
+      if (projectId && isOpenDesignHostAvailable()) {
+        const result = await pickAndReplaceHostProjectWorkingDir(
+          projectId,
+          suggestedPath ?? workingDir ?? undefined,
+        );
+        if (result.ok) {
+          applyWorkingDirectoryMetadata(result.baseDir, result.entryFile, undefined);
+        } else if (!('canceled' in result && result.canceled)) {
+          onShowToast?.(t('homeWorkingDir.applyFailed'));
+        }
         return;
       }
-      onProjectMetadataChange?.(result.metadata);
-      void rememberRecentDir(dir);
-    }
-    async function handlePickWorkingDir() {
       const selected = await openFolderDialog();
       if (selected) await setWorkingDirFolder(selected);
     }
@@ -2008,17 +2110,37 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     function removeStaged(p: string) {
       trackComposerBar({ element: 'context_remove', resource_kind: 'attachment', resource_id: p });
       setStaged((s) => s.filter((a) => a.path !== p));
-      setStagedVisualComments((current) => current.filter((attachment) => attachment.screenshotPath !== p));
+      const nextVisualComments = stagedVisualComments.filter((attachment) => attachment.screenshotPath !== p);
+      setStagedVisualComments(nextVisualComments);
+      if (nextVisualComments.length !== stagedVisualComments.length) {
+        syncVisualAnnotationDraft(nextVisualComments);
+      }
       // Strip the `@<path>` token from the draft and push the result back into
       // the editor so the pill disappears in lockstep with the chip.
       replaceEditorDraft(stripInlineMentionToken(draft, p));
     }
 
     function removeCommentAttachment(id: string) {
-      setStagedVisualComments((current) => current.filter((attachment) => attachment.id !== id));
+      const target = stagedVisualComments.find((attachment) => attachment.id === id);
+      const nextVisualComments = stagedVisualComments.filter((attachment) => attachment.id !== id);
+      setStagedVisualComments(nextVisualComments);
+      if (target) syncVisualAnnotationDraft(nextVisualComments);
+      if (target?.screenshotPath) {
+        setStaged((current) => current.filter((attachment) => attachment.path !== target.screenshotPath));
+      }
       if (!stagedVisualComments.some((attachment) => attachment.id === id)) {
         onRemoveCommentAttachment?.(id);
       }
+    }
+
+    function updateCommentAttachment(id: string, comment: string) {
+      const nextVisualComments = stagedVisualComments.map((attachment) => (
+        attachment.id === id
+          ? { ...attachment, comment, commentContext: 'context' as const }
+          : attachment
+      ));
+      setStagedVisualComments(nextVisualComments);
+      syncVisualAnnotationDraft(nextVisualComments);
     }
 
     async function submit() {
@@ -2246,7 +2368,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               }}
             />
           ) : null}
-          {designSystemPicker || selectedWorkspaceContexts.length > 0 || stagedSkills.length > 0 || stagedMcpServers.length > 0 || stagedConnectors.length > 0 || staged.length > 0 || activeAppliedPlugin ? (
+          {designSystemPicker || selectedWorkspaceContexts.length > 0 || stagedSkills.length > 0 || stagedMcpServers.length > 0 || stagedConnectors.length > 0 || visibleStagedAttachments.length > 0 || activeAppliedPlugin ? (
             <StagedRunContexts
               designSystemPicker={designSystemPicker}
               workspaceItems={selectedWorkspaceContexts}
@@ -2254,7 +2376,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               skills={stagedSkills}
               mcpServers={stagedMcpServers}
               connectors={stagedConnectors}
-              attachments={staged}
+              attachments={visibleStagedAttachments}
               pluginChip={
                 activeAppliedPlugin
                   ? {
@@ -2293,6 +2415,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           {currentCommentAttachments().length > 0 ? (
             <StagedCommentAttachments
               attachments={currentCommentAttachments()}
+              projectId={projectId}
+              onChange={updateCommentAttachment}
               onRemove={removeCommentAttachment}
               t={t}
             />
@@ -2610,6 +2734,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               placement="up"
               workingDir={workingDir}
               invalid={workingDirMissing}
+              required={workingDirRequired}
               recentDirs={recentDirs}
               onOpen={() => void checkWorkingDir()}
               onPickDirectory={() => {
@@ -2621,12 +2746,19 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               }}
               onSelectRecent={(dir) => {
                 trackComposerBar({ element: 'working_dir_recent' });
-                void setWorkingDirFolder(dir);
+                // Desktop deliberately requires a fresh native selection
+                // before granting a folder as the editable project root.
+                // The browser runtime can promote a validated recent path.
+                void (isOpenDesignHostAvailable()
+                  ? handlePickWorkingDir(dir)
+                  : setWorkingDirFolder(dir));
               }}
-              onClear={() => {
-                trackComposerBar({ element: 'working_dir_clear' });
-                void clearWorkingDir();
-              }}
+              {...(!projectBaseDir ? {
+                onClear: () => {
+                  trackComposerBar({ element: 'working_dir_clear' });
+                  void clearWorkingDir();
+                },
+              } : {})}
             />
           </div>
         ) : null}
@@ -3051,7 +3183,7 @@ function StagedRunContexts({
       {workspaceItems.map((workspaceItem) => {
         const kindLabel =
           workspaceItem.id === currentWorkspaceContextId
-            ? 'Current'
+            ? t('chat.importDesignSystemActive')
             : workspaceContextKindLabel(workspaceItem.kind);
         return (
           <div
@@ -3228,39 +3360,164 @@ function StagedRunContexts({
 
 function StagedCommentAttachments({
   attachments,
+  projectId,
+  onChange,
   onRemove,
   t,
 }: {
   attachments: ChatCommentAttachment[];
+  projectId: string | null;
+  onChange: (id: string, comment: string) => void;
   onRemove: (id: string) => void;
   t: TranslateFn;
 }) {
+  const visualAttachments = attachments.filter((attachment) => attachment.selectionKind === 'visual');
   const visibleAttachments = attachments.filter((attachment) => attachment.selectionKind !== 'visual');
-  if (visibleAttachments.length === 0) return null;
+  const [preview, setPreview] = useState<ChatCommentAttachment | null>(null);
+  const previewUrl = preview && projectId && preview.screenshotPath
+    ? projectRawUrl(projectId, preview.screenshotPath)
+    : null;
+
+  useEffect(() => {
+    if (!preview) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPreview(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [preview]);
+
+  if (visualAttachments.length === 0 && visibleAttachments.length === 0) return null;
   return (
-    <div className="staged-row comment-staged-row" data-testid="staged-comment-attachments">
-      {visibleAttachments.map((a) => (
-        <div key={a.id} className="staged-chip staged-comment">
-          <span
-            className="staged-name"
-            title={`${a.screenshotPath ? `${a.screenshotPath}: ` : ''}${commentTargetDisplayName(a)}${a.comment ? `: ${a.comment}` : ''}`}
-          >
-            <strong>{commentTargetDisplayName(a)}</strong>
-            {a.comment ? <span>{a.comment}</span> : null}
-          </span>
-          <button
-            type="button"
-            className="staged-remove od-tooltip"
-            onClick={() => onRemove(a.id)}
-            title={t('chat.comments.removeAttachment')}
-            data-tooltip={t('chat.comments.removeAttachment')}
-            aria-label={t('chat.comments.removeAttachmentAria', { name: a.elementId })}
-          >
-            <Icon name="close" size={11} />
-          </button>
+    <>
+    <div className="comment-staged-stack" data-testid="staged-comment-attachments">
+      {visualAttachments.length > 0 ? (
+        <div className="staged-visual-list" data-testid="staged-visual-annotations">
+          {visualAttachments.map((a, index) => {
+            const screenshotUrl = projectId && a.screenshotPath
+              ? projectRawUrl(projectId, a.screenshotPath)
+              : null;
+            const noteValue = a.comment === a.intent ? '' : a.comment;
+            const markLabel = `#${index + 1}`;
+            return (
+              <article
+                key={a.id}
+                className="staged-visual-card"
+                data-testid={`staged-visual-${index + 1}`}
+              >
+                <div className="staged-visual-head">
+                  <div className="staged-visual-title">
+                    <span className="staged-visual-badge" aria-label={`${t('chat.comments.comment')} ${markLabel}`}>
+                      {markLabel}
+                    </span>
+                    <strong>{commentTargetDisplayName(a)}</strong>
+                  </div>
+                  <button
+                    type="button"
+                    className="staged-remove od-tooltip"
+                    onClick={() => onRemove(a.id)}
+                    title={t('chat.comments.removeAttachment')}
+                    data-tooltip={t('chat.comments.removeAttachment')}
+                    aria-label={t('chat.comments.removeAttachmentAria', { name: a.elementId })}
+                  >
+                    <Icon name="close" size={11} />
+                  </button>
+                </div>
+                <div className="staged-visual-body">
+                  {screenshotUrl ? (
+                    <button
+                      type="button"
+                      className="staged-visual-thumb-trigger"
+                      onClick={() => setPreview(a)}
+                      title={a.screenshotPath}
+                      aria-label={`${t('common.openPreview')}: ${t('chat.comments.comment')} ${markLabel}`}
+                    >
+                      <img
+                        className="staged-visual-thumb"
+                        src={screenshotUrl}
+                        alt={`${t('chat.comments.comment')} ${markLabel}`}
+                      />
+                    </button>
+                  ) : (
+                    <div className="staged-visual-thumb staged-visual-thumb--empty" aria-hidden>
+                      <Icon name="image" size={16} />
+                    </div>
+                  )}
+                  <div className="staged-visual-fields">
+                    <textarea
+                      className="staged-visual-note"
+                      value={noteValue}
+                      onChange={(event) => onChange(a.id, event.currentTarget.value)}
+                      placeholder={t('chat.annotationNotePlaceholder')}
+                      aria-label={`${t('chat.comments.addNote')} ${markLabel}`}
+                      rows={2}
+                    />
+                    <span className="staged-visual-target" title={a.currentText || a.filePath}>
+                      {a.currentText || a.filePath || a.intent || t('chat.comments.targetArea')}
+                    </span>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
         </div>
-      ))}
+      ) : null}
+      {visibleAttachments.length > 0 ? (
+        <div className="staged-row comment-staged-row">
+          {visibleAttachments.map((a) => (
+            <div key={a.id} className="staged-chip staged-comment">
+              <span
+                className="staged-name"
+                title={`${a.screenshotPath ? `${a.screenshotPath}: ` : ''}${commentTargetDisplayName(a)}${a.comment ? `: ${a.comment}` : ''}`}
+              >
+                <strong>{commentTargetDisplayName(a)}</strong>
+                {a.comment ? <span>{a.comment}</span> : null}
+              </span>
+              <button
+                type="button"
+                className="staged-remove od-tooltip"
+                onClick={() => onRemove(a.id)}
+                title={t('chat.comments.removeAttachment')}
+                data-tooltip={t('chat.comments.removeAttachment')}
+                aria-label={t('chat.comments.removeAttachmentAria', { name: a.elementId })}
+              >
+                <Icon name="close" size={11} />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
+    {preview && previewUrl ? createPortal(
+      <div
+        className="staged-preview-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${t('chat.comments.comment')} ${preview.elementId}`}
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setPreview(null);
+        }}
+      >
+        <div className="staged-preview-card">
+          <div className="staged-preview-head">
+            <span title={preview.screenshotPath}>{commentTargetDisplayName(preview)}</span>
+            <button
+              type="button"
+              className="icon-only od-tooltip"
+              onClick={() => setPreview(null)}
+              aria-label={t('common.close')}
+              title={t('common.close')}
+              data-tooltip={t('common.close')}
+            >
+              <Icon name="close" size={14} />
+            </button>
+          </div>
+          <img src={previewUrl} alt={`${t('chat.comments.comment')} ${preview.elementId}`} />
+        </div>
+      </div>,
+      document.body,
+    ) : null}
+    </>
   );
 }
 
@@ -4516,9 +4773,8 @@ function ToolsImportPanel({
   t: TranslateFn;
   onLinkFolder: () => Promise<void> | void;
   currentDesignSystemId?: string | null;
-  // When omitted (no active project) the design-system import row stays
-  // disabled with the existing "Coming soon" affordance so users aren't
-  // routed into a picker that has nothing to PATCH. Returns true on a
+  // When omitted (no active project) the design-system import row is hidden so
+  // users are not routed into a picker that has nothing to PATCH. Returns true on a
   // successful PATCH so the picker can close itself; false leaves the
   // picker open so the user can retry.
   onSwitchDesignSystem?: (
@@ -4541,24 +4797,19 @@ function ToolsImportPanel({
 
   return (
     <div className="composer-tools-list">
-      <ImportItem icon="upload" label={t('chat.importFig')} t={t} />
-      <ImportItem icon="grid" label={t('chat.importWeb')} t={t} />
       <ImportItem
         icon="folder"
         label={t('chat.importFolder')}
-        t={t}
-        enabled
         onClick={() => void onLinkFolder()}
       />
-      <ImportItem
-        icon="sparkles"
-        label={t('chat.importSkills')}
-        t={t}
-        enabled={!!onSwitchDesignSystem}
-        onClick={() => setView('designSystems')}
-        testId="composer-import-design-systems"
-      />
-      <ImportItem icon="file" label={t('chat.importProject')} t={t} />
+      {onSwitchDesignSystem ? (
+        <ImportItem
+          icon="sparkles"
+          label={t('chat.importSkills')}
+          onClick={() => setView('designSystems')}
+          testId="composer-import-design-systems"
+        />
+      ) : null}
     </div>
   );
 }
@@ -4566,34 +4817,28 @@ function ToolsImportPanel({
 function ImportItem({
   icon,
   label,
-  t,
-  enabled,
   onClick,
   testId,
 }: {
   icon: "upload" | "link" | "grid" | "folder" | "sparkles" | "file";
   label: string;
-  t: TranslateFn;
-  enabled?: boolean;
   onClick?: () => void;
   testId?: string;
 }) {
   return (
     <button
       type="button"
-      className={`composer-import-item${enabled ? ' composer-import-item-enabled' : ''}`}
+      className="composer-import-item composer-import-item-enabled"
       role="menuitem"
       tabIndex={-1}
-      disabled={!enabled}
-      title={enabled ? label : t('chat.importComingSoon')}
-      onClick={enabled && onClick ? onClick : (e) => e.preventDefault()}
+      title={label}
+      onClick={onClick}
       data-testid={testId}
     >
       <span className="ico" aria-hidden>
         <Icon name={icon} size={14} />
       </span>
       <span className="composer-import-item-label">{label}</span>
-      {!enabled && <span className="composer-import-item-soon">{t('chat.importSoon')}</span>}
     </button>
   );
 }

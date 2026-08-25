@@ -178,20 +178,20 @@ test('codex args use workspace-write sandbox on macOS and Linux', () => {
   });
 });
 
-test('codex args use danger-full-access sandbox on WSL because workspace-write stays read-only', () => {
+test('codex args keep workspace-write sandbox on WSL by default', () => {
   withPlatform('linux', () => {
     withEnvSnapshot(['OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX', 'WSL_DISTRO_NAME'], () => {
       delete process.env.OD_CODEX_DISABLE_PLUGINS;
       delete process.env.OD_CODEX_SANDBOX;
       process.env.WSL_DISTRO_NAME = 'Ubuntu';
-      assert.equal(codexNeedsDangerFullAccessSandbox('linux', process.env), true);
+      assert.equal(codexNeedsDangerFullAccessSandbox('linux', process.env), false);
       const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
       assert.deepEqual(args.slice(0, 5), [
         'exec',
         '--json',
         '--skip-git-repo-check',
         '--sandbox',
-        'danger-full-access',
+        'workspace-write',
       ]);
       assert.equal(args.some((arg) => arg.includes('default_permissions')), false);
     });
@@ -242,13 +242,7 @@ test('codex args ignore unknown OD_CODEX_SANDBOX values', () => {
   });
 });
 
-test('codex args use danger-full-access sandbox on Windows because workspace-write blocks PowerShell', () => {
-  // Codex CLI's workspace-write sandbox mode on Windows lacks a working
-  // OS-level sandbox and falls back to a policy that rejects shell
-  // invocations such as powershell.exe with "blocked by policy".
-  // The agent cannot list files or run any shell-backed tool under that
-  // policy. danger-full-access is Codex CLI's documented Windows-compatible
-  // mode (issue #1721).
+test('codex args keep workspace-write sandbox on Windows by default', () => {
   withEnvSnapshot(['OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX'], () => {
     delete process.env.OD_CODEX_DISABLE_PLUGINS;
     delete process.env.OD_CODEX_SANDBOX;
@@ -261,15 +255,10 @@ test('codex args use danger-full-access sandbox on Windows because workspace-wri
         '--json',
         '--skip-git-repo-check',
         '--sandbox',
-        'danger-full-access',
+        'workspace-write',
       ]);
-      // The workspace-write-scoped network override is meaningless under
-      // danger-full-access and must not appear on Windows.
-      assert.equal(args.includes('workspace-write'), false);
-      assert.equal(
-        args.includes('sandbox_workspace_write.network_access=true'),
-        false,
-      );
+      assert.equal(args.includes('workspace-write'), true);
+      assert.equal(args.includes('sandbox_workspace_write.network_access=true'), true);
       assert.equal(args.some((arg) => arg.includes('default_permissions')), false);
     });
   });
@@ -306,6 +295,9 @@ test('codex args keep plugins enabled when OD_CODEX_DISABLE_PLUGINS is not 1', (
 test('codex model picker includes current OpenAI choices in priority order', async () => {
   const expectedModels = [
     'default',
+    'gpt-5.6-sol',
+    'gpt-5.6-terra',
+    'gpt-5.6-luna',
     'gpt-5.5',
     'gpt-5.4',
     'gpt-5.4-mini',
@@ -328,18 +320,24 @@ test('codex model picker includes current OpenAI choices in priority order', asy
     'medium',
     'high',
     'xhigh',
+    'max',
   ]);
 
   const args = codex.buildArgs(
     '',
     [],
     [],
-    { model: 'gpt-5.5', reasoning: 'xhigh' },
+    { model: 'gpt-5.6-sol', reasoning: 'max' },
     { cwd: '/tmp/od-project' },
   );
   assert.ok(args.includes('--model'));
-  assert.ok(args.includes('gpt-5.5'));
-  assert.ok(args.includes('model_reasoning_effort="xhigh"'));
+  assert.ok(args.includes('gpt-5.6-sol'));
+  assert.ok(args.includes('model_reasoning_effort="max"'));
+
+  // The fallback picker and argv assertions above are platform-neutral. The
+  // remaining detection check uses a POSIX shell fixture; Windows coverage for
+  // executable discovery lives in the dedicated runtime resolution tests.
+  if (process.platform === 'win32') return;
 
   const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-models-'));
   try {

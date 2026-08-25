@@ -96,11 +96,15 @@ function computeModel(doc: InterfaceSpecDocument): DetailModel[] {
   });
 }
 
-function fieldTableRows(rows: DetailModel['requestRows']): string {
+function fieldTableRows(
+  rows: DetailModel['requestRows'],
+  endpointIndex: number,
+  section: 'request' | 'response',
+): string {
   if (rows.length === 0) return `<tr><td colspan="8" class="empty">(필드 없음)</td></tr>`;
   return rows
     .map(
-      (r) => `<tr>
+      (r, rowIndex) => `<tr data-od-id="interface-spec-${endpointIndex}-${section}-field-${rowIndex}" data-screen-label="${esc(`${section.toUpperCase()} ${r.nameEn}`)}">
       <td class="num">${esc(r.no)}</td>
       <td>${esc(r.nameEn)}</td>
       <td>${esc(r.nameKo)}</td>
@@ -116,16 +120,16 @@ function fieldTableRows(rows: DetailModel['requestRows']): string {
 
 function detailSection(d: DetailModel, index: number): string {
   const headerCells = DETAIL_FIELD_HEADERS.map((h) => `<th>${esc(h)}</th>`).join('');
-  return `<section class="detail" id="if-${index}">
+  return `<section class="detail" id="if-${index}" data-od-id="interface-spec-${index}" data-screen-label="${esc(`${d.interfaceName} ${d.interfaceId}`)}">
     <h3>${esc(d.interfaceName)} <span class="id">${esc(d.interfaceId)}</span></h3>
     <table class="meta">
       <tr><th>인터페이스 ID</th><td>${esc(d.interfaceId)}</td><th>인터페이스 설명</th><td>${esc(d.interfaceName)}</td></tr>
       <tr><th>인터페이스 URL</th><td colspan="3">${esc(d.apiKey)}</td></tr>
     </table>
     <div class="sec-title">REQUEST</div>
-    <table class="fields"><thead><tr>${headerCells}</tr></thead><tbody>${fieldTableRows(d.requestRows)}</tbody></table>
+    <table class="fields"><thead><tr>${headerCells}</tr></thead><tbody>${fieldTableRows(d.requestRows, index, 'request')}</tbody></table>
     <div class="sec-title">Response</div>
-    <table class="fields"><thead><tr>${headerCells}</tr></thead><tbody>${fieldTableRows(d.responseRows)}</tbody></table>
+    <table class="fields"><thead><tr>${headerCells}</tr></thead><tbody>${fieldTableRows(d.responseRows, index, 'response')}</tbody></table>
     <div class="samples">
       <div><div class="sample-title">${esc(DETAIL_SHEET_LAYOUT.sampleBlocks.requestTitle)}</div><pre>${esc(d.requestSample)}</pre></div>
       <div><div class="sample-title">${esc(DETAIL_SHEET_LAYOUT.sampleBlocks.responseTitle)}</div><pre>${esc(d.responseSample)}</pre></div>
@@ -137,7 +141,7 @@ function listSection(models: DetailModel[]): string {
   const headers = LIST_SHEET_LAYOUT.headers.map((h) => `<th>${esc(h)}</th>`).join('');
   const rows = models
     .map(
-      (d, i) => `<tr>
+      (d, i) => `<tr data-od-id="interface-spec-list-${i}" data-screen-label="${esc(`${d.interfaceName} ${d.interfaceId}`)}">
       <td class="num">${i + 1}</td>
       <td></td>
       <td>${esc(d.interfaceId)}</td>
@@ -164,33 +168,39 @@ export function renderInterfaceSpecHtml(doc: InterfaceSpecDocument): string {
 
   const cover = doc.cover;
   const models = computeModel(doc);
+  const palette = {
+    'si-standard': { accent: '#294766', section: '#daeef3', list: '#ccffcc', border: '#d9dee8', page: '#faf9f7' },
+    compact: { accent: '#334155', section: '#e2e8f0', list: '#e2e8f0', border: '#cbd5e1', page: '#ffffff' },
+    review: { accent: '#8a5d00', section: '#fff2cc', list: '#ffe699', border: '#e0b84f', page: '#fffdf7' },
+  }[doc.templatePreset];
 
   return `<!doctype html><html lang="ko"><head><meta charset="utf-8">
 <title>${esc(cover.docName || COVER_SHEET_LAYOUT.docTypeText)}</title>
 <style>
   :root { color-scheme: light dark; }
-  body { font-family: "Malgun Gothic", system-ui, sans-serif; margin: 0; padding: 24px; background: #faf9f7; color: #1a1916; }
+  body { font-family: "Malgun Gothic", system-ui, sans-serif; margin: 0; padding: 24px; background: ${palette.page}; color: #1a1916; }
   .banner { background: #fdecea; border: 1px solid #f5c6c2; color: #9c2a25; padding: 10px 14px; border-radius: 6px; margin-bottom: 16px; font-size: 13px; }
   .cover { text-align: center; padding: 24px 0 8px; }
   .cover .doc-type { font-size: 28px; font-weight: 700; }
   .cover .doc-name { font-size: 18px; margin-top: 6px; }
   .cover .meta { font-size: 13px; color: #74716b; margin-top: 10px; }
-  h2 { font-size: 18px; border-bottom: 2px solid #294766; padding-bottom: 6px; margin-top: 32px; }
+  h2 { font-size: 18px; border-bottom: 2px solid ${palette.accent}; padding-bottom: 6px; margin-top: 32px; }
   h3 { font-size: 15px; margin: 28px 0 8px; }
   h3 .id { color: #b45a3b; font-weight: 600; font-size: 13px; margin-left: 8px; }
   table { border-collapse: collapse; width: 100%; font-size: 12px; margin: 6px 0 4px; }
-  th, td { border: 1px solid #d9dee8; padding: 4px 8px; text-align: left; vertical-align: top; }
-  thead th, table.fields thead th { background: #daeef3; font-weight: 700; text-align: center; }
-  table.meta th { background: #daeef3; width: 120px; white-space: nowrap; }
+  th, td { border: 1px solid ${palette.border}; padding: 4px 8px; text-align: left; vertical-align: top; }
+  thead th, table.fields thead th { background: ${palette.section}; font-weight: 700; text-align: center; }
+  .list table.fields thead th { background: ${palette.list}; }
+  table.meta th { background: ${palette.section}; width: 120px; white-space: nowrap; }
   .num, .ctr { text-align: center; }
-  .sec-title { background: #daeef3; font-weight: 700; text-align: center; padding: 4px; border: 1px solid #d9dee8; border-bottom: none; margin-top: 14px; }
+  .sec-title { background: ${palette.section}; font-weight: 700; text-align: center; padding: 4px; border: 1px solid ${palette.border}; border-bottom: none; margin-top: 14px; }
   .empty { text-align: center; color: #989590; }
   .samples { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
   .sample-title { font-weight: 700; font-size: 12px; margin-bottom: 4px; }
   pre { background: #f4f5f7; border: 1px solid #e1e5eb; border-radius: 4px; padding: 8px; font-size: 11px; overflow: auto; margin: 0; }
   .detail { border-top: 1px dashed #c9d0da; padding-top: 8px; }
   a { color: #2348b8; }
-</style></head><body>
+</style></head><body data-open-docs-kind="interface-spec">
 ${banner}
 <div class="cover">
   <div class="doc-type">${esc(COVER_SHEET_LAYOUT.docTypeText)}</div>

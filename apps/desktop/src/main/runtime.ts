@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
 import { createHmac, randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
 import { appendFile, mkdir, realpath, stat, writeFile } from "node:fs/promises";
-import { release } from "node:os";
+import { homedir, release } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -11,13 +12,25 @@ import {
   DESKTOP_UPDATE_CHANNELS,
   DESKTOP_UPDATE_MODES,
   DESKTOP_UPDATE_STATES,
+  SIDECAR_MESSAGES,
+  normalizeDesktopSidecarMessage,
+  type DesktopBrowserAutomationInput,
+  type DesktopBrowserAutomationResult,
   type DesktopExportArtifactInput,
   type DesktopExportArtifactResult,
   type DesktopExportPdfInput,
   type DesktopExportPdfResult,
   type DesktopUpdateStatusSnapshot,
 } from "@open-design/sidecar-proto";
-import type { OpenDesignHostActionResult, OpenDesignHostCaptureResult, OpenDesignHostUpdaterActionOptions } from "@open-design/host";
+import type {
+  OpenDesignHostActionResult,
+  OpenDesignHostBrowserAutomationBeginInput,
+  OpenDesignHostBrowserAutomationBeginResult,
+  OpenDesignHostBrowserAutomationLinkInput,
+  OpenDesignHostBrowserAutomationStopResult,
+  OpenDesignHostCaptureResult,
+  OpenDesignHostUpdaterActionOptions,
+} from "@open-design/host";
 
 import { openValidatedDirectory } from "./open-path.js";
 import { exportArtifact as exportArtifactFromHtml } from "./artifact-export.js";
@@ -25,8 +38,12 @@ import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf
 import { SPLASH_VIDEO_DATA_URL } from "./splash-video.js";
 import type { PrintReadyPdfOptions } from "./pdf-export.js";
 import type { DesktopUpdater } from "./updater.js";
+import type { DatabaseBroker } from "./database-broker.js";
+import { createBrowserAutomationService, type BrowserAutomationGuest } from "./browser-automation.js";
 
 const execFileAsync = promisify(execFile);
+const BROWSER_POPUP_EVENT = "od:browser:popup";
+const BROWSER_AUTOMATION_EVENT = "od:browser:automation-event";
 
 /**
  * Result of validating a candidate path before exposing it to a
@@ -233,7 +250,7 @@ const MIN_SPLASH_MS = 2000;
 // While the splash is up, the real web app loads in a hidden main window. We
 // reveal it only once the web bundle reports it has actually mounted (it sets
 // `data-od-app-mounted="1"` on first paint of the real UI), so the user never
-// sees the web's own "Loading Open Docs..." shell flash between the splash and
+// sees the web's own "Loading MonoField..." shell flash between the splash and
 // the app. Poll cadence + a hard ceiling so a missing mount signal can never
 // strand the user on the splash forever.
 const WEB_MOUNT_POLL_MS = 80;
@@ -315,6 +332,7 @@ export type DesktopStatusSnapshot = {
 };
 
 export type DesktopRuntime = {
+  browserAutomation(input: DesktopBrowserAutomationInput): Promise<DesktopBrowserAutomationResult>;
   close(): Promise<void>;
   click(input: DesktopClickInput): Promise<DesktopClickResult>;
   console(): DesktopConsoleResult;
@@ -335,6 +353,7 @@ export type DesktopRuntimeOptions = {
   // re-registration path on `DESKTOP_AUTH_PENDING` that needs the same
   // secret to mint a fresh token after re-handshaking with the daemon.
   desktopAuthSecret?: Buffer | null;
+  databaseBroker?: DatabaseBroker;
   discoverUrl(): Promise<string | null>;
   /**
    * Round-7 (lefarcen P2 @ runtime.ts:336): packaged desktop loads the
@@ -816,7 +835,7 @@ function createPendingHtml(): string {
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Open Docs</title>
+    <title>MonoField</title>
     <style>
       html,
       body {
@@ -994,7 +1013,7 @@ const SPLASH_STAGE_SEQUENCE: readonly SplashBootStage[] = [
 ];
 
 const SPLASH_STAGE_LABELS: Record<SplashBootStage, string> = {
-  starting: "Starting Open Docs",
+  starting: "Starting MonoField",
   engine: "Starting the local engine",
   engineReady: "Local engine ready",
   interface: "Preparing the interface",
@@ -1114,7 +1133,7 @@ export function createSplashWindow(): SplashWindowHandle {
     height: 900,
     resizable: false,
     show: true,
-    title: "Open Docs",
+    title: "MonoField",
     width: 1280,
     webPreferences: {
       contextIsolation: true,
@@ -1224,6 +1243,25 @@ export function isAllowedEmbeddedBrowserUrl(url: string): boolean {
       parsed.protocol === "https:" ||
       (parsed.protocol === "about:" && parsed.pathname === "blank")
     );
+  } catch {
+    return false;
+  }
+}
+
+function isEmbeddedBrowserDestinationUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function isEmbeddedBrowserBootstrapPopupUrl(url: string): boolean {
+  if (url.trim() === "") return true;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "about:" && parsed.pathname === "blank";
   } catch {
     return false;
   }
@@ -1529,15 +1567,38 @@ async function reportRendererCrash(
  */
 async function showDirectoryPickerForSender(
   sender: Electron.WebContents,
+  defaultPath?: string,
 ): Promise<Electron.OpenDialogReturnValue> {
   const parent =
     BrowserWindow.fromWebContents(sender) ?? BrowserWindow.getFocusedWindow();
   const pickerOptions: Electron.OpenDialogOptions = {
+    buttonLabel: "Use as working directory",
+    ...(defaultPath ? { defaultPath } : {}),
     properties: ["openDirectory", "createDirectory"],
+    title: "Select an MonoField working directory",
   };
   return parent
     ? dialog.showOpenDialog(parent, pickerOptions)
     : dialog.showOpenDialog(pickerOptions);
+}
+
+export function resolveWorkingDirectoryPickerDefaultPath(input: {
+  lastSelectedPath?: string;
+  suggestedPath?: string;
+  homePath?: string;
+  pathExists?: (candidate: string) => boolean;
+} = {}): string | undefined {
+  const homePath = input.homePath ?? homedir();
+  const pathExists = input.pathExists ?? existsSync;
+  if (input.suggestedPath && isAbsolute(input.suggestedPath) && pathExists(input.suggestedPath)) {
+    return input.suggestedPath;
+  }
+  if (input.lastSelectedPath && pathExists(input.lastSelectedPath)) {
+    return input.lastSelectedPath;
+  }
+  const desktopPath = join(homePath, "Desktop");
+  if (pathExists(desktopPath)) return desktopPath;
+  return pathExists(homePath) ? homePath : undefined;
 }
 
 export async function createDesktopRuntime(options: DesktopRuntimeOptions): Promise<DesktopRuntime> {
@@ -1556,9 +1617,40 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   ipcMain.removeHandler("shell:open-external");
   ipcMain.removeHandler("shell:open-path");
   ipcMain.removeHandler("browser:clear-data");
+  ipcMain.removeHandler("browser:automation:begin");
+  ipcMain.removeHandler("browser:automation:link");
+  ipcMain.removeHandler("browser:automation:stop");
+  ipcMain.removeHandler("od:database:list");
+  ipcMain.removeHandler("od:database:request");
+  ipcMain.removeHandler("od:database:save");
+  ipcMain.removeHandler("od:database:set-access-policy");
+  ipcMain.removeHandler("od:database:set-read-approval");
+  ipcMain.removeHandler("od:database:test");
+  ipcMain.removeHandler("od:database:remove");
   for (const channel of UPDATER_IPC_CHANNELS) {
     ipcMain.removeHandler(channel);
   }
+
+  // Electron otherwise lets the Windows shell reuse the last directory from
+  // an unrelated native dialog (for example a screenshot/export save). Keep
+  // working-directory navigation in its own history and seed the first pick
+  // from Desktop, so choosing a codebase never appears to open the screenshot
+  // folder by accident.
+  let lastWorkingDirectoryPickerPath: string | undefined;
+  const showWorkingDirectoryPicker = async (
+    sender: Electron.WebContents,
+    suggestedPath?: string,
+  ) => {
+    const defaultPath = resolveWorkingDirectoryPickerDefaultPath({
+      lastSelectedPath: lastWorkingDirectoryPickerPath,
+      suggestedPath,
+    });
+    const result = await showDirectoryPickerForSender(sender, defaultPath);
+    if (!result.canceled && result.filePaths.length > 0) {
+      lastWorkingDirectoryPickerPath = result.filePaths[0];
+    }
+    return result;
+  };
   ipcMain.handle("shell:open-external", async (_event, url: string) => {
     if (!isHttpUrl(url)) return false;
     try {
@@ -1567,6 +1659,58 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     } catch {
       return false;
     }
+  });
+  ipcMain.handle("od:database:list", async () => {
+    if (options.databaseBroker == null) throw new Error("database broker is unavailable");
+    return await options.databaseBroker.list();
+  });
+  ipcMain.handle("od:database:request", async (_event, input: unknown) => {
+    if (options.databaseBroker == null) throw new Error("database broker is unavailable");
+    const message = normalizeDesktopSidecarMessage({ type: SIDECAR_MESSAGES.DATABASE, input });
+    if (message.type !== SIDECAR_MESSAGES.DATABASE || message.input.action === 'mutate') {
+      throw new Error('invalid database read request');
+    }
+    return await options.databaseBroker.execute(message.input);
+  });
+  ipcMain.handle("od:database:save", async (_event, input: unknown) => {
+    if (options.databaseBroker == null || input == null || typeof input !== "object") throw new Error("database broker is unavailable");
+    const value = input as { label?: unknown; connectionString?: unknown; writePolicy?: unknown };
+    if (typeof value.label !== "string" || typeof value.connectionString !== "string") throw new Error("invalid database connection input");
+    if (value.writePolicy != null && value.writePolicy !== 'disabled' && value.writePolicy !== 'approve-each' && value.writePolicy !== 'always') throw new Error('invalid database write policy');
+    return await options.databaseBroker.save({
+      label: value.label,
+      connectionString: value.connectionString,
+      ...(value.writePolicy ? { writePolicy: value.writePolicy } : {}),
+    });
+  });
+  ipcMain.handle("od:database:set-read-approval", async (_event, input: unknown) => {
+    if (options.databaseBroker == null || input == null || typeof input !== "object") throw new Error("database broker is unavailable");
+    const value = input as { connectionId?: unknown; readApproval?: unknown };
+    if (typeof value.connectionId !== "string" || (value.readApproval !== "prompt" && value.readApproval !== "always")) {
+      throw new Error("invalid database read approval input");
+    }
+    return await options.databaseBroker.setReadApproval(value.connectionId, value.readApproval);
+  });
+  ipcMain.handle("od:database:set-access-policy", async (_event, input: unknown) => {
+    if (options.databaseBroker == null || input == null || typeof input !== 'object') throw new Error('database broker is unavailable');
+    const value = input as { connectionId?: unknown; writePolicy?: unknown };
+    if (typeof value.connectionId !== 'string'
+      || (value.writePolicy !== 'disabled' && value.writePolicy !== 'approve-each' && value.writePolicy !== 'always')) {
+      throw new Error('invalid database access policy input');
+    }
+    return await options.databaseBroker.setAccessPolicy(value.connectionId, value.writePolicy);
+  });
+  ipcMain.handle("od:database:test", async (_event, input: unknown) => {
+    if (options.databaseBroker == null || input == null || typeof input !== "object") throw new Error("database broker is unavailable");
+    const value = input as { label?: unknown; connectionString?: unknown };
+    if (typeof value.label !== "string" || typeof value.connectionString !== "string") throw new Error("invalid database connection input");
+    await options.databaseBroker.test({ label: value.label, connectionString: value.connectionString });
+    return { ok: true };
+  });
+  ipcMain.handle("od:database:remove", async (_event, connectionId: unknown) => {
+    if (options.databaseBroker == null || typeof connectionId !== "string") throw new Error("database broker is unavailable");
+    await options.databaseBroker.remove(connectionId);
+    return { ok: true };
   });
   // PR #974: the renderer no longer receives a raw filesystem path from
   // the main process. The previous `dialog:pick-folder` IPC returned the
@@ -1607,7 +1751,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       if (!apiBaseUrl) {
         return { ok: false, reason: "daemon API URL not available" };
       }
-      const result = await showDirectoryPickerForSender(event.sender);
+      const result = await showWorkingDirectoryPicker(event.sender);
       if (result.canceled || result.filePaths.length === 0) {
         return { ok: false, canceled: true };
       }
@@ -1636,7 +1780,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // POST are a single main-process transaction.
   ipcMain.handle(
     "dialog:pick-and-replace-working-dir",
-    async (event, init?: { projectId?: string }) => {
+    async (event, init?: { projectId?: string; suggestedPath?: string }) => {
       if (options.desktopAuthSecret == null) {
         return { ok: false, reason: "desktop auth secret not registered" };
       }
@@ -1650,7 +1794,8 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       if (!apiBaseUrl) {
         return { ok: false, reason: "daemon API URL not available" };
       }
-      const result = await showDirectoryPickerForSender(event.sender);
+      const suggestedPath = typeof init?.suggestedPath === "string" ? init.suggestedPath : undefined;
+      const result = await showWorkingDirectoryPicker(event.sender, suggestedPath);
       if (result.canceled || result.filePaths.length === 0) {
         return { ok: false, canceled: true };
       }
@@ -1673,11 +1818,12 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // spends the token on POST /api/projects/:id/working-dir once the project
   // exists. Main remains the single source of filesystem paths crossing into
   // the daemon (same trust boundary as dialog:pick-and-replace-working-dir).
-  ipcMain.handle("dialog:pick-working-dir", async (event) => {
+  ipcMain.handle("dialog:pick-working-dir", async (event, init?: { suggestedPath?: string }) => {
     if (options.desktopAuthSecret == null) {
       return { ok: false, reason: "desktop auth secret not registered" };
     }
-    const result = await showDirectoryPickerForSender(event.sender);
+    const suggestedPath = typeof init?.suggestedPath === "string" ? init.suggestedPath : undefined;
+    const result = await showWorkingDirectoryPicker(event.sender, suggestedPath);
     if (result.canceled || result.filePaths.length === 0) {
       return { ok: false, canceled: true };
     }
@@ -1754,7 +1900,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
 
   const consoleEntries: DesktopConsoleEntry[] = [];
   const petWindow = createDesktopPetWindow(preloadPath, options.osLocale);
-  const windowTitle = options.windowTitle ?? "Open Docs";
+  const windowTitle = options.windowTitle ?? "MonoField";
   const window = new BrowserWindow({
     height: 900,
     icon: resolveDesktopIconPath(),
@@ -1767,7 +1913,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     // Starts hidden: the splash window is what the user sees while the real web
     // app loads in here. We reveal this window only once the app has actually
     // mounted (see `revealWhenReady` below), so there is never a flash of the
-    // web's own "Loading Open Docs..." shell.
+    // web's own "Loading MonoField..." shell.
     show: false,
     title: windowTitle,
     autoHideMenuBar: true,
@@ -1868,9 +2014,16 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   const unsubscribeUpdater = options.updater?.subscribe(() => sendUpdaterStatus()) ?? (() => undefined);
   const requireMainWindowSender = (event: Electron.IpcMainInvokeEvent): void => {
     if (event.sender !== window.webContents) {
-      throw new Error("host IPC is only available to the main Open Docs window");
+      throw new Error("host IPC is only available to the main MonoField window");
     }
   };
+  const attachedBrowserGuests = new Map<number, BrowserAutomationGuest>();
+  const browserAutomation = createBrowserAutomationService({
+    emit: (automationEvent) => {
+      if (!window.isDestroyed()) window.webContents.send(BROWSER_AUTOMATION_EVENT, automationEvent);
+    },
+    getGuest: (guestWebContentsId) => attachedBrowserGuests.get(guestWebContentsId) ?? null,
+  });
   window.webContents.on("will-attach-webview", (event, webPreferences, params) => {
     const src = typeof params.src === "string" ? params.src : "";
     const partition = typeof params.partition === "string" ? params.partition : "";
@@ -1890,6 +2043,14 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // `loadURL("file:///etc/passwd")` after the first http(s) load and exfiltrate
   // its pixels through the host capture bridge.
   window.webContents.on("did-attach-webview", (_event, guestWebContents) => {
+    attachedBrowserGuests.set(guestWebContents.id, guestWebContents);
+    guestWebContents.once("destroyed", () => {
+      attachedBrowserGuests.delete(guestWebContents.id);
+      browserAutomation.revokeGuest(guestWebContents.id);
+    });
+    guestWebContents.on("did-navigate", (_navigationEvent, url) => {
+      browserAutomation.handleGuestNavigation(guestWebContents.id, url);
+    });
     const blockDisallowed = (navEvent: Electron.Event, url: string): void => {
       if (!isAllowedEmbeddedBrowserUrl(url)) {
         navEvent.preventDefault();
@@ -1897,7 +2058,143 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     };
     guestWebContents.on("will-navigate", blockDisallowed);
     guestWebContents.on("will-redirect", blockDisallowed);
-    guestWebContents.setWindowOpenHandler(() => ({ action: "deny" }));
+    guestWebContents.on("did-create-window", (childWindow, details) => {
+      // Some authentication portals synchronously create an empty popup and
+      // assign its destination afterwards (`const w = window.open('');
+      // w.location = ...`). Denying the about:blank bootstrap breaks that
+      // common flow before Electron ever exposes the real URL. Keep the child
+      // hidden and isolated, intercept its first http(s) navigation, relay that
+      // destination to the trusted renderer, then destroy the bootstrap.
+      if (!isEmbeddedBrowserBootstrapPopupUrl(details.url)) {
+        childWindow.destroy();
+        return;
+      }
+      let relayed = false;
+      const relayDestination = (navEvent: Electron.Event, url: string): void => {
+        navEvent.preventDefault();
+        if (relayed || !isEmbeddedBrowserDestinationUrl(url)) return;
+        relayed = true;
+        if (!window.isDestroyed()) {
+          window.webContents.send(BROWSER_POPUP_EVENT, {
+            guestWebContentsId: guestWebContents.id,
+            url,
+          });
+        }
+        if (!childWindow.isDestroyed()) childWindow.destroy();
+      };
+      childWindow.webContents.on("will-navigate", relayDestination);
+      childWindow.webContents.on("will-redirect", relayDestination);
+      childWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+      const timeout = setTimeout(() => {
+        if (!childWindow.isDestroyed()) childWindow.destroy();
+      }, 15_000);
+      childWindow.once("closed", () => clearTimeout(timeout));
+    });
+    guestWebContents.setWindowOpenHandler(({ url }) => {
+      // A page opened with target=_blank/window.open stays inside MonoField as
+      // a new workspace Browser tab. The guest never receives a child window:
+      // we validate the URL in the privileged process, notify only the trusted
+      // parent renderer, and deny the Electron popup itself.
+      if (isEmbeddedBrowserDestinationUrl(url)) {
+        window.webContents.send(BROWSER_POPUP_EVENT, {
+          guestWebContentsId: guestWebContents.id,
+          url,
+        });
+        return { action: "deny" };
+      }
+      if (isEmbeddedBrowserBootstrapPopupUrl(url)) {
+        return {
+          action: "allow",
+          overrideBrowserWindowOptions: {
+            show: false,
+            webPreferences: {
+              contextIsolation: true,
+              nodeIntegration: false,
+              sandbox: true,
+              partition: DESIGN_BROWSER_PARTITION,
+            },
+          },
+        };
+      }
+      return { action: "deny" };
+    });
+  });
+  ipcMain.handle("browser:automation:begin", async (
+    event,
+    rawInput: unknown,
+  ): Promise<OpenDesignHostBrowserAutomationBeginResult> => {
+    requireMainWindowSender(event);
+    if (rawInput == null || typeof rawInput !== "object") return { ok: false, reason: "Invalid browser automation request" };
+    const input = rawInput as Partial<OpenDesignHostBrowserAutomationBeginInput>;
+    if (
+      typeof input.guestWebContentsId !== "number"
+      || typeof input.origin !== "string"
+      || typeof input.projectId !== "string"
+      || (input.projectDir != null && typeof input.projectDir !== "string")
+    ) {
+      return { ok: false, reason: "Invalid browser automation request" };
+    }
+    let requestedOrigin: string;
+    try {
+      requestedOrigin = new URL(input.origin).origin;
+    } catch {
+      return { ok: false, reason: "Invalid browser automation origin" };
+    }
+    const confirmation = await dialog.showMessageBox(window, {
+      buttons: ["Cancel", "Allow until stopped"],
+      cancelId: 0,
+      defaultId: 0,
+      detail: [
+        `Origin: ${requestedOrigin}`,
+        "Allowed: bounded page reads, same-origin navigation, a visible native pointer, clicks, non-sensitive typing, and scrolling.",
+        "MonoField uses DOM structure to find safe targets, then uses pointer input when possible and a bounded DOM fallback when necessary.",
+        "This permission remains active until you stop it, close the tab, leave the approved origin, or quit MonoField.",
+        "Blocked: arbitrary JavaScript, cross-origin navigation, passwords, one-time codes, tokens, and payment-card fields.",
+      ].join("\n"),
+      message: "Allow agent automation for this in-app browser tab?",
+      noLink: true,
+      title: "MonoField browser permission",
+      type: "warning",
+    });
+    if (confirmation.response !== 1) return { ok: false, reason: "Browser automation approval was canceled" };
+    return browserAutomation.begin({
+      guestWebContentsId: input.guestWebContentsId,
+      origin: requestedOrigin,
+      projectId: input.projectId,
+      projectDir: input.projectDir ?? null,
+    });
+  });
+  ipcMain.handle("browser:automation:link", async (
+    event,
+    rawInput: unknown,
+  ): Promise<OpenDesignHostBrowserAutomationBeginResult> => {
+    requireMainWindowSender(event);
+    if (rawInput == null || typeof rawInput !== "object") return { ok: false, reason: "Invalid browser automation link request" };
+    const input = rawInput as Partial<OpenDesignHostBrowserAutomationLinkInput>;
+    if (
+      typeof input.guestWebContentsId !== "number"
+      || typeof input.origin !== "string"
+      || typeof input.parentSessionId !== "string"
+      || typeof input.projectId !== "string"
+      || (input.projectDir != null && typeof input.projectDir !== "string")
+    ) {
+      return { ok: false, reason: "Invalid browser automation link request" };
+    }
+    return browserAutomation.link({
+      guestWebContentsId: input.guestWebContentsId,
+      origin: input.origin,
+      parentSessionId: input.parentSessionId,
+      projectDir: input.projectDir ?? null,
+      projectId: input.projectId,
+    });
+  });
+  ipcMain.handle("browser:automation:stop", async (
+    event,
+    sessionId: unknown,
+  ): Promise<OpenDesignHostBrowserAutomationStopResult> => {
+    requireMainWindowSender(event);
+    if (typeof sessionId !== "string") return { ok: false, reason: "Invalid browser automation session" };
+    return browserAutomation.stop(sessionId);
   });
   ipcMain.handle("browser:clear-data", async (event, rawOptions: unknown): Promise<OpenDesignHostActionResult> => {
     requireMainWindowSender(event);
@@ -2148,7 +2445,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
 
   // Hold the splash until BOTH (a) the web bundle reports it has mounted — it
   // sets `data-od-app-mounted="1"` on first paint of the real UI — so we never
-  // reveal the web's own dark "Loading Open Docs..." shell, and (b) the splash
+  // reveal the web's own dark "Loading MonoField..." shell, and (b) the splash
   // has been up at least MIN_SPLASH_MS so the brand clip plays through. A hard
   // ceiling guarantees the user is never stranded on the splash if the mount
   // signal never arrives.
@@ -2222,8 +2519,18 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         pendingUrl = null;
         const nextPetUrl = desktopPetUrl(url);
         if (!petWindow.isDestroyed() && nextPetUrl !== currentPetUrl) {
-          await petWindow.loadURL(nextPetUrl);
-          currentPetUrl = nextPetUrl;
+          // The desktop pet is an optional companion surface. A route failure
+          // here must never prevent the real MonoField window from leaving the
+          // splash screen (for example when a web host rejects /desktop-pet/).
+          // Keep its load independent of the main window's successful load;
+          // on failure it stays hidden and the next URL change can retry.
+          void petWindow.loadURL(nextPetUrl)
+            .then(() => {
+              currentPetUrl = nextPetUrl;
+            })
+            .catch((error: unknown) => {
+              console.warn("[open-docs desktop] optional desktop pet failed to load", error);
+            });
         }
         if (!revealed) {
           void revealWhenReady();
@@ -2246,6 +2553,9 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   void tick();
 
   return {
+    async browserAutomation(input) {
+      return await browserAutomation.execute(input);
+    },
     async click(input) {
       if (window.isDestroyed()) return { clicked: false, found: false };
       const selector = JSON.stringify(input.selector);
@@ -2266,11 +2576,23 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         timer = null;
       }
       unsubscribeUpdater();
+      browserAutomation.stopAll();
+      attachedBrowserGuests.clear();
       ipcMain.removeAllListeners("desktop-pet:set-visible");
       for (const channel of UPDATER_IPC_CHANNELS) {
         ipcMain.removeHandler(channel);
       }
       ipcMain.removeHandler("browser:clear-data");
+      ipcMain.removeHandler("browser:automation:begin");
+      ipcMain.removeHandler("browser:automation:link");
+      ipcMain.removeHandler("browser:automation:stop");
+      ipcMain.removeHandler("od:database:list");
+      ipcMain.removeHandler("od:database:request");
+      ipcMain.removeHandler("od:database:save");
+      ipcMain.removeHandler("od:database:set-access-policy");
+      ipcMain.removeHandler("od:database:set-read-approval");
+      ipcMain.removeHandler("od:database:test");
+      ipcMain.removeHandler("od:database:remove");
       if (splash != null && !splash.isDestroyed()) splash.close();
       if (!petWindow.isDestroyed()) petWindow.close();
       if (!window.isDestroyed()) window.close();

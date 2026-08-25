@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react';
 import type { OpenDocsGithubRepoResponse } from '@open-design/contracts';
 
 const API = '/api/github/open-docs';
-const REPO = 'https://github.com/jhy0285/open-docs';
+const REPO = 'https://github.com/jhy0285/monofield';
 const LS_KEY = 'open-docs:gh-stars:v2';
 const FAILURE_LS_KEY = 'open-docs:gh-stars:last-failure:v2';
 export const GITHUB_STARS_FALLBACK_LABEL = '-';

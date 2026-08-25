@@ -293,7 +293,7 @@ function renderConnectorConnectedHtml(connectorId: string): string {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${connectorLabelHtml} connected · Open Docs</title>
+    <title>${connectorLabelHtml} connected · MonoField</title>
     <style>
       :root {
         --bg: #faf9f7;
@@ -446,9 +446,9 @@ function renderConnectorConnectedHtml(connectorId: string): string {
   </head>
   <body>
     <main aria-labelledby="callback-title">
-      <div class="chrome" aria-label="Open Docs">
+      <div class="chrome" aria-label="MonoField">
         <span class="brand-mark" aria-hidden="true">OD</span>
-        <span class="brand-title">Open Docs</span>
+        <span class="brand-title">MonoField</span>
       </div>
       <section class="content">
         <div class="status-icon" aria-hidden="true">
@@ -458,7 +458,7 @@ function renderConnectorConnectedHtml(connectorId: string): string {
         </div>
         <div>
           <h1 id="callback-title">${connectorLabelHtml} connected</h1>
-          <p>Your connector is ready to use in Open Docs.</p>
+          <p>Your connector is ready to use in MonoField.</p>
         </div>
         <div class="summary" role="status">
           <span class="summary-label">
@@ -480,7 +480,7 @@ function renderConnectorConnectedHtml(connectorId: string): string {
         const hint = document.getElementById('auto-close-hint');
         function showManualCloseHint() {
           closeButton.textContent = 'Close this tab manually';
-          hint.textContent = 'Your browser blocked automatic closing. You can close this tab and return to Open Docs.';
+          hint.textContent = 'Your browser blocked automatic closing. You can close this tab and return to MonoField.';
         }
         function hasLiveOpener() {
           try {
@@ -513,10 +513,10 @@ function renderConnectorConnectedHtml(connectorId: string): string {
             window.opener.postMessage(message, '*');
             window.setTimeout(requestClose, 900);
           } else {
-            hint.textContent = 'You can close this tab and return to Open Docs.';
+            hint.textContent = 'You can close this tab and return to MonoField.';
           }
         } catch {
-          hint.textContent = 'You can close this tab and return to Open Docs.';
+          hint.textContent = 'You can close this tab and return to MonoField.';
         }
         closeButton.addEventListener('click', requestClose);
       })();

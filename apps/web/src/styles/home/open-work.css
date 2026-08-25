@@ -1,0 +1,298 @@
+/* Open Work is an editorial result browser, not another plugin/template wall.
+   The home entry stays deliberately small; the dedicated route owns previews. */
+
+.home-open-work-entry {
+  display: grid;
+  grid-template-columns: minmax(92px, 0.3fr) minmax(280px, 1fr) auto;
+  align-items: center;
+  gap: 28px;
+  margin-top: 4px;
+  padding: 26px 2px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.home-open-work-entry__label,
+.open-work-view__kicker {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.18em;
+}
+
+.home-open-work-entry__copy h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: clamp(19px, 2vw, 26px);
+  font-weight: 570;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+}
+
+.home-open-work-entry__copy p {
+  max-width: 660px;
+  margin: 7px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.home-open-work-entry__action,
+.open-work-view__manage {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--text-strong);
+  color: var(--bg);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 140ms var(--ease-out), opacity 140ms var(--ease-out);
+}
+
+.home-open-work-entry__action:hover,
+.open-work-view__manage:hover {
+  opacity: 0.82;
+  transform: translateY(-1px);
+}
+
+.home-open-work-entry__action:focus-visible,
+.open-work-view__manage:focus-visible {
+  outline: 2px solid var(--text-strong);
+  outline-offset: 3px;
+}
+
+.open-work-view {
+  width: min(100%, 1280px);
+  margin: 0 auto;
+  padding: clamp(18px, 3vw, 44px) clamp(2px, 1.5vw, 18px) 84px;
+}
+
+.open-work-view__hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 40px;
+  padding: clamp(18px, 3vw, 40px) 0 clamp(34px, 5vw, 68px);
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.open-work-view__hero-copy {
+  max-width: 880px;
+}
+
+.open-work-view__kicker {
+  margin-bottom: 22px;
+}
+
+.open-work-view__hero h1 {
+  max-width: 820px;
+  margin: 0;
+  color: var(--text-strong);
+  font-size: clamp(42px, 6vw, 82px);
+  font-weight: 520;
+  line-height: 0.98;
+  letter-spacing: -0.06em;
+  text-wrap: balance;
+}
+
+.open-work-view__lede {
+  max-width: 760px;
+  margin: 26px 0 0;
+  color: var(--text-muted);
+  font-size: clamp(15px, 1.5vw, 19px);
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.open-work-view__manage {
+  margin-bottom: 3px;
+}
+
+.open-work-view__manifest {
+  margin: 0;
+  padding: 0;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.open-work-view__manifest > div {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.28fr) minmax(0, 1fr);
+  gap: 26px;
+  padding: 17px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.open-work-view__manifest > div:last-child {
+  border-bottom: 0;
+}
+
+.open-work-view__manifest dt,
+.open-work-view__manifest dd {
+  margin: 0;
+}
+
+.open-work-view__manifest dt {
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.open-work-view__manifest dd {
+  color: var(--text-strong);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.open-work-view__manifest-row--private dd {
+  color: var(--text-muted);
+}
+
+.open-work-view__catalog {
+  padding-top: clamp(42px, 7vw, 82px);
+}
+
+.open-work-view .plugins-home__head {
+  align-items: end;
+  margin-bottom: 30px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.open-work-view .plugins-home__title {
+  font-size: clamp(25px, 3vw, 38px);
+  font-weight: 550;
+  letter-spacing: -0.04em;
+}
+
+.open-work-view .plugins-home__subtitle {
+  max-width: 700px;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.open-work-view .plugins-home__facets {
+  margin-bottom: 34px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border-soft);
+  background: transparent;
+}
+
+.open-work-view .plugins-home__grid--gallery {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 52px 24px;
+}
+
+.open-work-view .plugins-home__card--gallery {
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+  contain-intrinsic-size: 420px 360px;
+}
+
+.open-work-view .plugins-home__card--gallery:hover {
+  border-color: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.open-work-view .plugins-home__card--gallery:first-child {
+  grid-column: 1 / -1;
+}
+
+.open-work-view .plugins-home__gallery-bar {
+  order: 2;
+  gap: 0;
+  padding: 13px 1px 0;
+  border: 0;
+  background: transparent;
+}
+
+.open-work-view .plugins-home__gallery-dot {
+  display: none;
+}
+
+.open-work-view .plugins-home__gallery-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.open-work-view .plugins-home__gallery-name:hover {
+  color: var(--text-muted);
+}
+
+.open-work-view .plugins-home__gallery-frame {
+  order: 1;
+  height: 340px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+
+.open-work-view .plugins-home__card--gallery:first-child .plugins-home__gallery-frame {
+  height: min(54vw, 540px);
+}
+
+.open-work-view .plugins-home__card--gallery[data-od-mode="deck"] .plugins-home__gallery-frame {
+  height: auto;
+}
+
+@media (max-width: 760px) {
+  .home-open-work-entry {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+
+  .home-open-work-entry__action {
+    justify-self: start;
+  }
+
+  .open-work-view__hero {
+    grid-template-columns: 1fr;
+    align-items: start;
+    gap: 24px;
+  }
+
+  .open-work-view__manage {
+    justify-self: start;
+  }
+
+  .open-work-view__manifest > div {
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
+
+  .open-work-view .plugins-home__grid--gallery {
+    grid-template-columns: 1fr;
+  }
+
+  .open-work-view .plugins-home__card--gallery:first-child {
+    grid-column: auto;
+  }
+
+  .open-work-view .plugins-home__gallery-frame,
+  .open-work-view .plugins-home__card--gallery:first-child .plugins-home__gallery-frame {
+    height: 300px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-open-work-entry__action,
+  .open-work-view__manage {
+    transition: none;
+  }
+}

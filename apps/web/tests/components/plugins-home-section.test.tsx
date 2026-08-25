@@ -154,11 +154,11 @@ describe('PluginsHomeSection (template gallery)', () => {
 });
 
 describe('PluginsHomeSection (category bar)', () => {
-  it('frames the home shelf as a template gallery and can jump to the full library', () => {
+  it('frames the management shelf as a workflow library and can jump to the full library', () => {
     const onBrowseRegistry = vi.fn();
     renderSection(sample, { onBrowseRegistry });
 
-    expect(screen.getByText('Template Gallery')).toBeTruthy();
+    expect(screen.getByText('Workflow library')).toBeTruthy();
     fireEvent.click(screen.getByTestId('plugins-home-browse-registry'));
     expect(onBrowseRegistry).toHaveBeenCalledTimes(1);
   });
@@ -269,7 +269,7 @@ describe('PluginsHomeSection (category bar)', () => {
     fireEvent.click(screen.getByTestId('plugins-home-pill-subcategory-video-data-explainers'));
 
     expect(screen.queryByRole('list')).toBeNull();
-    expect(screen.getByText(/No templates match the current filters/i)).toBeTruthy();
+    expect(screen.getByText(/No workflows match the current filters/i)).toBeTruthy();
     expect(screen.queryByTestId('plugins-home-contribution-card')).toBeNull();
   });
 

@@ -1,0 +1,215 @@
+.root {
+  gap: 10px;
+}
+
+.scopeTabs,
+.versionList,
+.uploadRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.scopeTabs {
+  border-bottom: 1px solid var(--border);
+}
+
+.savedHeader,
+.uploadHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.savedTitle {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.scopeButton,
+.scopeActive,
+.versionButton,
+.versionActive {
+  min-height: 28px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.scopeButton,
+.scopeActive {
+  padding: 0 2px;
+}
+
+.scopeActive {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.scopeButton:disabled,
+.scopeActive:disabled,
+.versionButton:disabled,
+.versionActive:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.libraryDetail,
+.uploadArea {
+  display: grid;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.uploadArea {
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.targetChoices {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.targetChoice,
+.targetChoiceActive {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  width: fit-content;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.targetChoiceActive {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.targetChoice input,
+.targetChoiceActive input {
+  margin: 0;
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+}
+
+.cancelUpload {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.cancelUpload:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.versionButton,
+.versionActive {
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.versionActive {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+}
+
+.previewTableWrap {
+  max-height: 172px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+}
+
+.previewTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.previewTable th,
+.previewTable td {
+  max-width: 190px;
+  padding: 5px 7px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.previewTable th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-subtle);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.previewTable tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.nameLabel {
+  display: grid;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.nameLabel input {
+  min-width: 0;
+  font: inherit;
+}
+
+.uploadRow input[type='file'] {
+  min-width: 0;
+  max-width: 100%;
+  font-size: 12px;
+}
+
+.status,
+.snapshotNote {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
+  .uploadRow {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

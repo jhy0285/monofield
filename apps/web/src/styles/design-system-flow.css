@@ -2392,7 +2392,7 @@ a.ds-source-link-open:focus-visible {
   border-color: var(--border-strong);
 }
 .ws-focus-toggle:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 .ws-tab-action {

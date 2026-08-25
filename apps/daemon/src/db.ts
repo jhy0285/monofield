@@ -13,11 +13,12 @@ import { migrateCritique } from './critique/persistence.js';
 import { migrateMediaTasks } from './media/tasks.js';
 import { migrateLibrary } from './library-store.js';
 import { migratePlugins } from './plugins/persistence.js';
+import { migrateDictionaries } from './dictionaries/store.js';
 
 type SqliteDb = Database.Database;
 type DbRow = Record<string, any>;
 type JsonObject = Record<string, unknown>;
-type ChatSessionMode = 'design' | 'chat';
+type ChatSessionMode = 'docs' | 'chat';
 
 let dbInstance: SqliteDb | null = null;
 let dbFile: string | null = null;
@@ -78,7 +79,7 @@ function migrate(db: SqliteDb): void {
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL,
       title TEXT,
-      session_mode TEXT NOT NULL DEFAULT 'design',
+      session_mode TEXT NOT NULL DEFAULT 'docs',
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
       FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
@@ -251,7 +252,7 @@ function migrate(db: SqliteDb): void {
   }
   const conversationCols = db.prepare(`PRAGMA table_info(conversations)`).all() as DbRow[];
   if (!conversationCols.some((c: DbRow) => c.name === 'session_mode')) {
-    db.exec(`ALTER TABLE conversations ADD COLUMN session_mode TEXT NOT NULL DEFAULT 'design'`);
+    db.exec(`ALTER TABLE conversations ADD COLUMN session_mode TEXT NOT NULL DEFAULT 'docs'`);
   }
   const messageCols = db.prepare(`PRAGMA table_info(messages)`).all() as DbRow[];
   if (!messageCols.some((c: DbRow) => c.name === 'agent_id')) {
@@ -281,6 +282,10 @@ function migrate(db: SqliteDb): void {
   if (!messageCols.some((c: DbRow) => c.name === 'session_mode')) {
     db.exec(`ALTER TABLE messages ADD COLUMN session_mode TEXT`);
   }
+  // `design` was the original wire value. Keep accepting it at API
+  // boundaries, but persist the user-facing `docs` name from now on.
+  db.exec(`UPDATE conversations SET session_mode = 'docs' WHERE session_mode = 'design'`);
+  db.exec(`UPDATE messages SET session_mode = 'docs' WHERE session_mode = 'design'`);
   if (!messageCols.some((c: DbRow) => c.name === 'run_context_json')) {
     db.exec(`ALTER TABLE messages ADD COLUMN run_context_json TEXT`);
   }
@@ -352,6 +357,7 @@ function migrate(db: SqliteDb): void {
   migrateMediaTasks(db);
   migrateLibrary(db);
   migratePlugins(db);
+  migrateDictionaries(db);
 }
 
 function migratePreviewCommentsSlideKey(db: SqliteDb): void {
@@ -940,7 +946,7 @@ function normalizeConversation(r: DbRow) {
 }
 
 export function normalizeConversationSessionMode(value: unknown): ChatSessionMode {
-  return value === 'chat' ? 'chat' : 'design';
+  return value === 'chat' ? 'chat' : 'docs';
 }
 
 function numberProperty(key: string, value: unknown) {
@@ -1697,11 +1703,11 @@ function normalizeMessage(row: DbRow) {
 }
 
 function normalizeMessageSessionMode(value: unknown): ChatSessionMode | undefined {
-  return value === 'chat' || value === 'design' ? value : undefined;
+  return value === 'chat' ? 'chat' : value === 'docs' || value === 'design' ? 'docs' : undefined;
 }
 
 function normalizeMessageSessionModeForStorage(value: unknown): ChatSessionMode | null {
-  return value === 'chat' || value === 'design' ? value : null;
+  return value === 'chat' ? 'chat' : value === 'docs' || value === 'design' ? 'docs' : null;
 }
 
 function parseJsonOrUndef(s: unknown): any {

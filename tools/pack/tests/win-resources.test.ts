@@ -23,6 +23,14 @@ async function writeFakeOpenCodeCompanion(
 }
 
 async function createWorkspaceFixture(workspaceRoot: string): Promise<void> {
+  await mkdir(workspaceRoot, { recursive: true });
+  await writeFile(join(workspaceRoot, "LICENSE"), "license one\n", "utf8");
+  await writeFile(join(workspaceRoot, "NOTICE"), "notice text\n", "utf8");
+  await writeFile(
+    join(workspaceRoot, "THIRD_PARTY_NOTICES.md"),
+    "third-party notices\n",
+    "utf8",
+  );
   await mkdir(join(workspaceRoot, "skills", "sample"), { recursive: true });
   await mkdir(join(workspaceRoot, "design-templates", "orbit-general"), {
     recursive: true,
@@ -68,6 +76,44 @@ async function createWorkspaceFixture(workspaceRoot: string): Promise<void> {
 }
 
 describe("prepareResourceTree", () => {
+  it("copies legal notices and invalidates the Windows cache when they change", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-legal-resources-"));
+    const workspaceRoot = join(root, "workspace");
+    const resourceRoot = join(root, "materialized", "open-design");
+    const cache = new ToolPackCache(join(root, "cache"));
+    const config = { workspaceRoot } as ToolPackConfig;
+    const paths = { resourceRoot } as WinPaths;
+
+    try {
+      await createWorkspaceFixture(workspaceRoot);
+
+      await prepareResourceTree(config, paths, cache, { materialize: true });
+
+      await expect(readFile(join(resourceRoot, "LICENSE"), "utf8")).resolves.toBe(
+        "license one\n",
+      );
+      await expect(readFile(join(resourceRoot, "NOTICE"), "utf8")).resolves.toBe(
+        "notice text\n",
+      );
+      await expect(
+        readFile(join(resourceRoot, "THIRD_PARTY_NOTICES.md"), "utf8"),
+      ).resolves.toBe("third-party notices\n");
+
+      await writeFile(join(workspaceRoot, "LICENSE"), "license two\n", "utf8");
+      await prepareResourceTree(config, paths, cache, { materialize: true });
+
+      await expect(readFile(join(resourceRoot, "LICENSE"), "utf8")).resolves.toBe(
+        "license two\n",
+      );
+      expect(cache.report().entries.map((entry) => entry.status)).toEqual([
+        "miss",
+        "miss",
+      ]);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  }, RESOURCE_TREE_CACHE_TEST_TIMEOUT_MS);
+
   it("invalidates the Windows resource tree cache when design templates change", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-win-resources-"));
     const workspaceRoot = join(root, "workspace");

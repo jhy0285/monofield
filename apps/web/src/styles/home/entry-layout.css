@@ -1,4 +1,4 @@
-﻿/* ============================================================
+/* ============================================================
    Entry layout ??header-less variant
    - Single-row shell (`entry-shell--no-header`)
    - Left icon-only nav rail (`entry-nav-rail`)
@@ -142,7 +142,7 @@
   color: var(--text-strong, #111);
 }
 .entry-nav-rail__collapse:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 
@@ -177,7 +177,7 @@
   color: var(--text-strong, #111);
 }
 .entry-rail-toggle:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 /* Hide the topbar toggle the instant the rail docks ??a fade here would
@@ -606,12 +606,11 @@
   transform: scale(0.96);
 }
 .entry-nav-rail__logo:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
-/* The logo doubles as the Home destination; when the home view is
-   active it gets the same accent treatment as a primary nav button
-   so users still see "you are here" without a dedicated Home icon. */
+/* The MonoField file mark doubles as the Home destination, so there is no
+   second generic house icon competing with the product identity. */
 .entry-nav-rail__logo.is-active {
   background: transparent;
   border-color: transparent;
@@ -662,7 +661,7 @@
   border-color: color-mix(in srgb, var(--accent) 12%, var(--bg-panel));
 }
 .entry-nav-rail__btn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 
@@ -1210,7 +1209,7 @@
   border-color: var(--border-strong);
 }
 .inline-switcher__chip:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 .inline-switcher__chip[aria-expanded='true'] {
@@ -1610,7 +1609,7 @@
   cursor: pointer;
 }
 .inline-switcher__select:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
   border-color: var(--accent);
 }
@@ -1850,7 +1849,7 @@
 }
 
 .onboarding-cloud__primary:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -2286,7 +2285,7 @@
 .onboarding-view__ghost:focus-visible,
 .onboarding-view__steps li button:focus-visible,
 .onboarding-view__card:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -2553,7 +2552,7 @@
 .onboarding-view__mini-button:focus-visible,
 .onboarding-view__field-row button:focus-visible,
 .onboarding-view__protocol-strip button:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -3427,7 +3426,7 @@
 }
 
 .onboarding-view__select-trigger:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -3569,7 +3568,7 @@
 }
 
 .onboarding-view__select-option:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -1px;
 }
 
@@ -3862,7 +3861,7 @@
   transform: scale(0.98);
 }
 .entry-star-badge:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 .entry-star-badge__icon {

@@ -5,12 +5,25 @@ import { createRef, type ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const trackChatPanelClickMock = vi.hoisted(() => vi.fn());
+const hostMocks = vi.hoisted(() => ({
+  isOpenDesignHostAvailable: vi.fn(() => false),
+  pickAndReplaceHostProjectWorkingDir: vi.fn(),
+}));
 
 vi.mock('../../src/analytics/events', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/analytics/events')>();
   return {
     ...actual,
     trackChatPanelClick: trackChatPanelClickMock,
+  };
+});
+
+vi.mock('@open-design/host', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@open-design/host')>();
+  return {
+    ...actual,
+    isOpenDesignHostAvailable: hostMocks.isOpenDesignHostAvailable,
+    pickAndReplaceHostProjectWorkingDir: hostMocks.pickAndReplaceHostProjectWorkingDir,
   };
 });
 
@@ -128,6 +141,7 @@ let fetchMock: ReturnType<typeof vi.fn>;
 let plugins = [COMMUNITY_PLUGIN, USER_PLUGIN];
 let skills = [SKILL];
 let servers = [MCP_SERVER];
+let recentDirs: string[] = [];
 
 function composerElement(
   overrides: Partial<ComponentProps<typeof ChatComposer>> = {},
@@ -178,10 +192,19 @@ function stagedPluginChip(): Element | null {
 
 beforeEach(() => {
   trackChatPanelClickMock.mockClear();
+  hostMocks.isOpenDesignHostAvailable.mockReturnValue(false);
+  hostMocks.pickAndReplaceHostProjectWorkingDir.mockReset();
   plugins = [COMMUNITY_PLUGIN, USER_PLUGIN];
   skills = [SKILL];
   servers = [MCP_SERVER];
+  recentDirs = [];
   fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/recent-dirs') {
+      return new Response(JSON.stringify({ dirs: recentDirs }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
     if (url === '/api/mcp/servers') {
       return new Response(JSON.stringify({ servers, templates: [] }), {
         status: 200,
@@ -207,7 +230,29 @@ beforeEach(() => {
       });
     }
     if (url === '/api/projects/project-1' && init?.method === 'PATCH') {
-      return new Response(JSON.stringify({ project: { id: 'project-1', skillId: SKILL.id } }), {
+      const body = typeof init.body === 'string' ? JSON.parse(init.body) as { metadata?: unknown } : {};
+      return new Response(JSON.stringify({ project: { id: 'project-1', skillId: SKILL.id, metadata: body.metadata } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (url === '/api/projects/project-1/working-dir' && init?.method === 'POST') {
+      const body = typeof init.body === 'string' ? JSON.parse(init.body) as { baseDir?: string } : {};
+      const baseDir = body.baseDir ?? '';
+      return new Response(JSON.stringify({
+        baseDir,
+        entryFile: 'src/main.ts',
+        project: {
+          id: 'project-1',
+          skillId: SKILL.id,
+          metadata: {
+            kind: 'interface-spec',
+            baseDir,
+            importedFrom: 'folder',
+            entryFile: 'src/main.ts',
+          },
+        },
+      }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
@@ -230,6 +275,98 @@ afterEach(() => {
 });
 
 describe('ChatComposer context pickers', () => {
+  it('sends an explicit no-codebase interface request without opening the folder gate', async () => {
+    const onSend = vi.fn();
+    renderComposer({
+      onSend,
+      projectMetadata: { kind: 'interface-spec', linkedDirs: [] },
+    });
+    await flushMounts();
+
+    const prompt = '코드베이스 없이 주문 생성 인터페이스 명세서를 만들어줘. POST /api/orders';
+    await typeAndSettle(prompt);
+    fireEvent.click(screen.getByTestId('chat-send'));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    expect(onSend.mock.calls[0]?.[0]).toBe(prompt);
+  });
+
+  it('lets an unspecified interface request reach the source-mode question', async () => {
+    const onSend = vi.fn();
+    renderComposer({
+      onSend,
+      projectMetadata: { kind: 'interface-spec', linkedDirs: [] },
+    });
+    await flushMounts();
+
+    await typeAndSettle('주문 API 인터페이스 명세서를 만들어줘.');
+    fireEvent.click(screen.getByTestId('chat-send'));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+  });
+
+  it('requires fresh interface-spec options after its working folder changes', async () => {
+    recentDirs = ['C:\\work\\aopserver-be'];
+    const onSend = vi.fn();
+    const onProjectMetadataChange = vi.fn();
+    renderComposer({
+      onSend,
+      onProjectMetadataChange,
+      projectMetadata: { kind: 'interface-spec', baseDir: 'C:\\work\\aauserver' },
+    });
+    await flushMounts();
+
+    fireEvent.click(screen.getByTestId('working-dir-trigger'));
+    fireEvent.click(screen.getByTestId('working-dir-recent'));
+    fireEvent.click(screen.getByTitle('C:\\work\\aopserver-be'));
+
+    await waitFor(() => expect(onProjectMetadataChange).toHaveBeenCalledWith({
+      kind: 'interface-spec',
+      baseDir: 'C:\\work\\aopserver-be',
+      importedFrom: 'folder',
+      entryFile: 'src/main.ts',
+    }));
+
+    await typeAndSettle('aopserver-be API 인터페이스 명세서를 만들어줘.');
+    fireEvent.click(screen.getByTestId('chat-send'));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    expect(onSend.mock.calls[0]?.[3]).toMatchObject({
+      interfaceSpecCollectionReset: { workingDir: 'C:\\work\\aopserver-be' },
+    });
+  });
+
+  it('uses the desktop host transaction to make a picked folder the writable project root', async () => {
+    hostMocks.isOpenDesignHostAvailable.mockReturnValue(true);
+    hostMocks.pickAndReplaceHostProjectWorkingDir.mockResolvedValue({
+      ok: true,
+      baseDir: 'C:\\work\\checkout-ui',
+      entryFile: 'src/main.tsx',
+    });
+    const onProjectMetadataChange = vi.fn();
+    renderComposer({
+      onProjectMetadataChange,
+      projectMetadata: { kind: 'prototype', baseDir: 'C:\\work\\legacy-ui' },
+    });
+    await flushMounts();
+
+    fireEvent.click(screen.getByTestId('working-dir-trigger'));
+    fireEvent.click(screen.getByTestId('working-dir-pick'));
+
+    await waitFor(() => expect(hostMocks.pickAndReplaceHostProjectWorkingDir).toHaveBeenCalledWith(
+      'project-1',
+      'C:\\work\\legacy-ui',
+    ));
+    expect(onProjectMetadataChange).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'prototype',
+      baseDir: 'C:\\work\\checkout-ui',
+      importedFrom: 'folder',
+      entryFile: 'src/main.tsx',
+      fromTrustedPicker: true,
+    }));
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/working-dir'))).toBe(false);
+  });
+
   it('auto-stages the active workspace context and re-stages after a tab change', async () => {
     const onSend = vi.fn();
     const fileContext = {
@@ -249,12 +386,12 @@ describe('ChatComposer context pickers', () => {
     const view = renderComposer({ activeWorkspaceContext: fileContext, onSend });
     await flushMounts();
 
-    expect(screen.getByTestId('staged-contexts').textContent).toContain('Currentindex.html');
+    expect(screen.getByTestId('staged-contexts').textContent).toContain('Activeindex.html');
     fireEvent.click(screen.getByLabelText('Remove index.html'));
     await waitFor(() => expect(screen.queryByText('index.html')).toBeNull());
 
     view.rerender(composerElement({ activeWorkspaceContext: browserContext, onSend }));
-    await waitFor(() => expect(screen.getByTestId('staged-contexts').textContent).toContain('CurrentDribbble'));
+    await waitFor(() => expect(screen.getByTestId('staged-contexts').textContent).toContain('ActiveDribbble'));
 
     await typeAndSettle('Use the current tab.');
     fireEvent.click(screen.getByTestId('chat-send'));
@@ -276,7 +413,7 @@ describe('ChatComposer context pickers', () => {
     await waitFor(() => expect(screen.getByTestId('mention-popover')).toBeTruthy());
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
       'All',
-      'Design files',
+      'Docs files',
       'Tabs',
       'Plugins',
       'Skills',
@@ -287,9 +424,9 @@ describe('ChatComposer context pickers', () => {
     expect(screen.getByRole('tab', { name: 'Skills' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'MCP' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Connectors' })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: 'Design files' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Docs files' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Tabs' })).toBeTruthy();
-    expect(screen.getByText('Search Design Files, tabs, plugins, skills, MCP servers, and connectors.')).toBeTruthy();
+    expect(screen.getByText('Search Docs Files, tabs, plugins, skills, MCP servers, and connectors.')).toBeTruthy();
   });
 
   it('localizes @ panel tabs and empty states in Chinese mode', async () => {
@@ -325,7 +462,7 @@ describe('ChatComposer context pickers', () => {
     expect(screen.queryByText('No results for “missing”.')).toBeNull();
   });
 
-  it('lists Design Files first in All and picks the first file with Enter', async () => {
+  it('lists Docs Files first in All and picks the first file with Enter', async () => {
     renderComposer({
       projectFiles: [
         {
@@ -357,7 +494,7 @@ describe('ChatComposer context pickers', () => {
       screen.getByTestId('mention-popover').querySelectorAll('.mention-section-label'),
       (node) => node.textContent,
     );
-    expect(labels[0]).toBe('Design files');
+    expect(labels[0]).toBe('Docs files');
     expect(labels[1]).toBe('Tabs');
 
     pressEnter();

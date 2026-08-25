@@ -21,7 +21,7 @@ export const TR_SKILL_COPY: Record<string, { description?: string; examplePrompt
   },
   'agent-browser': {
     description:
-      'AI ajanları için tarayıcı otomasyonu CLI\'ı. Kullanıcının tarayıcı davranışını\nincelemesi, test etmesi veya otomatikleştirmesi gerektiğinde kullanın: sayfalarda\ngezinme, form doldurma, düğmelere tıklama, ekran görüntüsü alma, sayfa verisi\nçıkarma, seçili Open Docs tarayıcı sekmesi bağlamını okuma, web uygulamalarını\ntest etme, Open Docs önizlemelerini dogfooding yapma, QA, hata avı veya uygulama\nkalitesini gözden geçirme. Kullanıcı açıkça harici tarama istemediği sürece yerel\nOpen Docs önizleme URL\'lerini tercih edin.',
+      'AI ajanları için tarayıcı otomasyonu CLI\'ı. Kullanıcının tarayıcı davranışını\nincelemesi, test etmesi veya otomatikleştirmesi gerektiğinde kullanın: sayfalarda\ngezinme, form doldurma, düğmelere tıklama, ekran görüntüsü alma, sayfa verisi\nçıkarma, seçili MonoField tarayıcı sekmesi bağlamını okuma, web uygulamalarını\ntest etme, MonoField önizlemelerini dogfooding yapma, QA, hata avı veya uygulama\nkalitesini gözden geçirme. Kullanıcı açıkça harici tarama istemediği sürece yerel\nMonoField önizleme URL\'lerini tercih edin.',
     examplePrompt:
       'AI ajanları için tarayıcı otomasyonu CLI\'ı.',
   },
@@ -849,7 +849,7 @@ export const TR_SKILL_COPY: Record<string, { description?: string; examplePrompt
   },
   'ui-ux-pro-max': {
     description:
-      'Yalnızca katalog UI/UX Pro Max girişi. Tam kaynak şablonlar, veriler ve arama iş akışı Open Docs\'a dahil değildir.',
+      'Yalnızca katalog UI/UX Pro Max girişi. Tam kaynak şablonlar, veriler ve arama iş akışı MonoField\'a dahil değildir.',
     examplePrompt:
       'Yalnızca katalog UI/UX Pro Max girişi.',
   },

@@ -68,6 +68,24 @@ test('spawnEnvForAgent lets configured Claude Code API credentials override inhe
   assert.equal(env.PATH, '/usr/bin');
 });
 
+test('spawnEnvForAgent strips daemon-only marketplace bearer credentials', () => {
+  const env = spawnEnvForAgent('codex', {
+    PATH: '/usr/bin',
+    OD_MARKETPLACE_TOKEN: 'catalog-secret',
+    OD_MARKETPLACE_TOKEN_TEAM_A: 'team-secret',
+    OPEN_DOCS_MARKETPLACE_TOKEN_BACKUP: 'backup-secret',
+    OD_MARKETPLACE_AUTH_ENV: 'OD_MARKETPLACE_TOKEN',
+  }, {
+    OD_MARKETPLACE_TOKEN_CONFIGURED: 'configured-secret',
+  });
+
+  assert.equal(env.OD_MARKETPLACE_TOKEN, undefined);
+  assert.equal(env.OD_MARKETPLACE_TOKEN_TEAM_A, undefined);
+  assert.equal(env.OPEN_DOCS_MARKETPLACE_TOKEN_BACKUP, undefined);
+  assert.equal(env.OD_MARKETPLACE_TOKEN_CONFIGURED, undefined);
+  assert.equal(env.OD_MARKETPLACE_AUTH_ENV, 'OD_MARKETPLACE_TOKEN');
+});
+
 test('spawnEnvForAgent applies configured Codex env without mutating the base env', () => {
   const base = { PATH: '/usr/bin' };
   const env = spawnEnvForAgent('codex', base, {

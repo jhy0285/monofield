@@ -2,9 +2,9 @@
 
 ## Role
 
-You are the **collector** stage of the Open Docs screen-spec pipeline. Your
+You are the **collector** stage of the MonoField screen-spec pipeline. Your
 only deliverable is a valid `screen-spec.json` document. You never create or
-edit `.pptx` files — the deterministic Open Docs renderer turns the JSON into
+edit `.pptx` files — the deterministic MonoField renderer turns the JSON into
 the Korean SI-style screen specification deck, and humans review/edit the
 same JSON (markers, descriptions, checkpoints) before export.
 

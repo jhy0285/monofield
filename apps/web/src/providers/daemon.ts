@@ -29,6 +29,7 @@ import type {
   RunContextSelection,
   SseErrorPayload,
 } from '@open-design/contracts';
+import { normalizeProviderTokenUsage } from '@open-design/contracts';
 import type { StreamHandlers } from './anthropic';
 
 /**
@@ -69,7 +70,7 @@ export function latestUserPromptFromHistory(history: ChatMessage[]): string {
 function truncateForTranscript(content: string): string {
   if (content.length <= MAX_TRANSCRIPT_MESSAGE_CHARS) return content;
   const omitted = content.length - MAX_TRANSCRIPT_MESSAGE_CHARS;
-  return `${content.slice(0, MAX_TRANSCRIPT_MESSAGE_CHARS)}\n\n[Open Docs truncated ${omitted} chars from this prior message before sending it to the agent. Full content remains in persisted history.]`;
+  return `${content.slice(0, MAX_TRANSCRIPT_MESSAGE_CHARS)}\n\n[MonoField truncated ${omitted} chars from this prior message before sending it to the agent. Full content remains in persisted history.]`;
 }
 
 function escapeTranscriptRoleDelimiters(content: string): string {
@@ -128,7 +129,7 @@ function buildPriorRunContextWarning(history: ChatMessage[]): string | null {
 
   return [
     '## context warning',
-    `Open Docs detected ${notes.join(', ')}.`,
+    `MonoField detected ${notes.join(', ')}.`,
     'Keep this turn compact: summarize prior tool output, read large references from temp files, and quote only task-relevant lines.',
   ].join('\n');
 }
@@ -285,6 +286,10 @@ export interface DaemonStreamOptions {
   research?: ResearchOptions;
   context?: RunContextSelection;
   appliedPluginSnapshotId?: string | null;
+  interfaceSpecCollectionReset?: {
+    workingDir: string;
+  };
+  browserVerification?: ChatRequest['browserVerification'];
   mediaExecution?: MediaExecutionPolicy;
   titleGeneration?: { enabled?: boolean };
   locale?: string;
@@ -579,6 +584,8 @@ export async function streamViaDaemon({
   research,
   context,
   appliedPluginSnapshotId,
+  interfaceSpecCollectionReset,
+  browserVerification,
   mediaExecution,
   titleGeneration,
   locale,
@@ -614,6 +621,8 @@ export async function streamViaDaemon({
     reasoning: reasoning ?? null,
     locale,
     ...(appliedPluginSnapshotId ? { appliedPluginSnapshotId } : {}),
+    ...(interfaceSpecCollectionReset ? { interfaceSpecCollectionReset } : {}),
+    ...(browserVerification ? { browserVerification } : {}),
     ...(context ? { context } : {}),
     ...(research ? { research } : {}),
     ...(mediaExecution ? { mediaExecution } : {}),
@@ -1265,13 +1274,17 @@ function translateAgentEvent(data: DaemonAgentPayload): AgentEvent | null {
     };
   }
   if (t === 'usage') {
-    const usage = (data.usage ?? {}) as Record<string, number>;
+    const usage = normalizeProviderTokenUsage(
+      (data.usage ?? {}) as Record<string, unknown>,
+      {
+        costUsd: data.costUsd,
+        durationMs: data.durationMs,
+        measurementSource: data.measurementSource,
+      },
+    );
     return {
       kind: 'usage',
-      inputTokens: usage.input_tokens,
-      outputTokens: usage.output_tokens,
-      costUsd: typeof data.costUsd === 'number' ? data.costUsd : undefined,
-      durationMs: typeof data.durationMs === 'number' ? data.durationMs : undefined,
+      ...usage,
     };
   }
   if (t === 'fabricated_role_marker' && typeof data.marker === 'string') {

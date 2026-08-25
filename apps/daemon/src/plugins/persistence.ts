@@ -49,6 +49,9 @@ export function migratePlugins(db: SqliteDb): void {
       spec_version  TEXT NOT NULL DEFAULT '1.0.0',
       version       TEXT NOT NULL DEFAULT '0.0.0',
       trust         TEXT NOT NULL,
+      visibility    TEXT NOT NULL DEFAULT 'public',
+      auth_env      TEXT,
+      policy_json   TEXT NOT NULL DEFAULT '{}',
       manifest_json TEXT NOT NULL,
       added_at      INTEGER NOT NULL,
       refreshed_at  INTEGER NOT NULL
@@ -176,7 +179,17 @@ export function migratePlugins(db: SqliteDb): void {
   if (!marketplaceCols.some((c) => c['name'] === 'version')) {
     db.exec(`ALTER TABLE plugin_marketplaces ADD COLUMN version TEXT NOT NULL DEFAULT '0.0.0'`);
   }
+  if (!marketplaceCols.some((c) => c['name'] === 'visibility')) {
+    db.exec(`ALTER TABLE plugin_marketplaces ADD COLUMN visibility TEXT NOT NULL DEFAULT 'public'`);
+  }
+  if (!marketplaceCols.some((c) => c['name'] === 'auth_env')) {
+    db.exec(`ALTER TABLE plugin_marketplaces ADD COLUMN auth_env TEXT`);
+  }
+  if (!marketplaceCols.some((c) => c['name'] === 'policy_json')) {
+    db.exec(`ALTER TABLE plugin_marketplaces ADD COLUMN policy_json TEXT NOT NULL DEFAULT '{}'`);
+  }
   db.exec(`CREATE INDEX IF NOT EXISTS idx_marketplaces_version ON plugin_marketplaces(version)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_marketplaces_visibility ON plugin_marketplaces(visibility)`);
 
   const installedCols = db.prepare(`PRAGMA table_info(installed_plugins)`).all() as DbRow[];
   for (const [name, ddl] of [

@@ -97,4 +97,22 @@ describe('EntrySettingsMenu language picker a11y', () => {
     expect(langTrigger.getAttribute('aria-expanded')).toBe('true');
     expect(list.hasAttribute('inert')).toBe(false);
   });
+
+  it('shows the public contact links', () => {
+    renderMenu();
+    fireEvent.click(screen.getByTestId('entry-settings-menu-trigger'));
+
+    expect(
+      screen
+        .getByRole('menuitem', {
+          name: 'Work contact: whdudwls0285@lgcns.com',
+        })
+        .getAttribute('href'),
+    ).toBe('mailto:whdudwls0285@lgcns.com');
+    expect(
+      screen
+        .getByRole('menuitem', { name: 'GitHub: jhy0285/monofield' })
+        .getAttribute('href'),
+    ).toBe('https://github.com/jhy0285/monofield');
+  });
 });

@@ -75,9 +75,9 @@ function pluginShareActionToCli(action: PluginShareAction) {
   }
   return {
     argv: ['plugin', 'open-design-pr'],
-    title: 'Open Docs PR',
+    title: 'MonoField PR',
     command: 'od plugin open-design-pr',
-    successMessage: 'Opened Open Docs PR flow.',
+    successMessage: 'Opened MonoField PR flow.',
     failureCode: 'open-design-pr-failed',
   };
 }
@@ -92,7 +92,7 @@ function pluginShareProgressPlan(action: PluginShareAction) {
     ];
   }
   return [
-    'Ensure the Open Docs fork exists',
+    'Ensure the MonoField fork exists',
     'Clone the fork and prepare a branch',
     'Copy the plugin into plugins/community',
     'Push the branch and open the PR form',
@@ -194,7 +194,7 @@ export function createPluginShareTaskStore(deps: CreatePluginShareTaskStoreDeps)
     task.status = 'done';
     task.result = {
       message: url
-        ? (action === 'publish-github' ? `Published plugin to ${url}.` : `Opened Open Docs PR flow at ${url}.`)
+        ? (action === 'publish-github' ? `Published plugin to ${url}.` : `Opened MonoField PR flow at ${url}.`)
         : share.successMessage,
       ...(url ? { url } : {}),
       log: stepLog,

@@ -41,7 +41,7 @@ describe('PrivacySection', () => {
     vi.unstubAllGlobals();
   });
 
-  it('keeps Open Docs telemetry disabled and clears legacy local privacy state', () => {
+  it('keeps MonoField telemetry disabled and clears legacy local privacy state', () => {
     render(
       <Harness
         initial={{
@@ -53,7 +53,7 @@ describe('PrivacySection', () => {
       />,
     );
 
-    expect(screen.getByText(/Open Docs does not send product telemetry/i)).toBeTruthy();
+    expect(screen.getByText(/MonoField does not send product telemetry/i)).toBeTruthy();
     expect((screen.getByLabelText('Anonymous ID') as HTMLInputElement).value).toBe(
       'legacy-inst',
     );

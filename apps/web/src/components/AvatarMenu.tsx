@@ -37,7 +37,7 @@ interface Props {
 }
 
 function displayAgentName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
-  return agent.id === 'amr' ? 'Open Docs AMR' : agent.name;
+  return agent.id === 'amr' ? 'MonoField AMR' : agent.name;
 }
 
 /**

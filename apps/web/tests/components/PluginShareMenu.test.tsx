@@ -382,7 +382,7 @@ describe('PluginShareMenu', () => {
     openPopover();
     const repoLinks = Array.from(
       container.querySelectorAll<HTMLAnchorElement>(
-        'a.plugin-share-item[href="https://github.com/jhy0285/open-docs"]',
+        'a.plugin-share-item[href="https://github.com/jhy0285/monofield"]',
       ),
     );
     expect(repoLinks.length).toBeGreaterThan(0);

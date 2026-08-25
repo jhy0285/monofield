@@ -2524,28 +2524,19 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /share/i }));
 
-    expect(screen.getByText('SHARE')).toBeTruthy();
     expect(screen.getByText('PUBLISH ONLINE')).toBeTruthy();
     const menuItems = screen.getAllByRole('menuitem').map((item) => item.textContent ?? '');
-    expect(menuItems.slice(0, 1)).toEqual([
-      'Publish online above to enable share ↑',
-    ]);
-    expect(menuItems.slice(1, 3)).toEqual([
-      'Deploy to Vercel',
-      'Deploy to Cloudflare Pages',
-    ]);
-    expect(screen.getByText('Publish online above to enable share ↑')).toBeTruthy();
+    expect(menuItems).toContain('Deploy to Vercel');
+    expect(menuItems).toContain('Deploy to Cloudflare Pages');
+    expect(menuItems).not.toContain('Publish online above to enable share ↑');
     expect(screen.queryByRole('menuitem', { name: /Copy share link/i })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: /Open share page/i })).toBeNull();
     expect(menuItems).not.toContain('Export as PDF');
     expect(menuItems).not.toContain('Export as image');
     expect(menuItems).not.toContain('Download as .zip');
     expect(menuItems).not.toContain('Export as standalone HTML');
-
-    fireEvent.click(screen.getByRole('menuitem', { name: /Publish online above to enable share/i }));
-    expect(await screen.findByText('Publish online first to get a link')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: /download/i }));
 

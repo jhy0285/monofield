@@ -86,6 +86,21 @@ describe('composeSystemPrompt — activeStageBlocks splice (spec §23.4)', () =>
 });
 
 describe('composeSystemPrompt', () => {
+  it('keeps ask and software-development sessions on the lean prompt path', () => {
+    const prompt = composeSystemPrompt({
+      agentId: 'codex',
+      sessionMode: 'chat',
+      streamFormat: 'jsonl',
+      locale: 'ko',
+    });
+
+    expect(prompt).toContain('# Ask / software development mode');
+    expect(prompt).not.toContain('# Identity and workflow charter');
+    expect(prompt).not.toContain('RULE 1 — turn 1 must emit');
+    expect(prompt).not.toContain('## Media generation (if asked)');
+    expect(prompt.length).toBeLessThan(8_000);
+  });
+
   it('injects Chinese quick brief guidance when the UI locale is zh-CN', () => {
     const prompt = composeSystemPrompt({ locale: 'zh-CN' });
 
@@ -337,7 +352,7 @@ describe('composeSystemPrompt', () => {
       expect(prompt).toContain('filesystem execution profile');
       expect(prompt).toContain("runtime's native tool-call interface");
       expect(prompt).toContain('Never type a tool invocation into assistant text');
-      expect(prompt).toContain('This tool-call rule does not apply to Open Design UI markup');
+      expect(prompt).toContain('This tool-call rule does not apply to MonoField UI markup');
       expect(prompt).toContain('emit the complete `<question-form>...</question-form>` block directly');
       expect(prompt).toContain('Do not output generated source code in a `<artifact type="text/html">...</artifact>` block.');
     });
@@ -345,7 +360,7 @@ describe('composeSystemPrompt', () => {
     it('prioritizes question forms over native tool calls when clarifying', () => {
       const prompt = composeSystemPrompt({ agentId: 'amr' });
       expect(prompt).toContain('## Clarifying questions mid-conversation');
-      expect(prompt).toContain('`<question-form>` is assistant text for the Open Design UI, not a native tool call');
+      expect(prompt).toContain('`<question-form>` is assistant text for the MonoField UI, not a native tool call');
       expect(prompt).toContain(
         'emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call',
       );
@@ -361,6 +376,29 @@ describe('composeSystemPrompt', () => {
     it('does not pin filesystem artifact handoff in plain API mode', () => {
       const prompt = composeSystemPrompt({ agentId: 'deepseek', streamFormat: 'plain' });
       expect(prompt).not.toContain('## Filesystem handoff');
+    });
+
+    it('adds encrypted database context only for connected filesystem projects', () => {
+      const disconnectedPrompt = composeSystemPrompt({ agentId: 'codex', streamFormat: 'jsonl' });
+      const filesystemPrompt = composeSystemPrompt({
+        agentId: 'codex',
+        streamFormat: 'jsonl',
+        metadata: { kind: 'other', databaseContext: { connectionId: 'db-development', useForDevelopment: true } },
+      });
+      const apiPrompt = composeSystemPrompt({
+        agentId: 'deepseek',
+        streamFormat: 'plain',
+        metadata: { databaseContext: { connectionId: 'db-development' } },
+      });
+
+      expect(disconnectedPrompt).not.toContain('# Connected project database');
+      expect(filesystemPrompt).toContain('# Connected project database');
+      expect(filesystemPrompt).toContain('database list --json');
+      expect(filesystemPrompt).toContain('structured mutation operations');
+      expect(filesystemPrompt).toContain('“Approve each write” opens a Desktop confirmation');
+      expect(filesystemPrompt).toContain('“Always allow” runs those structured mutations without a per-operation dialog');
+      expect(filesystemPrompt).toContain('DDL, raw SQL, credential fields, and token or approval bypasses remain prohibited');
+      expect(apiPrompt).not.toContain('# Connected project database');
     });
 
     it('forbids wrapping in-place-edit-only turns in an artifact block', () => {
@@ -465,7 +503,7 @@ describe('composeSystemPrompt', () => {
 
       expect(prompt).toContain('## External MCP servers — already authenticated');
       expect(prompt).toContain('`external-media`');
-      expect(prompt).toContain('Open Design-owned media execution is **disabled for this run**');
+      expect(prompt).toContain('MonoField-owned media execution is **disabled for this run**');
       expect(prompt).not.toContain('## Media generation contract');
     });
   });

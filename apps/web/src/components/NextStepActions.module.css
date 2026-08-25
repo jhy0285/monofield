@@ -71,7 +71,7 @@
 }
 
 .share:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 
@@ -127,7 +127,7 @@
 
 .toolboxRow:focus-visible,
 .moreRow:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 
@@ -349,7 +349,7 @@
   border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
 }
 .flyoutRow:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 .flyoutRow:disabled {

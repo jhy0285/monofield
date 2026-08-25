@@ -167,6 +167,23 @@ describe('redactSecrets', () => {
     expect(out).toContain('[REDACTED:ipv4]');
   });
 
+  it('redacts named configuration credentials and credential URLs', () => {
+    const input = [
+      'password: local-secret',
+      '"client_secret": "oauth-secret"',
+      'jdbc:postgresql://app:db-secret@db.internal:5432/sample',
+      'password: ${DB_PASSWORD}',
+    ].join('\n');
+    const out = redactSecrets(input);
+    expect(out).toContain('password: [REDACTED:named_credential]');
+    expect(out).toContain('"client_secret": "[REDACTED:named_credential]"');
+    expect(out).toContain('postgresql://app:[REDACTED:named_credential]@');
+    expect(out).toContain('password: ${DB_PASSWORD}');
+    expect(out).not.toContain('local-secret');
+    expect(out).not.toContain('oauth-secret');
+    expect(out).not.toContain('db-secret');
+  });
+
   it('is idempotent — redacting an already-redacted string is a no-op', () => {
     const once = redactSecrets('email is jane@example.com');
     expect(once).toBe('email is [REDACTED:email]');

@@ -6,6 +6,7 @@ import {
   optional,
   publicUrl,
   required,
+  requiredPublicOrigin,
   storageConfigFromEnv,
   writeJson,
 } from "./common.ts";
@@ -53,7 +54,7 @@ type TargetDef = {
 const releaseChannel = releaseChannelDescriptor(required("RELEASE_CHANNEL")).channel;
 const countedReleaseChannel = releaseChannel === "stable" ? null : releaseChannel;
 const releaseVersion = required("RELEASE_VERSION");
-const publicOrigin = required("RELEASE_PUBLIC_ORIGIN").replace(/\/+$/, "");
+const publicOrigin = requiredPublicOrigin();
 const metadataDir = required("RELEASE_METADATA_DIR");
 const manifestDir = required("RELEASE_MANIFEST_DIR");
 const outputsPath = required("RELEASE_OUTPUTS_PATH");

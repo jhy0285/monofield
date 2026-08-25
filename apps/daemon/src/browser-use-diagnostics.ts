@@ -17,9 +17,20 @@ export function isBrowserUseRequested(...values: unknown[]): boolean {
     (
       /(^|\s)@agent-browser(\s|$)/.test(value) ||
       value.includes('Browser tab context:') ||
-      value.includes('Use the selected Open Docs Browser tab as the bound target.')
+      value.includes('Use the selected MonoField Browser tab as the bound target.') ||
+      value.includes('MonoField browser automation session:') ||
+      value.includes('MonoField browser automation session:')
     )
   ));
+}
+
+export function browserAutomationSessionId(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value !== 'string') continue;
+    const match = /Open (?:Agent|Docs) browser automation session:\s*([A-Za-z0-9_-]{20,128})/.exec(value);
+    if (match?.[1]) return match[1];
+  }
+  return null;
 }
 
 export function collectBrowserUseDiscoveryFacts({
@@ -90,13 +101,24 @@ export function buildBrowserUseRunState({
   requested,
   agentId,
   diagnostics,
+  sessionId = null,
 }: {
   requested: boolean;
   agentId: string | null | undefined;
   diagnostics?: BrowserUseDiscoveryFacts;
+  sessionId?: string | null;
 }): BrowserUseRunState | null {
-  if (!requested || agentId !== 'codex') return null;
+  if (!requested) return null;
   const facts = diagnostics ?? collectBrowserUseDiscoveryFacts();
+  if (sessionId != null) {
+    return {
+      requested: true,
+      available: true,
+      sessionId,
+      diagnostics: facts,
+    };
+  }
+  if (agentId !== 'codex') return null;
   return {
     requested: true,
     available: false,
@@ -106,11 +128,39 @@ export function buildBrowserUseRunState({
 }
 
 export function renderBrowserUseUnavailablePrompt(state: BrowserUseRunState | null): string {
-  if (!state || state.available) return '';
+  if (!state) return '';
+  if (state.available && state.sessionId) {
+    const session = state.sessionId;
+    return [
+      '## MonoField in-app browser automation',
+      '',
+      `The user approved the current in-app browser tab for this run. Session: \`${session}\`.`,
+      'Use the MonoField CLI through the provided runtime wrapper. Do not launch another browser and do not use arbitrary JavaScript.',
+      'The host resolves returned DOM selectors to safe coordinates and drives a visible native pointer for click, hover, focus, and drag when possible. It automatically falls back to the bounded DOM executor when native hit testing is unavailable; do not ask the user to choose a low-level mode.',
+      'Wrapper prefix — PowerShell: `& $env:OD_NODE_BIN $env:OD_BIN`; POSIX: `"$OD_NODE_BIN" "$OD_BIN"`.',
+      '',
+      'Append one of these command arguments to that prefix:',
+      `- \`browser status --session ${session}\``,
+      `- \`browser page-info --session ${session}\``,
+      `- \`browser snapshot --session ${session}\``,
+      `- \`browser screenshot --session ${session} --out <project-png-path>\``,
+      `- \`browser navigate --session ${session} --url <same-origin-url>\``,
+      `- \`browser click --session ${session} --selector <css-selector>\``,
+      `- \`browser hover --session ${session} --selector <css-selector>\``,
+      `- \`browser drag --session ${session} --selector <source> --target-selector <target>\``,
+      `- \`browser type-text --session ${session} --selector <css-selector> --text <value>\``,
+      `- \`browser upload --session ${session} --selector <file-input> --file <project-file>\``,
+      `- \`browser scroll --session ${session} --to top|bottom|page\``,
+      `- \`browser batch --session ${session} --steps <json-array>\``,
+      '',
+      'Start with snapshot plus screenshot when visual state matters, use only selectors it returns, and verify the page after each mutation. Use batch only for deterministic steps that do not require intermediate reasoning.',
+      'The host keeps approval active until the user stops it, the tab closes, the origin changes, or MonoField quits. It remains bound to one tab/origin and blocks sensitive fields. If it rejects an operation, stop and tell the user why.',
+    ].join('\n');
+  }
   return [
     '## Browser automation availability',
     '',
-    `Browser automation was requested, but Open Docs has not confirmed a matching in-app browser backend for this run. Reason: \`${state.reason}\`.`,
+    `Browser automation was requested, but MonoField has not confirmed a matching in-app browser backend for this run. Reason: \`${state.reason}\`.`,
     'Treat browser-use / in-app-browser automation as unavailable for this turn.',
     'Do not use raw Google Chrome headless or ad-hoc Chrome fallback from the packaged desktop sandbox.',
     'If the task requires browser evidence, report the unavailable reason and use only the provided browser tab URL, title, and saved project context until a backend is attached.',

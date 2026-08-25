@@ -629,6 +629,9 @@ export function createCommandInvocation({ args = [], command, env = process.env 
   if (process.platform === "win32" && /\.(bat|cmd)$/i.test(command)) {
     return buildCmdShimInvocation(command, args, env);
   }
+  if (process.platform === "win32" && nodeLoadablePackageManagerExtensions.has(extname(command).toLowerCase())) {
+    return { args: [command, ...args], command: process.execPath };
+  }
   return { args, command };
 }
 

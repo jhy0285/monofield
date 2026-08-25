@@ -35,21 +35,25 @@ vi.mock('../../src/providers/registry', async () => {
 });
 
 vi.mock('../../src/components/DesignBrowserPanel', () => ({
+  labelFromUrl: (url: string) => new URL(url).hostname,
   DesignBrowserPanel: ({
     initialIconUrl,
     initialTitle,
     initialUrl,
+    onOpenPopup,
   }: {
     initialIconUrl?: string;
     initialTitle?: string;
     initialUrl?: string;
+    onOpenPopup?: (url: string) => void;
   }) => (
-    <div
-      data-testid="design-browser-panel"
-      data-initial-icon-url={initialIconUrl ?? ''}
-      data-initial-title={initialTitle ?? ''}
-      data-initial-url={initialUrl ?? ''}
-    />
+    <div data-testid="design-browser-panel" data-initial-icon-url={initialIconUrl ?? ''} data-initial-title={initialTitle ?? ''} data-initial-url={initialUrl ?? ''}>
+      {onOpenPopup ? (
+        <button type="button" data-testid="design-browser-popup" onClick={() => onOpenPopup('https://aop-dev.hellenicrailways.gr/auth/aop-card')}>
+          Open popup
+        </button>
+      ) : null}
+    </div>
   ),
 }));
 
@@ -661,7 +665,7 @@ describe('FileWorkspace launcher tab creation', () => {
       expect(onActiveContextChange).toHaveBeenLastCalledWith({
         id: 'workspace:design-files',
         kind: 'design-files',
-        label: 'Design Files',
+        label: 'Docs Files',
         tabId: '__design_files__',
         absolutePath: '/tmp/open-design/project-1',
       });
@@ -723,7 +727,7 @@ describe('FileWorkspace launcher tab creation', () => {
     );
 
     expect(renderedTabLabels()).toEqual([
-      'Design Files',
+      'Docs Files',
       'Browser',
       'New Terminal',
       'Side chat',
@@ -1728,6 +1732,48 @@ describe('FileWorkspace add-module menu', () => {
         { id: '__browser__:2', insertAfter: '__browser__:1', label: 'Browser 2' },
         { id: '__browser__:3', insertAfter: '__browser__:2', label: 'Browser 3' },
       ],
+    });
+  });
+
+  it('opens an embedded-browser popup in a new tab and preserves the source tab', async () => {
+    const onTabsStateChange = vi.fn();
+    const sourceTab = {
+      id: '__browser__:1',
+      insertAfter: '__design_files__',
+      label: 'Service select',
+      title: 'Service select',
+      url: 'https://aop-dev.hellenicrailways.gr/auth/service-select',
+    };
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: '__browser__:1', browserTabs: [sourceTab] }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    fireEvent.click(await screen.findByTestId('design-browser-popup'));
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenLastCalledWith({
+        tabs: [],
+        active: '__browser__:2',
+        browserTabs: [
+          sourceTab,
+          {
+            id: '__browser__:2',
+            insertAfter: '__browser__:1',
+            label: 'aop-dev.hellenicrailways.gr',
+            title: 'aop-dev.hellenicrailways.gr',
+            url: 'https://aop-dev.hellenicrailways.gr/auth/aop-card',
+          },
+        ],
+      });
     });
   });
 

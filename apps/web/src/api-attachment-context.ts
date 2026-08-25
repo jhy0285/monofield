@@ -92,7 +92,7 @@ async function buildApiAttachmentContext(
     }
     if (remaining <= 0) {
       blocks.push(
-        '[Open Docs omitted remaining attached files because the attachment context budget was exhausted.]',
+        '[MonoField omitted remaining attached files because the attachment context budget was exhausted.]',
       );
       break;
     }
@@ -201,14 +201,14 @@ function inferProjectFileKind(name: string): ProjectFileKind {
   if (lower.endsWith('.pdf')) return 'pdf';
   if (lower.endsWith('.docx')) return 'document';
   if (lower.endsWith('.pptx')) return 'presentation';
-  if (lower.endsWith('.xlsx')) return 'spreadsheet';
+  if (lower.endsWith('.xlsx') || lower.endsWith('.xlsm')) return 'spreadsheet';
   return 'binary';
 }
 
 function clipAttachmentText(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text;
   const omitted = text.length - maxChars;
-  return `${text.slice(0, maxChars)}\n\n[Open Docs truncated ${omitted} chars from this attachment before sending it to the API provider.]`;
+  return `${text.slice(0, maxChars)}\n\n[MonoField truncated ${omitted} chars from this attachment before sending it to the API provider.]`;
 }
 
 function escapeMarkdownFence(text: string): string {

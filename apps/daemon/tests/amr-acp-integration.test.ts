@@ -100,7 +100,7 @@ const IS_WINDOWS = process.platform === 'win32';
 
 describe('AMR runtime def', () => {
   it('is gated behind OD_ENABLE_AMR but keeps the expected ACP wiring', () => {
-    // Open Docs ships with the AMR runtime disabled unless OD_ENABLE_AMR=1
+    // MonoField ships with the AMR runtime disabled unless OD_ENABLE_AMR=1
     // (see runtimes/registry.ts). The def itself stays intact for opt-in use.
     const def = getAgentDef('amr');
     if (process.env.OD_ENABLE_AMR === '1') {

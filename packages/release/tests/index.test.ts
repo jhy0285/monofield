@@ -51,12 +51,12 @@ describe("@open-design/release", () => {
   });
 
   it("centralizes release identity and namespace derivation", () => {
-    expect(releaseChannelDescriptor("prerelease").productName).toBe("Open Docs Prerelease");
-    expect(releaseChannelDescriptor("betas").productName).toBe("Open Docs Betas");
+    expect(releaseChannelDescriptor("prerelease").productName).toBe("MonoField Prerelease");
+    expect(releaseChannelDescriptor("betas").productName).toBe("MonoField Betas");
     expect(releaseInstallIdentity("prerelease")).toEqual({
-      appId: "io.open-design.desktop.prerelease",
-      executableName: "Open Docs Prerelease",
-      productName: "Open Docs Prerelease",
+      appId: "io.monofield.desktop.prerelease",
+      executableName: "MonoField Prerelease",
+      productName: "MonoField Prerelease",
     });
     expect(releaseNamespace("prerelease")).toBe("release-prerelease");
     expect(releaseNamespace("prerelease", "win")).toBe("release-prerelease-win");

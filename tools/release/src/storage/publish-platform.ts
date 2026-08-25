@@ -8,6 +8,7 @@ import {
   optional,
   publicUrl,
   required,
+  requiredPublicOrigin,
   requiredTarget,
   storageConfigFromEnv,
   writeJson,
@@ -40,7 +41,7 @@ const target = requiredTarget();
 const releaseChannel = releaseChannelDescriptor(required("RELEASE_CHANNEL")).channel;
 const countedReleaseChannel = releaseChannel === "stable" ? null : releaseChannel;
 const releaseVersion = required("RELEASE_VERSION");
-const publicOrigin = required("RELEASE_PUBLIC_ORIGIN").replace(/\/+$/, "");
+const publicOrigin = requiredPublicOrigin();
 const releaseAssetsDir = required("RELEASE_ASSETS_DIR");
 const manifestDir = required("RELEASE_MANIFEST_DIR");
 const outputsPath = required("RELEASE_OUTPUTS_PATH");
@@ -174,14 +175,14 @@ async function uploadReport(reportDirectory: string): Promise<Record<string, unk
 function targetConfig(): TargetConfig {
   if (target === "mac_arm64" || target === "mac_x64") {
     const arch = target === "mac_arm64" ? "arm64" : "x64";
-    const dmg = `open-design-${releaseVersion}${assetSuffix}-mac-${arch}.dmg`;
-    const zip = `open-design-${releaseVersion}${assetSuffix}-mac-${arch}.zip`;
+    const dmg = `monofield-${releaseVersion}${assetSuffix}-mac-${arch}.dmg`;
+    const zip = `monofield-${releaseVersion}${assetSuffix}-mac-${arch}.zip`;
     const artifactMode = optional("RELEASE_ARTIFACT_MODE", target === "mac_arm64" ? "dmg-only" : "dmg-and-zip");
     const artifacts: Record<string, AssetEntry> = { dmg: assetEntry(dmg) };
     const assetNames = [dmg, `${dmg}.sha256`];
     let feed = null;
     if (artifactMode === "dmg-and-payload" || artifactMode === "all") {
-      const payload = `open-design-${releaseVersion}${assetSuffix}-mac-${arch}-payload.zip`;
+      const payload = `monofield-${releaseVersion}${assetSuffix}-mac-${arch}-payload.zip`;
       artifacts.payload = assetEntry(payload);
       assetNames.push(payload, `${payload}.sha256`);
     }
@@ -207,9 +208,9 @@ function targetConfig(): TargetConfig {
     };
   }
   if (target === "win_x64") {
-    const installer = `open-design-${releaseVersion}${assetSuffix}-win-x64-setup.exe`;
-    const payload = `open-design-${releaseVersion}${assetSuffix}-win-x64-payload.7z`;
-    const portableZip = `open-design-${releaseVersion}${assetSuffix}-win-x64-portable.zip`;
+    const installer = `monofield-${releaseVersion}${assetSuffix}-win-x64-setup.exe`;
+    const payload = `monofield-${releaseVersion}${assetSuffix}-win-x64-payload.7z`;
+    const portableZip = `monofield-${releaseVersion}${assetSuffix}-win-x64-portable.zip`;
     const includeZip = optional("WIN_INCLUDE_ZIP", "true") !== "false";
     const artifacts: Record<string, AssetEntry> = { installer: assetEntry(installer), payload: assetEntry(payload) };
     const assetNames = [installer, `${installer}.sha256`, payload, `${payload}.sha256`, "latest.yml"];
@@ -234,7 +235,7 @@ function targetConfig(): TargetConfig {
     };
   }
 
-  const appImage = `open-design-${releaseVersion}${assetSuffix}-linux-x64.AppImage`;
+  const appImage = `monofield-${releaseVersion}${assetSuffix}-linux-x64.AppImage`;
   return {
     arch: "x64",
     assetNames: [appImage, `${appImage}.sha256`],

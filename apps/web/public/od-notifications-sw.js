@@ -1,6 +1,6 @@
 // Browser service workers must be served as JavaScript files. This tiny
 // runtime exists only to display task-completion notifications and focus
-// the existing Open Docs tab when the user clicks one.
+// the existing MonoField tab when the user clicks one.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 

@@ -28,6 +28,19 @@ if ($ReleaseTarget -ne "win_x64") {
   throw "prepare-platform-assets.ps1 only supports win_x64"
 }
 
+$publicOriginUri = $null
+if (
+  [string]::IsNullOrWhiteSpace($ReleasePublicOrigin) -or
+  -not [Uri]::TryCreate($ReleasePublicOrigin, [UriKind]::Absolute, [ref]$publicOriginUri) -or
+  $publicOriginUri.Scheme -ne "https" -or
+  -not [string]::IsNullOrEmpty($publicOriginUri.UserInfo) -or
+  -not [string]::IsNullOrEmpty($publicOriginUri.Query) -or
+  -not [string]::IsNullOrEmpty($publicOriginUri.Fragment)
+) {
+  throw "ReleasePublicOrigin must be an explicit HTTPS URL without credentials, query, or fragment"
+}
+$publicOrigin = $ReleasePublicOrigin.TrimEnd("/")
+
 New-Item -ItemType Directory -Force -Path $ReleaseAssetsDir | Out-Null
 
 if (-not (Test-Path -LiteralPath $BuildJsonPath)) {
@@ -47,9 +60,9 @@ if ($IncludeZip -and ([string]::IsNullOrWhiteSpace($sourceZip) -or -not (Test-Pa
   throw "expected portable zip path from build json not found at $sourceZip"
 }
 
-$versionedInstaller = "open-design-$ReleaseVersion$ReleaseAssetSuffix-win-x64-setup.exe"
-$versionedPayload = "open-design-$ReleaseVersion$ReleaseAssetSuffix-win-x64-payload.7z"
-$versionedZip = "open-design-$ReleaseVersion$ReleaseAssetSuffix-win-x64-portable.zip"
+$versionedInstaller = "monofield-$ReleaseVersion$ReleaseAssetSuffix-win-x64-setup.exe"
+$versionedPayload = "monofield-$ReleaseVersion$ReleaseAssetSuffix-win-x64-payload.7z"
+$versionedZip = "monofield-$ReleaseVersion$ReleaseAssetSuffix-win-x64-portable.zip"
 $installerPath = Join-Path $ReleaseAssetsDir $versionedInstaller
 Copy-Item -LiteralPath $sourceInstaller -Destination $installerPath -Force
 $installerHash = (Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -70,7 +83,6 @@ if ($IncludeZip) {
 $installerBytes = [System.IO.File]::ReadAllBytes($installerPath)
 $installerSha512 = [System.Convert]::ToBase64String([System.Security.Cryptography.SHA512]::Create().ComputeHash($installerBytes))
 $installerSize = (Get-Item -LiteralPath $installerPath).Length
-$publicOrigin = $ReleasePublicOrigin.TrimEnd("/")
 $versionPrefix = if ([string]::IsNullOrWhiteSpace($ReleaseVersionPrefix)) {
   "$ReleaseChannel/versions/$ReleaseVersion$ReleaseAssetSuffix"
 } else {
@@ -79,7 +91,7 @@ $versionPrefix = if ([string]::IsNullOrWhiteSpace($ReleaseVersionPrefix)) {
 $installerUrl = "$publicOrigin/$versionPrefix/$versionedInstaller"
 $releaseDate = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
 $notes = if ([string]::IsNullOrWhiteSpace($ReleaseNotes)) {
-  "Open Design $ReleaseVersion$ReleaseAssetSuffix"
+  "MonoField $ReleaseVersion$ReleaseAssetSuffix"
 } else {
   $ReleaseNotes
 }

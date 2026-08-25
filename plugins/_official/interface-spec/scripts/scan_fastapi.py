@@ -1,4 +1,4 @@
-"""FastAPI collector for the Open Docs interface-spec pipeline.
+"""FastAPI collector for the MonoField interface-spec pipeline.
 
 AST-based (not regex): parses route decorators, endpoint signatures, and
 pydantic models to emit an interface-spec.json document (schema v1) that
@@ -32,6 +32,8 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
+from tools.excel_generator.synthetic_examples import add_static_examples, load_sample_context  # noqa: E402
+from tools.excel_generator.dictionary_loader import load_dictionary_file  # noqa: E402
 
 try:
     from tools.excel_generator.rules.naming import koreanize_identifier, load_name_dict
@@ -267,17 +269,7 @@ def korean_iface_name(handler: str, name_dict: dict) -> str:
 
 
 def load_custom_dict(path: Path) -> dict[str, str]:
-    if path.suffix.lower() == ".json":
-        raw = json.loads(path.read_text(encoding="utf-8"))
-        return {str(k): str(v) for k, v in raw.items()}
-    if path.suffix.lower() == ".csv":
-        out = {}
-        with path.open(encoding="utf-8-sig", newline="") as fh:
-            for row in csv.reader(fh):
-                if len(row) >= 2 and row[0].strip() and not row[0].startswith("#"):
-                    out[row[0].strip()] = row[1].strip()
-        return out
-    raise SystemExit(f"--name-dict {path}: use .json or .csv")
+    return load_dictionary_file(path)
 
 
 def main() -> int:
@@ -287,6 +279,7 @@ def main() -> int:
     ap.add_argument("--inventory-only", action="store_true")
     ap.add_argument("--modules", default="")
     ap.add_argument("--name-dict", default="")
+    ap.add_argument("--sample-context", default="", help="approved database-context JSON; never credentials")
     ap.add_argument("--codebase-name", default="")
     args = ap.parse_args()
 
@@ -369,6 +362,7 @@ def main() -> int:
             for ep in sorted(endpoints, key=lambda e: (module_of(e["path"], e["sourceFile"]), e["path"], e["method"]))
         ],
     }
+    add_static_examples(doc["endpoints"], load_sample_context(args.sample_context, args.codebase_path))
 
     Path(args.out).write_text(json.dumps(doc, ensure_ascii=False, indent=1), encoding="utf-8")
     counts = Counter(module_of(ep["path"], ep["sourceFile"]) for ep in endpoints)

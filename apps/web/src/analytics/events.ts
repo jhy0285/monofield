@@ -949,7 +949,7 @@ export function trackAssistantFeedbackReasonSubmit(
 // ---- Onboarding ---------------------------------------------------------
 //
 // `trackOnboardingClick` is the catch-all wrapper for the welcome flow's
-// runtime-pick / about-you / continue / skip / back buttons. Open Docs product
+// runtime-pick / about-you / continue / skip / back buttons. MonoField product
 // telemetry is disabled, so these wrappers currently resolve through a no-op
 // provider while preserving call-site shape. Lifecycle
 // events that don't fit a click — CLI scan finishing, onboarding

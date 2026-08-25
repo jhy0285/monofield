@@ -249,7 +249,7 @@ const MAX_ASSET_FILE_BYTES = 12 * 1024 * 1024;
 const UI_KIT_ENTRY_CONTRACT = [
   'Claude-style UI-kit entry contract:',
   '- When `ui_kits/app/components/*.jsx` or `*.tsx` files exist, `ui_kits/app/index.html` must behave like a runnable browser entry, not a static mock.',
-  '- Use the same structure as Open Docs exports: load React, ReactDOM, and Babel standalone scripts, load `../../colors_and_type.css`, create a `#root`, load each component script from `components/`, then render the composed `App` component.',
+  '- Use the same structure as MonoField exports: load React, ReactDOM, and Babel standalone scripts, load `../../colors_and_type.css`, create a `#root`, load each component script from `components/`, then render the composed `App` component.',
   '- `App.jsx` must assign `window.App = App` (or `globalThis.App = App`), and every directly loaded component file must expose the same browser global for its component name.',
   '- Use this skeleton for direct JSX component kits, replacing the component list only when evidence supports different names:',
   '```html',
@@ -946,7 +946,7 @@ export function DesignSystemCreationFlow({
     return (
       <div className="ds-setup-shell ds-setup-shell--center">
         <div className="ds-setup-center-card">
-          <h1>Open Docs will extract your design system.</h1>
+          <h1>MonoField will extract your design system.</h1>
           <p>You'll land in a project that fills in live — logo, palette, typography, imagery — as it measures your brand. Keep the tab open.</p>
           <div className="ds-setup-actions">
             <Button variant="ghost" onClick={() => setStep('setup')}>
@@ -2074,7 +2074,7 @@ export function DesignSystemDetailView({
         conversationId = fresh.id;
       }
       if (config.mode !== 'daemon' || !config.agentId) {
-        setChatError('Pick a local agent first, then ask Open Docs to update this design system.');
+        setChatError('Pick a local agent first, then ask MonoField to update this design system.');
         return;
       }
 
@@ -2532,11 +2532,11 @@ export function DesignSystemDetailView({
               <p>
                 {generationActive
                   ? activeJob?.kind === 'token-contract-rebuild'
-                    ? 'Open Docs is preparing a token contract rebuild for review. The active contract stays unchanged until you accept it.'
+                    ? 'MonoField is preparing a token contract rebuild for review. The active contract stays unchanged until you accept it.'
                     : activeJob?.kind === 'revision'
-                      ? 'Open Docs is applying your feedback. You can keep reviewing while the updated draft is prepared.'
-                      : 'Open Docs is still working, but you can start giving feedback on the work so far.'
-                  : 'Open Docs is ready for review. Give feedback on the work so far, then publish when it is useful for future projects.'}
+                      ? 'MonoField is applying your feedback. You can keep reviewing while the updated draft is prepared.'
+                      : 'MonoField is still working, but you can start giving feedback on the work so far.'
+                  : 'MonoField is ready for review. Give feedback on the work so far, then publish when it is useful for future projects.'}
               </p>
               <label>
                 <input
@@ -3032,7 +3032,7 @@ function WorkspaceActivityCard({
         <span>
           <strong>
             {status === 'running'
-              ? 'Open Docs is updating this system'
+              ? 'MonoField is updating this system'
               : status === 'failed'
                 ? 'Workspace update needs attention'
                 : 'Workspace update ready'}
@@ -3256,10 +3256,10 @@ function GenerationStatusCard({ job }: { job: DesignSystemGenerationJob }) {
           <strong>
             {active
               ? job.kind === 'token-contract-rebuild'
-                ? 'Open Docs is rebuilding tokens'
+                ? 'MonoField is rebuilding tokens'
                 : job.kind === 'revision'
-                  ? 'Open Docs is revising'
-                  : 'Open Docs is still working'
+                  ? 'MonoField is revising'
+                  : 'MonoField is still working'
               : job.status === 'failed'
                 ? `${noun} needs attention`
                 : `${noun} completed`}
@@ -3750,14 +3750,6 @@ function GitHubRepositoryAccessPanel({
       badge: 'Automatic',
       tone: 'success',
       description: 'Uses public git clone, local git credentials, or GitHub CLI auth available on this machine.',
-    },
-    {
-      id: 'native-oauth',
-      icon: 'link',
-      title: 'Open Docs account',
-      badge: 'Coming soon',
-      tone: 'muted',
-      description: 'Native GitHub sign-in managed by Open Docs; this build does not use an OD-managed GitHub token yet.',
     },
     {
       id: 'composio',
@@ -4907,7 +4899,7 @@ function buildFallbackDesignMdFromState(state: SetupState): string {
     state.company.trim()
     || state.notes.trim()
     || sourceNotes
-    || 'Design system generated from source material supplied in Open Docs.';
+    || 'Design system generated from source material supplied in MonoField.';
   return [
     '---',
     `name: ${yamlString(title.replace(/\s+Design System$/iu, ''))}`,
@@ -4970,7 +4962,7 @@ function buildCreationAgentPrompt(
   const localFolderRunbook = buildLocalFolderRunbook(state.codeFolders);
   const title = inferDesignSystemTitle(state);
   return [
-    'Create this project as a complete Open Docs design system workspace.',
+    'Create this project as a complete MonoField design system workspace.',
     '',
     'Autonomy requirement:',
     '- Do not ask setup or clarification questions during design-system generation.',
@@ -4985,14 +4977,14 @@ function buildCreationAgentPrompt(
     '',
     'Expected output:',
     '- A clear `DESIGN.md` with product context, visual foundations, color, type, spacing, layout, components, motion, voice, and anti-patterns.',
-    '- A Open Docs-quality package: `README.md`, `SKILL.md`, `colors_and_type.css`, provenance notes, `assets/`, `build/` when runtime icons exist, optional `fonts/`, category-specific `preview/` cards, and a reusable `ui_kits/app/` example.',
+    '- A MonoField-quality package: `README.md`, `SKILL.md`, `colors_and_type.css`, provenance notes, `assets/`, `build/` when runtime icons exist, optional `fonts/`, category-specific `preview/` cards, and a reusable `ui_kits/app/` example.',
     '- Write `README.md` as a reusable package guide, not only a generated file list. Include a source-backed Product Overview/Product Context section that explains what the product is, the primary UI surfaces, and the core capabilities evidenced by README/package/source files; include source repository or source folder references, package contents, preview manifest, and reuse workflow.',
     '- README.md must include a concrete `## Preview Manifest` section that lists each generated `preview/*.html` card by exact path, what reviewers should inspect there, and which source-backed components, tokens, assets, or fonts it demonstrates. Keep this manifest synchronized with the actual `preview/` files.',
-    '- Preserve real source assets when evidence provides them: logos, app icons, tray icons, avatars, wordmarks, and font files belong in `assets/`, `build/`, or `fonts/`, not in prose-only notes. When source files include build/runtime icon assets such as installer icons, tray icons, app icons, or wordmarks under build/resources paths, preserve representative files under `build/` as Open Docs does. When multiple source logos/icons/fonts are captured, preserve a representative set instead of collapsing everything into one generic logo or font. If font files are preserved, bind them in `colors_and_type.css` with `@font-face`, `@import`, or `url(...)` references so previews and UI kits actually render the brand typeface.',
+    '- Preserve real source assets when evidence provides them: logos, app icons, tray icons, avatars, wordmarks, and font files belong in `assets/`, `build/`, or `fonts/`, not in prose-only notes. When source files include build/runtime icon assets such as installer icons, tray icons, app icons, or wordmarks under build/resources paths, preserve representative files under `build/` as MonoField does. When multiple source logos/icons/fonts are captured, preserve a representative set instead of collapsing everything into one generic logo or font. If font files are preserved, bind them in `colors_and_type.css` with `@font-face`, `@import`, or `url(...)` references so previews and UI kits actually render the brand typeface.',
     BUILD_ASSET_PRESERVATION_CONTRACT,
     '- Preserve high-signal source component examples when evidence provides substantial app/component code. Copy at least a few real, substantive source-backed examples outside `context/` (for example `source_examples/SelectModelButton.tsx`, `source_examples/ChatNavBar/index.tsx`, or root/nested TSX files) so future agents can inspect the original implementation patterns without digging through intake snapshots. Do not replace captured source examples with tiny filename-only stubs.',
     '- Split review previews into focused cards instead of one generic page. Prefer cards such as `preview/colors-primary.html`, `preview/colors-theme-light.html`, `preview/colors-theme-dark.html`, `preview/typography-specimens.html`, `preview/spacing-tokens.html`, `preview/spacing-radius.html`, `preview/spacing-shadows.html`, `preview/components-buttons.html`, `preview/components-inputs.html`, and `preview/brand-assets.html` when evidence supports them. `preview/brand-assets.html` must visibly load the preserved files from `assets/` or `build/` with real `img`, `picture`, `object`, or CSS `url(...)` references; do not redraw brand marks as inline placeholders when source assets were captured.',
-    '- Write `SKILL.md` as an agent-usable Open Docs-style skill entry, not only a loose Markdown note. Include YAML frontmatter with `name`, `description`, and `user-invocable`, then include reusable sections for `What is inside`, `Source context`, `When to use this skill`, `How to use`, and `Design system highlights`. Those sections should tell future agents to read README.md, DESIGN.md, colors_and_type.css, preview/, assets/, build/, fonts/, source_examples/, and ui_kits/app/ before generating artifacts.',
+    '- Write `SKILL.md` as an agent-usable MonoField-style skill entry, not only a loose Markdown note. Include YAML frontmatter with `name`, `description`, and `user-invocable`, then include reusable sections for `What is inside`, `Source context`, `When to use this skill`, `How to use`, and `Design system highlights`. Those sections should tell future agents to read README.md, DESIGN.md, colors_and_type.css, preview/, assets/, build/, fonts/, source_examples/, and ui_kits/app/ before generating artifacts.',
     '- Build `ui_kits/app/` as an applied interface kit with `index.html`, a reusable README, and modular component files when the evidence includes representative product surfaces. `ui_kits/app/README.md` should document the kit structure, component files, usage workflow, design notes, and source basis, not only say the kit exists. `ui_kits/app/index.html` must load `../../colors_and_type.css`, must load/import/compose the modular component files under `ui_kits/app/components/`, and must mount/render the composed interface into the page; if it directly loads `.jsx`/`.tsx` files, include React, ReactDOM, and Babel standalone scripts and expose each loaded component as `window.ComponentName` / `globalThis.ComponentName`, or write compiled browser-ready JavaScript instead. Do not leave the entry page as a standalone generic static mock or disconnected script list when component files exist. For chat/workspace evidence, include substantive role-based components under `ui_kits/app/components/`: `App.jsx`, `Sidebar.jsx`, a list/rail component such as `AssistantsList.jsx`, a main workspace component such as `ChatArea.jsx`, an input/composer such as `InputBar.jsx`, and a message/comment component such as `MessageBubble.jsx`; the app shell component must compose the role components into one product-like surface; do not write one-line placeholder components.',
     UI_KIT_ENTRY_CONTRACT,
     '- Preview cards and UI-kit visuals should name or model high-signal source components from the evidence, such as the captured sidebar, chat, composer, message, artifact, modal, avatar, or selector files. Avoid anonymous generic examples when concrete source component names are available.',
@@ -5034,7 +5026,7 @@ function buildCreationAgentPrompt(
       ? githubRunbook
       : '',
     state.codeFolders.length
-      ? `Read the linked local code folders that Open Docs attached to this project: ${state.codeFolders.join(', ')}. Treat them as source context only unless the user asks you to edit them.\n\n${localFolderRunbook}`
+      ? `Read the linked local code folders that MonoField attached to this project: ${state.codeFolders.join(', ')}. Treat them as source context only unless the user asks you to edit them.\n\n${localFolderRunbook}`
       : '',
     stagedLocalCode?.uploadedPaths.length
       ? `Inspect the copied local code snapshot files in this project under \`${LOCAL_CODE_UPLOAD_ROOT}/\`: ${stagedLocalCode.uploadedPaths.slice(0, 20).join(', ')}${stagedLocalCode.uploadedPaths.length > 20 ? `, and ${stagedLocalCode.uploadedPaths.length - 20} more` : ''}.`
@@ -5179,12 +5171,12 @@ function buildSourceContextManifest(
     '- DESIGN.md is the canonical source of truth.',
     '- Use the canonical design-system title above for headings, README/SKILL names, preview labels, and UI-kit copy unless inspected evidence proves a more accurate product name. Never title the system from URL protocol text such as `https`.',
     '- colors_and_type.css should hold concrete reusable tokens when the source evidence supports them; if fonts/ contains preserved font files, colors_and_type.css must bind those files with @font-face, @import, or url(...) references so typography does not fall back to substitute fonts.',
-    '- README.md and SKILL.md should make the extracted system reusable as a real Open Docs design-system package.',
-    '- README.md should include a source-backed Product Overview/Product Context section, source repository or source folder references, package contents, a concrete `## Preview Manifest` listing every generated `preview/*.html` card, and reuse workflow, similar to Open Docs exports.',
+    '- README.md and SKILL.md should make the extracted system reusable as a real MonoField design-system package.',
+    '- README.md should include a source-backed Product Overview/Product Context section, source repository or source folder references, package contents, a concrete `## Preview Manifest` listing every generated `preview/*.html` card, and reuse workflow, similar to MonoField exports.',
     '- SKILL.md should include YAML frontmatter with `name`, `description`, and `user-invocable`, plus Claude-style reusable skill sections: What is inside, Source context, When to use this skill, How to use, and Design system highlights. The usage guidance should point agents at README.md, DESIGN.md, colors_and_type.css, preview/, assets/, build/, fonts/, source_examples/, and ui_kits/app/.',
     '- README.md, SKILL.md, DESIGN.md, and ui_kits/app/README.md must describe the final focused preview cards and `ui_kits/app/` paths, not old scaffold names such as `preview/typography-scale.html` or `ui_kits/generated_interface/`.',
     '- preview/ should contain small reviewable HTML cards for typography, color themes, spacing, radius, shadows, brand assets, and component evidence.',
-    '- source_examples/ or equivalent root/nested source files should preserve selected high-signal original components when snapshots include substantial app/component source, similar to Open Docs exports that keep files like SelectModelButton.tsx or ChatNavBar/index.tsx alongside the package. These examples should contain substantive original implementation code, not tiny stubs that only share the component name.',
+    '- source_examples/ or equivalent root/nested source files should preserve selected high-signal original components when snapshots include substantial app/component source, similar to MonoField exports that keep files like SelectModelButton.tsx or ChatNavBar/index.tsx alongside the package. These examples should contain substantive original implementation code, not tiny stubs that only share the component name.',
     '- ui_kits/app/ should contain an applied interface example, plus substantive role-based files under `ui_kits/app/components/` when the source snapshots include representative app shells, navigation, chat/input surfaces, or reusable components. `ui_kits/app/README.md` should explain structure, component files, usage, design notes, and source basis. `ui_kits/app/index.html` must load `../../colors_and_type.css`, must load/import/compose the modular component files, and must mount/render the composed interface instead of staying as a standalone generic static mock or disconnected script list. If the entry directly loads `.jsx`/`.tsx` files, include React, ReactDOM, and Babel standalone scripts and expose each loaded component as `window.ComponentName` / `globalThis.ComponentName`, or write compiled browser-ready JavaScript instead. For chat/workspace evidence, cover app shell, sidebar/navigation, assistant/list rail, chat area, input bar/composer, and message bubble/comment roles; the app shell component must compose those roles into one product-like surface. Placeholder component shells are not sufficient.',
     UI_KIT_ENTRY_CONTRACT,
     '- Preview cards and UI-kit visuals should explicitly label or model source-backed modules from the captured evidence instead of generic placeholder modules.',

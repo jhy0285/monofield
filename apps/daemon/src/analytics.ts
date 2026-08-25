@@ -1,4 +1,4 @@
-// Open Docs disables product telemetry at the daemon boundary. The inherited
+// MonoField disables product telemetry at the daemon boundary. The inherited
 // analytics API surface remains so callers do not need feature flags, but every
 // service returned here is a no-op and no external endpoint is contacted.
 
@@ -25,7 +25,7 @@ export interface AnalyticsContext {
 }
 
 // Keep parsing helpers available for callers, but no telemetry headers are
-// installed by Open Docs because /api/analytics/config never exposes a sink.
+// installed by MonoField because /api/analytics/config never exposes a sink.
 export function readAnalyticsContext(req: Request): AnalyticsContext | null {
   const deviceId = headerString(req, ANALYTICS_HEADER_DEVICE_ID);
   if (!deviceId) return null;

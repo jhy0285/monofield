@@ -35,6 +35,7 @@ import { OFFICIAL_DESIGNER_PROMPT } from './official-system.js';
 import { DISCOVERY_AND_PHILOSOPHY } from './discovery.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
 import { MEDIA_GENERATION_CONTRACT } from './media-contract.js';
+import { DATABASE_DEVELOPMENT_CONTEXT } from './database-development.js';
 
 export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
 const ELEVENLABS_VOICE_PROMPT_OPTION_LIMIT = 100;
@@ -70,7 +71,7 @@ function renderUiLocalePrompt(locale: string | undefined): string {
   const lines = [
     '# UI locale override',
     '',
-    `The Open Docs UI locale for this run is \`${normalized}\` (${languageName}). All user-visible chat prose and generated UI controls must follow this locale, especially \`<question-form>\` titles, descriptions, labels, placeholders, helper text, and option labels. Keep machine-readable ids and object option \`value\` fields exact and unlocalized.`,
+    `The MonoField UI locale for this run is \`${normalized}\` (${languageName}). All user-visible chat prose and generated UI controls must follow this locale, especially \`<question-form>\` titles, descriptions, labels, placeholders, helper text, and option labels. Keep machine-readable ids and object option \`value\` fields exact and unlocalized.`,
     'Exception: for the default task-type form, keep the `taskType` option labels as the canonical routing choices: `Prototype`, `Live artifact`, `Slide deck`, `Image`, `Video`, `HyperFrames`, `Audio`, `Other`. Do not translate, reorder, or rewrite those option labels.',
   ];
   if (normalized === 'zh-CN') {
@@ -271,6 +272,10 @@ export function composeSystemPrompt({
   // wording later in the official base prompt.
   const parts: string[] = [];
   const activeDesignSystemBody = designSystemBody?.trim();
+  const isLeanChatMode = sessionMode === 'chat';
+  const hasConnectedProjectDatabase =
+    typeof metadata?.databaseContext?.connectionId === 'string'
+    && metadata.databaseContext.connectionId.trim().length > 0;
   const isMediaSurfaceEarly =
     skillMode === 'image' ||
     skillMode === 'video' ||
@@ -297,6 +302,19 @@ export function composeSystemPrompt({
     parts.push('\n\n---\n\n');
   }
 
+  if (sessionMode === 'docs') {
+    parts.push(DOCS_MODE_OVERRIDE);
+    parts.push('\n\n---\n\n');
+  }
+
+  // Plain API/BYOK runs do not have filesystem or OD CLI tools. Local CLI
+  // runs do, so make Desktop's encrypted database broker a normal (but
+  // relevance-gated) part of development context there.
+  if (streamFormat !== 'plain' && hasConnectedProjectDatabase) {
+    parts.push(DATABASE_DEVELOPMENT_CONTEXT);
+    parts.push('\n\n---\n\n');
+  }
+
   if (metadata?.examplePrompt === true) {
     parts.push(buildExamplePromptOverride(metadata.examplePromptTitle, metadata.examplePromptBrief));
     parts.push('\n\n---\n\n');
@@ -311,11 +329,13 @@ export function composeSystemPrompt({
     parts.push('\n\n---\n\n');
   }
 
-  if (!isMediaSurfaceEarly) {
+  if (!isMediaSurfaceEarly && !isLeanChatMode) {
     parts.push(DISCOVERY_AND_PHILOSOPHY, '\n\n---\n\n');
   }
 
-  parts.push('# Identity and workflow charter (background)\n\n', BASE_SYSTEM_PROMPT);
+  if (!isLeanChatMode) {
+    parts.push('# Identity and workflow charter (background)\n\n', BASE_SYSTEM_PROMPT);
+  }
 
   // Mid-conversation clarification reuses the same `<question-form>` flow as
   // turn-1 discovery (DISCOVERY_AND_PHILOSOPHY) so the host keeps ONE unified
@@ -325,9 +345,11 @@ export function composeSystemPrompt({
   // in apps/daemon/src/prompts/system.ts — keep both in sync so a daemon chat
   // and a BYOK/API chat route follow-up choices through the same surface
   // instead of drifting back to plain markdown option lists.
-  parts.push(
-    "\n\n---\n\n## Clarifying questions mid-conversation\n\nWhen you need a clarification AFTER turn 1 and the natural answer is one of a small finite set of choices (2-4 options per question), emit a `<question-form>` block — the same markup turn-1 discovery uses — instead of writing a bulleted list of options in markdown. The host renders it as a Questions banner the user opens in the side tab; a markdown list renders as plain text and forces the user to type a reply. Use free-form prose questions only when the answer is naturally open-ended, needs more than ~4 options, or is a single yes/no. Do NOT also duplicate the form's questions as markdown text alongside it.\n\n`<question-form>` is assistant text for the Open Docs UI, not a native tool call. If you need to clarify direction, emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call. Do not stop after an introductory sentence such as \"先确认一下方向：\"; the same message must include the full form.",
-  );
+  if (!isLeanChatMode) {
+    parts.push(
+      "\n\n---\n\n## Clarifying questions mid-conversation\n\nWhen you need a clarification AFTER turn 1 and the natural answer is one of a small finite set of choices (2-4 options per question), emit a `<question-form>` block — the same markup turn-1 discovery uses — instead of writing a bulleted list of options in markdown. The host renders it as a Questions banner the user opens in the side tab; a markdown list renders as plain text and forces the user to type a reply. Use free-form prose questions only when the answer is naturally open-ended, needs more than ~4 options, or is a single yes/no. Do NOT also duplicate the form's questions as markdown text alongside it.\n\n`<question-form>` is assistant text for the MonoField UI, not a native tool call. If you need to clarify direction, emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call. Do not stop after an introductory sentence such as \"先确认一下方向：\"; the same message must include the full form.",
+    );
+  }
 
   // Mirrors the daemon-side composer in apps/daemon/src/prompts/system.ts —
   // keep both copies of this preamble in sync so a CLI chat and a BYOK
@@ -349,21 +371,23 @@ export function composeSystemPrompt({
     // use no backticks so they stay literal inside the template strings.
     // Keep this whole block BYTE-IDENTICAL to the daemon-side composer in
     // apps/daemon/src/prompts/system.ts.
-    if ((memoryHooks?.rewrite ?? true)) {
+    if (!isLeanChatMode && (memoryHooks?.rewrite ?? true)) {
       parts.push(
         `\n\n## Intent gateway — turn short asks into a brief\n\nWhen the user's request is short or underspecified AND memory gives you enough to expand it, silently build an internal task brief (task type, audience, files/artifacts in play, delivery preferences, constraints, and what "done" means) before acting. Surface it as ONE collapsed card at the very start of your reply, then continue with the work without waiting for confirmation:\n\n<od-card type="task-brief">\n{ "summary": "<one line restating the expanded intent>", "fields": [ {"label": "Audience", "value": "…"}, {"label": "Deliverable", "value": "…"}, {"label": "Done means", "value": "…"} ] }\n</od-card>\n\nEmit at most one task-brief per turn. Skip it entirely when the request is already explicit or trivial (a greeting, a yes/no, a tiny edit). If you applied memory but skipped the brief, you may instead emit one compact chip: <od-card type="memory-applied">{ "summary": "Applied your profile and 2 rules", "used": [ {"type": "profile", "name": "Work profile"} ] }</od-card>. Never dump the brief as prose — only as the card.\n\nThe task-brief card REPLACES the turn-1 discovery question-form when memory already makes the intent clear — it does NOT replace the rest of the build flow. On every artifact-producing turn you STILL open with a TodoWrite plan (RULE 3) before writing files and update it live as you work, then run the anti-slop / brand self-check before shipping. The brief only expands intent; it is never the deliverable and never stands in for the TodoWrite plan or the self-check. Skipping the discovery form when intent is already understood is correct; skipping TodoWrite or the anti-slop gate is not.`,
       );
     }
 
-    if ((memoryHooks?.verify ?? true)) {
+    if (!isLeanChatMode && (memoryHooks?.verify ?? true)) {
       parts.push(
         `\n\n## Self-verify against your verified rules\n\nThe **Verified rules** above are enforceable checks, not soft preferences. After you finish producing or editing an artifact, evaluate it against every active rule, FIX any failure in place before ending your turn, then emit one scorecard:\n\n<od-card type="verify-scorecard">\n{ "status": "pass|partial|fail", "summary": "5/6 checks passed · 1 auto-fixed", "rows": [ {"rule": "<the check>", "status": "pass|fail|fixed", "note": "<what was wrong / what you fixed>"} ] }\n</od-card>\n\nPrefer fixing silently over asking. Leave a row as "fail" only when fixing it needs a decision you genuinely cannot make from the request plus memory. The daemon programmatically checks this scorecard after your turn — a missing scorecard or a rule left uncovered on an artifact turn is recorded as an enforcement failure — so always emit it when verified rules apply. Skip the scorecard entirely only when there are no verified rules or the turn produced no artifact.\n\nThe scorecard is ADDITIVE to — never a replacement for — the rest of the end-of-run flow. On an artifact turn you still run the existing anti-slop / brand self-check (the "N/N brand checks passed" gate) and still close with the normal handoff. Order the end of your turn as: (1) finish the anti-slop / brand self-check and fix any failure in place, (2) emit the verify-scorecard card, (3) close with the normal handoff — a single <artifact> block when this turn wrote a new canonical HTML file, otherwise a brief file-operation summary of what changed and what is still open. The scorecard only checks your verified rules; it does not absorb the anti-slop gate or the end-of-run summary.`,
       );
     }
 
-    parts.push(
-      `\n\n## Propose new verified rules from corrections\n\nWhen the user corrects your output in a way that implies a reusable, checkable rule, PROPOSE it — never save it silently. Emit a proposal card the user can Keep, Edit, or Discard:\n\n<od-card type="rule-proposal">\n{ "name": "<short name>", "description": "<one line>", "assertion": "<what must hold>", "check": "<how to verify it>", "rationale": "<why you inferred it>" }\n</od-card>\n\nPropose at most one rule per turn, and only when confident it generalizes beyond the current artifact.`,
-    );
+    if (!isLeanChatMode) {
+      parts.push(
+        `\n\n## Propose new verified rules from corrections\n\nWhen the user corrects your output in a way that implies a reusable, checkable rule, PROPOSE it — never save it silently. Emit a proposal card the user can Keep, Edit, or Discard:\n\n<od-card type="rule-proposal">\n{ "name": "<short name>", "description": "<one line>", "assertion": "<what must hold>", "check": "<how to verify it>", "rationale": "<why you inferred it>" }\n</od-card>\n\nPropose at most one rule per turn, and only when confident it generalizes beyond the current artifact.`,
+      );
+    }
   }
 
   if (userInstructions && userInstructions.trim().length > 0) {
@@ -428,7 +452,7 @@ export function composeSystemPrompt({
     !!skillBody && /assets\/template\.html/.test(skillBody);
   if (isDeckProject && !hasSkillSeed) {
     parts.push(`\n\n---\n\n${DECK_FRAMEWORK_DIRECTIVE}`);
-  } else if (isFreeformProject && !hasSkillSeed) {
+  } else if (!isLeanChatMode && isFreeformProject && !hasSkillSeed) {
     // Freeform / kind=other projects skip the kind picker entirely and
     // land here. If the user's brief is a deck/keynote/slides ("讲解",
     // "presentation", "make a deck"), the agent used to invent its own
@@ -487,13 +511,21 @@ Every later instruction in this prompt that tells you to "call TodoWrite", "run 
 
 If the rules below tell you to plan with TodoWrite, write the plan as prose instead. If they tell you to read skill side files before writing, describe in one sentence which patterns/conventions you're going to apply and proceed. If they tell you to run brand-spec extraction via Bash + Read + WebFetch, ask the user the missing brand questions in the discovery form instead.`;
 
-const CHAT_MODE_OVERRIDE = `# Chat mode — standard conversation (read first — overrides every rule below)
+const CHAT_MODE_OVERRIDE = `# Ask / software development mode
 
-This conversation is in Open Docs Chat mode. Open Docs is a local-first document specification workspace for creating, maintaining, and exporting screen, interface, API, Excel, and slide-deck artifacts. Official repository: https://github.com/jhy0285/open-docs.
+MonoField connects the selected working folder, files, browser context, approved database connection, and model. Answer directly and keep the response proportional to the request.
 
-Use the same available context, files, attachments, connectors, MCP servers, project memory, and model capabilities as Design mode. The difference is behavior: answer like a fast, direct, multi-turn desktop chat assistant. Prefer concise prose, explanations, comparisons, debugging help, and follow-up questions only when needed.
+- For explanations, reviews, greetings, or comparisons, respond concisely without a discovery form or planning ceremony.
+- Do not claim to have inspected files, queried a database, or verified a browser state in this API-only run unless that context was explicitly provided.
+- Do not create document, deck, media, or design artifacts unless the user explicitly asks for them. If they do, use the selected skill, plugin, design system, and project context supplied below.`;
 
-Override artifact-first discovery rules below: do not emit a default discovery \`<question-form>\`, do not call TodoWrite just to plan a chat answer, and do not create or edit project files, HTML, PPT, slide decks, images, video, or audio unless the user explicitly asks you to generate/build/design/export/modify something. When the user does ask for a design artifact or file change, you may use the normal Open Docs agent workflow and the same tools/capabilities available in Design mode.`;
+const DOCS_MODE_OVERRIDE = `# Docs mode — distinguish guidance from generation (read first — overrides every rule below)
+
+This conversation is in MonoField Docs mode. Use the document and specification workflow only when the user explicitly asks you to create, generate, write, collect, edit, validate, render, export, or modify a document or specification.
+
+If the user asks how to do something, asks what a document/specification is, asks for an explanation, meaning, comparison, guide, or general usage instructions, answer directly in clear prose. Do not emit a discovery or artifact-options \`<question-form>\`, do not inspect files, do not call collection tools, and do not create an artifact for that explanatory turn.
+
+For an explicit interface-spec generation request, first determine its source mode. An explicit no-codebase/manual/new-design request does not require a Working folder: do not inspect files or call database tools, and use the Interface Spec Collector's \`interface-spec-manual-draft\` form. An explicit codebase-reading request still requires a selected, validated Working folder before \`interface-spec-options\`; never replace it with the managed project directory, a database-only sample, or guessed context. If the request is genuinely ambiguous and no valid source folder is linked, emit only the collector's \`interface-spec-source-mode\` choice form instead of forcing folder selection or guessing.`;
 
 function renderMetadataBlock(
   metadata: ProjectMetadata | undefined,

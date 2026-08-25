@@ -302,7 +302,7 @@
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text-faint);
+  color: var(--text-muted);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -476,7 +476,7 @@
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text-faint);
+  color: var(--text-muted);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -732,17 +732,17 @@
 .chrome-action-export {
   background: var(--accent);
   border-color: var(--accent);
-  color: white;
+  color: var(--accent-contrast);
   box-shadow: 0 6px 14px color-mix(in srgb, var(--accent) 24%, transparent);
 }
 .chrome-action-export:hover:not(:disabled) {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
-  color: white;
+  color: var(--accent-contrast);
 }
 .chrome-action-export:focus-visible {
-  outline-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  outline-color: var(--focus-ring);
+  box-shadow: 0 0 0 3px var(--focus-ring-soft);
 }
 .chrome-action-export.export-ready-nudge {
   animation: export-ready-nudge 1600ms cubic-bezier(0.23, 1, 0.32, 1) 1;
@@ -759,7 +759,8 @@
   gap: 4px;
 }
 .viewer-toolbar-zoom .zoom-trigger:focus-visible {
-  outline: none;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
   box-shadow: none;
 }
 .zoom-menu-popover {
@@ -838,7 +839,7 @@
   color: var(--text);
 }
 .viewer .present-exit-btn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 .live-artifact-preview-frame-host {
@@ -1019,13 +1020,14 @@
   transition: box-shadow var(--dur-quick) var(--ease-out), transform var(--dur-quick) var(--ease-out);
 }
 .avatar-btn:hover:not(:disabled) {
-  box-shadow: 0 0 0 3px rgba(194, 83, 45, 0.18);
-  border-color: transparent;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--text) 12%, transparent);
+  border-color: var(--control-border-hover);
 }
 .avatar-btn:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(194, 83, 45, 0.32);
-  border-color: transparent;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  box-shadow: none;
+  border-color: var(--control-border-hover);
 }
 .avatar-btn:active:not(:disabled) { transform: scale(0.96); }
 .avatar-btn-photo {

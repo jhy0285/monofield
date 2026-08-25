@@ -35,6 +35,7 @@ interface StartedServer {
 }
 
 const realFetch = globalThis.fetch;
+const IS_WINDOWS = process.platform === 'win32';
 let baseUrl: string;
 let server: http.Server;
 const FAKE_VELA_FIXTURE = path.resolve(process.cwd(), 'tests', 'fixtures', 'fake-vela.mjs');
@@ -2041,7 +2042,7 @@ describe('POST /api/test/connection provider mode', () => {
 });
 
 describe('POST /api/test/connection agent mode', () => {
-  it('uses the AMR profile-scoped remembered model during connection tests when no explicit model is selected', async () => {
+  it.skipIf(process.env.OD_ENABLE_AMR !== '1')('uses the AMR profile-scoped remembered model during connection tests when no explicit model is selected', async () => {
     rememberLiveModels('amr', [{ id: 'local-scoped-model', label: 'local-scoped-model' }], 'local');
 
     await withFakeAgent(
@@ -2067,7 +2068,7 @@ describe('POST /api/test/connection agent mode', () => {
     );
   });
 
-  it('resolves the AMR connection-test scope from the merged launch env', async () => {
+  it.skipIf(process.env.OD_ENABLE_AMR !== '1')('resolves the AMR connection-test scope from the merged launch env', async () => {
     rememberLiveModels('amr', [{ id: 'local-env-model', label: 'local-env-model' }], 'local');
     const previousProfile = process.env.OPEN_DESIGN_AMR_PROFILE;
     process.env.OPEN_DESIGN_AMR_PROFILE = 'local';
@@ -2847,7 +2848,8 @@ process.stdin.on('end', () => {
     );
   });
 
-  it('uses CODEX_BIN overrides when testing agent connections', async () => {
+  // These cases create Unix shebang fixtures; Windows only executes .cmd/.exe files directly.
+  it.skipIf(IS_WINDOWS)('uses CODEX_BIN overrides when testing agent connections', async () => {
     const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-codex-bin-'));
     const oldPath = process.env.PATH;
     try {
@@ -2918,7 +2920,8 @@ process.stdin.on('end', () => {
     );
   });
 
-  it('falls back to PATH Codex during connection tests when a configured CODEX_BIN fails', async () => {
+  // These cases create Unix shebang fixtures; Windows only executes .cmd/.exe files directly.
+  it.skipIf(IS_WINDOWS)('falls back to PATH Codex during connection tests when a configured CODEX_BIN fails', async () => {
     await withFakeCodex(
       `console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'ok' } }));\n`,
       async () => {
@@ -2960,7 +2963,8 @@ process.stdin.on('end', () => {
     );
   });
 
-  it('falls back to PATH Codex when a configured shim spawns ENOENT', async () => {
+  // These cases create Unix shebang fixtures; Windows only executes .cmd/.exe files directly.
+  it.skipIf(IS_WINDOWS)('falls back to PATH Codex when a configured shim spawns ENOENT', async () => {
     await withFakeCodex(
       `console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'ok' } }));\n`,
       async () => {
@@ -3743,6 +3747,23 @@ process.exit(1);
 });
 
 describe('connection test helpers', () => {
+  it('redacts named credentials and connection URL passwords while preserving env references', () => {
+    const detail = redactSecrets([
+      'password: local-secret',
+      '"clientSecret": "oauth-secret"',
+      'url=jdbc:postgresql://app:db-secret@localhost:5432/sample',
+      'password: ${DB_PASSWORD}',
+    ].join('\n'));
+
+    expect(detail).toContain('password: [REDACTED]');
+    expect(detail).toContain('"clientSecret": "[REDACTED]"');
+    expect(detail).toContain('postgresql://app:[REDACTED]@localhost');
+    expect(detail).toContain('password: ${DB_PASSWORD}');
+    expect(detail).not.toContain('local-secret');
+    expect(detail).not.toContain('oauth-secret');
+    expect(detail).not.toContain('db-secret');
+  });
+
   it('redacts the exact submitted provider key when it appears in body text', () => {
     const detail = redactSecrets(
       'Incorrect API key provided: sk-test-raw-secret.',

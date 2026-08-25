@@ -91,10 +91,21 @@ export const ScreenSpecRenderer: ArtifactRenderer = {
   id: 'screen-spec',
   supportsStreaming: false,
   canRender: ({ file }) => {
-    if (/\.screen-spec\.json$/i.test(file.name)) return true;
+    if (/(?:^|\.)screen-spec\.json$/i.test(file.name)) return true;
     const manifest = resolveManifest(file);
     if (!manifest) return false;
     return manifest.kind === 'screen-spec' || manifest.renderer === 'screen-spec';
+  },
+};
+
+export const InterfaceSpecRenderer: ArtifactRenderer = {
+  id: 'interface-spec',
+  supportsStreaming: false,
+  canRender: ({ file }) => {
+    if (/(?:^|\.)interface-spec\.json$/i.test(file.name)) return true;
+    const manifest = resolveManifest(file);
+    if (!manifest) return false;
+    return manifest.kind === 'interface-spec' || manifest.renderer === 'interface-spec';
   },
 };
 
@@ -111,6 +122,7 @@ export class RendererRegistry {
 }
 
 export const artifactRendererRegistry = new RendererRegistry([
+  InterfaceSpecRenderer,
   ScreenSpecRenderer,
   ReactComponentRenderer,
   DeckHtmlRenderer,

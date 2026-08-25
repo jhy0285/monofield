@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PrivacyConsentModal } from '../../src/components/PrivacyConsentModal';
 import { I18nProvider } from '../../src/i18n';
 
-const PRIVACY_POLICY_HREF = 'https://github.com/jhy0285/open-docs/blob/main/PRIVACY.md';
+const PRIVACY_POLICY_HREF = 'https://github.com/jhy0285/monofield/blob/main/PRIVACY.md';
 
 function renderModal(overrides?: { onAccept?: () => void }) {
   const onAccept = overrides?.onAccept ?? vi.fn();
@@ -31,9 +31,9 @@ describe('PrivacyConsentModal', () => {
     expect(screen.queryByRole('button', { name: "Don't share" })).toBeNull();
   });
 
-  it('tells the user Open Docs telemetry is disabled and model provider policy applies', () => {
+  it('tells the user MonoField telemetry is disabled and model provider policy applies', () => {
     renderModal();
-    expect(screen.getAllByText(/Open Docs does not send product telemetry/i).length).toBeGreaterThan(
+    expect(screen.getAllByText(/MonoField does not send product telemetry/i).length).toBeGreaterThan(
       0,
     );
     expect(screen.getByText(/Model and agent input/i)).toBeTruthy();

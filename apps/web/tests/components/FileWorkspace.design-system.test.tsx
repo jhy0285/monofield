@@ -613,7 +613,7 @@ describe('FileWorkspace design-system project surface', () => {
       />,
     );
 
-    expect(markup).toContain('Creating your design system...');
+    expect(markup).toContain('Creating your document style...');
     expect(markup).toContain('Keep this tab open. You can come back in a few minutes.');
     expect(markup).toContain('role="progressbar"');
   });
@@ -638,8 +638,8 @@ describe('FileWorkspace design-system project surface', () => {
     await flushKit();
 
     expect(container.textContent).toContain('Extraction complete');
-    expect(container.textContent).toContain('Your design system is ready');
-    expect(container.textContent).not.toContain('Creating your design system...');
+    expect(container.textContent).toContain('Your document style is ready');
+    expect(container.textContent).not.toContain('Creating your document style...');
     expect(container.textContent).not.toContain('Keep this tab open. You can come back in a few minutes.');
   });
 
@@ -672,7 +672,7 @@ describe('FileWorkspace design-system project surface', () => {
     const publishButton = container.querySelector<HTMLButtonElement>(
       '[data-testid="design-system-publish"]',
     );
-    expect(container.textContent).toContain('Connect your repo to pull aspects of your design system');
+    expect(container.textContent).toContain('Connect your repo to pull aspects of your document style');
     expect(publishButton?.disabled).toBe(true);
 
     await act(async () => {
@@ -770,7 +770,7 @@ describe('FileWorkspace design-system project surface', () => {
     expect(onRefresh).toHaveBeenCalledOnce();
   });
 
-  it('routes Create new design to the selected design system', async () => {
+  it('routes Create new doc to the selected document style', async () => {
     const onUseDesignSystem = vi.fn();
     const container = renderWorkspace(
       <FileWorkspace
@@ -790,7 +790,7 @@ describe('FileWorkspace design-system project surface', () => {
     await flushKit();
 
     const newDesignButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('Create new design'),
+      button.textContent?.includes('Create new doc'),
     );
     expect(newDesignButton).toBeTruthy();
 
@@ -868,7 +868,7 @@ describe('FileWorkspace design-system project surface', () => {
 
     await flushKit();
 
-    expect(container.textContent).toContain('Connect your repo to pull aspects of your design system');
+    expect(container.textContent).toContain('Connect your repo to pull aspects of your document style');
     const connectButton = Array.from(container.querySelectorAll('button')).find((button) =>
       button.textContent?.includes('Connect GitHub'),
     );
@@ -904,7 +904,7 @@ describe('FileWorkspace design-system project surface', () => {
     await flushKit();
 
     expect(container.textContent).toContain('GitHub is connected');
-    expect(container.textContent).not.toContain('Connect your repo to pull aspects of your design system');
+    expect(container.textContent).not.toContain('Connect your repo to pull aspects of your document style');
     const importButton = Array.from(container.querySelectorAll('button')).find((button) =>
       button.textContent?.includes('Import repo'),
     );

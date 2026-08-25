@@ -87,6 +87,11 @@ interface PluginRouteHelpers {
   handleCandidateDraft(req: Request, res: Response): Promise<unknown>;
   handleCandidateShareTask(req: Request, res: Response): Promise<unknown>;
   handleProjectShareTask(req: Request, res: Response): Promise<unknown>;
+  // Managed enterprise distributions expose and execute only plugins that
+  // satisfy an administrator-owned distribution policy. Optional keeps this
+  // route bundle reusable by open-mode tests and downstream embedders.
+  managedDistributionOnly?: boolean;
+  isPluginAllowed?(plugin: InstalledPluginLike): boolean;
 }
 
 export interface RegisterPluginRoutesDeps {
@@ -146,22 +151,92 @@ export function registerPluginEventRoutes(app: Express, deps: RegisterPluginEven
 
 export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDeps): void {
   const { db, paths, plugins, helpers } = deps;
-  app.get('/api/plugins', async (_req, res) => { try { res.json({ plugins: helpers.applyBakedPreviews(plugins.listInstalledPlugins(db), helpers.PLUGIN_PREVIEWS_DIR) }); } catch (err) { res.status(500).json({ error: String(err) }); } });
-  app.get('/api/plugins/:id', async (req, res) => { try { const plugin = plugins.getInstalledPlugin(db, req.params.id); if (!plugin) return res.status(404).json({ error: 'plugin not found' }); res.json(plugin); } catch (err) { res.status(500).json({ error: String(err) }); } });
+  const isPluginAllowed = (plugin: InstalledPluginLike): boolean =>
+    helpers.isPluginAllowed?.(plugin) !== false;
+  const managedPolicyBlocked = (res: Response, message: string) => res.status(403).json({
+    error: {
+      code: 'managed-plugin-policy-blocked',
+      message,
+    },
+  });
+  const isSnapshotAllowed = (snapshot: AppliedPluginSnapshotLike): boolean => {
+    const plugin = plugins.getInstalledPlugin(db, snapshot.pluginId);
+    return Boolean(plugin && isPluginAllowed(plugin));
+  };
+
+  app.get('/api/plugins', async (_req, res) => { try { const visible = plugins.listInstalledPlugins(db).filter(isPluginAllowed); res.json({ plugins: helpers.applyBakedPreviews(visible, helpers.PLUGIN_PREVIEWS_DIR) }); } catch (err) { res.status(500).json({ error: String(err) }); } });
+  app.get('/api/plugins/:id', async (req, res) => { try { const plugin = plugins.getInstalledPlugin(db, req.params.id); if (!plugin || !isPluginAllowed(plugin)) return res.status(404).json({ error: 'plugin not found' }); res.json(plugin); } catch (err) { res.status(500).json({ error: String(err) }); } });
   app.post('/api/plugins/upload-zip', (req, res) => helpers.pluginUpload.single('file')(req, res, async (err: unknown) => { if (err) return helpers.sendMulterError(res, err); try { const file = req.file; if (!file?.buffer) return res.status(400).json({ error: 'file is required' }); const result = await helpers.pluginInstallation.stageUploadedPluginZip(file.buffer, `upload:zip:${helpers.decodeMultipartFilename(file.originalname || 'plugin.zip')}`); res.status((result as { ok?: boolean }).ok ? 200 : 400).json(result); } catch (uploadErr: unknown) { res.status(400).json({ ok: false, warnings: [], message: uploadErr instanceof Error ? uploadErr.message : String(uploadErr), log: [] }); } }));
   app.post('/api/plugins/upload-folder', (req, res) => helpers.pluginUpload.array('files', 500)(req, res, async (err: unknown) => { if (err) return helpers.sendMulterError(res, err); try { const files = Array.isArray(req.files) ? req.files as Array<{ buffer: Buffer; originalname: string }> : []; if (files.length === 0) return res.status(400).json({ error: 'files are required' }); const result = await helpers.pluginInstallation.stageUploadedPluginFolder(files, req.body?.paths); res.status((result as { ok?: boolean } | null)?.ok ? 200 : 400).json(result); } catch (uploadErr: unknown) { res.status(400).json({ ok: false, warnings: [], message: uploadErr instanceof Error ? uploadErr.message : String(uploadErr), log: [] }); } }));
   app.post('/api/plugins/install', async (req, res) => helpers.installOrUpgradePlugin(req, res, 'install'));
   app.post('/api/plugins/:id/uninstall', async (req, res) => { try { const result = await plugins.uninstallPlugin(db, req.params.id, paths.PLUGIN_REGISTRY_ROOTS); if (!result.ok && !result.removedFolder) return res.status(404).json({ error: 'plugin not found', warning: result.warning }); res.json(result); } catch (err) { res.status(500).json({ error: String(err) }); } });
   app.post('/api/plugins/:id/upgrade', async (req, res) => helpers.installOrUpgradePlugin(req, res, 'upgrade'));
-  app.post('/api/plugins/:id/apply', async (req, res) => { try { const plugin = plugins.getInstalledPlugin(db, req.params.id); if (!plugin) return res.status(404).json({ error: 'plugin not found' }); const body = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {}; const inputs = body.inputs && typeof body.inputs === 'object' ? body.inputs : {}; const grantCaps = Array.isArray(body.grantCaps) ? body.grantCaps.filter((c: unknown): c is string => typeof c === 'string') : []; const locale = typeof body.locale === 'string' ? body.locale : undefined; const registry = await helpers.loadPluginRegistryView(); const connectorProbe = helpers.buildConnectorProbe(helpers.connectorService); const computed = plugins.applyPlugin({ plugin, inputs, registry, locale, connectorProbe }); if (grantCaps.length > 0) { const merged = new Set([...computed.result.capabilitiesGranted, ...grantCaps]); computed.result.capabilitiesGranted = Array.from(merged); computed.result.appliedPlugin.capabilitiesGranted = Array.from(merged); } res.json({ ok: true, ...computed.result, warnings: computed.warnings, manifestSourceDigest: computed.manifestSourceDigest }); } catch (err: unknown) { if (err instanceof plugins.MissingInputError) return res.status(422).json({ error: 'missing_inputs', fields: err.fields }); res.status(500).json({ error: String(err) }); } });
-  app.post('/api/plugins/:id/share-project', async (req, res) => helpers.handleShareProject(req, res));
-  app.post('/api/plugins/:id/doctor', async (req, res) => { try { const plugin = plugins.getInstalledPlugin(db, req.params.id); if (!plugin) return res.status(404).json({ error: 'plugin not found' }); const registry = await helpers.loadPluginRegistryView(); const connectorProbe = helpers.buildConnectorProbe(helpers.connectorService); res.json(plugins.doctorPlugin(plugin, registry, { connectorProbe })); } catch (err) { res.status(500).json({ error: String(err) }); } });
-  app.post('/api/plugins/:id/trust', async (req, res) => helpers.handlePluginTrust(req, res));
+  app.post('/api/plugins/:id/apply', async (req, res) => {
+    try {
+      const plugin = plugins.getInstalledPlugin(db, req.params.id);
+      if (!plugin) return res.status(404).json({ error: 'plugin not found' });
+      if (!isPluginAllowed(plugin)) {
+        return managedPolicyBlocked(res, 'This plugin is not approved by the managed distribution policy.');
+      }
+      const body = req.body && typeof req.body === 'object'
+        ? req.body as Record<string, unknown>
+        : {};
+      const inputs = body.inputs && typeof body.inputs === 'object' ? body.inputs : {};
+      const grantCaps = Array.isArray(body.grantCaps)
+        ? body.grantCaps.filter((c: unknown): c is string => typeof c === 'string')
+        : [];
+      if (helpers.managedDistributionOnly && grantCaps.length > 0) {
+        return managedPolicyBlocked(
+          res,
+          'Request-scoped capability grants are disabled in managed distribution mode.',
+        );
+      }
+      const locale = typeof body.locale === 'string' ? body.locale : undefined;
+      const registry = await helpers.loadPluginRegistryView();
+      const connectorProbe = helpers.buildConnectorProbe(helpers.connectorService);
+      const computed = plugins.applyPlugin({ plugin, inputs, registry, locale, connectorProbe });
+      if (grantCaps.length > 0) {
+        const merged = new Set([...computed.result.capabilitiesGranted, ...grantCaps]);
+        computed.result.capabilitiesGranted = Array.from(merged);
+        computed.result.appliedPlugin.capabilitiesGranted = Array.from(merged);
+      }
+      res.json({
+        ok: true,
+        ...computed.result,
+        warnings: computed.warnings,
+        manifestSourceDigest: computed.manifestSourceDigest,
+      });
+    } catch (err: unknown) {
+      if (err instanceof plugins.MissingInputError) {
+        return res.status(422).json({ error: 'missing_inputs', fields: err.fields });
+      }
+      res.status(500).json({ error: String(err) });
+    }
+  });
+  app.post('/api/plugins/:id/share-project', async (req, res) => {
+    if (helpers.managedDistributionOnly) {
+      return managedPolicyBlocked(
+        res,
+        'Public plugin sharing is disabled in managed distribution mode. Publish through the company SCM and approval pipeline.',
+      );
+    }
+    return helpers.handleShareProject(req, res);
+  });
+  app.post('/api/plugins/:id/doctor', async (req, res) => { try { const plugin = plugins.getInstalledPlugin(db, req.params.id); if (!plugin) return res.status(404).json({ error: 'plugin not found' }); if (!isPluginAllowed(plugin)) return managedPolicyBlocked(res, 'This plugin is not approved by the managed distribution policy.'); const registry = await helpers.loadPluginRegistryView(); const connectorProbe = helpers.buildConnectorProbe(helpers.connectorService); res.json(plugins.doctorPlugin(plugin, registry, { connectorProbe })); } catch (err) { res.status(500).json({ error: String(err) }); } });
+  app.post('/api/plugins/:id/trust', async (req, res) => {
+    if (helpers.managedDistributionOnly) {
+      return managedPolicyBlocked(
+        res,
+        'Local plugin trust changes are disabled in managed distribution mode.',
+      );
+    }
+    return helpers.handlePluginTrust(req, res);
+  });
   app.get('/api/plugins/stats', async (_req, res) => helpers.handlePluginStats(res));
-  app.get('/api/applied-plugins/:snapshotId', (req, res) => { try { const snap = plugins.getSnapshot(db, req.params.snapshotId); if (!snap) return res.status(404).json({ error: 'snapshot not found' }); res.json(snap); } catch (err) { res.status(500).json({ error: String(err) }); } });
-  app.get('/api/applied-plugins/:snapshotId/canon', (req, res) => { try { const snap = plugins.getSnapshot(db, req.params.snapshotId); if (!snap) return res.status(404).json({ error: 'snapshot not found' }); const block = plugins.pluginPromptBlock(snap); const accepts = String(req.headers.accept ?? '').toLowerCase(); if (accepts.includes('text/plain')) { res.setHeader('Content-Type', 'text/plain; charset=utf-8'); res.send(block); return; } res.json({ snapshotId: snap.snapshotId, pluginId: snap.pluginId, block }); } catch (err) { res.status(500).json({ error: String(err) }); } });
-  app.get('/api/applied-plugins', (_req, res) => { try { const rows = db.prepare(`SELECT id FROM applied_plugin_snapshots ORDER BY applied_at DESC LIMIT 500`).all() as SqliteRowId[]; res.json({ snapshots: rows.map((r) => plugins.getSnapshot(db, r.id)).filter((x): x is AppliedPluginSnapshotLike => x !== null) }); } catch (err) { res.status(500).json({ error: String(err) }); } });
-  app.get('/api/projects/:projectId/applied-plugins', (req, res) => { try { const rows = db.prepare(`SELECT id FROM applied_plugin_snapshots WHERE project_id = ? ORDER BY applied_at DESC`).all(req.params.projectId) as SqliteRowId[]; res.json({ snapshots: rows.map((r) => plugins.getSnapshot(db, r.id)).filter((x): x is AppliedPluginSnapshotLike => x !== null) }); } catch (err) { res.status(500).json({ error: String(err) }); } });
+  app.get('/api/applied-plugins/:snapshotId', (req, res) => { try { const snap = plugins.getSnapshot(db, req.params.snapshotId); if (!snap || !isSnapshotAllowed(snap)) return res.status(404).json({ error: 'snapshot not found' }); res.json(snap); } catch (err) { res.status(500).json({ error: String(err) }); } });
+  app.get('/api/applied-plugins/:snapshotId/canon', (req, res) => { try { const snap = plugins.getSnapshot(db, req.params.snapshotId); if (!snap || !isSnapshotAllowed(snap)) return res.status(404).json({ error: 'snapshot not found' }); const block = plugins.pluginPromptBlock(snap); const accepts = String(req.headers.accept ?? '').toLowerCase(); if (accepts.includes('text/plain')) { res.setHeader('Content-Type', 'text/plain; charset=utf-8'); res.send(block); return; } res.json({ snapshotId: snap.snapshotId, pluginId: snap.pluginId, block }); } catch (err) { res.status(500).json({ error: String(err) }); } });
+  app.get('/api/applied-plugins', (_req, res) => { try { const rows = db.prepare(`SELECT id FROM applied_plugin_snapshots ORDER BY applied_at DESC LIMIT 500`).all() as SqliteRowId[]; res.json({ snapshots: rows.map((r) => plugins.getSnapshot(db, r.id)).filter((x): x is AppliedPluginSnapshotLike => x !== null && isSnapshotAllowed(x)) }); } catch (err) { res.status(500).json({ error: String(err) }); } });
+  app.get('/api/projects/:projectId/applied-plugins', (req, res) => { try { const rows = db.prepare(`SELECT id FROM applied_plugin_snapshots WHERE project_id = ? ORDER BY applied_at DESC`).all(req.params.projectId) as SqliteRowId[]; res.json({ snapshots: rows.map((r) => plugins.getSnapshot(db, r.id)).filter((x): x is AppliedPluginSnapshotLike => x !== null && isSnapshotAllowed(x)) }); } catch (err) { res.status(500).json({ error: String(err) }); } });
   app.post('/api/applied-plugins/export', helpers.requireLocalDaemonRequest, async (req, res) => helpers.handleAppliedPluginExport(req, res));
   app.post('/api/applied-plugins/prune', async (req, res) => { try { const body = req.body && typeof req.body === 'object' ? req.body : {}; const before = typeof body.before === 'number' ? body.before : undefined; const result = plugins.pruneExpiredSnapshots(db, before ? { before } : {}); if (result.removed > 0) { try { const { recordPluginEvent } = await import('../../plugins/events.js'); recordPluginEvent({ kind: 'plugin.snapshot-pruned', pluginId: '', details: { removed: result.removed, ...(before ? { before } : {}) } }); } catch {} } res.json({ ok: true, removed: result.removed, ids: result.ids }); } catch (err) { res.status(500).json({ error: String(err) }); } });
 }
@@ -169,13 +244,19 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
 export function registerProjectPluginRoutes(app: Express, deps: RegisterPluginRoutesDeps): void {
   const { db, paths, plugins, helpers } = deps;
   app.post('/api/projects/:id/plugins/install-folder', async (req, res) => helpers.handleProjectInstallFolder(req, res));
-  app.post('/api/projects/:id/plugins/publish-github', async (req, res) => helpers.handleProjectPluginCli(req, res, 'publish-github'));
+  const managedSharingBlocked = (res: Response) => res.status(403).json({
+    error: {
+      code: 'managed-plugin-sharing-blocked',
+      message: 'Public plugin sharing is disabled in managed distribution mode. Publish through the company SCM and approval pipeline.',
+    },
+  });
+  app.post('/api/projects/:id/plugins/publish-github', async (req, res) => helpers.managedDistributionOnly ? managedSharingBlocked(res) : helpers.handleProjectPluginCli(req, res, 'publish-github'));
   app.get('/api/projects/:id/plugin-candidates', (req, res) => { try { const project = helpers.getProject(db, req.params.id); if (!project) return helpers.sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const includeDismissed = req.query.includeDismissed === 'true'; res.json({ candidates: plugins.listSkillPluginCandidates(db, req.params.id, includeDismissed) }); } catch (err: unknown) { res.status(400).json({ error: err instanceof Error ? err.message : String(err) }); } });
   app.post('/api/projects/:id/plugin-candidates/:candidateId/dismiss', (req, res) => { if (!helpers.isLocalSameOrigin(req, helpers.resolvedPortRef.current)) return res.status(403).json({ error: 'cross-origin request rejected' }); const candidate = plugins.dismissSkillPluginCandidate(db, req.params.id, req.params.candidateId); if (!candidate) return helpers.sendApiError(res, 404, 'NOT_FOUND', 'plugin candidate not found'); if (candidate.assistantMessageId) db.prepare(`DELETE FROM messages WHERE id = ?`).run(candidate.assistantMessageId); res.json({ ok: true, candidate }); });
   app.post('/api/projects/:id/plugin-candidates/:candidateId/draft', async (req, res) => helpers.handleCandidateDraft(req, res));
-  app.post('/api/projects/:id/plugin-candidates/:candidateId/share-tasks', async (req, res) => helpers.handleCandidateShareTask(req, res));
-  app.post('/api/projects/:id/plugins/contribute-open-design', async (req, res) => helpers.handleProjectPluginCli(req, res, 'contribute-open-design'));
-  app.post('/api/projects/:id/plugins/share-tasks', async (req, res) => helpers.handleProjectShareTask(req, res));
+  app.post('/api/projects/:id/plugin-candidates/:candidateId/share-tasks', async (req, res) => helpers.managedDistributionOnly ? managedSharingBlocked(res) : helpers.handleCandidateShareTask(req, res));
+  app.post('/api/projects/:id/plugins/contribute-open-design', async (req, res) => helpers.managedDistributionOnly ? managedSharingBlocked(res) : helpers.handleProjectPluginCli(req, res, 'contribute-open-design'));
+  app.post('/api/projects/:id/plugins/share-tasks', async (req, res) => helpers.managedDistributionOnly ? managedSharingBlocked(res) : helpers.handleProjectShareTask(req, res));
   app.post('/api/plugins/share-tasks/:id/wait', (req, res) => {
     if (!helpers.isLocalSameOrigin(req, helpers.resolvedPortRef.current)) return res.status(403).json({ error: 'cross-origin request rejected' });
     const task = helpers.pluginShareTaskStore.get(req.params.id);

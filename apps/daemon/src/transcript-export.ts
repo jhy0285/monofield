@@ -74,7 +74,17 @@ type PersistedAgentEvent =
   | { kind: 'thinking'; text: string }
   | { kind: 'tool_use'; id: string; name: string; input: unknown }
   | { kind: 'tool_result'; toolUseId: string; content: string; isError: boolean }
-  | { kind: 'usage'; inputTokens?: number; outputTokens?: number; costUsd?: number; durationMs?: number }
+  | {
+      kind: 'usage';
+      inputTokens?: number;
+      cachedInputTokens?: number;
+      outputTokens?: number;
+      reasoningTokens?: number;
+      totalTokens?: number;
+      costUsd?: number;
+      durationMs?: number;
+      measurementSource?: 'provider_usage' | 'estimated' | 'unavailable';
+    }
   | { kind: 'raw'; line: string };
 
 type Db = Database.Database;

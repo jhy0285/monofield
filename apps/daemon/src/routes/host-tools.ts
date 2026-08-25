@@ -93,7 +93,7 @@ function pathDirs(): string[] {
   // /opt/homebrew/bin), so add the common locations the user's shell
   // would have on first login. Without this, Cursor / Zed / VS Code
   // shims installed via "Install '...' command" are invisible to the
-  // daemon launched by `open Open Docs.app`.
+  // daemon launched by `open MonoField.app`.
   const extras = process.platform === 'darwin'
     ? ['/usr/local/bin', '/opt/homebrew/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin', `${process.env.HOME ?? ''}/.local/bin`]
     : process.platform === 'linux'

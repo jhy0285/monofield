@@ -7,10 +7,15 @@ import {
   SIDECAR_MESSAGES,
   normalizeDaemonSidecarMessage,
   type DaemonStatusSnapshot,
+  type DesktopBrowserAutomationInput,
+  type DesktopBrowserAutomationResult,
   type DesktopExportArtifactInput,
   type DesktopExportArtifactResult,
   type DesktopExportPdfInput,
   type DesktopExportPdfResult,
+  type DesktopDatabaseRequest,
+  type DesktopDevelopmentProcessInput,
+  type DesktopDevelopmentProcessResult,
   type MintImportTokenResult,
   type SidecarStamp,
 } from "@open-design/sidecar-proto";
@@ -119,6 +124,30 @@ export function mintImportTokenForCli(baseDir: string): MintImportTokenResult {
 
 export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarStamp>): Promise<DaemonSidecarHandle> {
   const serverHandle: StartedDaemonRuntime = await startDaemonRuntime({
+    desktopBrowserAutomation: async (input: DesktopBrowserAutomationInput): Promise<DesktopBrowserAutomationResult> => {
+      const desktopIpc = resolveAppIpcPath({
+        app: APP_KEYS.DESKTOP,
+        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        namespace: runtime.namespace,
+      });
+      return await requestJsonIpc<DesktopBrowserAutomationResult>(
+        desktopIpc,
+        { input, type: SIDECAR_MESSAGES.BROWSER_AUTOMATION },
+        { timeoutMs: 60_000 },
+      );
+    },
+    desktopDatabaseBroker: async (input: DesktopDatabaseRequest): Promise<unknown> => {
+      const desktopIpc = resolveAppIpcPath({ app: APP_KEYS.DESKTOP, contract: OPEN_DESIGN_SIDECAR_CONTRACT, namespace: runtime.namespace });
+      return await requestJsonIpc<unknown>(desktopIpc, { input, type: SIDECAR_MESSAGES.DATABASE }, { timeoutMs: 600_000 });
+    },
+    desktopDevelopmentProcessBroker: async (input: DesktopDevelopmentProcessInput): Promise<DesktopDevelopmentProcessResult> => {
+      const desktopIpc = resolveAppIpcPath({ app: APP_KEYS.DESKTOP, contract: OPEN_DESIGN_SIDECAR_CONTRACT, namespace: runtime.namespace });
+      return await requestJsonIpc<DesktopDevelopmentProcessResult>(
+        desktopIpc,
+        { input, type: SIDECAR_MESSAGES.DEVELOPMENT_PROCESS },
+        { timeoutMs: 15_000 },
+      );
+    },
     desktopPdfExporter: async (input: DesktopExportPdfInput): Promise<DesktopExportPdfResult> => {
       const desktopIpc = resolveAppIpcPath({
         app: APP_KEYS.DESKTOP,

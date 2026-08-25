@@ -2570,7 +2570,7 @@ test('[P1] Browser Inspiration page_info action seeds Browser tab context into t
 
   const input = page.getByTestId('chat-composer-input');
   await expect(input).toContainText('@agent-browser');
-  await expect(input).toContainText('Use the selected Open Docs Browser tab as the bound target.');
+  await expect(input).toContainText('Use the selected MonoField Browser tab as the bound target.');
   await expect(input).toContainText('Operation: page_info');
   await expect(input).toContainText('- tab: Browser');
   await expect(input).toContainText('- url: about:blank');

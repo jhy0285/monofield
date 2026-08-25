@@ -2,16 +2,16 @@ import { describe, expect, it } from 'vitest';
 
 import { createOpenDocsPublicMetadataService } from '../src/services/open-design-public-metadata.js';
 
-describe('Open Docs public metadata service', () => {
+describe('MonoField public metadata service', () => {
   it('falls back to the GitHub repository page when the REST API is rate limited', async () => {
     const calls: string[] = [];
     const fetchImpl = (async (input: Parameters<typeof fetch>[0]) => {
       const url = String(input);
       calls.push(url);
-      if (url === 'https://api.github.com/repos/jhy0285/open-docs') {
+      if (url === 'https://api.github.com/repos/jhy0285/monofield') {
         return new Response('rate limited', { status: 403 });
       }
-      if (url === 'https://github.com/jhy0285/open-docs') {
+      if (url === 'https://github.com/jhy0285/monofield') {
         return new Response(
           '<span id="repo-stars-counter-star" aria-label="1 user starred this repository" title="1">1</span>',
           { status: 200 },
@@ -32,8 +32,8 @@ describe('Open Docs public metadata service', () => {
       stale: false,
     });
     expect(calls).toEqual([
-      'https://api.github.com/repos/jhy0285/open-docs',
-      'https://github.com/jhy0285/open-docs',
+      'https://api.github.com/repos/jhy0285/monofield',
+      'https://github.com/jhy0285/monofield',
     ]);
   });
 });

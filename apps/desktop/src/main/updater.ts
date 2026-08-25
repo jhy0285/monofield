@@ -84,7 +84,6 @@ export const DESKTOP_UPDATE_ENV = Object.freeze({
   PLATFORM: "OD_UPDATE_PLATFORM",
 } as const);
 
-const DEFAULT_RELEASE_ORIGIN = "https://releases.open-design.ai";
 const OWNERSHIP_SENTINEL = ".open-design-updater-root.json";
 const STORE_METADATA_FILE = "metadata.json";
 const RELEASES_DIR = "releases";
@@ -148,7 +147,7 @@ export type DesktopUpdaterConfig = {
   launcherRoot?: string;
   launcherPayloadExtractorPath?: string;
   launcherRuntimePath?: string;
-  metadataUrl: string;
+  metadataUrl: string | null;
   mode: DesktopUpdateMode;
   namespace?: string;
   openDryRun: boolean;
@@ -358,10 +357,6 @@ function isDesktopUpdateChannel(value: unknown): value is DesktopUpdateChannel {
   return typeof value === "string" && DESKTOP_UPDATE_CHANNEL_VALUES.has(value);
 }
 
-function defaultMetadataUrl(channel: DesktopUpdateChannel): string {
-  return `${DEFAULT_RELEASE_ORIGIN}/${channel}/latest/metadata.json`;
-}
-
 function normalizeDownloadRoot(value: string): string {
   if (value.includes("\0")) throw new Error("update download root must not contain null bytes");
   if (!isAbsolute(value)) throw new Error(`update download root must be absolute: ${value}`);
@@ -402,7 +397,10 @@ export function resolveDesktopUpdaterConfig(input: DesktopUpdaterConfigInput): D
   const env = input.env ?? process.env;
   const mode = normalizeMode(env[DESKTOP_UPDATE_ENV.MODE], input.mode ?? DESKTOP_UPDATE_MODES.PACKAGE_LAUNCHER);
   const defaultEnabled = input.source === SIDECAR_SOURCES.PACKAGED;
-  const enabled = isTruthyEnv(env[DESKTOP_UPDATE_ENV.ENABLED]) ?? defaultEnabled;
+  const metadataUrl = normalizeOptionalNonEmpty(env[DESKTOP_UPDATE_ENV.METADATA_URL]) ?? null;
+  // Packaged builds must never infer a public update service. An updater is
+  // available only when its metadata endpoint is explicitly provisioned.
+  const enabled = metadataUrl != null && (isTruthyEnv(env[DESKTOP_UPDATE_ENV.ENABLED]) ?? defaultEnabled);
   const runtimeBase = input.runtimeBase == null ? process.cwd() : input.runtimeBase;
   const downloadRoot = normalizeDownloadRoot(
     env[DESKTOP_UPDATE_ENV.DOWNLOAD_ROOT] ??
@@ -456,7 +454,7 @@ export function resolveDesktopUpdaterConfig(input: DesktopUpdaterConfigInput): D
     ...(launcherRoot == null ? {} : { launcherRoot }),
     ...(launcherPayloadExtractorPath == null ? {} : { launcherPayloadExtractorPath }),
     ...(launcherRuntimePath == null ? {} : { launcherRuntimePath }),
-    metadataUrl: env[DESKTOP_UPDATE_ENV.METADATA_URL] ?? defaultMetadataUrl(channel),
+    metadataUrl,
     mode,
     ...(namespace == null ? {} : { namespace }),
     openDryRun: isTruthyEnv(env[DESKTOP_UPDATE_ENV.OPEN_DRY_RUN]) ?? false,
@@ -528,7 +526,7 @@ function extensionForArtifact(name: string | undefined, type: string): string {
 function artifactFileName(candidate: UpdateCandidate): string {
   const ext = extensionForArtifact(candidate.artifact.name, candidate.artifact.type ?? "artifact");
   return [
-    "open-design",
+    "open-docs",
     sanitizePathSegment(candidate.version),
     sanitizePathSegment(candidate.platformKey),
     sanitizePathSegment(candidate.arch),
@@ -743,7 +741,7 @@ async function ensureOwnedUpdateRoot(
           ok: false,
           error: createError(
             "update-root-not-owned",
-            `update root is not empty and has no Open Docs updater ownership marker: ${realRoot}`,
+            `update root is not empty and has no MonoField updater ownership marker: ${realRoot}`,
           ),
         };
       }
@@ -2614,8 +2612,10 @@ export function createDesktopUpdater(
     const keepDownloadedVisible = activeRelease != null;
     if (!keepDownloadedVisible) setState(DESKTOP_UPDATE_STATES.CHECKING);
     try {
-      logUpdateEvent("check-start", { metadataUrl: config.metadataUrl });
-      const body = await fetchJson(fetchImpl, config.metadataUrl);
+      const metadataUrl = config.metadataUrl;
+      if (metadataUrl == null) return setState(DESKTOP_UPDATE_STATES.IDLE);
+      logUpdateEvent("check-start", { metadataUrl });
+      const body = await fetchJson(fetchImpl, metadataUrl);
       lastCheckedAt = now().toISOString();
       metadata = body;
       const root = await writeMetadataPatch((current) => ({

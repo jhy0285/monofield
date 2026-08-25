@@ -52,6 +52,8 @@ export interface AnnotationEventDetail {
   ack?: (result: { ok: boolean; message?: string }) => void;
 }
 
+export type AnnotationReviewDraft = Omit<AnnotationEventDetail, 'ack' | 'action'>;
+
 interface Props {
   children: ReactNode;
   active?: boolean;
@@ -65,6 +67,10 @@ interface Props {
   sendDisabled?: boolean;
   sendDisabledReason?: string;
   onToolbarClick?: (element: DrawToolbarElement, submitAction?: AnnotationAction) => void;
+  /** Browser review mode keeps a visual mark in a local review tray instead of
+   * immediately staging or sending a chat turn. */
+  onAddReviewItem?: (draft: AnnotationReviewDraft) => Promise<{ ok: boolean; message?: string }>;
+  reviewQueueLabel?: string;
 }
 
 const STROKE_COLOR = '#ff3b30';
@@ -89,6 +95,8 @@ export function PreviewDrawOverlay({
   sendDisabled = false,
   sendDisabledReason,
   onToolbarClick,
+  onAddReviewItem,
+  reviewQueueLabel,
 }: Props) {
   const t = useT();
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -281,7 +289,15 @@ export function PreviewDrawOverlay({
 
   function onPointerDown(e: PointerEvent) {
     if (!active || sending) return;
-    (e.target as Element).setPointerCapture?.(e.pointerId);
+    // Pointer capture is useful for a real pointer leaving the canvas, but it
+    // can throw when a browser restores a stale pointer id (and in test/OS
+    // automation synthetic events). A failed capture must not abort the mark
+    // itself: the pointer sequence can still be completed on the canvas.
+    try {
+      (e.target as Element).setPointerCapture?.(e.pointerId);
+    } catch {
+      // Best effort only.
+    }
     const point = pointFromEvent(e);
     if (markTool === 'box') {
       boxDraftRef.current = { start: point, current: point };
@@ -523,7 +539,13 @@ export function PreviewDrawOverlay({
       flushSync(() => setCapturing(true));
       try {
         await waitForOverlayHidden();
-        return await captureSnapshot();
+        const compositorSnapshot = await captureSnapshot();
+        if (compositorSnapshot) return compositorSnapshot;
+        // A desktop compositor can briefly return null while the window is
+        // being revealed, resized, or switching preview transports. Do not
+        // turn that transient failure into a note-only annotation. Fall
+        // through to the iframe bridge below, which is independent of the
+        // desktop capture IPC path and can still produce a complete PNG.
       } finally {
         flushSync(() => setCapturing(false));
       }
@@ -663,29 +685,34 @@ export function PreviewDrawOverlay({
       }
       const sentWithoutScreenshot = shouldCapture && !file;
       const kind = markKind();
-      const result = await new Promise<{ ok: boolean; message?: string }>((resolve) => {
-        let settled = false;
-        const finish = (next: { ok: boolean; message?: string }) => {
-          if (settled) return;
-          settled = true;
-          resolve(next);
-        };
-        window.setTimeout(() => {
-          finish({ ok: false, message: t('chat.annotationTimeout') });
-        }, 60000);
-        const detail: AnnotationEventDetail = {
-          file,
-          note: note.trim(),
-          action,
-          filePath: captureTarget?.filePath || filePath,
-          markKind: kind,
-          bounds: kind ? annotationBounds() : undefined,
-          target: captureTarget,
-          extraFiles: extraFiles.length ? extraFiles : undefined,
-          ack: finish,
-        };
-        window.dispatchEvent(new CustomEvent(ANNOTATION_EVENT, { detail }));
-      });
+      const reviewDraft: AnnotationReviewDraft = {
+        file,
+        note: note.trim(),
+        filePath: captureTarget?.filePath || filePath,
+        markKind: kind,
+        bounds: kind ? annotationBounds() : undefined,
+        target: captureTarget,
+        extraFiles: extraFiles.length ? extraFiles : undefined,
+      };
+      const result = action === 'draft' && onAddReviewItem
+        ? await onAddReviewItem(reviewDraft)
+        : await new Promise<{ ok: boolean; message?: string }>((resolve) => {
+            let settled = false;
+            const finish = (next: { ok: boolean; message?: string }) => {
+              if (settled) return;
+              settled = true;
+              resolve(next);
+            };
+            window.setTimeout(() => {
+              finish({ ok: false, message: t('chat.annotationTimeout') });
+            }, 60000);
+            const detail: AnnotationEventDetail = {
+              ...reviewDraft,
+              action,
+              ack: finish,
+            };
+            window.dispatchEvent(new CustomEvent(ANNOTATION_EVENT, { detail }));
+          });
       if (!result.ok) {
         setCaptureWarning({
           action,
@@ -1028,16 +1055,16 @@ export function PreviewDrawOverlay({
               }}
               onKeyDown={(e) => {
                 if (isImeComposing(e, composingRef.current)) return;
-                if (e.key === 'Enter') void send('queue');
+                if (e.key === 'Enter') void send(onAddReviewItem ? 'draft' : 'queue');
               }}
             />
             <button
               type="button"
               onClick={() => void send('draft')}
               disabled={sending || !canAddToInput}
-              aria-label={pendingAction === 'draft' ? t('chat.annotationAddingToInput') : t('chat.annotationAddToInput')}
-              title={pendingAction === 'draft' ? t('chat.annotationAddingToInput') : t('chat.annotationAddToInput')}
-              data-tooltip={pendingAction === 'draft' ? t('chat.annotationAddingToInput') : t('chat.annotationAddToInput')}
+              aria-label={pendingAction === 'draft' ? t('chat.annotationAddingToInput') : (reviewQueueLabel || t('chat.annotationAddToInput'))}
+              title={pendingAction === 'draft' ? t('chat.annotationAddingToInput') : (reviewQueueLabel || t('chat.annotationAddToInput'))}
+              data-tooltip={pendingAction === 'draft' ? t('chat.annotationAddingToInput') : (reviewQueueLabel || t('chat.annotationAddToInput'))}
               className="preview-draw-icon-action"
               style={{
                 ...drawActionButtonStyle(false),
@@ -1051,7 +1078,7 @@ export function PreviewDrawOverlay({
                 <RemixIcon name="input-field" size={15} />
               )}
             </button>
-            <button
+            {!onAddReviewItem ? <button
               type="button"
               onClick={() => void send('queue')}
               disabled={sending || !canSubmit}
@@ -1070,8 +1097,8 @@ export function PreviewDrawOverlay({
               ) : (
                 <RemixIcon name="list-check-2" size={15} />
               )}
-            </button>
-            <button
+            </button> : null}
+            {!onAddReviewItem ? <button
               type="button"
               onClick={() => void send('send')}
               disabled={sending || !canSend}
@@ -1090,7 +1117,7 @@ export function PreviewDrawOverlay({
               ) : (
                 <Icon name="send" size={14} />
               )}
-            </button>
+            </button> : null}
           </div>
           </div>
           {activePreview ? createPortal(
@@ -1250,7 +1277,7 @@ function drawActionButtonStyle(primary: boolean): CSSProperties {
     flex: '0 0 auto',
     whiteSpace: 'nowrap',
     background: primary ? 'var(--accent)' : 'transparent',
-    color: primary ? '#fff' : 'inherit',
+    color: primary ? 'var(--accent-contrast)' : 'inherit',
   };
 }
 

@@ -6,7 +6,7 @@ export interface NativeFolderDialogCommand {
 const WINDOWS_FOLDER_DIALOG_SCRIPT = [
   'Add-Type -AssemblyName System.Windows.Forms;',
   '$owner = New-Object System.Windows.Forms.Form;',
-  "$owner.Text = 'Open Docs';",
+  "$owner.Text = 'MonoField';",
   '$owner.TopMost = $true;',
   '$owner.ShowInTaskbar = $true;',
   "$owner.StartPosition = 'CenterScreen';",
@@ -15,6 +15,8 @@ const WINDOWS_FOLDER_DIALOG_SCRIPT = [
   '$dialog = New-Object System.Windows.Forms.FolderBrowserDialog;',
   "$dialog.Description = 'Select a code folder to link';",
   '$dialog.ShowNewFolderButton = $true;',
+  "$desktop = [Environment]::GetFolderPath('Desktop');",
+  "if (-not [string]::IsNullOrWhiteSpace($desktop) -and (Test-Path -LiteralPath $desktop -PathType Container)) { $dialog.SelectedPath = $desktop; }",
   'try {',
   '  if ($dialog.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { $dialog.SelectedPath }',
   '} finally {',

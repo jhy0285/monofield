@@ -42,7 +42,7 @@ let packagedLogger: PackagedDesktopLogger | null = null;
 let pendingSecondInstanceFocus = false;
 let showExistingDesktop: (() => void) | null = null;
 
-// Local startup-failure context for the fatal-exit path. Open Docs does not
+// Local startup-failure context for the fatal-exit path. MonoField does not
 // send product telemetry; this only keeps enough context for local diagnostics.
 let startupFailureContext:
   | {

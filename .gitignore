@@ -1,6 +1,8 @@
 node_modules/
 dist/
 out/
+output/
+.idea/
 .next/
 .next-*/
 .tmp/
@@ -11,6 +13,11 @@ out/
 .astro/
 .wrangler/
 .vscode
+.obsidian/
+.playwright-cli/
+**/__pycache__/
+*.pyc
+
 
 # Local runtime data — auto-created by the daemon on first start.
 # Holds app.sqlite (project metadata), projects/<id>/ (per-project artifacts,

@@ -5,7 +5,7 @@ import { resolveOnPath } from "../runtimes/executables.js";
 /**
  * Optional system-Chrome fallback for the prefetch pipeline.
  *
- * Brand extraction opens the target site in Open Docs's in-product browser
+ * Brand extraction opens the target site in MonoField's in-product browser
  * tab so the user can clear Cloudflare / human checks there and the agent can
  * continue in the same product loop. Launching an unrelated local Chrome here
  * breaks that loop: cookies, user confirmation, and page state do not carry

@@ -146,7 +146,7 @@ async function main(): Promise<void> {
   }
 
   const shutdown = async (): Promise<void> => {
-    process.stdout.write("\n Shutting down Open Design...\n");
+    process.stdout.write("\n Shutting down MonoField...\n");
     await ipcServer.close().catch(() => undefined);
     await sidecars.close().catch(() => undefined);
     await identity.close().catch(() => undefined);
@@ -176,7 +176,7 @@ async function main(): Promise<void> {
   });
   await confirmPackagedLauncherRuntime(launcherRuntime);
 
-  process.stdout.write(`\n Open Design is running\n\n`);
+  process.stdout.write(`\n MonoField is running\n\n`);
   process.stdout.write(` ➜ ${colorize(webUrl)}\n\n`);
   process.stdout.write(` Press Ctrl+C to stop\n\n`);
 
@@ -190,7 +190,7 @@ async function main(): Promise<void> {
 
 void main().catch((error: unknown) => {
   process.stderr.write(
-    `open-design headless failed: ${error instanceof Error ? error.message : String(error)}\n`,
+    `open-docs headless failed: ${error instanceof Error ? error.message : String(error)}\n`,
   );
   process.exit(1);
 });

@@ -415,6 +415,20 @@ describe('preview comment attachment helpers', () => {
     expect(content).toContain('ask the user before proceeding');
   });
 
+  it('routes interface-spec preview comments back to the structured JSON source', () => {
+    const content = messageContentWithCommentAttachments('', [commentAttachment({
+      filePath: 'preview.html',
+      elementId: 'interface-spec-0-request-field-1',
+      selector: '[data-od-id="interface-spec-0-request-field-1"]',
+      label: 'REQUEST customerId',
+      comment: '최대 크기를 36으로 바꿔주세요.',
+    })]);
+
+    expect(content).toContain('the selected HTML is a generated preview');
+    expect(content).toContain('Apply content changes to interface-spec.json');
+    expect(content).toContain('Never patch preview.html as the source of truth');
+  });
+
   it('adds hidden comment context only to the current user message sent to API providers', () => {
     const attachments = commentsToAttachments([
       comment({ id: 'c1', elementId: 'hero-title', note: 'Make it bolder' }),

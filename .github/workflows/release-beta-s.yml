@@ -44,7 +44,6 @@ on:
         description: "Anonymous-read public origin for the self-hosted S3 publish target."
         required: true
         type: string
-        default: "https://s3.nexu.space/od-releases"
       ref:
         description: "Optional git ref to build. Empty builds the dispatched ref."
         required: false
@@ -197,9 +196,8 @@ on:
         type: string
         default: nexu-s3
       release_public_origin:
-        required: false
+        required: true
         type: string
-        default: "https://s3.nexu.space/od-releases"
       ref:
         required: false
         type: string
@@ -320,7 +318,7 @@ jobs:
     runs-on: [self-hosted, macOS, ARM64, nexu-mac, release-beta]
     env:
       OPEN_DESIGN_BETAS_METADATA_URL: ${{ inputs.release_public_origin }}/betas/latest/metadata.json
-      OPEN_DESIGN_STABLE_METADATA_URL: https://releases.open-design.ai/stable/latest/metadata.json
+      OPEN_DESIGN_STABLE_METADATA_URL: ${{ inputs.release_public_origin }}/stable/latest/metadata.json
     outputs:
       asset_version_suffix: ${{ steps.betas.outputs.asset_version_suffix }}
       base_version: ${{ steps.betas.outputs.base_version }}
@@ -424,14 +422,20 @@ jobs:
           fnm exec --using=24 -- pnpm install --frozen-lockfile --prefer-offline
 
       - name: Validate self-hosted beta inputs
+        env:
+          RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin }}
         run: |
           set -euo pipefail
           if [ "${{ inputs.release_origin }}" != "nexu-s3" ]; then
             echo "release-beta-s supports release_origin=nexu-s3 only" >&2
             exit 1
           fi
-          if [ -z "${{ inputs.release_public_origin }}" ]; then
+          if [ -z "$RELEASE_PUBLIC_ORIGIN" ]; then
             echo "release_public_origin is required" >&2
+            exit 1
+          fi
+          if [[ ! "$RELEASE_PUBLIC_ORIGIN" =~ ^https://[^[:space:]/?#@]+(/[^[:space:]?#@]*)?/?$ ]]; then
+            echo "release_public_origin must be an explicit HTTPS URL without credentials, query, or fragment" >&2
             exit 1
           fi
           if [ "${{ inputs.enable_mac_arm64 }}" != "true" ] && [ "${{ inputs.enable_win_x64 }}" != "true" ] && [ "${{ inputs.enable_mac_x64 }}" != "true" ] && [ "${{ inputs.enable_linux_x64 }}" != "true" ]; then

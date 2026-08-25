@@ -56,7 +56,11 @@ export function ScreenSpecCanvas({
 }: Props) {
   const t = useT();
   const frameRef = useRef<HTMLDivElement | null>(null);
-  const lastAutoFitImageRef = useRef<string | null>(null);
+  // Opening an existing spec must be read-only. Auto-fitting every image on
+  // load used to mutate canvasHeightPx immediately, marking the document dirty
+  // and even blocking navigation before the user touched anything. Only a
+  // freshly uploaded image is eligible for one automatic fit.
+  const pendingAutoFitImageRef = useRef<string | null>(null);
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
   const [imageSize, setImageSize] = useState<{ width: number; height: number } | undefined>();
   const [draggingCalloutNo, setDraggingCalloutNo] = useState<number | null>(null);
@@ -125,7 +129,7 @@ export function ScreenSpecCanvas({
       if (typeof reader.result === 'string') {
         setUploadError('');
         setImageSize(undefined);
-        lastAutoFitImageRef.current = null;
+        pendingAutoFitImageRef.current = reader.result;
         onImageUpload(reader.result);
       }
     };
@@ -200,8 +204,8 @@ export function ScreenSpecCanvas({
                 height: event.currentTarget.naturalHeight,
               };
               setImageSize(nextImageSize);
-              if (lastAutoFitImageRef.current !== imageSrc) {
-                lastAutoFitImageRef.current = imageSrc;
+              if (pendingAutoFitImageRef.current === imageSrc) {
+                pendingAutoFitImageRef.current = null;
                 fitCanvasHeightToImage(nextImageSize);
               }
             }}

@@ -15,6 +15,8 @@ import type {
   ImportFolderRequest,
   ImportFolderResponse,
   InstalledPluginRecord,
+  MarketplaceSecurityPolicy,
+  MarketplaceVisibility,
   PluginInstallOutcome,
   PluginShareAction,
   ProjectPluginFolderInstallRequest,
@@ -76,7 +78,7 @@ export async function createProject(input: {
 }): Promise<{ project: Project; conversationId: string; appliedPluginSnapshotId?: string }> {
   try {
     // `randomUUID` falls back to `crypto.getRandomValues` / `Math.random`
-    // when `crypto.randomUUID` is unavailable. Open Docs served over
+    // when `crypto.randomUUID` is unavailable. MonoField served over
     // plain HTTP on a LAN IP (Docker / unRAID self-hosting) is a
     // non-secure context, where `crypto.randomUUID` is undefined and
     // calling it directly throws — the surrounding try/catch then turns
@@ -1121,6 +1123,9 @@ export interface PluginMarketplace {
   id: string;
   url: string;
   trust: PluginMarketplaceTrust;
+  visibility?: MarketplaceVisibility;
+  authEnv?: string | null;
+  policy?: MarketplaceSecurityPolicy;
   specVersion?: string;
   version?: string;
   addedAt?: number;
@@ -1192,20 +1197,42 @@ export interface PluginMarketplaceMutationOutcome {
   message: string;
 }
 
-export async function listPluginMarketplaces(): Promise<PluginMarketplace[]> {
+export interface PluginMarketplaceState {
+  marketplaces: PluginMarketplace[];
+  installMode: 'open' | 'managed';
+}
+
+export async function getPluginMarketplaceState(): Promise<PluginMarketplaceState> {
   try {
     const resp = await fetch('/api/marketplaces');
-    if (!resp.ok) return [];
-    const json = (await resp.json()) as { marketplaces?: PluginMarketplace[] };
-    return json.marketplaces ?? [];
+    if (!resp.ok) return { marketplaces: [], installMode: 'open' };
+    const json = (await resp.json()) as {
+      marketplaces?: PluginMarketplace[];
+      installPolicy?: { mode?: 'open' | 'managed' };
+    };
+    return {
+      marketplaces: json.marketplaces ?? [],
+      installMode: json.installPolicy?.mode === 'managed' ? 'managed' : 'open',
+    };
   } catch {
-    return [];
+    return { marketplaces: [], installMode: 'open' };
   }
+}
+
+export async function listPluginMarketplaces(): Promise<PluginMarketplace[]> {
+  return (await getPluginMarketplaceState()).marketplaces;
+}
+
+export async function getPluginMarketplaceInstallMode(): Promise<'open' | 'managed'> {
+  return (await getPluginMarketplaceState()).installMode;
 }
 
 export async function addPluginMarketplace(input: {
   url: string;
   trust: PluginMarketplaceTrust;
+  visibility?: MarketplaceVisibility;
+  authEnv?: string;
+  policy?: MarketplaceSecurityPolicy;
 }): Promise<PluginMarketplaceMutationOutcome> {
   try {
     const resp = await fetch('/api/marketplaces', {

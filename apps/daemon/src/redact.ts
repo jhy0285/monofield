@@ -104,6 +104,9 @@ const CARD_CANDIDATE = /\b(?:\d[ -]?){12,18}\d\b/g;
 const API_KEY_HEADER =
   /(^|[^?&\w-])("?)(x-api-key|api-key|x-goog-api-key)\2(\s*[:=]\s*)("[^"]*"|[^\s,;"'#}]+)/gi;
 const API_KEY_QUERY = /([?&](?:key|api_key|api-key)=)[^&#\s,;"']+/gi;
+const CREDENTIAL_URL = /(\b(?:jdbc:)?(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|redis):\/\/[^:\s/@]+:)[^@\s/]+(@)/gi;
+const QUOTED_NAMED_CREDENTIAL = /((?<![\w-])(?:["'])?(?:password|passwd|pwd|client[_-]?secret|private[_-]?key|access[_-]?token|refresh[_-]?token|api[_-]?key|secret)(?:["'])?\s*[:=]\s*)(["'])(.*?)\2/gi;
+const UNQUOTED_NAMED_CREDENTIAL = /((?<![\w-])(?:password|passwd|pwd|client[_-]?secret|private[_-]?key|access[_-]?token|refresh[_-]?token|api[_-]?key|secret)\b\s*[:=]\s*)([^\s,;#}\r\n]+)/gi;
 
 function isLuhnValid(digits: string): boolean {
   if (digits.length < 13 || digits.length > 19) return false;
@@ -135,6 +138,33 @@ function redactApiKeyHeaderValue(
   return `${prefix}${quote}${name}${quote}${separator}${redactedValue}`;
 }
 
+function isEnvironmentReference(value: string): boolean {
+  return /^\s*(?:\$\{|\{\{|env\()/i.test(value);
+}
+
+function isRedactionMarker(value: string): boolean {
+  return /^\[REDACTED:[^\]]+\]$/i.test(value);
+}
+
+function redactNamedCredentials(input: string, marker = '[REDACTED:named_credential]'): string {
+  return input
+    .replace(CREDENTIAL_URL, `$1${marker}$2`)
+    .replace(
+      QUOTED_NAMED_CREDENTIAL,
+      (_match, prefix: string, quote: string, secret: string) =>
+        isEnvironmentReference(secret) || isRedactionMarker(secret)
+          ? `${prefix}${quote}${secret}${quote}`
+          : `${prefix}${quote}${marker}${quote}`,
+    )
+    .replace(
+      UNQUOTED_NAMED_CREDENTIAL,
+      (_match, prefix: string, secret: string) =>
+        isEnvironmentReference(secret) || isRedactionMarker(secret)
+          ? `${prefix}${secret}`
+          : `${prefix}${marker}`,
+    );
+}
+
 /**
  * Returns `input` with every recognised secret / PII pattern replaced by
  * a `[REDACTED:<kind>]` marker. Idempotent — re-running on already
@@ -145,7 +175,7 @@ function redactApiKeyHeaderValue(
  */
 export function redactSecrets(input: string): string {
   if (!input) return input;
-  let out = input;
+  let out = input.replace(CREDENTIAL_URL, '$1[REDACTED:named_credential]$2');
   for (const { name, regex } of PATTERNS) {
     out = out.replace(regex, `[REDACTED:${name}]`);
   }
@@ -162,6 +192,7 @@ export function redactSecrets(input: string): string {
       ) => redactApiKeyHeaderValue(prefix, quote, name, separator, value),
     )
     .replace(API_KEY_QUERY, '$1[REDACTED:api_key_query]');
+  out = redactNamedCredentials(out);
   out = out.replace(CARD_CANDIDATE, (match) => {
     const digits = match.replace(/\D/g, '');
     return isLuhnValid(digits) ? '[REDACTED:credit_card]' : match;
@@ -180,7 +211,8 @@ export function redactSecretsWithCounts(input: string): {
 } {
   const counts: Record<string, number> = {};
   if (!input) return { redacted: input, counts };
-  let out = input;
+  let out = input.replace(CREDENTIAL_URL, '$1[REDACTED:named_credential]$2');
+  if (out !== input) counts.named_credential = 1;
   for (const { name, regex } of PATTERNS) {
     let matched = 0;
     out = out.replace(regex, () => {
@@ -211,6 +243,9 @@ export function redactSecretsWithCounts(input: string): {
     return `${prefix}[REDACTED:api_key_query]`;
   });
   if (apiKeyQueryCount > 0) counts.api_key_query = apiKeyQueryCount;
+  const beforeNamedCredentials = out;
+  out = redactNamedCredentials(out);
+  if (out !== beforeNamedCredentials) counts.named_credential = 1;
   let cardCount = 0;
   out = out.replace(CARD_CANDIDATE, (match) => {
     const digits = match.replace(/\D/g, '');

@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { HomeView } from '../../src/components/HomeView';
 import { I18nProvider } from '../../src/i18n';
+import { createPluginUseHandoff } from '../../src/components/home-hero/plugin-authoring';
 // HomeHero's prompt input is now the same Lexical contenteditable as the
 // project composer, so `home-hero-input` has no `.value`. Read its serialized
 // text through the shared helper instead.
@@ -75,7 +76,7 @@ describe('HomeView plugin i18n', () => {
     cleanup();
   });
 
-  it('routes the plugin card Use action as the active driver without hydrating the query', async () => {
+  it('routes an Open Work plain-Use handoff as the active driver without hydrating the query', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
         return new Response(JSON.stringify({ plugins: [PLUGIN_ROW] }), {
@@ -101,6 +102,7 @@ describe('HomeView plugin i18n', () => {
             onSubmit={() => undefined}
             onOpenProject={() => undefined}
             onViewAllProjects={() => undefined}
+            promptHandoff={createPluginUseHandoff(1, 'localized-plugin', { action: 'use' })}
           />
         </div>
       </I18nProvider>,
@@ -108,17 +110,9 @@ describe('HomeView plugin i18n', () => {
     const scrollContainer = view.container.querySelector('.entry-main--scroll') as HTMLElement;
     scrollContainer.scrollTop = 240;
 
-    // Home Community renders gallery tiles with no inline Use button — the
-    // plugin is used from its detail modal. For query-bearing plugins the
-    // primary CTA is now "Replicate this content"; plain structure-only Use
-    // lives behind the caret menu.
-    fireEvent.click(await waitFor(() => screen.getByTestId('plugins-home-details-localized-plugin')));
-    fireEvent.click(await screen.findByTestId('plugin-details-use-localized-plugin-menu'));
-    fireEvent.click(await screen.findByTestId('plugin-details-use-option-localized-plugin'));
-
-    // Plain "Use" now routes the plugin as the active driver (so its own
-    // pipeline + context apply on submit) and applies it, surfacing the
-    // active-plugin chip.
+    // Open Work hands the selected configuration back to Home. Plain "Use"
+    // routes the plugin as the active driver and applies it without copying
+    // the example request into the user's draft.
     await waitFor(() => {
       expect(screen.getByTestId('home-hero-active-plugin')).toBeTruthy();
     });

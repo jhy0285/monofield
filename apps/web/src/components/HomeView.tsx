@@ -2,8 +2,8 @@
 // when the left nav rail's "Home" tab is active.
 //
 // Owns the prompt state + active plugin lifecycle and stitches
-// together the smaller pieces (HomeHero, RecentProjectsStrip,
-// PluginsHomeSection). Replaces the older left-side `PluginLoopHome`
+// together the smaller pieces (HomeHero and RecentProjectsStrip).
+// Replaces the older left-side `PluginLoopHome`
 // surface by lifting its plugin orchestration up here so the prompt
 // textarea can live centered in the hero.
 
@@ -17,9 +17,13 @@ import type {
   McpServerConfig,
   InstalledPluginRecord,
   ProjectKind,
+  ProjectWorkMode,
   AudioVoiceOption,
 } from '@open-design/contracts';
-import { DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID } from '@open-design/contracts';
+import {
+  DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
+  defaultConversationModeForWorkMode,
+} from '@open-design/contracts';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
@@ -28,7 +32,6 @@ import {
   trackPageView,
   trackPluginDetailModalClick,
   trackPluginDetailModalSharePopoverClick,
-  trackPluginDetailModalSurfaceView,
   trackPluginReplacementModalClick,
   trackPluginReplacementModalSurfaceView,
   trackPluginReplacementResult,
@@ -89,8 +92,6 @@ import {
   type HomePromptHandoff,
 } from './home-hero/plugin-authoring';
 import { PluginDetailsModal } from './PluginDetailsModal';
-import { HomeTemplatesReveal } from './HomeTemplatesReveal';
-import { PluginsHomeSection } from './PluginsHomeSection';
 import type { PluginLoopSubmit } from './PluginLoopHome';
 import { localizePluginTitle } from './plugins-home/localization';
 import type { PluginUseAction } from './plugins-home/useActions';
@@ -192,9 +193,9 @@ interface PendingPluginUseHandoff {
 }
 
 const AUTHORING_DEFAULT_SCENARIO_INPUTS = {
-  artifactKind: 'Open Docs plugin',
-  audience: 'Open Docs plugin authors',
-  topic: 'packaging a reusable workflow as an Open Docs plugin',
+  artifactKind: 'MonoField plugin',
+  audience: 'MonoField plugin authors',
+  topic: 'packaging a reusable workflow as an MonoField plugin',
 };
 
 
@@ -210,6 +211,7 @@ interface Props {
   onDeleteProject?: (id: string) => Promise<boolean | void> | boolean | void;
   onRenameProject?: (id: string, name: string) => void;
   onBrowseRegistry?: () => void;
+  onExploreOpenWork?: () => void;
   onOpenIntegrations?: () => void;
   onOpenMcp?: () => void;
   // Stage B: optional callbacks the rail's migration chips need.
@@ -241,6 +243,7 @@ export function HomeView({
   onDeleteProject,
   onRenameProject,
   onBrowseRegistry,
+  onExploreOpenWork,
   onOpenIntegrations,
   onOpenMcp,
   onOpenNewProject,
@@ -283,7 +286,8 @@ export function HomeView({
     text: string;
     chipId: string | null;
   } | null>(null);
-  const [sessionMode, setSessionMode] = useState<ChatSessionMode>('design');
+  const [sessionMode, setSessionMode] = useState<ChatSessionMode>('docs');
+  const [workMode, setWorkMode] = useState<ProjectWorkMode>('creation');
   const [activeSkill, setActiveSkill] = useState<SkillSummary | null>(null);
   const [selectedPluginContexts, setSelectedPluginContexts] = useState<SelectedPluginContext[]>([]);
   const [selectedMcpContexts, setSelectedMcpContexts] = useState<SelectedMcpContext[]>([]);
@@ -368,33 +372,6 @@ export function HomeView({
       area: 'plugin_replacement_modal',
     });
   }, [pendingReplacement, analytics.track]);
-  // Template Gallery analytics. Opening a tile fires both a ui_click on
-  // the card (the funnel's denominator) and a surface_view on the detail
-  // modal it reveals (the numerator); the ↗ that jumps straight to the
-  // real example page is its own ui_click so "go to the finished thing"
-  // stays distinct from "open the detail modal". plugin_id / plugin_type
-  // mirror PluginsView so the two surfaces join on the same keys.
-  const handleCommunityOpenDetails = useCallback(
-    (record: InstalledPluginRecord) => {
-      const pluginId = record.sourceMarketplaceEntryName ?? record.id;
-      const pluginType = record.marketplaceTrust ?? 'official';
-      trackCommunityGalleryClick(analytics.track, {
-        page_name: 'home',
-        area: 'community_gallery',
-        element: 'card',
-        plugin_id: pluginId,
-        plugin_type: pluginType,
-      });
-      trackPluginDetailModalSurfaceView(analytics.track, {
-        page_name: 'home',
-        area: 'plugin_detail_modal',
-        plugin_id: pluginId,
-        plugin_type: pluginType,
-      });
-      setDetailsRecord(record);
-    },
-    [analytics.track],
-  );
   const inputRef = useRef<HomeHeroHandle | null>(null);
   const homeViewRef = useRef<HTMLDivElement | null>(null);
   const consumedHandoffIdRef = useRef<number | null>(null);
@@ -1105,6 +1082,7 @@ export function HomeView({
         name: t('common.untitled'),
         skillId: null,
         designSystemId: null,
+        metadata: { kind: 'other', workMode: 'creation' },
       });
       onOpenProject(project.id);
     } catch {
@@ -1164,11 +1142,11 @@ export function HomeView({
     setStagedFiles((current) => current.filter((_, i) => i !== index));
   }
 
-  async function handlePickWorkingDir() {
+  async function handlePickWorkingDir(suggestedPath?: string) {
     // On desktop the working-dir POST is gated behind a host-minted token, so
     // pick through the host bridge to capture { baseDir, token } together.
     if (isOpenDesignHostAvailable()) {
-      const result = await pickHostWorkingDir();
+      const result = await pickHostWorkingDir(suggestedPath ?? workingDir ?? undefined);
       if (result.ok) {
         setWorkingDir(result.baseDir);
         setWorkingDirToken(result.token);
@@ -1186,7 +1164,7 @@ export function HomeView({
       // auth gate and surface as a confusing late create-time failure.
       // Surface the host error instead and keep the existing working dir.
       setError(
-        `Couldn't open the folder picker (${'reason' in result ? result.reason : 'host unavailable'}). Please update Open Docs and try again.`,
+        `Couldn't open the folder picker (${'reason' in result ? result.reason : 'host unavailable'}). Please update MonoField and try again.`,
       );
       return;
     }
@@ -1592,6 +1570,11 @@ export function HomeView({
     if (sending) return;
     const trimmed = prompt.trim();
     if (!trimmed && stagedFiles.length === 0) return;
+    if (workMode === 'development' && !workingDir) {
+      setError(t('workMode.developmentFolderRequired'));
+      void handlePickWorkingDir();
+      return;
+    }
     // P0 ui_click area=chat_composer element=send_button. Fires before the
     // async plugin-apply roundtrip so the click count reflects user intent
     // even when the run is rejected (missing inputs, apply failure). The
@@ -1699,13 +1682,25 @@ export function HomeView({
             submittedActive?.inputs ?? null,
             submittedActive?.projectMetadata ?? fallbackProjectMetadata ?? null,
           );
+      const projectMetadataWithWorkMode: ProjectMetadata = {
+        ...(submittedProjectMetadata ?? { kind: submittedProjectKind }),
+        workMode,
+        ...(workMode === 'development'
+          ? {
+              development: {
+                ...submittedProjectMetadata?.development,
+                autoVerify: submittedProjectMetadata?.development?.autoVerify ?? true,
+              },
+            }
+          : {}),
+      };
       // Scenario plugins (chips / preset cards) and explicit skill picks are
       // mutually exclusive routing sources. In Design mode, free-form prompts
       // route through the default design router; in Ask mode they stay plain
       // chat conversations with no hidden router plugin.
       const resolvedSkillId = submittedActive ? null : activeSkill?.id ?? null;
       const routedPluginId =
-        sessionMode === 'design'
+        sessionMode === 'docs'
           ? submittedActive?.record.id ?? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID
           : submittedActive?.record.id ?? null;
       // The example-prompt override is a one-shot marker. Decide whether to
@@ -1726,7 +1721,7 @@ export function HomeView({
         taskKind: submittedActive?.result?.appliedPlugin?.taskKind ?? null,
         pluginInputs: submittedPluginInputs,
         projectKind: submittedProjectKind,
-        projectMetadata: submittedProjectMetadata,
+        projectMetadata: projectMetadataWithWorkMode,
         designSystemId: submittedDesignSystemId,
         contextPlugins,
         contextMcpServers,
@@ -1833,9 +1828,14 @@ export function HomeView({
         recentDirs={recentDirs}
         onPickWorkingDir={handlePickWorkingDir}
         onSelectRecentWorkingDir={(dir) => {
+          if (isOpenDesignHostAvailable()) {
+            // A recent path is only a navigation hint. Desktop opens the
+            // trusted native picker at that folder and mints a fresh token
+            // only after the user confirms it.
+            void handlePickWorkingDir(dir);
+            return;
+          }
           setWorkingDir(dir);
-          // Recents come from the browser-side picker only; they carry no
-          // desktop trust token (and linkedDirs don't need one).
           setWorkingDirToken(null);
           void rememberRecentDir(dir);
         }}
@@ -1845,6 +1845,17 @@ export function HomeView({
         }}
         onExamplePromptStatusChange={handleExamplePromptStatusChange}
         onStartBlankProject={startBlankProject}
+        workMode={workMode}
+        onWorkModeChange={(next) => {
+          setWorkMode(next);
+          setSessionMode(defaultConversationModeForWorkMode(next));
+          if (next === 'development') {
+            setActive(null);
+            setActiveSkill(null);
+            setDesignSystemId(null);
+          }
+          setError(null);
+        }}
         sessionMode={sessionMode}
         onSessionModeChange={setSessionMode}
         executionSwitcher={executionSwitcher}
@@ -1881,21 +1892,26 @@ export function HomeView({
         {...(onRenameProject ? { onRename: onRenameProject } : {})}
       />
 
-      <HomeTemplatesReveal
-        enabled={!projectsLoading && projects.length === 0}
-      >
-        <PluginsHomeSection
-          plugins={plugins}
-          loading={pluginsLoading}
-          activePluginId={active?.record.id ?? null}
-          pendingApplyId={pendingApplyId}
-          onUse={(record, action) => void routePluginUse(record, action)}
-          onOpenDetails={handleCommunityOpenDetails}
-          onBrowseRegistry={onBrowseRegistry}
-          preferDefaultFacet={false}
-          cardLayout="gallery"
-        />
-      </HomeTemplatesReveal>
+      {onExploreOpenWork ? (
+        <section className="home-open-work-entry" aria-labelledby="home-open-work-title">
+          <div className="home-open-work-entry__label" aria-hidden="true">
+            {t('homeOpenWork.kicker')}
+          </div>
+          <div className="home-open-work-entry__copy">
+            <h2 id="home-open-work-title">{t('homeOpenWork.title')}</h2>
+            <p>{t('homeOpenWork.body')}</p>
+          </div>
+          <button
+            type="button"
+            className="home-open-work-entry__action"
+            onClick={onExploreOpenWork}
+            data-testid="home-open-work-link"
+          >
+            <span>{t('homeOpenWork.action')}</span>
+            <span aria-hidden="true">↗</span>
+          </button>
+        </section>
+      ) : null}
 
       <AnimatePresence>
         {detailsRecord ? (

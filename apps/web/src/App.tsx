@@ -79,7 +79,7 @@ import {
   syncConfigToDaemon,
   syncMediaProvidersToDaemon,
 } from './state/config';
-import { applyAppearanceToDocument } from './state/appearance';
+import { applyAppearanceToDocument, observeSystemAppearance } from './state/appearance';
 import { isMacPlatform } from './utils/platform';
 import {
   createProject,
@@ -342,7 +342,7 @@ function AppInner() {
   // Observability marker. `apps/web/src/observability/white-screen.ts`
   // keys its "app actually mounted" success condition on this attribute
   // because the dynamic-import loading shell (`<div class="od-loading-shell">
-  // Loading Open Docs…</div>`) is itself >MIN_VISIBLE_TEXT and would
+  // Loading MonoField…</div>`) is itself >MIN_VISIBLE_TEXT and would
   // otherwise be mistaken for a real mount. Survives subsequent render
   // crashes — once App has mounted at least once, it's no longer a white
   // screen (subsequent failures show up as `$exception`).
@@ -633,10 +633,12 @@ function AppInner() {
   // live theme switch in Settings applies atomically — no 1-frame flash of
   // the old theme. Safe here because the component tree is ssr:false.
   useLayoutEffect(() => {
-    applyAppearanceToDocument({
+    const apply = () => applyAppearanceToDocument({
       theme: config.theme ?? 'light',
       accentColor: config.accentColor,
     });
+    apply();
+    return observeSystemAppearance(config.theme, apply);
   }, [config.theme, config.accentColor]);
 
   // Tell the daemon what the user is currently looking at, so the MCP
@@ -1362,6 +1364,15 @@ function AppInner() {
       // to "None" for every kind now, and the user expects that to land
       // as a no-design-system project rather than silently inheriting the
       // workspace default.
+      // A Home-picked folder is a one-time handoff, not a durable metadata
+      // field. The post-create working-dir route is the only place that can
+      // make it the project root after desktop token verification.
+      const metadataForCreate = input.metadata
+        ? (() => {
+            const { userWorkingDir: _userWorkingDir, ...metadata } = input.metadata;
+            return metadata;
+          })()
+        : undefined;
       const derivedPendingPrompt =
       input.pendingPrompt ??
       (input.metadata?.promptTemplate?.prompt?.trim() || undefined);
@@ -1377,7 +1388,7 @@ function AppInner() {
           skillId: input.skillId,
           designSystemId: input.designSystemId,
           pendingPrompt: derivedPendingPrompt,
-          metadata: input.metadata,
+          metadata: metadataForCreate,
           ...(input.conversationMode ? { conversationMode: input.conversationMode } : {}),
           ...(input.pluginId ? { pluginId: input.pluginId } : {}),
           ...(input.appliedPluginSnapshotId
@@ -1438,13 +1449,18 @@ function AppInner() {
       // the final tree.
       const userWorkingDir = input.metadata?.userWorkingDir;
       let workingDirHandoffFailed = false;
+      // Keep the canonical folder-rooted project returned by the daemon. The
+      // next render (including the auto-sent first CLI turn) must see baseDir
+      // immediately, not wait for a later project-list refresh.
+      let activeProject = result.project;
       if (userWorkingDir) {
         try {
-          await replaceProjectWorkingDir(
+          const workingDirResult = await replaceProjectWorkingDir(
             result.project.id,
             userWorkingDir,
             input.userWorkingDirToken,
           );
+          activeProject = workingDirResult.project;
         } catch (err) {
           // The desktop working-dir token is short-lived (~60s TTL); if the
           // user lingered on Home or the POST was otherwise rejected, the
@@ -1534,10 +1550,10 @@ function AppInner() {
       }
       const project = result.appliedPluginSnapshotId
         ? {
-            ...result.project,
+            ...activeProject,
             appliedPluginSnapshotId: result.appliedPluginSnapshotId,
           }
-        : result.project;
+        : activeProject;
       rememberLocalProject(project.id);
       flushSync(() => {
         setProjects((curr) => [

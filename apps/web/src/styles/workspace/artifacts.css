@@ -113,7 +113,7 @@
   gap: 6px;
   padding: 7px 12px;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast);
   border: 1px solid var(--accent);
   border-radius: var(--radius-sm);
   font-size: 12px;
@@ -128,7 +128,7 @@
   transform: translateY(-1px);
 }
 .orbit-artifact-open:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -201,6 +201,36 @@
   flex-direction: column;
   gap: 8px;
 }
+.settings-about-identity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 4px 2px 12px;
+}
+.settings-about-identity img {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+}
+.settings-about-identity h3 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 19px;
+  font-weight: 720;
+  letter-spacing: -0.035em;
+}
+.settings-about-identity p {
+  margin: 2px 0 0;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.settings-about-identity span {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
 .mcp-client-body {
   display: flex;
   flex-direction: column;
@@ -263,6 +293,13 @@
 }
 .settings-about-version-row {
   justify-content: space-between;
+}
+.settings-database-approval-field {
+  flex: 0 1 220px;
+  min-width: 170px;
+}
+.settings-database-approval-field select {
+  min-width: 0;
 }
 .settings-about-list dt {
   font-size: 12px;
@@ -369,6 +406,39 @@
 .settings-about-diagnostics-text .hint {
   margin: 0;
   font-size: 12px;
+}
+.settings-about-notices {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+}
+.settings-about-notices h4,
+.settings-about-notices p {
+  margin: 0;
+}
+.settings-about-notices h4 {
+  color: var(--text);
+  font-size: 13px;
+}
+.settings-about-notices p,
+.settings-about-notices small {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.settings-about-notices a {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 620;
+  text-underline-offset: 3px;
+}
+.settings-about-notices a:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
 }
 .diagnostics-export-row {
   display: flex;
@@ -670,7 +740,7 @@
 .settings-language-tile.active .settings-language-tile-title { color: var(--accent); }
 .settings-language-tile.active:hover { background: var(--accent-soft); }
 .settings-language-tile:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 .empty-card {
@@ -987,7 +1057,7 @@
   overflow: hidden;
 }
 
-/* Failed-run AMR nudge: when the chat error card's "Try Open Docs AMR" link
+/* Failed-run AMR nudge: when the chat error card's "Try MonoField AMR" link
    opens Settings, the AMR card scrolls into view and pulses a couple of times.
    The card's own box-shadow is not clipped by `overflow: hidden`, so the glow
    reads fully even though inner content is clipped. */
@@ -1806,7 +1876,7 @@
 .settings-section-byok .settings-test-btn.loading {
   border-color: var(--selected);
   background: var(--selected);
-  color: #fff;
+  color: var(--selected-contrast);
   box-shadow:
     0 0 0 3px var(--selected-soft),
     0 1px 2px color-mix(in srgb, var(--selected) 22%, transparent);
@@ -1815,11 +1885,13 @@
 .settings-section-byok .settings-test-btn:focus-visible:not(:disabled) {
   border-color: color-mix(in srgb, var(--selected) 82%, var(--text-strong));
   background: color-mix(in srgb, var(--selected) 88%, var(--text-strong));
-  color: #fff;
+  color: var(--selected-contrast);
 }
 .settings-section-byok .settings-test-btn:disabled {
-  opacity: 0.72;
-  color: #fff;
+  opacity: 1;
+  color: var(--control-disabled-text);
+  background: var(--control-disabled-bg);
+  border-color: var(--control-disabled-border);
 }
 .settings-memory-summary-value {
   color: var(--text-muted);
@@ -2892,12 +2964,15 @@
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--text-strong);
   box-shadow: 0 1px 2px rgba(28, 27, 26, 0.18);
   transition: transform 160ms cubic-bezier(0.2, 0, 0.2, 1);
 }
 .toggle-row.on .toggle-row-switch { background: var(--text); }
-.toggle-row.on .toggle-row-switch::after { transform: translateX(14px); }
+.toggle-row.on .toggle-row-switch::after {
+  transform: translateX(14px);
+  background: var(--inverted-contrast);
+}
 
 /* -------- Compact toggle (lightweight inline variant used by
    SurfaceOptions; one-line, no border, hint moves to a native tooltip). -- */
@@ -2955,12 +3030,15 @@
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--text-strong);
   box-shadow: 0 1px 2px rgba(28, 27, 26, 0.18);
   transition: transform 160ms cubic-bezier(0.2, 0, 0.2, 1);
 }
 .compact-toggle.on .compact-toggle-switch { background: var(--text); }
-.compact-toggle.on .compact-toggle-switch::after { transform: translateX(12px); }
+.compact-toggle.on .compact-toggle-switch::after {
+  transform: translateX(12px);
+  background: var(--inverted-contrast);
+}
 
 /* -------- Template picker (template tab) ---------------------------- */
 .template-list {

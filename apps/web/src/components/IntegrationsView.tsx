@@ -3,7 +3,6 @@ import type { AppConfig } from '../types';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackIntegrationsConnectorsTabClick,
-  trackIntegrationsSkillsTabClick,
   trackIntegrationsTabClick,
   trackPageView,
   trackSettingsConnectorAuthResult,
@@ -14,7 +13,7 @@ import { McpClientSection } from './McpClientSection';
 import { UseEverywhereGuidePanel } from './UseEverywhereModal';
 import { useT } from '../i18n';
 
-export type IntegrationTab = 'mcp' | 'connectors' | 'skills' | 'use-everywhere';
+export type IntegrationTab = 'mcp' | 'connectors' | 'use-everywhere';
 
 interface Props {
   config: AppConfig;
@@ -28,13 +27,12 @@ const INTEGRATION_TABS: ReadonlyArray<{
 }> = [
   { id: 'mcp' },
   { id: 'connectors' },
-  { id: 'skills' },
   { id: 'use-everywhere' },
 ];
 
 function integrationTabToTrackingElement(
   id: IntegrationTab,
-): 'mcp' | 'connectors' | 'skills' | 'use_everywhere' {
+): 'mcp' | 'connectors' | 'use_everywhere' {
   if (id === 'use-everywhere') return 'use_everywhere';
   return id;
 }
@@ -148,8 +146,6 @@ export function IntegrationsView({
           />
         ) : null}
 
-        {activeTab === 'skills' ? <SkillsComingSoonPanel /> : null}
-
         {activeTab === 'use-everywhere' ? (
           <div className="integrations-view__use-everywhere">
             <UseEverywhereGuidePanel
@@ -163,40 +159,10 @@ export function IntegrationsView({
   );
 }
 
-function SkillsComingSoonPanel() {
-  const t = useT();
-  const analytics = useAnalytics();
-  return (
-    <section
-      className="integrations-view__coming-soon"
-      aria-labelledby="integration-skills-title"
-      onClick={() =>
-        trackIntegrationsSkillsTabClick(analytics.track, {
-          page_name: 'integrations',
-          area: 'skills_tab',
-          element: 'coming_soon',
-        })
-      }
-    >
-      <div className="integrations-view__coming-icon" aria-hidden="true">
-        <Icon name="sparkles" size={22} />
-      </div>
-      <div>
-        <p className="integrations-view__coming-kicker">{t('tasks.comingSoon')}</p>
-        <h2 id="integration-skills-title">{t('integrations.skillsTitle')}</h2>
-        <p>
-          {t('integrations.skillsBody')}
-        </p>
-      </div>
-    </section>
-  );
-}
-
 function integrationTabLabel(id: IntegrationTab, t: ReturnType<typeof useT>): string {
   switch (id) {
     case 'mcp': return t('integrations.tabLabel.mcp');
     case 'connectors': return t('entry.tabConnectors');
-    case 'skills': return t('integrations.tabLabel.skills');
     case 'use-everywhere': return t('entry.useEverywhereTitle');
   }
 }
@@ -205,7 +171,6 @@ function integrationTabHint(id: IntegrationTab, t: ReturnType<typeof useT>): str
   switch (id) {
     case 'mcp': return t('integrations.tabHint.mcp');
     case 'connectors': return t('integrations.tabHint.connectors');
-    case 'skills': return t('tasks.comingSoon');
     case 'use-everywhere': return t('integrations.tabHint.useEverywhere');
   }
 }

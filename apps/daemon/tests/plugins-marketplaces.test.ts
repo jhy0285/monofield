@@ -13,15 +13,28 @@ import Database from 'better-sqlite3';
 import { migratePlugins } from '../src/plugins/persistence.js';
 import {
   addMarketplace,
+  canonicalManagedMarketplaceCatalogUrl,
   ensureMarketplaceManifest,
   getMarketplace,
+  intersectManagedMarketplaceAllowedLicenses,
+  intersectManagedMarketplaceAllowedHosts,
+  isManagedMarketplaceCatalogUrlAllowed,
+  isManagedMarketplaceUrlAllowed,
   listMarketplaces,
   marketplaceManifestUrlForRegistry,
+  parseManagedMarketplaceAllowedCatalogUrls,
+  parseManagedMarketplaceAllowedHosts,
+  parseManagedMarketplaceAllowedLicenses,
+  parseManagedMarketplaceAuthEnv,
   refreshMarketplace,
   removeMarketplace,
+  resolveManagedMarketplaceInstallHostPolicy,
+  resolveManagedMarketplacePolicy,
   resolvePluginInMarketplaces,
+  marketplaceEvidenceForResolution,
   resolveMarketplaceFetchUrl,
   setMarketplaceTrust,
+  syncManagedMarketplaceCatalogs,
 } from '../src/plugins/marketplaces.js';
 
 let db: Database.Database;
@@ -60,6 +73,239 @@ afterEach(async () => {
   await rm(tmpDir, { recursive: true, force: true });
 });
 
+describe('managed marketplace administrator hosts', () => {
+  const marketplacePolicy = {
+    allowedVisibilities: ['enterprise'] as const,
+    allowedHosts: ['*.company.example', 'outside.example'],
+    allowedLicenses: ['Apache-2.0'],
+    requireHttps: true,
+    requireDigest: true,
+    requireSignature: false,
+    requireProvenance: false,
+    requireSbom: false,
+    requireApproval: false,
+    allowDirectUrlInstall: false,
+  };
+
+  it('accepts only normalized exact hostnames from administrator configuration', () => {
+    expect(parseManagedMarketplaceAllowedHosts(
+      ' CATALOG.COMPANY.EXAMPLE,packages.company.example,*.company.example,https://evil.example,packages.company.example ',
+    )).toEqual(['catalog.company.example', 'packages.company.example']);
+    expect(parseManagedMarketplaceAllowedHosts(' , *.company.example,https://evil.example ')).toEqual([]);
+  });
+
+  it('trims and de-duplicates exact administrator license labels', () => {
+    expect(parseManagedMarketplaceAllowedLicenses(
+      ' Apache-2.0,Internal-Proprietary,Apache-2.0, apache-2.0, ',
+    )).toEqual(['Apache-2.0', 'Internal-Proprietary', 'apache-2.0']);
+    expect(parseManagedMarketplaceAllowedLicenses(' , ')).toEqual([]);
+  });
+
+  it('canonicalizes exact catalog URLs including effective port and path', () => {
+    expect(canonicalManagedMarketplaceCatalogUrl(
+      'https://CATALOG.company.example/teams/platform/open-docs-marketplace.json',
+    )).toBe(
+      'https://catalog.company.example:443/teams/platform/open-docs-marketplace.json',
+    );
+    expect(canonicalManagedMarketplaceCatalogUrl(
+      'https://catalog.company.example:8443/open-docs-marketplace.json',
+    )).toBe('https://catalog.company.example:8443/open-docs-marketplace.json');
+    expect(canonicalManagedMarketplaceCatalogUrl(
+      'https://catalog.company.example/open-docs-marketplace.json?tenant=platform',
+    )).toBeNull();
+    expect(canonicalManagedMarketplaceCatalogUrl(
+      'https://token@catalog.company.example/open-docs-marketplace.json',
+    )).toBeNull();
+
+    const allowed = parseManagedMarketplaceAllowedCatalogUrls(
+      'https://catalog.company.example/teams/platform/open-docs-marketplace.json, https://catalog.company.example:443/teams/platform/open-docs-marketplace.json',
+    );
+    expect(allowed).toEqual([
+      'https://catalog.company.example:443/teams/platform/open-docs-marketplace.json',
+    ]);
+    expect(isManagedMarketplaceCatalogUrlAllowed(
+      'https://catalog.company.example/teams/platform/open-docs-marketplace.json',
+      allowed,
+    )).toBe(true);
+    expect(isManagedMarketplaceCatalogUrlAllowed(
+      'https://catalog.company.example/teams/attacker/open-docs-marketplace.json',
+      allowed,
+    )).toBe(false);
+    expect(isManagedMarketplaceCatalogUrlAllowed(
+      'https://catalog.company.example:8443/teams/platform/open-docs-marketplace.json',
+      allowed,
+    )).toBe(false);
+  });
+
+  it('accepts only dedicated marketplace credential environment names', () => {
+    expect(parseManagedMarketplaceAuthEnv(' od_marketplace_token_platform ')).toBe(
+      'OD_MARKETPLACE_TOKEN_PLATFORM',
+    );
+    expect(parseManagedMarketplaceAuthEnv('DATABASE_PASSWORD')).toBeNull();
+    expect(parseManagedMarketplaceAuthEnv('')).toBeNull();
+  });
+
+  it('matches HTTPS URLs without credentials by exact hostname', () => {
+    const allowedHosts = ['catalog.company.example'];
+    expect(isManagedMarketplaceUrlAllowed(
+      'https://catalog.company.example/open-docs-marketplace.json',
+      allowedHosts,
+    )).toBe(true);
+    expect(isManagedMarketplaceUrlAllowed(
+      'https://sub.catalog.company.example/open-docs-marketplace.json',
+      allowedHosts,
+    )).toBe(false);
+    expect(isManagedMarketplaceUrlAllowed(
+      'https://token@catalog.company.example/open-docs-marketplace.json',
+      allowedHosts,
+    )).toBe(false);
+    expect(isManagedMarketplaceUrlAllowed(
+      'http://catalog.company.example/open-docs-marketplace.json',
+      allowedHosts,
+    )).toBe(false);
+    expect(isManagedMarketplaceUrlAllowed(
+      'https://catalog.company.example:8443/open-docs-marketplace.json',
+      allowedHosts,
+    )).toBe(false);
+    expect(isManagedMarketplaceUrlAllowed(
+      'https://catalog.company.example/plugin.tgz?token=secret',
+      allowedHosts,
+    )).toBe(false);
+  });
+
+  it('uses the intersection of the row policy and administrator exact hosts', () => {
+    expect(intersectManagedMarketplaceAllowedHosts(
+      marketplacePolicy.allowedHosts,
+      ['catalog.company.example', 'packages.company.example', 'outside-admin.example'],
+    )).toEqual(['catalog.company.example', 'packages.company.example']);
+    expect(intersectManagedMarketplaceAllowedLicenses(
+      ['Apache-2.0', 'Unapproved-License'],
+      ['Internal-Proprietary', 'Apache-2.0'],
+    )).toEqual(['Apache-2.0']);
+  });
+
+  it('enforces the managed minimum while preserving stronger assurance choices', () => {
+    const decision = resolveManagedMarketplacePolicy({
+      marketplacePolicy: {
+        ...marketplacePolicy,
+        allowedVisibilities: ['enterprise', 'public'],
+        requireHttps: false,
+        requireDigest: false,
+        requireSignature: true,
+        requireProvenance: true,
+        allowDirectUrlInstall: true,
+      },
+      administratorAllowedHosts: ['packages.company.example'],
+      administratorAllowedLicenses: ['Apache-2.0', 'Internal-Proprietary'],
+    });
+    expect(decision).toMatchObject({
+      ok: true,
+      policy: {
+        allowedVisibilities: ['enterprise'],
+        allowedHosts: ['packages.company.example'],
+        allowedLicenses: ['Apache-2.0'],
+        requireHttps: true,
+        requireDigest: true,
+        requireSignature: true,
+        requireProvenance: true,
+        allowDirectUrlInstall: false,
+      },
+    });
+  });
+
+  it('fails closed unless catalog, archive, and row policy all permit the hosts', () => {
+    expect(resolveManagedMarketplaceInstallHostPolicy({
+      catalogUrl: 'https://catalog.company.example/open-docs-marketplace.json',
+      archiveUrl: 'https://packages.company.example/plugin.tgz',
+      marketplacePolicy: { ...marketplacePolicy, allowedVisibilities: ['enterprise'] },
+      administratorAllowedCatalogUrls: [],
+      administratorAllowedHosts: ['packages.company.example'],
+      administratorAllowedLicenses: ['Apache-2.0'],
+      packageLicense: 'Apache-2.0',
+    })).toEqual({ ok: false, reason: 'administrator-catalog-allowlist-empty' });
+
+    expect(resolveManagedMarketplaceInstallHostPolicy({
+      catalogUrl: 'https://catalog.company.example/open-docs-marketplace.json',
+      archiveUrl: 'https://packages.company.example/plugin.tgz',
+      marketplacePolicy: { ...marketplacePolicy, allowedVisibilities: ['enterprise'] },
+      administratorAllowedCatalogUrls: [
+        'https://catalog.company.example/open-docs-marketplace.json',
+      ],
+      administratorAllowedHosts: [],
+      administratorAllowedLicenses: ['Apache-2.0'],
+      packageLicense: 'Apache-2.0',
+    })).toEqual({ ok: false, reason: 'administrator-allowlist-empty' });
+
+    expect(resolveManagedMarketplaceInstallHostPolicy({
+      catalogUrl: 'https://catalog.company.example/open-docs-marketplace.json',
+      archiveUrl: 'https://packages.company.example/plugin.tgz',
+      marketplacePolicy: { ...marketplacePolicy, allowedVisibilities: ['enterprise'] },
+      administratorAllowedCatalogUrls: [
+        'https://catalog.company.example/open-docs-marketplace.json',
+      ],
+      administratorAllowedHosts: ['packages.company.example'],
+      administratorAllowedLicenses: [],
+      packageLicense: 'Apache-2.0',
+    })).toEqual({ ok: false, reason: 'administrator-license-allowlist-empty' });
+
+    expect(resolveManagedMarketplaceInstallHostPolicy({
+      catalogUrl: 'https://user-controlled.example/open-docs-marketplace.json',
+      archiveUrl: 'https://packages.company.example/plugin.tgz',
+      marketplacePolicy: { ...marketplacePolicy, allowedVisibilities: ['enterprise'] },
+      administratorAllowedCatalogUrls: [
+        'https://catalog.company.example/open-docs-marketplace.json',
+      ],
+      administratorAllowedHosts: ['packages.company.example'],
+      administratorAllowedLicenses: ['Apache-2.0'],
+      packageLicense: 'Apache-2.0',
+    })).toEqual({ ok: false, reason: 'catalog-url-not-allowed' });
+
+    expect(resolveManagedMarketplaceInstallHostPolicy({
+      catalogUrl: 'https://catalog.company.example/open-docs-marketplace.json',
+      archiveUrl: 'https://attacker.example/plugin.tgz',
+      marketplacePolicy: { ...marketplacePolicy, allowedVisibilities: ['enterprise'] },
+      administratorAllowedCatalogUrls: [
+        'https://catalog.company.example/open-docs-marketplace.json',
+      ],
+      administratorAllowedHosts: ['packages.company.example'],
+      administratorAllowedLicenses: ['Apache-2.0'],
+      packageLicense: 'Apache-2.0',
+    })).toEqual({ ok: false, reason: 'archive-host-not-allowed' });
+
+    expect(resolveManagedMarketplaceInstallHostPolicy({
+      catalogUrl: 'https://catalog.company.example/open-docs-marketplace.json',
+      archiveUrl: 'https://packages.company.example/plugin.tgz',
+      marketplacePolicy: { ...marketplacePolicy, allowedVisibilities: ['enterprise'] },
+      administratorAllowedCatalogUrls: [
+        'https://catalog.company.example/open-docs-marketplace.json',
+      ],
+      administratorAllowedHosts: ['packages.company.example'],
+      administratorAllowedLicenses: ['Internal-Proprietary'],
+      packageLicense: 'Apache-2.0',
+    })).toEqual({ ok: false, reason: 'marketplace-policy-license-not-allowed' });
+
+    const accepted = resolveManagedMarketplaceInstallHostPolicy({
+      catalogUrl: 'https://catalog.company.example/open-docs-marketplace.json',
+      archiveUrl: 'https://packages.company.example/plugin.tgz',
+      marketplacePolicy: { ...marketplacePolicy, allowedVisibilities: ['enterprise'] },
+      administratorAllowedCatalogUrls: [
+        'https://catalog.company.example/open-docs-marketplace.json',
+      ],
+      administratorAllowedHosts: [
+        'packages.company.example',
+        'outside-admin.example',
+      ],
+      administratorAllowedLicenses: ['Apache-2.0'],
+      packageLicense: 'Apache-2.0',
+    });
+    expect(accepted).toMatchObject({
+      ok: true,
+      allowedHosts: ['packages.company.example'],
+      policy: { allowedHosts: ['packages.company.example'] },
+    });
+  });
+});
+
 describe('marketplaces', () => {
   it('addMarketplace fetches, validates, stores, and returns the row', async () => {
     const result = await addMarketplace(db, {
@@ -75,6 +321,93 @@ describe('marketplaces', () => {
     expect(result.row.trust).toBe('restricted');
     expect(result.row.manifest.plugins).toHaveLength(1);
     expect(listMarketplaces(db)).toHaveLength(1);
+  });
+
+  it('persists a company marketplace policy without persisting its bearer token', async () => {
+    const manifest = JSON.stringify({
+      specVersion: '1.0.0',
+      name: 'company-marketplace',
+      version: '1.0.0',
+      plugins: [{
+        name: 'company/orders-spec',
+        packageKind: 'template',
+        source: 'https://packages.company.example/orders-spec-1.0.0.tgz',
+        version: '1.0.0',
+        integrity: `sha256:${'a'.repeat(64)}`,
+        license: 'Apache-2.0',
+        supplyChain: {
+          signature: { ref: 'oci://company/orders-spec-signature' },
+        },
+      }],
+    });
+    const policy = {
+      allowedVisibilities: ['enterprise'] as const,
+      allowedHosts: ['packages.company.example'],
+      allowedLicenses: ['Apache-2.0'],
+      requireHttps: true,
+      requireDigest: true,
+      requireSignature: false,
+      requireProvenance: false,
+      requireSbom: false,
+      requireApproval: false,
+      allowDirectUrlInstall: false,
+    };
+    const added = await addMarketplace(db, {
+      url: 'https://packages.company.example/open-docs-marketplace.json',
+      visibility: 'enterprise',
+      trust: 'trusted',
+      authEnv: 'OD_MARKETPLACE_TOKEN_TEAM',
+      policy: { ...policy, allowedVisibilities: [...policy.allowedVisibilities] },
+      fetcher: fixtureFetcher(manifest),
+    });
+    if (!added.ok) throw new Error(`add failed: ${added.message}`);
+
+    expect(added.row).toMatchObject({
+      visibility: 'enterprise',
+      authEnv: 'OD_MARKETPLACE_TOKEN_TEAM',
+      policy: { requireDigest: true, requireSignature: false },
+    });
+    const stored = db.prepare(`SELECT auth_env, policy_json FROM plugin_marketplaces WHERE id = ?`)
+      .get(added.row.id) as { auth_env: string; policy_json: string };
+    expect(stored.auth_env).toBe('OD_MARKETPLACE_TOKEN_TEAM');
+    expect(stored.policy_json).not.toContain('secret');
+
+    const resolved = resolvePluginInMarketplaces(db, 'company/orders-spec');
+    expect(resolved).toMatchObject({
+      marketplaceVisibility: 'enterprise',
+      marketplaceAuthEnv: 'OD_MARKETPLACE_TOKEN_TEAM',
+      packageKind: 'template',
+      license: 'Apache-2.0',
+    });
+    expect(marketplaceEvidenceForResolution(resolved!)).toMatchObject({
+      visibility: 'enterprise',
+      packageKind: 'template',
+      digest: { state: 'unknown' },
+      signature: { state: 'unknown' },
+    });
+  });
+
+  it('rejects enterprise credential references that could expose unrelated environment secrets', async () => {
+    const result = await addMarketplace(db, {
+      url: 'https://packages.company.example/open-docs-marketplace.json',
+      visibility: 'enterprise',
+      authEnv: 'DATABASE_PASSWORD',
+      policy: {
+        allowedVisibilities: ['enterprise'],
+        allowedHosts: ['packages.company.example'],
+        allowedLicenses: ['Apache-2.0'],
+        requireHttps: true,
+        requireDigest: true,
+        requireSignature: false,
+        requireProvenance: false,
+        requireSbom: false,
+        requireApproval: false,
+        allowDirectUrlInstall: false,
+      },
+      fetcher: fixtureFetcher(VALID_MANIFEST),
+    });
+    expect(result).toMatchObject({ ok: false, status: 400 });
+    if (!result.ok) expect(result.message).toMatch(/credential environment variable/i);
   });
 
   it('resolves marketplace names with exact versions, dist-tags, ranges, and yanks', async () => {
@@ -359,6 +692,82 @@ describe('marketplaces', () => {
         repo: expect.stringContaining('github.com/nexu-io/open-design'),
       },
     });
+  });
+});
+
+describe('managed marketplace startup synchronization', () => {
+  const catalogUrl = 'https://catalog.company.example/open-docs-marketplace.json';
+  const managedManifest = (version: string) => JSON.stringify({
+    specVersion: '1.0.0',
+    name: 'company-marketplace',
+    version,
+    plugins: [{
+      name: 'company/orders-spec',
+      source: 'https://packages.company.example/orders-spec.tgz',
+      version,
+      integrity: `sha256:${'a'.repeat(64)}`,
+      license: 'Apache-2.0',
+    }],
+  });
+
+  it('auto-enrolls and refreshes one administrator catalog without duplicates', async () => {
+    let version = '1.0.0';
+    let fetchCalls = 0;
+    const fetcher = async () => {
+      fetchCalls += 1;
+      return { ok: true, status: 200, text: async () => managedManifest(version) };
+    };
+    const input = {
+      catalogUrls: [catalogUrl],
+      allowedHosts: ['packages.company.example'],
+      allowedLicenses: ['Apache-2.0'],
+      authEnv: 'OD_MARKETPLACE_TOKEN_PLATFORM',
+      fetcher,
+    };
+
+    const first = await syncManagedMarketplaceCatalogs(db, input);
+    expect(first.failures).toEqual([]);
+    expect(first.rows).toHaveLength(1);
+    expect(first.rows[0]).toMatchObject({
+      trust: 'restricted',
+      visibility: 'enterprise',
+      authEnv: 'OD_MARKETPLACE_TOKEN_PLATFORM',
+      version: '1.0.0',
+      policy: {
+        requireHttps: true,
+        requireDigest: true,
+        allowDirectUrlInstall: false,
+      },
+    });
+
+    version = '1.1.0';
+    const second = await syncManagedMarketplaceCatalogs(db, input);
+    expect(second.failures).toEqual([]);
+    expect(second.rows[0]?.id).toBe(first.rows[0]?.id);
+    expect(second.rows[0]?.version).toBe('1.1.0');
+    expect(listMarketplaces(db)).toHaveLength(1);
+    expect(fetchCalls).toBe(2);
+  });
+
+  it('fails closed without fetching when administrator package policy is empty', async () => {
+    let fetchCalls = 0;
+    const result = await syncManagedMarketplaceCatalogs(db, {
+      catalogUrls: [catalogUrl],
+      allowedHosts: [],
+      allowedLicenses: ['Apache-2.0'],
+      fetcher: async () => {
+        fetchCalls += 1;
+        return { ok: true, status: 200, text: async () => managedManifest('1.0.0') };
+      },
+    });
+
+    expect(result.rows).toEqual([]);
+    expect(result.failures).toEqual([{
+      url: catalogUrl,
+      status: 403,
+      message: 'administrator-allowlist-empty',
+    }]);
+    expect(fetchCalls).toBe(0);
   });
 });
 

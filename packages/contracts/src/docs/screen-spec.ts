@@ -125,10 +125,15 @@ export type ScreenSpecIssueSeverity = 'fatal' | 'warning';
 export interface ScreenSpecIssue {
   severity: ScreenSpecIssueSeverity;
   code:
+    | 'missing-screen'
     | 'duplicate-screen-id'
     | 'duplicate-callout-no'
+    | 'non-sequential-callout-no'
     | 'relation-missing-callout'
-    | 'missing-screen-image';
+    | 'missing-screen-image'
+    | 'missing-screen-name'
+    | 'empty-callout-description'
+    | 'empty-checkpoint';
   message: string;
   screenIndex?: number;
 }
@@ -137,6 +142,14 @@ export interface ScreenSpecIssue {
 export function validateScreenSpecDocument(doc: ScreenSpecDocument): ScreenSpecIssue[] {
   const issues: ScreenSpecIssue[] = [];
   const seenScreenIds = new Map<string, number>();
+
+  if (doc.screens.length === 0) {
+    issues.push({
+      severity: 'fatal',
+      code: 'missing-screen',
+      message: 'The screen specification must contain at least one screen.',
+    });
+  }
 
   doc.screens.forEach((screen, index) => {
     const firstIndex = seenScreenIds.get(screen.id);
@@ -152,7 +165,7 @@ export function validateScreenSpecDocument(doc: ScreenSpecDocument): ScreenSpecI
     }
 
     const calloutNos = new Set<number>();
-    for (const callout of screen.callouts) {
+    for (const [calloutIndex, callout] of screen.callouts.entries()) {
       if (calloutNos.has(callout.no)) {
         issues.push({
           severity: 'fatal',
@@ -162,6 +175,22 @@ export function validateScreenSpecDocument(doc: ScreenSpecDocument): ScreenSpecI
         });
       }
       calloutNos.add(callout.no);
+      if (callout.no !== calloutIndex + 1) {
+        issues.push({
+          severity: 'fatal',
+          code: 'non-sequential-callout-no',
+          message: `Screen "${screen.id}" callout numbers must be sequential from 1 (found ${callout.no} at row ${calloutIndex + 1}).`,
+          screenIndex: index,
+        });
+      }
+      if (!callout.description.trim()) {
+        issues.push({
+          severity: 'warning',
+          code: 'empty-callout-description',
+          message: `Screen "${screen.id}" callout ${callout.no} has no description.`,
+          screenIndex: index,
+        });
+      }
     }
 
     for (const relation of screen.calloutRelations) {
@@ -182,6 +211,22 @@ export function validateScreenSpecDocument(doc: ScreenSpecDocument): ScreenSpecI
         severity: 'warning',
         code: 'missing-screen-image',
         message: `Screen "${screen.id}" has no image; the PPTX will render a placeholder.`,
+        screenIndex: index,
+      });
+    }
+    if (!screen.screenName.trim()) {
+      issues.push({
+        severity: 'warning',
+        code: 'missing-screen-name',
+        message: `Screen "${screen.id}" has no screen name.`,
+        screenIndex: index,
+      });
+    }
+    if (screen.checkpoints.some((checkpoint) => !checkpoint.trim())) {
+      issues.push({
+        severity: 'warning',
+        code: 'empty-checkpoint',
+        message: `Screen "${screen.id}" contains an empty Check Point row.`,
         screenIndex: index,
       });
     }

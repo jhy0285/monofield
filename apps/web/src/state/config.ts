@@ -87,7 +87,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   orbit: DEFAULT_ORBIT,
   projectLocations: [],
   defaultProjectLocationId: 'default',
-  // Open Docs is local-first. Product telemetry is optional and starts off.
+  // MonoField is local-first. Product telemetry is optional and starts off.
   // Model input still goes to the user-selected local CLI or BYOK provider
   // when the user runs an agent; that provider's data policy applies there.
   telemetry: { metrics: false, content: false, artifactManifest: false },

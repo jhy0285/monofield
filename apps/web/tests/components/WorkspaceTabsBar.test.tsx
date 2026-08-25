@@ -25,10 +25,15 @@ vi.mock('../../src/i18n', () => ({
       'entry.navDesignSystems': 'Design systems',
       'entry.navHome': 'Home',
       'entry.navProjects': 'Projects',
+      'entry.navOpenWork': 'Open work',
       'entry.navTasks': 'Automations',
       'entry.navPlugins': 'Plugins',
       'entry.navIntegrations': 'Integrations',
       'settings.welcomeTitle': 'Welcome',
+      'workspace.newTab': 'New tab',
+      'workspace.searchFilesPlaceholder': 'Search tabs',
+      'workspace.openTabs': 'Open tabs',
+      'workspace.noFilesMatch': 'No tabs found',
     };
     return labels[key] ?? key;
   },
@@ -225,8 +230,9 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     );
     expect(screen.getAllByRole('tab')).toHaveLength(1);
 
-    const sections: Array<{ view: 'projects' | 'tasks' | 'design-systems' | 'plugins' | 'integrations'; label: string }> = [
+    const sections: Array<{ view: 'projects' | 'open-work' | 'tasks' | 'design-systems' | 'plugins' | 'integrations'; label: string }> = [
       { view: 'projects', label: 'Projects' },
+      { view: 'open-work', label: 'Open work' },
       { view: 'tasks', label: 'Automations' },
       { view: 'design-systems', label: 'Design systems' },
       { view: 'plugins', label: 'Plugins' },

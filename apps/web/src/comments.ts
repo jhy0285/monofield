@@ -437,20 +437,32 @@ export function trimHtmlHint(value: string): string {
 }
 
 function renderCommentAttachmentContext(commentAttachments: ChatCommentAttachment[]): string {
+  const hasInterfaceSpecTarget = commentAttachments.some((item) =>
+    item.elementId.startsWith('interface-spec-') ||
+    item.podMembers?.some((member) => member.elementId.startsWith('interface-spec-')),
+  );
   const lines = [
     '',
     '',
     '<attached-preview-comments>',
     "Hard scope: change ONLY the elements identified below by selector / position / pod members. Do NOT modify sibling sub-pages, parent layout, global CSS, design tokens, or unrelated rules even if you notice issues there — surface those as a follow-up note in your reply instead of editing them. If the user's request cannot be satisfied without touching outside this scope, ask the user before proceeding. For visual marks, inspect the screenshot and modify the marked region first.",
   ];
+  if (hasInterfaceSpecTarget) {
+    lines.push(
+      'Interface-spec source rule: the selected HTML is a generated preview. Apply content changes to interface-spec.json (or its reviewed manual draft) and regenerate both preview.html and XLSX. Never patch preview.html as the source of truth.',
+    );
+  }
+  let visualMarkNumber = 0;
   commentAttachments.forEach((item) => {
     const position = normalizePosition(item.pagePosition);
     const selectionKind =
       item.selectionKind === 'visual' ? 'visual' : item.selectionKind === 'pod' ? 'pod' : 'element';
+    const markNumber = selectionKind === 'visual' ? ++visualMarkNumber : null;
     lines.push(
       '',
       `${item.order}. ${item.elementId}`,
       `targetKind: ${selectionKind}`,
+      ...(markNumber ? [`markNumber: ${markNumber}`] : []),
       `file: ${item.filePath}`,
       `label: ${item.label || '(unlabeled)'}`,
       `position: x${position.x} y${position.y} ${position.width}x${position.height}`,

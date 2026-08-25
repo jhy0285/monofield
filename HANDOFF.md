@@ -121,7 +121,7 @@ interface-spec/screen-spec 문서 파이프라인 전체가 미커밋 상태였�
 - `apps/daemon/src/doc-renderers/{interface-spec,screen-spec}/*` — 렌더러(exceljs/pptxgenjs/HTML).
 - `apps/daemon/src/docs-cli.ts` — `od docs render-*/preview-*` CLI.
 - `packages/contracts/src/docs/{interface-spec,screen-spec}.ts` — zod 스키마.
-- `plugins/_official/{interface-spec,screen-spec}/` — 스킬 + 스캐너(scan_spring/fastapi/nestjs/express/django/go.py + probe_check.py) + 픽스처.
+- `plugins/_official/{interface-spec,screen-spec}/` — 스킬 + 스캐너(scan_spring/fastapi/nestjs/express/django/go.py) + 픽스처.
 - `plugins/registry/{community,official}/open-docs-marketplace.json`.
 
 ---

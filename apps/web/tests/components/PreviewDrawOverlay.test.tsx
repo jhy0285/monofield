@@ -133,6 +133,38 @@ describe('PreviewDrawOverlay', () => {
     }
   });
 
+  it('falls back to the iframe snapshot bridge when the compositor returns null', async () => {
+    const restoreCompositeMocks = installImageCompositeMocks();
+    const annotation = vi.fn((event: Event) => {
+      const detail = (event as CustomEvent<{ ack?: (result: { ok: boolean }) => void }>).detail;
+      detail.ack?.({ ok: true });
+    });
+    const captureSnapshot = vi.fn(async () => null);
+    window.addEventListener('opendesign:annotation', annotation);
+
+    try {
+      const { getByRole } = render(
+        <PreviewDrawOverlay active captureViewport captureSnapshot={captureSnapshot}>
+          <iframe title="srcdoc" data-od-render-mode="srcdoc" />
+        </PreviewDrawOverlay>,
+      );
+
+      fireEvent.click(getByRole('button', { name: 'Send' }));
+
+      await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
+      expect(captureSnapshot).toHaveBeenCalledTimes(1);
+      expect(annotation.mock.calls[0]?.[0]).toMatchObject({
+        detail: expect.objectContaining({
+          action: 'send',
+          file: expect.any(File),
+        }),
+      });
+    } finally {
+      window.removeEventListener('opendesign:annotation', annotation);
+      restoreCompositeMocks();
+    }
+  });
+
   it('does not submit a note when Enter confirms IME composition', () => {
     const annotation = vi.fn();
     window.addEventListener('opendesign:annotation', annotation);
@@ -227,6 +259,40 @@ describe('PreviewDrawOverlay', () => {
           note: 'Keep this in the input.',
         }),
       });
+    } finally {
+      window.removeEventListener('opendesign:annotation', annotation);
+    }
+  });
+
+  it('adds a browser visual mark to the review tray without dispatching a chat action', async () => {
+    const annotation = vi.fn();
+    const onAddReviewItem = vi.fn(async (_draft: unknown) => ({ ok: true }));
+    window.addEventListener('opendesign:annotation', annotation);
+
+    try {
+      const { container, getByRole, queryByRole } = render(
+        <PreviewDrawOverlay
+          active
+          onAddReviewItem={onAddReviewItem}
+          reviewQueueLabel="Add review item"
+        >
+          <div style={{ width: 320, height: 200 }} />
+        </PreviewDrawOverlay>,
+      );
+
+      const input = container.querySelector<HTMLInputElement>('.preview-draw-note-input');
+      fireEvent.change(input!, { target: { value: 'Reduce this card spacing.' } });
+
+      expect(queryByRole('button', { name: 'Queue' })).toBeNull();
+      expect(queryByRole('button', { name: 'Send' })).toBeNull();
+      fireEvent.click(getByRole('button', { name: 'Add review item' }));
+
+      await waitFor(() => expect(onAddReviewItem).toHaveBeenCalledTimes(1));
+      expect(onAddReviewItem.mock.calls[0]?.[0]).toMatchObject({
+        note: 'Reduce this card spacing.',
+        file: null,
+      });
+      expect(annotation).not.toHaveBeenCalled();
     } finally {
       window.removeEventListener('opendesign:annotation', annotation);
     }

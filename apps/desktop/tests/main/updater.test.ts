@@ -297,6 +297,68 @@ describe("desktop updater", () => {
     }
   });
 
+  it("keeps packaged updates disabled without an explicitly configured metadata URL", async () => {
+    const root = makeRoot();
+    const fetchMock = vi.fn(async () => {
+      throw new Error("unexpected updater egress");
+    });
+    try {
+      const updater = createDesktopUpdater(
+        {
+          arch: "arm64",
+          currentVersion: "1.0.0",
+          downloadRoot: root,
+          env: {
+            [DESKTOP_UPDATE_ENV.ENABLED]: "1",
+            [DESKTOP_UPDATE_ENV.PLATFORM]: "darwin",
+          },
+          source: SIDECAR_SOURCES.PACKAGED,
+        },
+        { fetch: fetchMock as typeof globalThis.fetch },
+      );
+
+      expect(updater.config.metadataUrl).toBeNull();
+      expect(updater.config.enabled).toBe(false);
+      expect(updater.shouldAutoCheck()).toBe(false);
+      expect((await updater.checkForUpdates()).state).toBe(DESKTOP_UPDATE_STATES.IDLE);
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("enables packaged updates when the metadata URL is explicitly configured", async () => {
+    const root = makeRoot();
+    const metadataUrl = "https://updates.company.example/stable/latest/metadata.json";
+    const fetchMock = vi.fn(async () => metadataResponse("1.0.1"));
+    try {
+      const updater = createDesktopUpdater(
+        {
+          arch: "arm64",
+          currentVersion: "1.0.0",
+          downloadRoot: root,
+          env: {
+            [DESKTOP_UPDATE_ENV.METADATA_URL]: metadataUrl,
+            [DESKTOP_UPDATE_ENV.PLATFORM]: "darwin",
+          },
+          source: SIDECAR_SOURCES.PACKAGED,
+        },
+        { fetch: fetchMock as typeof globalThis.fetch },
+      );
+
+      expect(updater.config.metadataUrl).toBe(metadataUrl);
+      expect(updater.config.enabled).toBe(true);
+      expect(updater.shouldAutoCheck()).toBe(true);
+      expect((await updater.checkForUpdates({ autoDownload: false })).state).toBe(
+        DESKTOP_UPDATE_STATES.AVAILABLE,
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledWith(metadataUrl);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   it("adds session and source context to lifecycle logs", async () => {
     const root = makeRoot();
     const fixture = await createUpdaterFixture();
@@ -2532,17 +2594,19 @@ describe("desktop updater", () => {
   it("defaults counted beta internal builds to the beta update channel", () => {
     const root = makeRoot();
     try {
+      const metadataUrl = "https://updates.company.example/beta/latest/metadata.json";
       const config = resolveDesktopUpdaterConfig({
         currentVersion: "1.2.3-beta-internal.4",
         downloadRoot: root,
         env: {
           [DESKTOP_UPDATE_ENV.ENABLED]: "1",
+          [DESKTOP_UPDATE_ENV.METADATA_URL]: metadataUrl,
         },
         source: SIDECAR_SOURCES.PACKAGED,
       });
 
       expect(config.channel).toBe(DESKTOP_UPDATE_CHANNELS.BETA);
-      expect(config.metadataUrl).toContain("/beta/latest/metadata.json");
+      expect(config.metadataUrl).toBe(metadataUrl);
     } finally {
       rmSync(root, { force: true, recursive: true });
     }
@@ -2570,17 +2634,19 @@ describe("desktop updater", () => {
   it("defaults prerelease builds to the prerelease update channel", () => {
     const root = makeRoot();
     try {
+      const metadataUrl = "https://updates.company.example/prerelease/latest/metadata.json";
       const config = resolveDesktopUpdaterConfig({
         currentVersion: "1.2.3-prerelease.4",
         downloadRoot: root,
         env: {
           [DESKTOP_UPDATE_ENV.ENABLED]: "1",
+          [DESKTOP_UPDATE_ENV.METADATA_URL]: metadataUrl,
         },
         source: SIDECAR_SOURCES.PACKAGED,
       });
 
       expect(config.channel).toBe(DESKTOP_UPDATE_CHANNELS.PRERELEASE);
-      expect(config.metadataUrl).toContain("/prerelease/latest/metadata.json");
+      expect(config.metadataUrl).toBe(metadataUrl);
     } finally {
       rmSync(root, { force: true, recursive: true });
     }
@@ -2589,17 +2655,19 @@ describe("desktop updater", () => {
   it("defaults preview builds to the preview update channel", () => {
     const root = makeRoot();
     try {
+      const metadataUrl = "https://updates.company.example/preview/latest/metadata.json";
       const config = resolveDesktopUpdaterConfig({
         currentVersion: "1.2.3-preview.4",
         downloadRoot: root,
         env: {
           [DESKTOP_UPDATE_ENV.ENABLED]: "1",
+          [DESKTOP_UPDATE_ENV.METADATA_URL]: metadataUrl,
         },
         source: SIDECAR_SOURCES.PACKAGED,
       });
 
       expect(config.channel).toBe(DESKTOP_UPDATE_CHANNELS.PREVIEW);
-      expect(config.metadataUrl).toContain("/preview/latest/metadata.json");
+      expect(config.metadataUrl).toBe(metadataUrl);
     } finally {
       rmSync(root, { force: true, recursive: true });
     }

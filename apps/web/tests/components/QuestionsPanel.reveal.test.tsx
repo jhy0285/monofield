@@ -233,4 +233,30 @@ describe('QuestionsPanel staggered reveal', () => {
 
     expect(textInputAt(0).value).toBe('');
   });
+
+  it('waits ten minutes before auto-continuing an unanswered form', () => {
+    vi.useFakeTimers();
+    const onSubmit = vi.fn();
+    render(
+      <QuestionsPanel
+        form={form}
+        interactive
+        generating={false}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    revealAll();
+    expect(screen.getByText('10:00')).toBeTruthy();
+
+    act(() => {
+      vi.advanceTimersByTime((10 * 60 - 1) * 1000);
+    });
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
 });

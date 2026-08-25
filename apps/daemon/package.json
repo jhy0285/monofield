@@ -6,6 +6,7 @@
   "main": "./dist/cli.js",
   "types": "./dist/cli.d.ts",
   "bin": {
+    "monofield": "./bin/od.mjs",
     "od": "./bin/od.mjs"
   },
   "exports": {

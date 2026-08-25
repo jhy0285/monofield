@@ -238,6 +238,67 @@ export function updateScreenImage(screen: ScreenSpecScreen, imageDataUrl: string
   return { ...screen, imageDataUrl, imageRef: undefined };
 }
 
+export type ScreenSpecCommandResult =
+  | { ok: true; screen: ScreenSpecScreen; message: string }
+  | { ok: false; screen: ScreenSpecScreen; message: string };
+
+/**
+ * Safe, deterministic editing commands for the screen-spec inspector. The
+ * assistant can still perform broader revisions through chat, while these
+ * common Korean commands apply instantly without a model call.
+ */
+export function applyScreenSpecCommand(
+  screen: ScreenSpecScreen,
+  rawCommand: string,
+): ScreenSpecCommandResult {
+  const command = rawCommand.trim().replace(/^['"]|['"]$/g, '');
+  if (!command) return { ok: false, screen, message: '명령을 입력해 주세요.' };
+
+  const updateDescription = command.match(/^(\d+)번\s*(?:설명|description)을?\s+(.+?)(?:\s*(?:으로|로)\s*바꿔\s*줘)?[.!]?$/i);
+  if (updateDescription) {
+    const no = Number(updateDescription[1]);
+    const description = updateDescription[2]?.trim() ?? '';
+    const target = screen.callouts.find((callout) => callout.no === no);
+    if (!target) return { ok: false, screen, message: `${no}번 마커를 찾을 수 없습니다.` };
+    if (!description) return { ok: false, screen, message: '새 설명을 입력해 주세요.' };
+    return {
+      ok: true,
+      screen: updateCallout(screen, no, { label: target.label, description }),
+      message: `${no}번 설명을 변경했습니다.`,
+    };
+  }
+
+  const deleteMarker = command.match(/^(\d+)번\s*마커(?:를|\s)?\s*삭제(?:해\s*줘)?[.!]?$/i);
+  if (deleteMarker) {
+    const no = Number(deleteMarker[1]);
+    if (!screen.callouts.some((callout) => callout.no === no)) {
+      return { ok: false, screen, message: `${no}번 마커를 찾을 수 없습니다.` };
+    }
+    return { ok: true, screen: deleteCallout(screen, no), message: `${no}번 마커를 삭제하고 번호를 다시 정렬했습니다.` };
+  }
+
+  const checkpoint = command.match(/^체크\s*포인트에?\s+(.+?)\s*추가(?:해\s*줘)?[.!]?$/i);
+  if (checkpoint?.[1]?.trim()) {
+    return { ok: true, screen: addCheckpoint(screen, checkpoint[1]), message: 'Check Point를 추가했습니다.' };
+  }
+
+  const screenName = command.match(/^화면명을?\s+(.+?)(?:\s*(?:으로|로)\s*바꿔\s*줘)?[.!]?$/i);
+  if (screenName?.[1]?.trim()) {
+    return { ok: true, screen: updateScreenMetadata(screen, { screenName: screenName[1].trim() }), message: '화면명을 변경했습니다.' };
+  }
+
+  const version = command.match(/^버전을?\s+(.+?)(?:\s*(?:으로|로)\s*바꿔\s*줘)?[.!]?$/i);
+  if (version?.[1]?.trim()) {
+    return { ok: true, screen: updateScreenMetadata(screen, { version: version[1].trim() }), message: '버전을 변경했습니다.' };
+  }
+
+  return {
+    ok: false,
+    screen,
+    message: '지원하는 예: “1번 설명을 로그인 버튼으로 바꿔줘”, “2번 마커 삭제해줘”, “체크포인트에 권한 오류 처리 추가해줘”.',
+  };
+}
+
 function renumberCallouts(callouts: ScreenSpecCallout[]): ScreenSpecCallout[] {
   return callouts.map((callout, index) => ({ ...callout, no: index + 1 }));
 }

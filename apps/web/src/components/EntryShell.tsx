@@ -92,7 +92,6 @@ import { BrandsTab } from './BrandsTab';
 import { EntryNavRail, type EntryView as EntryViewKind } from './EntryNavRail';
 import { LibrarySection } from './LibrarySection';
 import { UpdaterPopup } from './UpdaterPopup';
-import { GithubStarBadge } from './GithubStarBadge';
 import { HomeView } from './HomeView';
 import {
   createPluginAuthoringHandoff,
@@ -113,6 +112,7 @@ import {
 } from './EntrySettingsMenu';
 import { NewProjectModal } from './NewProjectModal';
 import { PluginsView } from './PluginsView';
+import { OpenWorkView } from './OpenWorkView';
 import type { CreateInput, CreateTab, ImportClaudeDesignOutcome } from './NewProjectPanel';
 import type { PluginLoopSubmit } from './PluginLoopHome';
 import {
@@ -345,6 +345,7 @@ interface Props {
       conversationMode?: ChatSessionMode;
       autoSendFirstMessage?: boolean;
       pendingFiles?: File[];
+      userWorkingDirToken?: string;
     },
   ) => Promise<boolean> | boolean | void;
   onCreatePluginShareProject: (
@@ -386,6 +387,7 @@ function navElementForView(
 ):
   | 'home'
   | 'projects'
+  | 'open_work'
   | 'automations'
   | 'plugins'
   | 'design_systems'
@@ -396,6 +398,8 @@ function navElementForView(
       return 'home';
     case 'projects':
       return 'projects';
+    case 'open-work':
+      return 'open_work';
     case 'tasks':
       return 'automations';
     case 'plugins':
@@ -616,13 +620,12 @@ export function EntryShell({
       ...(payload.contextConnectors && payload.contextConnectors.length > 0
         ? { contextConnectors: payload.contextConnectors }
         : {}),
-      // The Home working-directory picker grants the agent read-only
-      // awareness of a local folder (via `--add-dir`), it does NOT import
-      // that folder into Design Files. So the picked path becomes the new
-      // project's `linkedDirs` rather than its `baseDir`/`userWorkingDir`:
-      // Design Files stays the managed `.od/projects/<id>` artifact store,
-      // independent of the user's local files.
-      ...(payload.workingDir ? { linkedDirs: [payload.workingDir] } : {}),
+      // A folder selected on Home is the project's actual local workspace.
+      // App.tsx spends the host-minted token immediately after creation and
+      // atomically repoints the project at this folder (`metadata.baseDir`).
+      // That makes the selected repository the CLI's cwd and writable scope,
+      // rather than a read-only --add-dir reference beside Design Files.
+      ...(payload.workingDir ? { userWorkingDir: payload.workingDir } : {}),
       ...(payload.examplePromptContext ? {
         examplePrompt: true,
         examplePromptTitle: payload.examplePromptContext.title,
@@ -645,10 +648,7 @@ export function EntryShell({
       ...(payload.attachments && payload.attachments.length > 0
         ? { pendingFiles: payload.attachments }
         : {}),
-      // No `userWorkingDirToken`: linkedDirs grant read-only `--add-dir`
-      // access and are validated by the daemon at create time, so they do
-      // not need the desktop main-process trust token that baseDir imports
-      // require for write access.
+      ...(payload.workingDirToken ? { userWorkingDirToken: payload.workingDirToken } : {}),
       autoSendFirstMessage: true,
     });
   }
@@ -759,7 +759,6 @@ export function EntryShell({
               <Icon name="panel-left" size={20} />
             </button>
             <div className="entry-main__topbar-chips entry-main__topbar-chips--icon-only">
-              <GithubStarBadge />
               {view === 'home' ? null : executionSwitcher}
               <button
                 type="button"
@@ -806,6 +805,7 @@ export function EntryShell({
                 onDeleteProject={onDeleteProject}
                 onRenameProject={onRenameProject}
                 onBrowseRegistry={() => changeView('plugins')}
+                onExploreOpenWork={() => changeView('open-work')}
                 onOpenIntegrations={() => openIntegrationTab('connectors')}
                 onOpenMcp={() => openIntegrationTab('mcp')}
                 onOpenNewProject={(tab) => {
@@ -841,6 +841,14 @@ export function EntryShell({
                   />
                 </div>
               )}
+            </div>
+            <div data-testid="entry-view-open-work" data-active={view === 'open-work' ? 'true' : 'false'} {...inactiveViewProps(view === 'open-work')}>
+              {view === 'open-work' ? (
+                <OpenWorkView
+                  onUse={usePluginFromLibrary}
+                  onManagePlugins={() => changeView('plugins')}
+                />
+              ) : null}
             </div>
             <div data-testid="entry-view-tasks" data-active={view === 'tasks' ? 'true' : 'false'} {...inactiveViewProps(view === 'tasks')}>
               <TasksView
@@ -1690,7 +1698,7 @@ function OnboardingView({
   }
 
   // Cloud-landing primary CTA: pick the AMR cloud runtime and kick off the
-  // Open Docs Cloud sign-in in one gesture. Mirrors the old AMR card's
+  // MonoField Cloud sign-in in one gesture. Mirrors the old AMR card's
   // selection side effects (mode/agent) followed by the sign-in path, so a
   // successful login advances to the next onboarding step exactly the same way.
   async function handleCloudSignIn() {
@@ -2127,7 +2135,7 @@ function OnboardingView({
       ? t('settings.onboardingFinish')
       : t('settings.onboardingContinue');
 
-  // Connect step, default face: a minimal, centered Open Docs Cloud sign-in
+  // Connect step, default face: a minimal, centered MonoField Cloud sign-in
   // landing. No stepper, no runtime cards — just the cloud CTA, a secondary
   // link into the full runtime chooser, and a top-left language/theme bar.
   if (step === 0 && connectExpanded === null) {
@@ -2162,7 +2170,7 @@ function OnboardingView({
           <span
             className="onboarding-cloud__logo"
             role="img"
-            aria-label="Open Docs"
+            aria-label="MonoField"
           />
           <h1 className="onboarding-cloud__title">{t('settings.onboardingCloudTitle')}</h1>
           <p className="onboarding-cloud__body">{t('settings.onboardingCloudBody')}</p>
@@ -2256,7 +2264,7 @@ function OnboardingView({
           )}
         </div>
         <footer className="onboarding-cloud__footer">
-          © {new Date().getFullYear()} Open Docs · {t('settings.onboardingCloudRights')}
+          © {new Date().getFullYear()} MonoField · {t('settings.onboardingCloudRights')}
         </footer>
       </section>
     );

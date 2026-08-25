@@ -1,6 +1,10 @@
 import { createHash, randomBytes } from 'node:crypto';
 
-export const DEFAULT_TOOL_TOKEN_TTL_MS = 15 * 60 * 1000;
+// A tool grant is scoped to one run and is revoked as soon as that run exits or
+// its SSE stream closes. Keep a generous ceiling so long development sessions
+// do not silently lose browser/DB access part-way through the job, while still
+// bounding orphaned grants if a process terminates abnormally.
+export const DEFAULT_TOOL_TOKEN_TTL_MS = 8 * 60 * 60 * 1000;
 
 export const CHAT_TOOL_ENDPOINTS = [
   '/api/tools/live-artifacts/create',
@@ -13,6 +17,8 @@ export const CHAT_TOOL_ENDPOINTS = [
   '/api/tools/media/generate',
   '/api/tools/library/search',
   '/api/tools/library/apply',
+  '/api/database/mutations',
+  '/api/database/read',
 ] as const;
 
 export const CHAT_TOOL_OPERATIONS = [
@@ -26,6 +32,8 @@ export const CHAT_TOOL_OPERATIONS = [
   'media:generate',
   'library:search',
   'library:apply',
+  'database:mutate',
+  'database:read',
 ] as const;
 
 export type ToolEndpoint = (typeof CHAT_TOOL_ENDPOINTS)[number] | (string & {});

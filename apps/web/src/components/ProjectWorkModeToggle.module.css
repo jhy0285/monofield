@@ -1,0 +1,71 @@
+.root {
+  display: grid;
+  gap: 7px;
+  width: min(100%, 520px);
+  margin: 18px auto 14px;
+}
+
+.header {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--border-control, var(--border));
+  border-radius: 10px;
+  background: var(--bg-subtle);
+}
+
+.options button {
+  min-height: 34px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.options button:hover {
+  background: var(--control-hover);
+  color: var(--text);
+}
+
+.options button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.options button.selected {
+  border-color: var(--border-strong);
+  background: var(--selected);
+  color: var(--accent-contrast);
+  box-shadow: var(--shadow-sm);
+}
+
+.hint {
+  min-height: 17px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.compact {
+  width: auto;
+  margin: 0 24px 12px;
+}
+
+@media (max-width: 700px) {
+  .root {
+    margin-top: 12px;
+  }
+}

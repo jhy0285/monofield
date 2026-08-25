@@ -10,6 +10,7 @@ import { projectFileUrl } from './registry';
 import type { StreamHandlers } from './anthropic';
 import { parseSseFrame } from './sse';
 import { isAnthropicSupportedImagePath } from '../utils/apiProtocol';
+import { normalizeProviderTokenUsage } from '@open-design/contracts';
 
 /**
  * Optional per-request context that some protocols thread into the
@@ -113,6 +114,25 @@ export async function streamProxyEndpoint(
         if (parsed.event === 'error') {
           handlers.onError(new Error(proxyErrorMessage(parsed.data)));
           return;
+        }
+
+        if (parsed.event === 'usage') {
+          handlers.onUsage?.(
+            normalizeProviderTokenUsage(
+              (parsed.data.usage ?? parsed.data) as Record<string, unknown>,
+              {
+                costUsd:
+                  typeof parsed.data.costUsd === 'number'
+                    ? parsed.data.costUsd
+                    : undefined,
+                durationMs:
+                  typeof parsed.data.durationMs === 'number'
+                    ? parsed.data.durationMs
+                    : undefined,
+              },
+            ),
+          );
+          continue;
         }
 
         if (parsed.event === 'end') {

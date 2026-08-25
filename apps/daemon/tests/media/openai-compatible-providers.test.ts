@@ -123,8 +123,8 @@ describe('OpenAI-compatible media providers', () => {
       expectedArgsExcludes?: string;
     } = {},
   ) {
-    const codexBin = path.join(root, `${threadId}.mjs`);
-    await writeFile(codexBin, `#!/usr/bin/env node
+    const runner = path.join(root, `${threadId}.mjs`);
+    await writeFile(runner, `#!/usr/bin/env node
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -166,7 +166,14 @@ process.stdin.on('end', () => {
   process.stdout.write(JSON.stringify({ type: 'thread.started', thread_id: '${threadId}' }) + '\\n');
 });
 `, 'utf8');
-    await chmod(codexBin, 0o755);
+    const codexBin = process.platform === 'win32'
+      ? path.join(root, `${threadId}.cmd`)
+      : runner;
+    if (process.platform === 'win32') {
+      await writeFile(codexBin, `@echo off\r\nnode "${runner}" %*\r\n`);
+    } else {
+      await chmod(codexBin, 0o755);
+    }
     process.env.CODEX_BIN = codexBin;
     process.env.CODEX_HOME = codexHome;
   }

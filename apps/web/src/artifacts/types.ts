@@ -8,6 +8,7 @@ export type ArtifactKind =
   | 'code-snippet'
   | 'mini-app'
   | 'design-system'
+  | 'interface-spec'
   | 'screen-spec';
 
 export type ArtifactRendererId =
@@ -20,6 +21,7 @@ export type ArtifactRendererId =
   | 'code'
   | 'mini-app'
   | 'design-system'
+  | 'interface-spec'
   | 'screen-spec';
 
 export type ArtifactExportKind =
@@ -29,6 +31,8 @@ export type ArtifactExportKind =
   | 'jsx'
   | 'md'
   | 'svg'
+  | 'xlsx'
+  | 'pptx'
   | 'txt';
 
 export type ArtifactStatus = 'streaming' | 'complete' | 'error';

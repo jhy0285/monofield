@@ -138,7 +138,7 @@ describe('daemon startup route smoke', () => {
     const conversationResponse = await fetch(`${started.url}/api/projects/${projectId}/conversations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: 'Startup write conversation', sessionMode: 'design' }),
+      body: JSON.stringify({ title: 'Startup write conversation', sessionMode: 'docs' }),
     });
     expect(conversationResponse.status).toBe(200);
     const conversationBody = await conversationResponse.json() as {

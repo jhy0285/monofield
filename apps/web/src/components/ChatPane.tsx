@@ -68,6 +68,8 @@ import type { PlaceholderScenario } from './home-hero/placeholderScenarios';
 import { listDesignArtifactCandidates } from './design-files/designArtifacts';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { Icon, type IconName } from './Icon';
+import { TokenUsageDisclosure } from './TokenUsageDisclosure';
+import { usageForConversation } from '../runtime/token-usage';
 import { repoConnectCopy } from './design-system-github-evidence';
 import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 import type { SettingsSection } from './SettingsDialog';
@@ -490,7 +492,7 @@ interface Props {
   ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
   activePluginActionPaths?: Set<string>;
   hiddenPluginActionPaths?: Set<string>;
-  // "Share to Open Docs" button on each completed assistant message —
+  // "Share to MonoField" button on each completed assistant message —
   // wired by ProjectView to handleSend with the bundled
   // `od-share-to-community` scenario's trigger prompt.
   onShareToOpenDocs?: (assistantMessageId: string) => void;
@@ -681,7 +683,7 @@ export function ChatPane({
   queuedItems = [],
   error,
   projectId,
-  sessionMode = 'design',
+  sessionMode = 'docs',
   onSessionModeChange,
   projectKindForTracking = null,
   projectFiles,
@@ -784,6 +786,10 @@ export function ChatPane({
   const t = useT();
   const analytics = useAnalytics();
   const displayMessages = messages;
+  const conversationUsage = useMemo(
+    () => usageForConversation(displayMessages),
+    [displayMessages],
+  );
   const amrProfile = config?.agentCliEnv?.amr?.[AMR_PROFILE_ENV_KEY] ?? null;
   const [inlineAmrLoginStatus, setInlineAmrLoginStatus] =
     useState<VelaLoginStatus | null>(null);
@@ -2016,6 +2022,14 @@ export function ChatPane({
             </div>
           ) : null}
         </div>
+        {conversationUsage.assistantResponseCount > 0 ? (
+          <TokenUsageDisclosure
+            metrics={conversationUsage.metrics}
+            variant="conversation"
+            measuredResponses={conversationUsage.measuredResponseCount}
+            totalResponses={conversationUsage.assistantResponseCount}
+          />
+        ) : null}
       </div>
       {tab === 'chat' ? (
         <>
@@ -3428,7 +3442,7 @@ export function isAssistantMessageStreaming(
 
 export function buildRunErrorDiagnosticText(input: RunErrorDiagnosticInput): string {
   const lines = [
-    'Open Docs run error diagnostics',
+    'MonoField run error diagnostics',
     `trace_id: ${input.traceId ?? 'n/a'}`,
     `run_id: ${input.traceId ?? 'n/a'}`,
     `error_code: ${input.errorCode ?? 'n/a'}`,

@@ -274,7 +274,7 @@ export async function startBrandExtraction(
     id: conversationId,
     projectId,
     title: null,
-    sessionMode: 'design',
+    sessionMode: 'docs',
     createdAt: now,
     updatedAt: now,
   });

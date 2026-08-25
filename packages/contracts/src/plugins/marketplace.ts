@@ -4,19 +4,53 @@ import {
   OPEN_DESIGN_PLUGIN_SPEC_VERSION,
   OpenDocsSpecVersionSchema,
 } from './manifest.js';
+import { MarketplacePackageKindSchema } from './marketplace-policy.js';
 
-const MarketplaceEntryDistSchema = z.object({
+export const MarketplaceOciDistributionSchema = z.object({
+  reference: z.string().min(1),
+  digest:    z.string().min(1),
+  mediaType: z.string().min(1).optional(),
+}).passthrough();
+export type MarketplaceOciDistribution = z.infer<typeof MarketplaceOciDistributionSchema>;
+
+export const MarketplaceSupplyChainReferenceSchema = z.object({
+  ref:       z.string().min(1),
+  digest:    z.string().min(1).optional(),
+  mediaType: z.string().min(1).optional(),
+}).passthrough();
+export type MarketplaceSupplyChainReference = z.infer<
+  typeof MarketplaceSupplyChainReferenceSchema
+>;
+
+/**
+ * Publisher-provided locations only. Installers must verify these references
+ * and construct MarketplacePackageEvidence locally before applying policy.
+ */
+export const MarketplaceSupplyChainReferencesSchema = z.object({
+  signature:  MarketplaceSupplyChainReferenceSchema.optional(),
+  provenance: MarketplaceSupplyChainReferenceSchema.optional(),
+  sbom:       MarketplaceSupplyChainReferenceSchema.optional(),
+  approval:   MarketplaceSupplyChainReferenceSchema.optional(),
+}).passthrough();
+export type MarketplaceSupplyChainReferences = z.infer<
+  typeof MarketplaceSupplyChainReferencesSchema
+>;
+
+export const MarketplaceEntryDistSchema = z.object({
   type:           z.string().optional(),
   archive:        z.string().optional(),
   integrity:      z.string().optional(),
   manifestDigest: z.string().optional(),
+  oci:            MarketplaceOciDistributionSchema.optional(),
 }).passthrough();
 
-const MarketplacePluginVersionSchema = z.object({
+export const MarketplacePluginVersionSchema = z.object({
   version:        z.string().min(1),
+  packageKind:    MarketplacePackageKindSchema.optional(),
   source:         z.string().min(1).optional(),
   ref:            z.string().optional(),
   dist:           MarketplaceEntryDistSchema.optional(),
+  supplyChain:    MarketplaceSupplyChainReferencesSchema.optional(),
   integrity:      z.string().optional(),
   manifestDigest: z.string().optional(),
   deprecated:     z.union([z.boolean(), z.string()]).optional(),
@@ -33,10 +67,12 @@ export type MarketplacePluginVersion = z.infer<typeof MarketplacePluginVersionSc
 // fields (e.g. clawhub category tags) without breaking OD installs.
 export const MarketplacePluginEntrySchema = z.object({
   name:        z.string().min(1),
+  packageKind: MarketplacePackageKindSchema.optional(),
   source:      z.string().min(1),
   version:     z.string().min(1),
   ref:         z.string().optional(),
   dist:        MarketplaceEntryDistSchema.optional(),
+  supplyChain: MarketplaceSupplyChainReferencesSchema.optional(),
   versions:    z.array(MarketplacePluginVersionSchema).optional(),
   distTags:    z.record(z.string()).optional(),
   integrity:   z.string().optional(),

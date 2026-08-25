@@ -9,7 +9,7 @@
 // Frontmatter format (matches Claude Code's auto-memory pattern):
 //   ---
 //   name: User role
-//   description: User is a senior FE engineer working on Open Docs.
+//   description: User is a senior FE engineer working on MonoField.
 //   type: user
 //   ---
 //

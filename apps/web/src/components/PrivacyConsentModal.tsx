@@ -8,7 +8,7 @@ import { Icon } from './Icon';
  * constant so it can be repointed (e.g. to a hosted page) without touching
  * markup. `PRIVACY.md` documents the same data handling the modal discloses.
  */
-const PRIVACY_POLICY_URL = 'https://github.com/jhy0285/open-docs/blob/main/PRIVACY.md';
+const PRIVACY_POLICY_URL = 'https://github.com/jhy0285/monofield/blob/main/PRIVACY.md';
 
 interface Props {
   /** Acknowledges the disclosure. This does not enable product telemetry. */
@@ -24,9 +24,9 @@ interface Props {
  * it stretches to a bottom-edge bar (see `.privacy-consent-banner` in
  * index.css) so it doesn't crowd content on phones.
  *
- * Single "I get it" action: Open Docs product telemetry is disabled.
+ * Single "I get it" action: MonoField product telemetry is disabled.
  * The banner explains that model-provider input is governed by the selected
- * CLI/provider policy, while Open Docs itself does not send telemetry.
+ * CLI/provider policy, while MonoField itself does not send telemetry.
  *
  * Stays mounted until the user clicks I get it — there is no
  * dismiss-without-acknowledgement button on purpose. The downstream
@@ -37,7 +37,7 @@ export function PrivacyConsentModal({ onAccept }: Props): JSX.Element {
   const t = useT();
   const analytics = useAnalytics();
   // The first-launch privacy banner only records that the disclosure was
-  // acknowledged; it does not opt the user into Open Docs telemetry.
+  // acknowledged; it does not opt the user into MonoField telemetry.
   return (
     <div className="privacy-consent-banner" role="region" aria-labelledby="privacy-consent-title">
       <div className="privacy-consent-banner-head">

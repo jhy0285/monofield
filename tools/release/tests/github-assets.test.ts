@@ -30,21 +30,21 @@ describe("stable GitHub Release asset plan", () => {
 
     try {
       const allowed = [
-        `open-design-${version}-mac-arm64.dmg`,
-        `open-design-${version}-mac-arm64.dmg.sha256`,
-        `open-design-${version}-mac-x64.dmg`,
-        `open-design-${version}-mac-x64.dmg.sha256`,
-        `open-design-${version}-win-x64-setup.exe`,
-        `open-design-${version}-win-x64-setup.exe.sha256`,
+        `monofield-${version}-mac-arm64.dmg`,
+        `monofield-${version}-mac-arm64.dmg.sha256`,
+        `monofield-${version}-mac-x64.dmg`,
+        `monofield-${version}-mac-x64.dmg.sha256`,
+        `monofield-${version}-win-x64-setup.exe`,
+        `monofield-${version}-win-x64-setup.exe.sha256`,
       ];
       for (const name of allowed) {
         await writeAsset(source, name.includes("win") ? "win" : name.includes("x64") ? "mac-intel" : "mac", name);
       }
       for (const name of [
-        `open-design-${version}-mac-arm64-payload.zip`,
-        `open-design-${version}-mac-x64.zip`,
-        `open-design-${version}-win-x64-payload.7z`,
-        `open-design-${version}-win-x64-portable.zip`,
+        `monofield-${version}-mac-arm64-payload.zip`,
+        `monofield-${version}-mac-x64.zip`,
+        `monofield-${version}-win-x64-payload.7z`,
+        `monofield-${version}-win-x64-portable.zip`,
         "latest.yml",
         "latest-mac.yml",
       ]) {

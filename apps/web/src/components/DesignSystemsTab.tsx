@@ -60,7 +60,7 @@ const CATEGORY_ORDER = [
 ];
 
 type SurfaceFilter = 'all' | Surface;
-type DesignSystemCollection = 'mine' | 'official' | 'enterprise';
+type DesignSystemCollection = 'mine' | 'official';
 type DesignSystemActionKind = 'edit' | 'publish' | 'default' | 'delete';
 
 const SURFACE_PILLS: { value: SurfaceFilter; labelKey: 'examples.modeAll' | 'ds.surfaceWeb' | 'ds.surfaceImage' | 'ds.surfaceVideo' | 'ds.surfaceAudio' }[] = [
@@ -602,7 +602,6 @@ export function DesignSystemsTab({
   const scopeTabs = [
     { value: 'mine' as const, label: t('dsManager.yourSystems'), count: userSearched.length },
     { value: 'official' as const, label: t('dsManager.officialPresets'), count: queryScoped.length },
-    { value: 'enterprise' as const, label: t('dsManager.enterprise'), comingSoon: true },
   ];
 
   const showPresetFilters = designSystemCollection === 'official';
@@ -736,9 +735,6 @@ export function DesignSystemsTab({
               {'count' in tab ? (
                 <span className={styles.scopeCount} aria-hidden>{tab.count}</span>
               ) : null}
-              {tab.comingSoon ? (
-                <span className={styles.scopeComingSoon} aria-hidden>{t('dsManager.comingSoonBadge')}</span>
-              ) : null}
             </button>
           ))}
         </div>
@@ -812,13 +808,6 @@ export function DesignSystemsTab({
   );
 
   function renderSidebarList() {
-    if (designSystemCollection === 'enterprise') {
-      return (
-        <div className={styles.sidebarEmpty}>
-          <p className={styles.sidebarEmptyText}>{t('dsManager.enterpriseDsBody')}</p>
-        </div>
-      );
-    }
     if (activeSystems.length === 0) {
       if (designSystemCollection === 'official') {
         return (
@@ -856,16 +845,6 @@ export function DesignSystemsTab({
   }
 
   function renderPreview() {
-    if (designSystemCollection === 'enterprise') {
-      return (
-        <ComingSoon
-          title={t('dsManager.enterpriseDsTitle')}
-          body={t('dsManager.enterpriseDsBody')}
-          comingSoonLabel={t('dsManager.comingSoonBadge')}
-        />
-      );
-    }
-
     if (selectedSystem) {
       return (
         <DesignSystemDetail
@@ -1324,24 +1303,6 @@ function DesignSystemDetailSkeleton({
           ))}
         </div>
       </section>
-    </div>
-  );
-}
-
-function ComingSoon({
-  title,
-  body,
-  comingSoonLabel,
-}: {
-  title: string;
-  body: string;
-  comingSoonLabel: string;
-}) {
-  return (
-    <div className={styles.previewEmpty}>
-      <span className={styles.comingSoonBadge}>{comingSoonLabel}</span>
-      <p className={styles.previewEmptyTitle}>{title}</p>
-      <p className={styles.previewEmptyText}>{body}</p>
     </div>
   );
 }

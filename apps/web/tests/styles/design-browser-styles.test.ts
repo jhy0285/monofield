@@ -43,6 +43,8 @@ function definedClasses(css: string): Set<string> {
 // no layout of its own; anything that paints or positions must stay covered.
 const STYLELESS_HOOKS = new Set([
   'db-action-browser-use',
+  'db-action-access',
+  'db-action-local-tool',
   'db-action-menu',
   'db-action-primary',
   'db-action-secondary',
@@ -54,6 +56,7 @@ const STYLELESS_HOOKS = new Set([
   'db-inspect-padding',
   'db-inspect-radius',
   'db-inspect-weight',
+  'db-automation-title',
   'db-viewport-height',
   'db-viewport-icon',
   'db-viewport-menu-label',
@@ -94,6 +97,23 @@ describe('design browser panel styles', () => {
     expect(chrome).toMatch(/grid-template-columns/);
     const board = /\.db-reference-board\s*\{([^}]*)\}/.exec(designBrowserCss)?.[1] ?? '';
     expect(board).toMatch(/(grid|flex|padding)/);
+  });
+
+  it('keeps the approved automation stop action from consuming the entire safety row', () => {
+    const stop = /\.db-browser-access-foot button\.db-browser-automation-stop\s*\{([^}]*)\}/
+      .exec(designBrowserCss)?.[1] ?? '';
+    expect(stop).toMatch(/width:\s*auto/);
+    expect(stop).toMatch(/display:\s*inline-flex/);
+    expect(stop).toMatch(/white-space:\s*nowrap/);
+  });
+
+  it('keeps the live agent pointer status above the browser with an immediate stop control', () => {
+    const status = /\.db-agent-pointer-status\s*\{([^}]*)\}/.exec(designBrowserCss)?.[1] ?? '';
+    expect(status).toMatch(/position:\s*absolute/);
+    expect(status).toMatch(/z-index:\s*170/);
+    const stop = /\.db-agent-pointer-status button\s*\{([^}]*)\}/.exec(designBrowserCss)?.[1] ?? '';
+    expect(stop).toMatch(/cursor:\s*pointer/);
+    expect(designBrowserCss).toContain('@media (prefers-reduced-motion: reduce)');
   });
 
   it('keeps every styled browser-panel class the component renders defined in the stylesheet', () => {

@@ -105,7 +105,7 @@ describe('readLangfuseConfig', () => {
     ).toBeNull();
   });
 
-  it('ignores legacy Langfuse keys because Open Docs telemetry is disabled', () => {
+  it('ignores legacy Langfuse keys because MonoField telemetry is disabled', () => {
     const cfg = readLangfuseConfig({
       LANGFUSE_PUBLIC_KEY: 'pk-lf-abc',
       LANGFUSE_SECRET_KEY: 'sk-lf-xyz',
@@ -115,7 +115,7 @@ describe('readLangfuseConfig', () => {
 });
 
 describe('readTelemetrySinkConfig', () => {
-  it('ignores legacy relay and Langfuse env because Open Docs telemetry is disabled', () => {
+  it('ignores legacy relay and Langfuse env because MonoField telemetry is disabled', () => {
     const cfg = readTelemetrySinkConfig({
       OPEN_DESIGN_TELEMETRY_RELAY_URL: 'https://telemetry.open-design.ai/api/langfuse//',
       LANGFUSE_PUBLIC_KEY: 'pk',

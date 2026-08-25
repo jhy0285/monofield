@@ -5,6 +5,7 @@ import type {
   ProjectContextMcpServerRef,
   ProjectContextPluginRef,
 } from './context.js';
+import type { ProjectDatabaseContext, ProjectWorkMode } from './development.js';
 
 export type ProjectKind =
   | 'prototype'
@@ -93,6 +94,15 @@ export interface DesignSystemReviewEntry {
 
 export interface ProjectMetadata {
   kind: ProjectKind;
+  /** Selects the workspace defaults without splitting MonoField into separate products. */
+  workMode?: ProjectWorkMode;
+  /** Credential-free pointer to the encrypted Desktop database connection used by development runs. */
+  databaseContext?: ProjectDatabaseContext;
+  /** Preferred detected run configuration and post-edit verification behavior. */
+  development?: {
+    runConfigId?: string;
+    autoVerify?: boolean;
+  };
   intent?: 'live-artifact';
   fidelity?: 'wireframe' | 'high-fidelity';
   speakerNotes?: boolean;
@@ -137,9 +147,9 @@ export interface ProjectMetadata {
   // Externally prepared scratch workspace provenance. OD may read/write
   // metadata.baseDir, but source authority and writeback stay outside OD.
   orchestratorWorkspace?: OrchestratorWorkspace;
-  // Hint stamped by the Home composer working-directory chip. It records
-  // where the user wanted the project to live without granting write access
-  // to that path; actual filesystem roots still use baseDir/import flows.
+  // Transient Home composer selection. App spends the associated trusted
+  // desktop token after creation and promotes this folder to baseDir, making
+  // it the project's real CLI workspace rather than a read-only reference.
   userWorkingDir?: string;
   imageModel?: string;
   imageAspect?: MediaAspect;

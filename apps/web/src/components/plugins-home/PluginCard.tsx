@@ -299,8 +299,8 @@ export function PluginCard({
                 onClick={() => onShareAction(record, 'contribute-open-design')}
                 disabled={pendingAny || shareBusy}
                 aria-busy={sharePendingAction === 'contribute-open-design' ? 'true' : undefined}
-                aria-label={`Contribute ${title} to Open Docs`}
-                title="Contribute plugin to Open Docs with a pull request"
+                aria-label={`Contribute ${title} to MonoField`}
+                title="Contribute plugin to MonoField with a pull request"
                 data-testid={`plugins-home-contribute-open-design-${record.id}`}
               >
                 <Icon

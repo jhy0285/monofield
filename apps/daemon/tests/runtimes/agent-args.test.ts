@@ -803,6 +803,11 @@ test('codex buildArgs clamps reasoning effort per model', () => {
     ['gpt-5.5', 'medium', 'medium'],
     ['gpt-5.5', 'high', 'high'],
     ['vendor/gpt-5.5-foo', 'minimal', 'low'], // path-style id
+    // GPT-5.6 exposes the complete current effort set. The legacy minimal
+    // value remains normalized to low, while max is forwarded unchanged.
+    ['gpt-5.6-sol', 'minimal', 'low'],
+    ['gpt-5.6-terra', 'max', 'max'],
+    ['gpt-5.6-luna', 'none', 'none'],
     // gpt-5.1: xhigh isn't supported, others pass through.
     ['gpt-5.1', 'xhigh', 'high'],
     ['gpt-5.1', 'high', 'high'],

@@ -16,7 +16,7 @@ import type { McpAuthMode, McpServerConfig, McpTransport } from './mcp';
 import type { TrackingRuntimeType } from '../analytics/public-params.js';
 
 export type ChatRole = 'user' | 'assistant';
-export type ChatSessionMode = 'design' | 'chat';
+export type ChatSessionMode = 'docs' | 'chat';
 export type ChatCommentSelectionKind = PreviewCommentSelectionKind | 'visual';
 
 export interface ChatRequest {
@@ -48,7 +48,25 @@ export interface ChatRequest {
   context?: RunContextSelection;
   appliedPluginSnapshotId?: string | null;
   /**
-   * Run-scoped media execution policy. Omitted means current Open Docs
+   * A source-folder switch in an interface-spec project starts a fresh
+   * collection. The daemon uses this one-turn signal to require the fixed
+   * options form before the agent reads code or chooses example data.
+   */
+  interfaceSpecCollectionReset?: {
+    workingDir: string;
+  };
+  /**
+   * Ephemeral Desktop capability selected by the user for post-edit UI
+   * verification. It is never persisted on the project: the host revokes the
+   * session when the tab closes, its origin changes, or the user stops it.
+   */
+  browserVerification?: {
+    sessionId: string;
+    origin: string;
+    url: string;
+  };
+  /**
+   * Run-scoped media execution policy. Omitted means current MonoField
    * behavior: media generation is enabled and OD may execute its configured
    * local providers.
    */
@@ -212,6 +230,8 @@ export interface BrowserUseRunState {
   requested: boolean;
   available: boolean;
   reason?: BrowserUseUnavailableReason;
+  /** Capability token minted only after the user approves an in-app session. */
+  sessionId?: string;
   diagnostics: BrowserUseDiscoveryFacts;
 }
 
@@ -455,7 +475,17 @@ export type PersistedAgentEvent =
       confidence?: number;
       draftPath?: string | null;
     }
-  | { kind: 'usage'; inputTokens?: number; outputTokens?: number; costUsd?: number; durationMs?: number }
+  | {
+      kind: 'usage';
+      inputTokens?: number;
+      cachedInputTokens?: number;
+      outputTokens?: number;
+      reasoningTokens?: number;
+      totalTokens?: number;
+      costUsd?: number;
+      durationMs?: number;
+      measurementSource?: import('./token-usage.js').TokenUsageMeasurementSource;
+    }
   | { kind: 'raw'; line: string };
 
 export interface ChatMessage {

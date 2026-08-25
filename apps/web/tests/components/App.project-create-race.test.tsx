@@ -144,6 +144,7 @@ vi.mock('../../src/components/ProjectView', () => ({
   }) => (
     <main data-testid="project-view">
       <span data-testid="project-title">{project.name}</span>
+      <span data-testid="project-base-dir">{project.metadata?.baseDir ?? 'none'}</span>
       <span data-testid="project-route-conversation">{routeConversationId ?? 'none'}</span>
       <button type="button" onClick={onBack}>
         Back to projects
@@ -846,7 +847,19 @@ describe('App project creation routing', () => {
     // land in the temporary managed .od/projects/<id> root and vanish once the
     // working dir flips. Asserting the call order locks the ordering in.
     mockedListProjects.mockResolvedValue([]);
-    mockedReplaceProjectWorkingDir.mockResolvedValue(undefined as never);
+    mockedReplaceProjectWorkingDir.mockResolvedValue({
+      baseDir: '/Users/me/external',
+      entryFile: 'src/main.ts',
+      project: {
+        ...freshProject,
+        metadata: {
+          kind: 'prototype',
+          baseDir: '/Users/me/external',
+          importedFrom: 'folder',
+          entryFile: 'src/main.ts',
+        },
+      },
+    });
 
     render(<App />);
 
@@ -864,6 +877,7 @@ describe('App project creation routing', () => {
       '/Users/me/external',
       'wd-token',
     );
+    expect(screen.getByTestId('project-base-dir').textContent).toBe('/Users/me/external');
     // Both target the same project id, and the working-dir handoff is ordered
     // strictly before the upload so the files land in the final tree.
     expect(mockedUploadProjectFiles.mock.calls[0]?.[0]).toBe('project-new');

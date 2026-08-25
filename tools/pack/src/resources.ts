@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { cp } from "node:fs/promises";
+import { cp, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -72,6 +72,12 @@ const BUNDLED_RESOURCE_TREES = [
   { from: join("data", "plugin-previews"), to: join("data", "plugin-previews") },
 ] as const;
 
+const BUNDLED_LEGAL_FILES = [
+  "LICENSE",
+  "NOTICE",
+  "THIRD_PARTY_NOTICES.md",
+] as const;
+
 export async function copyBundledResourceTrees({
   workspaceRoot,
   resourceRoot,
@@ -79,9 +85,19 @@ export async function copyBundledResourceTrees({
   workspaceRoot: string;
   resourceRoot: string;
 }): Promise<void> {
+  await mkdir(resourceRoot, { recursive: true });
+
   for (const entry of BUNDLED_RESOURCE_TREES) {
     await cp(join(workspaceRoot, entry.from), join(resourceRoot, entry.to), {
       recursive: true,
     });
+  }
+
+  // Keep the distribution's license, fork attribution, and bundled-component
+  // notices beside the runtime resources on every packaged platform. These are
+  // required release inputs: a missing notice must fail packaging rather than
+  // silently produce an incomplete distribution.
+  for (const fileName of BUNDLED_LEGAL_FILES) {
+    await cp(join(workspaceRoot, fileName), join(resourceRoot, fileName));
   }
 }

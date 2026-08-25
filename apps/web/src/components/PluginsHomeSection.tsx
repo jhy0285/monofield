@@ -50,6 +50,9 @@ interface Props {
   title?: string;
   subtitle?: string;
   emptyMessage?: string;
+  searchPlaceholder?: string;
+  searchAriaLabel?: string;
+  filtersAriaLabel?: string;
   // 'gallery' renders each card as a minimal live example.html preview
   // tile (Template Gallery); 'rich' keeps the hover-overlay metadata card.
   cardLayout?: 'rich' | 'gallery';
@@ -69,6 +72,9 @@ export function PluginsHomeSection({
   title,
   subtitle,
   emptyMessage,
+  searchPlaceholder,
+  searchAriaLabel,
+  filtersAriaLabel,
   cardLayout = 'rich',
 }: Props) {
   const { locale, t } = useI18n();
@@ -173,7 +179,7 @@ export function PluginsHomeSection({
           <div
             className="plugins-home__facets"
             role="group"
-            aria-label="Plugin filters"
+            aria-label={filtersAriaLabel ?? 'Plugin filters'}
           >
             <CategoryRow
               options={catalog.category}
@@ -191,6 +197,8 @@ export function PluginsHomeSection({
               }
               query={query}
               onQueryChange={setQuery}
+              searchPlaceholder={searchPlaceholder}
+              searchAriaLabel={searchAriaLabel}
             />
             {selection.category ? (
               <SubcategoryRow
@@ -272,6 +280,8 @@ interface CategoryRowProps {
   onToggleSaved: () => void;
   query: string;
   onQueryChange: (next: string) => void;
+  searchPlaceholder?: string;
+  searchAriaLabel?: string;
 }
 
 // Single combined filter bar: an optional Saved override chip + category
@@ -289,6 +299,8 @@ function CategoryRow({
   onToggleSaved,
   query,
   onQueryChange,
+  searchPlaceholder,
+  searchAriaLabel,
 }: CategoryRowProps) {
   const t = useT();
   if (options.length === 0) return null;
@@ -341,7 +353,12 @@ function CategoryRow({
         ))}
       </div>
       <div className="plugins-home__facet-tools">
-        <SearchInput value={query} onChange={onQueryChange} />
+        <SearchInput
+          value={query}
+          onChange={onQueryChange}
+          placeholder={searchPlaceholder}
+          ariaLabel={searchAriaLabel}
+        />
       </div>
     </div>
   );
@@ -469,6 +486,8 @@ function pluginFacetLabel(slug: string, fallback: string, t: ReturnType<typeof u
 interface SearchInputProps {
   value: string;
   onChange: (next: string) => void;
+  placeholder?: string;
+  ariaLabel?: string;
 }
 
 // Compact search field that lives in the section head. Search composes
@@ -477,7 +496,7 @@ interface SearchInputProps {
 // discarding the category context. We keep the UI a single text input
 // with an optional clear button so it sits inside the existing head
 // row without a heavyweight toolbar.
-function SearchInput({ value, onChange }: SearchInputProps) {
+function SearchInput({ value, onChange, placeholder, ariaLabel }: SearchInputProps) {
   const t = useT();
   return (
     <div className="plugins-home__search">
@@ -487,8 +506,8 @@ function SearchInput({ value, onChange }: SearchInputProps) {
         className="plugins-home__search-input"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder={t('pluginsHome.searchPlaceholder')}
-        aria-label={t('pluginsHome.searchAria')}
+        placeholder={placeholder ?? t('pluginsHome.searchPlaceholder')}
+        aria-label={ariaLabel ?? t('pluginsHome.searchAria')}
         data-testid="plugins-home-search"
         spellCheck={false}
         autoComplete="off"

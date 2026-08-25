@@ -681,6 +681,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       }
 
       let ended = false;
+      const usage: Record<string, unknown> = {};
       const guard = createDeltaGuard(sse);
       await streamUpstreamSse(response, ({ event, data }: any) => {
         if (!data) return false;
@@ -698,14 +699,24 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             return true;
           }
         }
+        if (event === 'message_start' && data.message?.usage) {
+          Object.assign(usage, data.message.usage);
+        }
+        if (event === 'message_delta' && data.usage) {
+          Object.assign(usage, data.usage);
+        }
         if (event === 'message_stop') {
+          if (Object.keys(usage).length > 0) sse.send('usage', { usage });
           sse.send('end', {});
           ended = true;
           return true;
         }
         return false;
       });
-      if (!ended) sse.send('end', {});
+      if (!ended) {
+        if (Object.keys(usage).length > 0) sse.send('usage', { usage });
+        sse.send('end', {});
+      }
       sse.end();
     } catch (err: any) {
       console.error(`[${opts.logTag}] internal error: ${err.message}`);
@@ -769,6 +780,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       }
 
       let ended = false;
+      let usage: Record<string, unknown> | null = null;
       const guard = createDeltaGuard(sse);
       await streamUpstreamSse(response, ({ data }: any) => {
         if (!data) return false;
@@ -793,9 +805,21 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
           ended = true;
           return true;
         }
+        if (data.usageMetadata && typeof data.usageMetadata === 'object') {
+          usage = {
+            input_tokens: data.usageMetadata.promptTokenCount,
+            output_tokens: data.usageMetadata.candidatesTokenCount,
+            total_tokens: data.usageMetadata.totalTokenCount,
+            cached_input_tokens: data.usageMetadata.cachedContentTokenCount,
+            thought_tokens: data.usageMetadata.thoughtsTokenCount,
+          };
+        }
         return false;
       });
-      if (!ended) sse.send('end', {});
+      if (!ended) {
+        if (usage) sse.send('usage', { usage });
+        sse.send('end', {});
+      }
       sse.end();
     } catch (err: any) {
       console.error(`[${opts.logTag}] internal error: ${err.message}`);
@@ -990,6 +1014,14 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       ),
       stream: true,
     };
+    if (
+      validated.parsed!.hostname === 'api.openai.com' ||
+      validated.parsed!.hostname === 'openrouter.ai' ||
+      validated.parsed!.hostname.endsWith('.groq.com') ||
+      validated.parsed!.hostname.endsWith('.together.xyz')
+    ) {
+      payload.stream_options = { include_usage: true };
+    }
 
     const sse = createSseResponse(res);
     let proxyDispatcher: ReturnType<typeof proxyDispatcherRequestInit> | null = null;
@@ -1004,7 +1036,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
           Authorization: `Bearer ${apiKey}`,
           ...(validated.parsed!.hostname === 'openrouter.ai' ? {
             'HTTP-Referer': 'https://opendesign.dev',
-            'X-Title': 'Open Docs',
+            'X-Title': 'MonoField',
           } : {}),
         },
         body: JSON.stringify(payload),
@@ -1025,14 +1057,17 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       }
 
       let ended = false;
+      let usage: Record<string, unknown> | null = null;
       const guard = createDeltaGuard(sse);
       await streamUpstreamSse(response, ({ payload, data }: any) => {
         if (payload === '[DONE]') {
+          if (usage) sse.send('usage', { usage });
           sse.send('end', {});
           ended = true;
           return true;
         }
         if (!data) return false;
+        if (data.usage && typeof data.usage === 'object') usage = data.usage;
         const streamError = extractStreamErrorMessage(data);
         if (streamError) {
           sendProxyError(sse, `Provider error: ${streamError}`, { details: data });
@@ -1050,7 +1085,10 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         }
         return false;
       });
-      if (!ended) sse.send('end', {});
+      if (!ended) {
+        if (usage) sse.send('usage', { usage });
+        sse.send('end', {});
+      }
       sse.end();
     } catch (err: any) {
       console.error(`[proxy:openai] internal error: ${err.message}`);
@@ -1188,14 +1226,17 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       }
 
       let ended = false;
+      let usage: Record<string, unknown> | null = null;
       const guard = createDeltaGuard(sse);
       await streamUpstreamSse(response, ({ payload: ssePayload, data }: any) => {
         if (ssePayload === '[DONE]') {
+          if (usage) sse.send('usage', { usage });
           sse.send('end', {});
           ended = true;
           return true;
         }
         if (!data) return false;
+        if (data.usage && typeof data.usage === 'object') usage = data.usage;
         const streamError = extractStreamErrorMessage(data);
         if (streamError) {
           sendProxyError(sse, `Azure error: ${streamError}`, { details: data });
@@ -1212,7 +1253,10 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         }
         return false;
       });
-      if (!ended) sse.send('end', {});
+      if (!ended) {
+        if (usage) sse.send('usage', { usage });
+        sse.send('end', {});
+      }
       sse.end();
     } catch (err: any) {
       console.error(`[proxy:azure] internal error: ${err.message}`);
@@ -1336,10 +1380,20 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       }
 
       let ended = false;
+      let usage: Record<string, unknown> | null = null;
       const guard = createDeltaGuard(sse);
       await streamUpstreamNdjson(response, ({ data }: any) => {
         if (!data) return false;
         if (data.done) {
+          usage = {
+            input_tokens: data.prompt_eval_count,
+            output_tokens: data.eval_count,
+            total_tokens:
+              typeof data.prompt_eval_count === 'number' && typeof data.eval_count === 'number'
+                ? data.prompt_eval_count + data.eval_count
+                : undefined,
+          };
+          if (usage) sse.send('usage', { usage });
           sse.send('end', {});
           ended = true;
           return true;

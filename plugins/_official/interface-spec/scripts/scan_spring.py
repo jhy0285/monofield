@@ -1,4 +1,4 @@
-"""Spring Boot fast-path collector for the Open Docs interface-spec pipeline.
+"""Spring Boot fast-path collector for the MonoField interface-spec pipeline.
 
 Wraps the proven static scanner (ported from the generate-api-interface-excel
 skill, stdlib-only) and emits an interface-spec.json document (schema v1)
@@ -47,6 +47,8 @@ from tools.excel_generator.rules.naming import (  # noqa: E402
     koreanize_identifier,
     load_name_dict,
 )
+from tools.excel_generator.synthetic_examples import add_static_examples, load_sample_context  # noqa: E402
+from tools.excel_generator.dictionary_loader import load_dictionary_file  # noqa: E402
 
 _HANGUL = re.compile(r"[가-힣]")
 
@@ -111,20 +113,7 @@ def module_of(path: str) -> str:
 
 
 def load_custom_dict(path: Path) -> dict[str, str]:
-    """Custom dictionary: JSON object {nameEn: nameKo} or CSV nameEn,nameKo."""
-    if path.suffix.lower() == ".json":
-        raw = json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(raw, dict):
-            raise SystemExit(f"--name-dict {path}: JSON must be an object of nameEn -> nameKo")
-        return {str(k): str(v) for k, v in raw.items()}
-    if path.suffix.lower() == ".csv":
-        out: dict[str, str] = {}
-        with path.open(encoding="utf-8-sig", newline="") as fh:
-            for row in csv.reader(fh):
-                if len(row) >= 2 and row[0].strip() and not row[0].startswith("#"):
-                    out[row[0].strip()] = row[1].strip()
-        return out
-    raise SystemExit(f"--name-dict {path}: unsupported format (use .json or .csv)")
+    return load_dictionary_file(path)
 
 
 def field_to_json(field) -> dict:
@@ -150,6 +139,7 @@ def main() -> int:
     ap.add_argument("--inventory-only", action="store_true")
     ap.add_argument("--modules", default="", help="comma-separated module filter")
     ap.add_argument("--name-dict", default="", help="custom dictionary (.json/.csv), overrides bundled entries")
+    ap.add_argument("--sample-context", default="", help="approved database-context JSON; never credentials")
     ap.add_argument("--codebase-name", default="")
     ap.add_argument("--language", default="java")
     ap.add_argument("--framework", default="spring-boot")
@@ -250,6 +240,7 @@ def main() -> int:
             for ep in sorted(endpoints, key=lambda e: (module_of(e.path), e.path, e.method))
         ],
     }
+    add_static_examples(doc["endpoints"], load_sample_context(args.sample_context, args.codebase_path))
 
     out_path = Path(args.out)
     out_path.write_text(json.dumps(doc, ensure_ascii=False, indent=1), encoding="utf-8")

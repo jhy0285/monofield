@@ -4,10 +4,14 @@ import { readExpandedIndexCss } from '../helpers/read-expanded-css';
 const indexCss = readExpandedIndexCss();
 
 function cssBlock(selector: string): string {
-  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = new RegExp(`${escaped}\\s*\\{([^}]*)\\}`).exec(indexCss);
-  if (!match) throw new Error(`Missing CSS block for ${selector}`);
-  return match[1] ?? '';
+  const cssWithoutComments = indexCss.replace(/\/\*[\s\S]*?\*\//g, '');
+  const rulePattern = /([^{}]+)\{([^}]*)\}/g;
+  let match: RegExpExecArray | null;
+  while ((match = rulePattern.exec(cssWithoutComments)) !== null) {
+    const selectors = (match[1] ?? '').split(',').map((item) => item.trim());
+    if (selectors.includes(selector)) return match[2] ?? '';
+  }
+  throw new Error(`Missing CSS block for ${selector}`);
 }
 
 function cssVar(block: string, name: string): string {
@@ -72,7 +76,7 @@ describe('filter pill hover contrast', () => {
     };
     const hover = cssBlock('button.filter-pill:hover:not(:disabled)');
     const activeHover = cssBlock('button.filter-pill.active:hover:not(:disabled)');
-    const countHover = cssBlock('button.filter-pill:hover:not(:disabled) .filter-pill-count,\n.filter-pill.active .filter-pill-count');
+    const countHover = cssBlock('button.filter-pill:hover:not(:disabled) .filter-pill-count');
 
     for (const block of [hover, activeHover]) {
       expect(ruleValue(block, 'background')).toBe('var(--bg-muted)');

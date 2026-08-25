@@ -7,8 +7,8 @@
   gap: 6px;
   font: inherit;
   color: var(--text);
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
+  background: var(--control-bg);
+  border: 1px solid var(--control-border);
   border-radius: var(--radius-sm);
   padding: 6px 12px;
   cursor: pointer;
@@ -16,21 +16,26 @@
 }
 
 .button:hover:not(:disabled) {
-  background: var(--bg-subtle);
-  border-color: var(--border-strong);
+  background: var(--control-hover);
+  border-color: var(--control-border-hover);
+}
+
+.button:active:not(:disabled) {
+  background: var(--control-pressed);
+  border-color: var(--control-border-hover);
 }
 
 .button:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
 .primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: white;
+  color: var(--accent-contrast);
   font-weight: 500;
-  box-shadow: 0 1px 0 rgba(180, 90, 59, 0.18) inset, var(--shadow-xs);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--accent-contrast) 12%, transparent) inset, var(--shadow-xs);
 }
 
 .primary:hover:not(:disabled) {
@@ -38,8 +43,13 @@
   border-color: var(--accent-hover);
 }
 
+.primary:active:not(:disabled) {
+  background: var(--accent-pressed);
+  border-color: var(--accent-pressed);
+}
+
 .primaryGhost {
-  background: var(--bg-panel);
+  background: var(--control-bg);
   border-color: var(--accent);
   color: var(--accent);
   font-weight: 500;
@@ -49,25 +59,34 @@
   background: var(--accent-tint);
 }
 
+.primaryGhost:active:not(:disabled) {
+  background: var(--accent-soft);
+}
+
 .ghost {
   background: transparent;
-  border-color: var(--border);
+  border-color: var(--control-border);
   color: var(--text);
 }
 
 .ghost:hover:not(:disabled) {
-  background: var(--bg-subtle);
-  border-color: var(--border-strong);
+  background: var(--control-hover);
+  border-color: var(--control-border-hover);
+}
+
+.ghost:active:not(:disabled) {
+  background: var(--control-pressed);
+  border-color: var(--control-border-hover);
 }
 
 .subtle {
-  background: var(--bg-subtle);
+  background: var(--control-hover);
   border-color: transparent;
   color: var(--text);
 }
 
 .subtle:hover:not(:disabled) {
-  background: var(--bg-muted);
+  background: var(--control-pressed);
 }
 
 .icon {
@@ -76,6 +95,9 @@
 }
 
 .button:disabled {
-  opacity: 0.5;
+  opacity: 1;
   cursor: not-allowed;
+  color: var(--control-disabled-text);
+  background: var(--control-disabled-bg);
+  border-color: var(--control-disabled-border);
 }

@@ -731,8 +731,8 @@ function isInputRecord(value: InputValue): value is InputRecord {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-const DESIGN_FILES_HINT_FOLDER_LIMIT = 40;
-const DESIGN_FILES_HINT_FILE_LIMIT = 80;
+const DESIGN_FILES_HINT_FOLDER_LIMIT = 8;
+const DESIGN_FILES_HINT_FILE_LIMIT = 12;
 type DesignFilesHintEntry = {
   name?: string;
   path?: string;
@@ -844,13 +844,9 @@ export function formatDesignFilesWorkspaceHint(
   const lines = [
     '',
     '',
-    '## Design Files workspace',
-    `The Design Files panel is backed by your current working directory: \`${cwd}\`. Write project files relative to this directory (for example \`index.html\` or \`assets/x.png\`). The user can browse these files in real time.`,
-    'The selected/attached files for a turn are only a shortcut for priority and ordering. If the user did not attach any file, do not assume there are no relevant Design Files.',
-    'When the request refers to existing files, asks you to choose a file, says "current", "this design", "the deck", "the image", "the folder", or depends on project state, inspect/search/read this workspace before answering or editing. Prefer project-relative paths, use the active workspace context as the default target, and ask only if multiple plausible targets remain after inspection.',
-    'For non-trivial inspection or edits, surface progress through visible planning/status/tool events instead of silently guessing.',
-    '',
-    `Current Design Files snapshot: ${totalFolders} folder${totalFolders === 1 ? '' : 's'}, ${totalFiles} file${totalFiles === 1 ? '' : 's'}.`,
+    '## Working folder',
+    `Root: \`${cwd}\`. Read and write project-relative paths here. Inspect with native file/search tools before editing; the short snapshot below is only a hint, not the full workspace.`,
+    `Snapshot: ${totalFolders} folder${totalFolders === 1 ? '' : 's'}, ${totalFiles} file${totalFiles === 1 ? '' : 's'}.`,
   ];
 
   if (folderLines.length > 0) {

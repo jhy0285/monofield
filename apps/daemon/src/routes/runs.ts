@@ -552,15 +552,16 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         const cfgAgent = typeof appCfg.agentId === 'string' && appCfg.agentId
           ? appCfg.agentId
           : null;
-        const agents = await detectAgents(
-          toJsonRecord(appCfg.agentCliEnv),
-        ).catch((): DetectedAgent[] => []);
-        const cfgAgentAvailable = cfgAgent
-          ? agents.some((agent) => agent.id === cfgAgent && agent.available)
-          : false;
-        if (cfgAgent && cfgAgentAvailable) {
+        // A saved runtime is the user's explicit choice. Do not block the hot
+        // run path on a 24-adapter availability scan; the spawn layer already
+        // validates the exact binary and returns an actionable runtime error.
+        // Only scan the catalog when no valid runtime has been configured.
+        if (cfgAgent && getAgentDef(cfgAgent)) {
           meta.agentId = cfgAgent;
         } else {
+          const agents = await detectAgents(
+            toJsonRecord(appCfg.agentCliEnv),
+          ).catch((): DetectedAgent[] => []);
           const firstAvailable = agents.find((agent) => agent.available)?.id ?? null;
           if (firstAvailable) meta.agentId = firstAvailable;
         }

@@ -1186,7 +1186,7 @@
   border-radius: var(--radius-sm);
   color: var(--text);
 }
-.composer-ds-picker-search:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+.composer-ds-picker-search:focus { outline: 2px solid var(--focus-ring); outline-offset: 0; }
 .composer-ds-picker-list {
   display: flex;
   flex-direction: column;

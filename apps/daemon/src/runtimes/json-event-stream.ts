@@ -20,6 +20,7 @@ type ParserState = {
 type Usage = {
   input_tokens?: number;
   output_tokens?: number;
+  total_tokens?: number;
   thought_tokens?: number;
   cached_read_tokens?: number;
   cached_write_tokens?: number;
@@ -139,6 +140,7 @@ function formatOpenCodeUsage(tokens: unknown): Usage | null {
   const usage: Usage = {};
   if (typeof tokens.input === 'number') usage.input_tokens = tokens.input;
   if (typeof tokens.output === 'number') usage.output_tokens = tokens.output;
+  if (typeof tokens.total === 'number') usage.total_tokens = tokens.total;
   if (typeof tokens.reasoning === 'number') usage.thought_tokens = tokens.reasoning;
   if (isRecord(tokens.cache)) {
     if (typeof tokens.cache.read === 'number') usage.cached_read_tokens = tokens.cache.read;

@@ -6,7 +6,7 @@
 // presses Send on an empty composer while a scenario is showing, HomeView
 // seeds the prompt with that scenario's text AND binds its template, so a
 // single click creates a fully-routed project ??the low-cost "just start"
-// path mirrored from Open Docs's rotating placeholder.
+// path mirrored from MonoField's rotating placeholder.
 //
 // Copy is localised: each scenario carries a `textKey` into the i18n Dict
 // (`homeHero.carousel.*`), resolved with `t()` at render time in HomeHero so

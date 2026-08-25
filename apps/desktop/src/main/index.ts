@@ -11,7 +11,9 @@ import {
   SIDECAR_MESSAGES,
   SIDECAR_MODES,
   normalizeDesktopSidecarMessage,
+  type DesktopBrowserAutomationInput,
   type DesktopClickInput,
+  type DesktopDevelopmentProcessInput,
   type DesktopEvalInput,
   type DesktopExportArtifactInput,
   type DesktopExportPdfInput,
@@ -38,6 +40,8 @@ import {
 import { readProcessStamp } from "@open-design/platform";
 
 import { createDesktopRuntime, type DesktopRuntime } from "./runtime.js";
+import { DatabaseBroker } from "./database-broker.js";
+import { DevelopmentProcessBroker } from "./development-process-broker.js";
 import { attachDesktopProcessErrorFilter } from "./uncaught-exception.js";
 import { createDesktopUpdater, createDesktopUpdaterScheduler, type DesktopUpdaterScheduler } from "./updater.js";
 import {
@@ -82,6 +86,25 @@ export {
 } from "./runtime.js";
 
 const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
+// Some Windows hosts cannot load the Chromium GPU process (for example when a
+// driver dependency is unavailable). Keep the fallback explicitly opt-in so
+// normal packaged and development launches retain hardware acceleration.
+// This must run while Electron is still starting, before `app.whenReady()`.
+const DISABLE_HARDWARE_ACCELERATION_ENV = "OD_DESKTOP_DISABLE_HARDWARE_ACCELERATION";
+if (process.env[DISABLE_HARDWARE_ACCELERATION_ENV] === "1") {
+  app.disableHardwareAcceleration();
+}
+
+// Keep the OS-facing desktop identity aligned with the product, including in
+// source/Electron development where the package namespace intentionally keeps
+// its historical `@open-design/*` name for compatibility.  On Windows the
+// explicit AppUserModelID also keeps taskbar grouping and notifications under
+// MonoField rather than the Electron executable's default identity.
+app?.setName?.("MonoField");
+if (process.platform === "win32") {
+  app?.setAppUserModelId?.("io.monofield.desktop");
+}
+
 const AMR_PROFILE_ENV_KEY = "OPEN_DESIGN_AMR_PROFILE";
 const AMR_PROFILE_AGENT_ID = "amr";
 const AMR_ENVIRONMENT_PROFILES = ["prod", "test", "local"] as const;
@@ -457,20 +480,20 @@ function installDesktopMenu(
           {
             label: "Documentation",
             click() {
-              void shell.openExternal("https://github.com/jhy0285/open-docs#readme");
+              void shell.openExternal("https://github.com/jhy0285/monofield#readme");
             },
           },
           { type: "separator" },
           {
             label: "Contact Us",
             click() {
-              void shell.openExternal("https://github.com/jhy0285/open-docs");
+              void shell.openExternal("https://github.com/jhy0285/monofield");
             },
           },
           {
             label: "Report Issue",
             click() {
-              void shell.openExternal("https://github.com/jhy0285/open-docs/issues/new");
+              void shell.openExternal("https://github.com/jhy0285/monofield/issues/new");
             },
           },
           {
@@ -668,6 +691,8 @@ export async function runDesktopMain(
   const rendererLogPath = join(dirname(desktopLogPath), "renderer.log");
 
   let desktop: DesktopRuntime | null = null;
+  const databaseBroker = new DatabaseBroker();
+  const developmentProcessBroker = new DevelopmentProcessBroker();
   let disposeMenu: () => void = () => undefined;
   let updateScheduler: DesktopUpdaterScheduler | null = null;
   let removeDiagnosticsIpc: () => void = () => undefined;
@@ -724,6 +749,7 @@ export async function runDesktopMain(
     updateScheduler?.stop("shutdown");
     disposeMenu();
     removeDiagnosticsIpc();
+    await developmentProcessBroker.dispose();
     await ipcServer?.close().catch(() => undefined);
     await desktop?.close().catch(() => undefined);
     app.quit();
@@ -756,6 +782,8 @@ export async function runDesktopMain(
           throw new Error("desktop runtime is not initialized");
         }
         switch (request.type) {
+          case SIDECAR_MESSAGES.BROWSER_AUTOMATION:
+            return await activeDesktop.browserAutomation(request.input as DesktopBrowserAutomationInput);
           case SIDECAR_MESSAGES.EVAL:
             return await activeDesktop.eval(request.input as DesktopEvalInput);
           case SIDECAR_MESSAGES.SCREENSHOT:
@@ -773,6 +801,10 @@ export async function runDesktopMain(
             return await activeDesktop.exportArtifact(request.input as DesktopExportArtifactInput);
           case SIDECAR_MESSAGES.UPDATE:
             return await updater.handle((request.input as DesktopUpdateInput).action);
+          case SIDECAR_MESSAGES.DATABASE:
+            return await databaseBroker.execute(request.input);
+          case SIDECAR_MESSAGES.DEVELOPMENT_PROCESS:
+            return await developmentProcessBroker.execute(request.input as DesktopDevelopmentProcessInput);
         }
       } catch (error) {
         console.error("[open-design desktop] desktop IPC request failed", {
@@ -794,6 +826,7 @@ export async function runDesktopMain(
   console.info("[open-design desktop] creating desktop runtime");
   desktop = await createDesktopRuntime({
     desktopAuthSecret,
+    databaseBroker,
     discoverUrl: options.discoverWebUrl ?? createWebDiscovery(runtime),
     discoverDaemonUrl: options.discoverDaemonUrl,
     osLocale,

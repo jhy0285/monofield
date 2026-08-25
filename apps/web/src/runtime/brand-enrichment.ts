@@ -21,7 +21,7 @@ const AI_OPTIMIZE_QUALITY_BAR = [
   '- Extract the site\'s design best practices as reusable guidance only when the evidence supports them: content hierarchy, grid and density, navigation patterns, accessibility affordances, responsive behavior, interaction feedback, component states, editorial/product page conventions, and conversion or trust cues.',
   '- Preserve real assets. Save useful logos, icons, cover images, screenshots, illustrations, and fonts as project files when source evidence exposes them; do not redraw brand marks or substitute generated placeholders when real files are available.',
   '- Strengthen the complete reusable package: DESIGN.md, README.md, SKILL.md, brand.json, colors/type tokens, light and dark kit quality, focused preview cards, component/UI-kit guidance, and starter implementation examples. Keep file manifests synchronized with the files you actually write.',
-  '- Use a Open Docs / Baoyu Design style bar for fidelity: the finished system should read as a versioned bundle of tokens, fonts, components, UI kits, provenance, and exact source assets that can drive a new polished HTML deliverable without re-asking the user.',
+  '- Use a MonoField / Baoyu Design style bar for fidelity: the finished system should read as a versioned bundle of tokens, fonts, components, UI kits, provenance, and exact source assets that can drive a new polished HTML deliverable without re-asking the user.',
   '- Progressively write valid partial updates and keep the preview recoverable. If a field group is ready, update it and continue; do not wait until the end to write everything.',
   '- Run the available preview/finalize/audit commands for this project when they exist, fix validation errors, and leave explicit caveats for evidence that could not be measured.',
   '- Do not get stuck on blocked sources. If the live site is an anti-bot verification page, emit a question-form asking the user to complete verification; otherwise continue from existing local evidence and record the limitation.',
@@ -29,7 +29,7 @@ const AI_OPTIMIZE_QUALITY_BAR = [
 ].join('\n');
 
 const FALLBACK_BRAND_ENRICHMENT_PROMPT = [
-  'AI optimize this Open Docs design system in place.',
+  'AI optimize this MonoField design system in place.',
   '',
   'A fast programmatic extraction already produced a usable design system, but it may be thin or approximate. Run a deeper asynchronous extraction pass now and turn it into a production-usable design-system package.',
   '',

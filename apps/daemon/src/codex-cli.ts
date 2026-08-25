@@ -89,7 +89,7 @@ export async function probeCodexInstall(name: string): Promise<CodexInstallStatu
 
 export interface CodexInstallSpec {
   // MCP server name as it will appear in ~/.codex/config.toml. We
-  // hard-code the Open Docs MCP server name at the route layer but keep the parameter
+  // hard-code the MonoField MCP server name at the route layer but keep the parameter
   // explicit so the helper can later be reused for other server names.
   name: string;
   command: string;

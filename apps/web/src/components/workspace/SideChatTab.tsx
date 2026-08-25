@@ -109,7 +109,7 @@ export function SideChatTab({
   const t = useT();
   const sessionMode =
     conversations.find((conversation) => conversation.id === conversationId)?.sessionMode
-    ?? 'design';
+    ?? 'docs';
   const chat = useConversationChat(projectId, conversationId, {
     config,
     agentsById,

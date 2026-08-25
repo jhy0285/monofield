@@ -61,6 +61,9 @@ import type { Dict } from "../i18n/types";
 import { agentDisplayName, agentIconId, exactAgentDisplayName } from "../utils/agentLabels";
 import { AgentIcon } from "./AgentIcon";
 import { filterImplicitProducedFiles } from "../produced-files";
+import { usageForEvents } from "../runtime/token-usage";
+import { TokenUsageDisclosure } from "./TokenUsageDisclosure";
+import { redactSensitiveText } from "../utils/redactSensitiveText";
 import type {
   AgentEvent,
   ChatMessage,
@@ -204,7 +207,7 @@ function SkillPluginCandidateCard({
         { action },
       );
       setNotice({
-        message: `Open Docs contribution task started for ${data?.path ?? "the draft"}.`,
+        message: `MonoField contribution task started for ${data?.path ?? "the draft"}.`,
       });
     } catch (err) {
       setNotice({ message: err instanceof Error ? err.message : String(err) });
@@ -287,7 +290,7 @@ interface Props {
   ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
   activePluginActionPaths?: Set<string>;
   hiddenPluginActionPaths?: Set<string>;
-  // Click handler for the post-completion "Share to Open Docs" submission
+  // Click handler for the post-completion "Share to MonoField" submission
   // action. ProjectView wires this to handleSend with the bundled
   // `od-share-to-community` trigger prompt.
   onShareToOpenDocs?: () => void;
@@ -561,9 +564,7 @@ function AssistantMessageImpl({
     },
     [pluginBusyKey, onRequestPluginFolderAgentAction],
   );
-  const usage = events.find((e) => e.kind === "usage") as
-    | Extract<AgentEvent, { kind: "usage" }>
-    | undefined;
+  const usage = usageForEvents(events) ?? undefined;
   const roleName = assistantRoleName(message, t);
   const roleIconId = agentIconId(message.agentId, message.agentName);
   const hasEmptyResponse = events.some(
@@ -579,7 +580,9 @@ function AssistantMessageImpl({
     unfinishedTodos.length > 0 &&
     !!onContinueRemainingTasks;
   const canFork = !streaming && !!onForkFromMessage;
-  const copyMarkdown = message.content.trim().length > 0 ? message.content : undefined;
+  const copyMarkdown = message.content.trim().length > 0
+    ? redactSensitiveText(message.content)
+    : undefined;
   const showFeedback =
     !!onFeedback &&
     isFeedbackEligible({
@@ -989,7 +992,7 @@ interface AssistantFooterProps {
   streaming: boolean;
   startedAt: number | undefined;
   endedAt: number | undefined;
-  usage: Extract<AgentEvent, { kind: "usage" }> | undefined;
+  usage: import('@open-design/contracts').TokenUsageMetrics | undefined;
   hasUnfinishedTodos: boolean;
   hasEmptyResponse: boolean;
   // Pre-output phase: streaming but nothing rendered yet. The label shimmers
@@ -1024,13 +1027,6 @@ function AssistantFooter({
 }: AssistantFooterProps) {
   const t = useT();
   const elapsed = useLiveElapsed(streaming, startedAt, endedAt, usage?.durationMs);
-  const formattedCost =
-    typeof usage?.costUsd === "number" &&
-    Number.isFinite(usage.costUsd) &&
-    usage.costUsd > 0
-      ? usage.costUsd.toFixed(4)
-      : "";
-  const costLabel = formattedCost && formattedCost !== "0.0000" ? ` · $${formattedCost}` : "";
   if (
     !forceVisible &&
     !streaming &&
@@ -1063,13 +1059,15 @@ function AssistantFooter({
           ? t("assistant.unfinishedLabel")
           : t("assistant.doneLabel")}
       </span>
-      <span className="assistant-stats">
-        {elapsed}
-        {usage?.outputTokens != null
-          ? ` · ${t("assistant.outTokens", { n: usage.outputTokens })}`
-          : ""}
-        {costLabel}
-      </span>
+      {elapsed ? (
+        <span className="assistant-stats">{elapsed}</span>
+      ) : null}
+      {!streaming ? (
+        <TokenUsageDisclosure
+          metrics={usage ?? { measurementSource: 'unavailable' }}
+          variant="response"
+        />
+      ) : null}
       {copyMarkdown || onFork || feedbackControls ? (
         <span className="assistant-footer-controls">
           {copyMarkdown ? <AssistantMarkdownCopyButton markdown={copyMarkdown} /> : null}
@@ -1814,7 +1812,7 @@ function PluginActionPanel({
                   <span>
                     {actionBusy && busyKey === `contribute:${folder.path}`
                       ? "Sending..."
-                      : "Open Docs PR"}
+                      : "MonoField PR"}
                   </span>
                 </button>
                 {onRequestOpenFile ? (
@@ -1910,7 +1908,7 @@ function pathMatchesFolderFileBasename(
 }
 
 function hasPluginFinalActionHint(content: string): boolean {
-  return /\b(Add to My plugins|Open Docs PR|Publish repo|plugin publish|ready to publish|ready to add)\b/i.test(
+  return /\b(Add to My plugins|MonoField PR|Publish repo|plugin publish|ready to publish|ready to add)\b/i.test(
     content,
   );
 }
@@ -2030,7 +2028,7 @@ function ProseBlock({
         if (seg.kind === "text") {
           return (
             <Fragment key={seg.key}>
-              {renderMarkdown(seg.text, { onLinkClick })}
+              {renderMarkdown(redactSensitiveText(seg.text), { onLinkClick })}
             </Fragment>
           );
         }

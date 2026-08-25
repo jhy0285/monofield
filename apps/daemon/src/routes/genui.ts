@@ -23,15 +23,23 @@ export interface RegisterGenuiRoutesDeps {
   paths: {
     PROJECTS_DIR: string;
   };
+  plugins?: {
+    getSnapshot(snapshotId: string): ReturnType<typeof getSnapshot>;
+  };
 }
 
 export function registerGenuiRoutes(app: Express, deps: RegisterGenuiRoutesDeps): void {
   const { db, design } = deps;
   const { PROJECTS_DIR } = deps.paths;
+  const readSnapshot = deps.plugins
+    ? deps.plugins.getSnapshot
+    : (snapshotId: string) => getSnapshot(db, snapshotId);
+  const surfaceAllowed = (surface: { pluginSnapshotId?: string | null }) =>
+    !surface.pluginSnapshotId || Boolean(readSnapshot(surface.pluginSnapshotId));
 
   app.get('/api/runs/:runId/genui', (req, res) => {
     try {
-      const surfaces = listSurfacesForRun(db, req.params.runId);
+      const surfaces = listSurfacesForRun(db, req.params.runId).filter(surfaceAllowed);
       res.json({ runId: req.params.runId, surfaces });
     } catch (err) {
       res.status(500).json({ error: String(err) });
@@ -40,7 +48,7 @@ export function registerGenuiRoutes(app: Express, deps: RegisterGenuiRoutesDeps)
 
   app.get('/api/projects/:projectId/genui', (req, res) => {
     try {
-      const surfaces = listSurfacesForProject(db, req.params.projectId);
+      const surfaces = listSurfacesForProject(db, req.params.projectId).filter(surfaceAllowed);
       res.json({ projectId: req.params.projectId, surfaces });
     } catch (err) {
       res.status(500).json({ error: String(err) });
@@ -62,6 +70,10 @@ export function registerGenuiRoutes(app: Express, deps: RegisterGenuiRoutesDeps)
       );
       const row = stmt.get(req.params.runId, req.params.surfaceId) as { id?: string } | undefined;
       if (!row?.id) {
+        return res.status(404).json({ error: 'no pending surface for runId/surfaceId' });
+      }
+      const pendingSurface = getSurface(db, row.id);
+      if (!pendingSurface || !surfaceAllowed(pendingSurface)) {
         return res.status(404).json({ error: 'no pending surface for runId/surfaceId' });
       }
       const updated = respondSurfaceRow(db, {
@@ -131,6 +143,9 @@ export function registerGenuiRoutes(app: Express, deps: RegisterGenuiRoutesDeps)
       if (!snapshotId || !surfaceId) {
         return res.status(400).json({ error: 'snapshotId and surfaceId are required' });
       }
+      if (!readSnapshot(snapshotId)) {
+        return res.status(404).json({ error: 'snapshot not found' });
+      }
       const row = prefillProjectSurface(db, {
         projectId: req.params.projectId,
         pluginSnapshotId: snapshotId,
@@ -159,7 +174,7 @@ export function registerGenuiRoutes(app: Express, deps: RegisterGenuiRoutesDeps)
       if (!surface) return res.status(404).json({ error: 'surface not found' });
       let spec = null;
       if (surface.pluginSnapshotId) {
-        const snap = getSnapshot(db, surface.pluginSnapshotId);
+        const snap = readSnapshot(surface.pluginSnapshotId);
         if (snap && Array.isArray(snap.genuiSurfaces)) {
           spec = snap.genuiSurfaces.find((s) => s?.id === surface.surfaceId) ?? null;
         }
@@ -189,7 +204,7 @@ export function registerGenuiRoutes(app: Express, deps: RegisterGenuiRoutesDeps)
           error: 'snapshotId is required (runs are in-memory; pass the snapshotId returned by /api/plugins/:id/apply)',
         });
       }
-      const snapshot = getSnapshot(db, snapshotId);
+      const snapshot = readSnapshot(snapshotId);
       if (!snapshot) return res.status(404).json({ error: 'snapshot not found' });
       res.json({
         ok: true,

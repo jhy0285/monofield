@@ -129,16 +129,16 @@ describe('derivePluginSourceLinks · url + local + bundled sources', () => {
     expect(out.sourceKindLabel).toBe('Local');
   });
 
-  it('routes bundled official sources to the Open Docs repo without inventing author links', () => {
+  it('routes bundled official sources to the MonoField repo without inventing author links', () => {
     const out = derivePluginSourceLinks(
       makeRecord({
         sourceKind: 'bundled',
         source:     'plugins/_official/scenarios/od-code-migration',
       }),
     );
-    expect(out.sourceUrl).toBe('https://github.com/jhy0285/open-docs');
+    expect(out.sourceUrl).toBe('https://github.com/jhy0285/monofield');
     expect(out.sourceKindLabel).toBe('Official');
-    expect(out.sourceLabel).toBe('jhy0285/open-docs');
+    expect(out.sourceLabel).toBe('jhy0285/monofield');
     expect(out.authorProfileUrl).toBeNull();
     expect(out.homepageUrl).toBeNull();
   });
@@ -161,7 +161,7 @@ describe('derivePluginSourceLinks · url + local + bundled sources', () => {
     expect(out.authorName).toBe('Eli');
     expect(out.authorProfileUrl).toBe('https://motionsites.ai/');
     expect(out.homepageUrl).toBe('https://motionsites.ai/sections');
-    expect(out.sourceUrl).toBe('https://github.com/jhy0285/open-docs');
+    expect(out.sourceUrl).toBe('https://github.com/jhy0285/monofield');
   });
 });
 

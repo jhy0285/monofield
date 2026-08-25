@@ -24,10 +24,10 @@
     "uk": "Специфікація екранів"
   },
   "version": "0.1.0",
-  "description": "Document existing screens into a screen-spec.json document (numbered callout markers, description rows, checkpoints, relation lines), then render the Korean SI-style screen specification deck (.pptx) with the deterministic Open Docs renderer. The agent only writes the JSON; humans review and edit the same JSON before export.",
+  "description": "Document existing screens into a screen-spec.json document (numbered callout markers, description rows, checkpoints, relation lines), then render the Korean SI-style screen specification deck (.pptx) with the deterministic MonoField renderer. The agent only writes the JSON; humans review and edit the same JSON before export.",
   "description_i18n": {
-    "en": "Document existing screens into screen-spec.json (numbered callout markers, description rows, checkpoints), then render the Korean SI-style screen specification deck (.pptx) with the deterministic Open Docs renderer.",
-    "ko": "기존 화면을 screen-spec.json 문서(번호 콜아웃 마커, Description 행, Check Point)로 문서화하고, 결정론적 Open Docs 렌더러로 한국형 SI 화면명세서(.pptx)를 생성합니다.",
+    "en": "Document existing screens into screen-spec.json (numbered callout markers, description rows, checkpoints), then render the Korean SI-style screen specification deck (.pptx) with the deterministic MonoField renderer.",
+    "ko": "기존 화면을 screen-spec.json 문서(번호 콜아웃 마커, Description 행, Check Point)로 문서화하고, 결정론적 MonoField 렌더러로 한국형 SI 화면명세서(.pptx)를 생성합니다.",
     "zh-CN": "将现有界面记录为 screen-spec.json（编号标注、说明行、检查点），再由确定性渲染器输出韩国 SI 风格的界面规格书幻灯片（.pptx）。",
     "zh-TW": "將現有畫面記錄為 screen-spec.json（編號標註、說明列、檢查點），再由確定性渲染器輸出韓國 SI 風格的畫面規格書簡報（.pptx）。",
     "ja": "既存画面を screen-spec.json（番号付きコールアウト、説明行、チェックポイント）として文書化し、決定論的レンダラーで韓国 SI 形式の画面仕様書（.pptx）を生成します。",
@@ -47,8 +47,8 @@
   },
   "license": "Apache-2.0",
   "author": {
-    "name": "Open Docs Contributors",
-    "url": "https://github.com/jhy0285/open-docs"
+    "name": "MonoField Contributors",
+    "url": "https://github.com/jhy0285/monofield"
   },
   "tags": [
     "first-party",

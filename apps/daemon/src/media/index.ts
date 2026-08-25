@@ -53,6 +53,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { Agent as UndiciAgent } from 'undici';
+import { createCommandInvocation } from '@open-design/platform';
 import {
   AUDIO_DURATIONS_SEC,
   type AudioKind,
@@ -1031,10 +1032,16 @@ async function runCodexImagegen(
   env: NodeJS.ProcessEnv,
 ): Promise<{ stderr: string; stdout: string }> {
   const codexBin = env.CODEX_BIN?.trim() || 'codex';
-  const child = spawn(codexBin, codexImagegenArgs(ctx, generatedRoot, env), {
+  const invocation = createCommandInvocation({
+    command: codexBin,
+    args: codexImagegenArgs(ctx, generatedRoot, env),
+    env,
+  });
+  const child = spawn(invocation.command, invocation.args, {
     cwd: ctx.projectRoot,
     env,
     stdio: ['pipe', 'pipe', 'pipe'],
+    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
   });
   const stdout: Buffer[] = [];
   const stderr: Buffer[] = [];
@@ -1943,7 +1950,7 @@ async function renderOpenRouterImage(
       'authorization': `Bearer ${credentials.apiKey}`,
       'content-type': 'application/json',
       'HTTP-Referer': 'https://opendesign.dev',
-      'X-Title': 'Open Docs',
+      'X-Title': 'MonoField',
     },
     body: JSON.stringify(body),
   });
@@ -2102,7 +2109,7 @@ async function renderOpenRouterVideo(
       // OpenRouter attribution headers per
       // https://openrouter.ai/docs/app-attribution
       'HTTP-Referer': 'https://opendesign.dev',
-      'X-Title': 'Open Docs',
+      'X-Title': 'MonoField',
     },
     body: JSON.stringify(body),
   });
@@ -2151,7 +2158,7 @@ async function renderOpenRouterVideo(
       headers: {
         'authorization': `Bearer ${credentials.apiKey}`,
         'HTTP-Referer': 'https://opendesign.dev',
-        'X-Title': 'Open Docs',
+        'X-Title': 'MonoField',
       },
     });
     const pollText = await pollResp.text();

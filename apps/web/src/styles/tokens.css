@@ -1,50 +1,87 @@
 /* ============================================================
-   Open Docs — neutral document workspace
+   MonoField — monochrome working surface
    ============================================================ */
 :root {
   /* Surface palette — neutral app chrome that does not bias generated artifacts.
      Keep warm/brand colors out of preview backgrounds; generated product UI
      must choose its own palette through the active skill/design brief. */
-  --bg: #faf9f7;
-  --bg-app: #faf9f7;
-  --bg-panel: #fdfcfa;
-  --bg-subtle: #f4f5f7;
-  --bg-muted: #eef1f5;
+  --bg: #f7f7f5;
+  --bg-app: #f7f7f5;
+  --bg-panel: #ffffff;
+  --bg-subtle: #f0f0ee;
+  --bg-muted: #e8e8e5;
   --bg-fill-tertiary: rgba(0, 0, 0, 0.03);
   --bg-fill-secondary: rgba(0, 0, 0, 0.06);
   --bg-fill: rgba(0, 0, 0, 0.12);
-  --bg-elevated: #fffefc;
-  --border: #e1e5eb;
-  --border-strong: #c9d0da;
-  --border-soft: #edf0f4;
+  --bg-elevated: #ffffff;
+  --border: #dededb;
+  --border-strong: #bdbdb8;
+  --border-soft: #ececea;
 
-  --text: #1a1916;
-  --text-strong: #0d0c0a;
-  --text-muted: #74716b;
-  --text-soft: #989590;
-  --text-faint: #b3b0a8;
+  /* Interactive surfaces are separate from layout dividers. This keeps
+     controls discoverable without drawing a box around every section. */
+  --control-bg: #ffffff;
+  --control-hover: #f0f0ee;
+  --control-pressed: #e2e2df;
+  --control-selected: #e8e8e5;
+  --control-border: #c7c7c2;
+  --control-border-hover: #92928c;
+  --control-disabled-bg: #f0f0ee;
+  --control-disabled-border: #d8d8d4;
+  --control-disabled-text: #858580;
 
-  /* Accent — Open Docs action color for app chrome only. */
-  --accent: #c96442;
-  --accent-strong: #b45a3b;
-  --accent-soft: #f5d8cb;
-  --accent-tint: #fbeee5;
-  --accent-hover: #b45a3b;
+  /* Compatibility aliases used by older feature styles. Keeping them mapped
+     here prevents an undefined custom property from silently discarding an
+     entire hover, focus, or foreground declaration. */
+  --bg-primary: var(--bg-panel);
+  --bg-default: var(--bg-panel);
+  --bg-hover: var(--control-hover);
+  --bg-tertiary: var(--bg-fill-tertiary);
+  --border-subtle: var(--border);
+  --text-primary: var(--text);
+  --text-secondary: var(--text-muted);
+  --text-default: var(--text);
+
+  --text: #20201e;
+  --text-strong: #090909;
+  --text-muted: #6f6f6a;
+  --text-soft: #92928c;
+  --text-faint: #adada7;
+
+  /* Product chrome is intentionally monochrome. Semantic colors below remain
+     reserved for errors, warnings, and success states. */
+  --accent: #111111;
+  --accent-strong: #000000;
+  --accent-soft: #dededb;
+  --accent-tint: #ececea;
+  --accent-hover: #2a2a28;
+  --accent-pressed: #3a3a38;
+  --accent-contrast: #ffffff;
+
+  /* Focus is intentionally the only non-semantic color in the product
+     chrome. It must remain visible on neutral and inverted controls. */
+  --focus-ring: #315ff4;
+  --focus-ring-soft: rgba(49, 95, 244, 0.22);
 
   /* Semantic accent tints used by tool / status pills. */
   --green: #1f7a3a;
+  --green-contrast: #ffffff;
   --green-bg: #e8f7ee;
   --green-border: #c6ead2;
   --blue: #2348b8;
+  --blue-contrast: #ffffff;
   --blue-bg: #e8efff;
   --blue-border: #c8d6ff;
   --purple: #6c3aa6;
+  --purple-contrast: #ffffff;
   --purple-bg: #f3ecf9;
   --purple-border: #e4d4f1;
   --red: #9c2a25;
+  --red-contrast: #ffffff;
   --red-bg: #fdecea;
   --red-border: #f5c6c2;
   --amber: #b26200;
+  --amber-contrast: #ffffff;
   --amber-bg: #fff3e0;
 
   --shadow-xs: 0 1px 0 rgba(28, 27, 26, 0.04);
@@ -74,16 +111,16 @@
   --dur-enter: 200ms;
   --dur-exit: 140ms;
 
-  /* "Active option" indicator color, intentionally separate from --accent
-     (brand orange used by primary CTAs like Create / Save). Use --selected
-     for "this option is the one currently picked" affordances — selected
-     fidelity card, focused input ring, active filter pill — so a primary
-     CTA and a selected state can coexist on the same screen without
-     competing. --selected-soft is the 16% tint for outer rings / fills. */
-  --selected: #2563eb;
-  --selected-soft: rgba(37, 99, 235, 0.16);
+  /* Keep selection as a semantic role even though the monochrome palette
+     currently shares its hue with primary actions. Components must use the
+     matching contrast token so an inverted selected state stays readable in
+     both themes. --selected-soft is reserved for secondary rings / fills. */
+  --selected: #111111;
+  --selected-soft: rgba(17, 17, 17, 0.12);
+  --selected-contrast: #ffffff;
+  --inverted-contrast: #ffffff;
 
-  --serif: 'Source Serif Pro', 'Source Serif 4', 'Iowan Old Style', 'Apple Garamond', Georgia, 'Times New Roman', serif;
+  --serif: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', 'Noto Sans', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', 'Noto Sans', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
 
@@ -97,46 +134,70 @@
 
 /* Dark theme variables — shared between explicit [data-theme="dark"] and the
    OS-level prefers-color-scheme media query (system mode = no data-theme attr). */
-[data-theme="dark"] {
+[data-theme="dark"],
+[data-theme="cyberpunk"] {
   color-scheme: dark;
-  --bg: #1a1917;
-  --bg-app: #1a1917;
-  --bg-panel: #222120;
-  --bg-subtle: #252321;
-  --bg-muted: #2e2c29;
+  --bg: #0b0b0c;
+  --bg-app: #0b0b0c;
+  --bg-panel: #161616;
+  --bg-subtle: #242424;
+  --bg-muted: #2e2e2e;
   --bg-fill-tertiary: rgba(255, 255, 255, 0.06);
   --bg-fill-secondary: rgba(255, 255, 255, 0.10);
   --bg-fill: rgba(255, 255, 255, 0.16);
-  --bg-elevated: #2a2825;
-  --border: #333128;
-  --border-strong: #46433c;
-  --border-soft: #2a2825;
+  --bg-elevated: #1e1e1e;
+  --border: #383838;
+  --border-strong: #5a5a5a;
+  --border-soft: #2a2a2a;
 
-  --text: #e8e4dc;
-  --text-strong: #f2ede4;
-  --text-muted: #9a9690;
-  --text-soft: #6e6b65;
-  --text-faint: #4e4b46;
+  --control-bg: #1f1f1f;
+  --control-hover: #2e2e2e;
+  --control-pressed: #3a3a3a;
+  --control-selected: #3a3a3a;
+  --control-border: #686868;
+  --control-border-hover: #808080;
+  --control-disabled-bg: #161616;
+  --control-disabled-border: #343434;
+  --control-disabled-text: #808080;
 
-  --accent: #d97a56;
-  --accent-strong: #e8896a;
-  --accent-soft: #3d2318;
-  --accent-tint: #2e1a12;
-  --accent-hover: #e8896a;
+  --text: #e9e9e7;
+  --text-strong: #fafafa;
+  --text-muted: #aeaeaa;
+  --text-soft: #93938e;
+  --text-faint: #80807a;
+
+  --accent: #f4f4f2;
+  --accent-strong: #ffffff;
+  --accent-soft: #3a3a38;
+  --accent-tint: #292927;
+  --accent-hover: #dededb;
+  --accent-pressed: #c8c8c5;
+  --accent-contrast: #111111;
+  --focus-ring: #7698fd;
+  --focus-ring-soft: rgba(118, 152, 253, 0.28);
+  --selected: #f4f4f2;
+  --selected-soft: rgba(244, 244, 242, 0.14);
+  --selected-contrast: #111111;
+  --inverted-contrast: #111111;
 
   --green: #4caf72;
+  --green-contrast: #111111;
   --green-bg: #0f2a18;
   --green-border: #1a4028;
   --blue: #6b8fe8;
+  --blue-contrast: #111111;
   --blue-bg: #0f1a38;
   --blue-border: #1a2c58;
   --purple: #a87dd4;
+  --purple-contrast: #111111;
   --purple-bg: #1e1030;
   --purple-border: #321a50;
   --red: #e06b65;
+  --red-contrast: #111111;
   --red-bg: #2a0e0c;
   --red-border: #451714;
   --amber: #e09a40;
+  --amber-contrast: #111111;
   --amber-bg: #2a1a04;
 
   --shadow-xs: 0 1px 0 rgba(0, 0, 0, 0.2);
@@ -148,102 +209,71 @@
   --code-body-bg: #18181b;
 }
 
-[data-theme="cyberpunk"] {
-  color-scheme: dark;
-  --bg: #0f1320;
-  --bg-app: #0c111d;
-  --bg-panel: #151b2a;
-  --bg-subtle: #192234;
-  --bg-muted: #202c43;
-  --bg-fill-tertiary: rgba(122, 232, 223, 0.07);
-  --bg-fill-secondary: rgba(122, 232, 223, 0.11);
-  --bg-fill: rgba(122, 232, 223, 0.18);
-  --bg-elevated: #1a2336;
-  --border: #27344c;
-  --border-strong: #3b4d6c;
-  --border-soft: #202a3e;
-
-  --text: #e4edf7;
-  --text-strong: #f6fbff;
-  --text-muted: #9ba9bd;
-  --text-soft: #718096;
-  --text-faint: #4f5d73;
-
-  --accent: #29d3c4;
-  --accent-strong: #65eee0;
-  --accent-soft: #12393f;
-  --accent-tint: #102934;
-  --accent-hover: #46e2d4;
-
-  --green: #55d68d;
-  --green-bg: #0d2b22;
-  --green-border: #1f5442;
-  --blue: #7aa7ff;
-  --blue-bg: #0f1d3d;
-  --blue-border: #243d72;
-  --purple: #b29aff;
-  --purple-bg: #22143d;
-  --purple-border: #463179;
-  --red: #ff7b86;
-  --red-bg: #331319;
-  --red-border: #64303a;
-  --amber: #f4b45f;
-  --amber-bg: #33220c;
-
-  --shadow-xs: 0 1px 0 rgba(0, 0, 0, 0.24);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.34), 0 1px 3px rgba(0, 0, 0, 0.24);
-  --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.42), 0 2px 8px rgba(18, 57, 63, 0.18);
-  --shadow-lg: 0 26px 66px rgba(0, 0, 0, 0.62), 0 10px 22px rgba(18, 57, 63, 0.22);
-
-  --selected: #8b7cff;
-  --selected-soft: rgba(139, 124, 255, 0.18);
-
-  --code-header-bg: #121829;
-  --code-body-bg: #0d1220;
-}
-
 /* System mode: follow OS preference when no explicit data-theme is set. */
 @media (prefers-color-scheme: dark) {
   html:not([data-theme]) {
     color-scheme: dark;
-    --bg: #1a1917;
-    --bg-app: #1a1917;
-    --bg-panel: #222120;
-    --bg-subtle: #252321;
-    --bg-muted: #2e2c29;
+    --bg: #0b0b0c;
+    --bg-app: #0b0b0c;
+    --bg-panel: #161616;
+    --bg-subtle: #242424;
+    --bg-muted: #2e2e2e;
     --bg-fill-tertiary: rgba(255, 255, 255, 0.06);
     --bg-fill-secondary: rgba(255, 255, 255, 0.10);
     --bg-fill: rgba(255, 255, 255, 0.16);
-    --bg-elevated: #2a2825;
-    --border: #333128;
-    --border-strong: #46433c;
-    --border-soft: #2a2825;
+    --bg-elevated: #1e1e1e;
+    --border: #383838;
+    --border-strong: #5a5a5a;
+    --border-soft: #2a2a2a;
 
-    --text: #e8e4dc;
-    --text-strong: #f2ede4;
-    --text-muted: #9a9690;
-    --text-soft: #6e6b65;
-    --text-faint: #4e4b46;
+    --control-bg: #1f1f1f;
+    --control-hover: #2e2e2e;
+    --control-pressed: #3a3a3a;
+    --control-selected: #3a3a3a;
+    --control-border: #686868;
+    --control-border-hover: #808080;
+    --control-disabled-bg: #161616;
+    --control-disabled-border: #343434;
+    --control-disabled-text: #808080;
 
-    --accent: #d97a56;
-    --accent-strong: #e8896a;
-    --accent-soft: #3d2318;
-    --accent-tint: #2e1a12;
-    --accent-hover: #e8896a;
+    --text: #e9e9e7;
+    --text-strong: #fafafa;
+    --text-muted: #aeaeaa;
+    --text-soft: #93938e;
+    --text-faint: #80807a;
+
+    --accent: #f4f4f2;
+    --accent-strong: #ffffff;
+    --accent-soft: #3a3a38;
+    --accent-tint: #292927;
+    --accent-hover: #dededb;
+    --accent-pressed: #c8c8c5;
+    --accent-contrast: #111111;
+    --focus-ring: #7698fd;
+    --focus-ring-soft: rgba(118, 152, 253, 0.28);
+    --selected: #f4f4f2;
+    --selected-soft: rgba(244, 244, 242, 0.14);
+    --selected-contrast: #111111;
+    --inverted-contrast: #111111;
 
     --green: #4caf72;
+    --green-contrast: #111111;
     --green-bg: #0f2a18;
     --green-border: #1a4028;
     --blue: #6b8fe8;
+    --blue-contrast: #111111;
     --blue-bg: #0f1a38;
     --blue-border: #1a2c58;
     --purple: #a87dd4;
+    --purple-contrast: #111111;
     --purple-bg: #1e1030;
     --purple-border: #321a50;
     --red: #e06b65;
+    --red-contrast: #111111;
     --red-bg: #2a0e0c;
     --red-border: #451714;
     --amber: #e09a40;
+    --amber-contrast: #111111;
     --amber-bg: #2a1a04;
 
     --shadow-xs: 0 1px 0 rgba(0, 0, 0, 0.2);

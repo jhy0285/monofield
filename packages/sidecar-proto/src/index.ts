@@ -69,7 +69,7 @@ export const SIDECAR_DEFAULTS = Object.freeze({
   windowsPipePrefix: "open-design",
 } as const);
 
-export const OPEN_DESIGN_PRODUCT_NAME = "Open Docs";
+export const OPEN_DESIGN_PRODUCT_NAME = "MonoField";
 
 export function resolveWindowsReleaseNamespaceToken(value: string): string {
   return value.replace(/[^A-Za-z0-9._-]+/g, "-");
@@ -81,8 +81,11 @@ export function resolveWindowsUninstallRegistryKey(namespace: string): string {
 }
 
 export const SIDECAR_MESSAGES = Object.freeze({
+  BROWSER_AUTOMATION: "browser-automation",
   CLICK: "click",
   CONSOLE: "console",
+  DATABASE: "database",
+  DEVELOPMENT_PROCESS: "development-process",
   EVAL: "eval",
   EXPORT_ARTIFACT: "export-artifact",
   EXPORT_PDF: "export-pdf",
@@ -94,6 +97,24 @@ export const SIDECAR_MESSAGES = Object.freeze({
   STATUS: "status",
   UPDATE: "update",
 } as const);
+
+export const DESKTOP_BROWSER_AUTOMATION_ACTIONS = Object.freeze({
+  BATCH: "batch",
+  CLICK: "click",
+  DRAG: "drag",
+  HOVER: "hover",
+  NAVIGATE: "navigate",
+  PAGE_INFO: "page-info",
+  SCREENSHOT: "screenshot",
+  SCROLL: "scroll",
+  SNAPSHOT: "snapshot",
+  STATUS: "status",
+  TYPE_TEXT: "type-text",
+  UPLOAD: "upload",
+} as const);
+
+export type DesktopBrowserAutomationAction =
+  (typeof DESKTOP_BROWSER_AUTOMATION_ACTIONS)[keyof typeof DESKTOP_BROWSER_AUTOMATION_ACTIONS];
 
 export const DESKTOP_UPDATE_ACTIONS = Object.freeze({
   CHECK: "check",
@@ -229,6 +250,37 @@ export type DesktopClickInput = {
 export type DesktopClickResult = {
   clicked: boolean;
   found: boolean;
+};
+
+/**
+ * Deliberately finite browser-automation protocol. A caller can select and
+ * interact with page elements, but cannot send JavaScript to the guest.
+ * The Electron main process validates the user-approved session, origin,
+ * selector, URL, and sensitive-field policy again before execution.
+ */
+export type DesktopBrowserAutomationStep = {
+  action: DesktopBrowserAutomationAction;
+  continueOnError?: boolean;
+  filePath?: string;
+  selector?: string;
+  steps?: DesktopBrowserAutomationStep[];
+  targetSelector?: string;
+  text?: string;
+  url?: string;
+  pixels?: number;
+  to?: "top" | "bottom" | "page";
+};
+
+export type DesktopBrowserAutomationInput = DesktopBrowserAutomationStep & {
+  sessionId: string;
+};
+
+export type DesktopBrowserAutomationResult = {
+  action: DesktopBrowserAutomationAction;
+  data?: unknown;
+  error?: string;
+  ok: boolean;
+  sessionId: string;
 };
 
 export type DesktopExportPdfInput = {
@@ -408,6 +460,58 @@ export type DesktopUpdateInput = {
 
 export type DesktopUpdateResult = DesktopUpdateStatusSnapshot;
 
+// Deliberately narrow desktop-main database broker protocol. It contains no
+// connection URL, username, password, or arbitrary SQL; those never leave the
+// Electron main process or encrypted OS-backed storage.
+export type DesktopDatabaseRequest =
+  | { action: "list" }
+  | { action: "schemas"; connectionId: string; selectedByUser?: boolean }
+  | { action: "describe"; connectionId: string; schema: string; table: string }
+  | { action: "sample"; connectionId: string; schema: string; table: string; limit?: number }
+  | {
+      action: "inspect";
+      connectionId: string;
+      tables: Array<{ schema: string; table: string }>;
+      limit?: number;
+      concurrency?: 8 | 16 | 32;
+      /** The user selected these tables in the database-context form. */
+      selectedByUser?: boolean;
+    }
+  | {
+      action: "mutate";
+      connectionId: string;
+      operation: "insert" | "update" | "delete";
+      schema: string;
+      table: string;
+      values?: Record<string, string | number | boolean | null>;
+      where?: Record<string, string | number | boolean | null>;
+      projectId?: string;
+      reason: string;
+    };
+
+export type DesktopDatabaseMessage = { input: DesktopDatabaseRequest; type: typeof SIDECAR_MESSAGES.DATABASE };
+export type DesktopDevelopmentProcessInput =
+  | { action: "start"; args: string[]; command: string; cwd: string; ownerPid: number; port: number; projectId: string; windowsVerbatimArguments?: boolean }
+  | { action: "status"; ownerPid: number; projectId: string }
+  | { action: "terminate"; ownerPid: number; projectId: string };
+export type DesktopDevelopmentProcessResult = {
+  accepted: true;
+  action: DesktopDevelopmentProcessInput["action"];
+  error: string | null;
+  logs: string[];
+  pid: number | null;
+  projectId: string;
+  running: boolean;
+};
+export type DesktopDevelopmentProcessMessage = {
+  input: DesktopDevelopmentProcessInput;
+  type: typeof SIDECAR_MESSAGES.DEVELOPMENT_PROCESS;
+};
+export type DesktopBrowserAutomationMessage = {
+  input: DesktopBrowserAutomationInput;
+  type: typeof SIDECAR_MESSAGES.BROWSER_AUTOMATION;
+};
+
 export type SidecarStatusMessage = { type: typeof SIDECAR_MESSAGES.STATUS };
 export type SidecarShutdownMessage = { type: typeof SIDECAR_MESSAGES.SHUTDOWN };
 export type DesktopEvalMessage = { input: DesktopEvalInput; type: typeof SIDECAR_MESSAGES.EVAL };
@@ -467,6 +571,9 @@ export type DesktopSidecarMessage =
   | DesktopEvalMessage
   | DesktopScreenshotMessage
   | DesktopConsoleMessage
+  | DesktopDatabaseMessage
+  | DesktopDevelopmentProcessMessage
+  | DesktopBrowserAutomationMessage
   | DesktopShowMessage
   | DesktopClickMessage
   | DesktopExportPdfMessage
@@ -490,6 +597,7 @@ export type SidecarStampCriteria = Partial<SidecarStamp>;
 
 export type OpenDesignSidecarContract = {
   appKeys: typeof APP_KEYS;
+  browserAutomationActions: typeof DESKTOP_BROWSER_AUTOMATION_ACTIONS;
   defaults: typeof SIDECAR_DEFAULTS;
   env: typeof SIDECAR_RUNTIME_ENV;
   errorCodes: typeof SIDECAR_ERROR_CODES;
@@ -721,6 +829,227 @@ function normalizeDesktopUpdateInput(input: unknown): DesktopUpdateInput {
   return { action: value.action };
 }
 
+function normalizeDesktopBrowserAutomationStep(
+  input: unknown,
+  { allowBatch = true }: { allowBatch?: boolean } = {},
+): DesktopBrowserAutomationStep {
+  const value = assertObject(input, "desktop browser automation input");
+  const action = normalizeNonEmptyString(value.action, "desktop browser automation action") as DesktopBrowserAutomationAction;
+  if (!Object.values(DESKTOP_BROWSER_AUTOMATION_ACTIONS).includes(action)) {
+    throw new Error(`unsupported desktop browser automation action: ${String(value.action)}`);
+  }
+  if (!allowBatch && action === "batch") throw new Error("nested browser automation batches are not supported");
+  const keysByAction: Record<DesktopBrowserAutomationAction, readonly string[]> = {
+    "status": ["action"],
+    "page-info": ["action"],
+    "snapshot": ["action"],
+    "screenshot": ["action"],
+    "navigate": ["action", "url"],
+    "click": ["action", "selector"],
+    "hover": ["action", "selector"],
+    "drag": ["action", "selector", "targetSelector"],
+    "type-text": ["action", "selector", "text"],
+    "upload": ["action", "selector", "filePath"],
+    "scroll": ["action", "pixels", "to"],
+    "batch": ["action", "steps", "continueOnError"],
+  };
+  assertKnownKeys(value, [...keysByAction[action]], `desktop browser automation ${action} input`);
+  if (["click", "hover", "drag", "type-text", "upload"].includes(action) && value.selector == null) {
+    throw new Error(`desktop browser automation ${action} requires selector`);
+  }
+  if (action === "drag" && value.targetSelector == null) {
+    throw new Error("desktop browser automation drag requires targetSelector");
+  }
+  if (action === "type-text" && value.text == null) {
+    throw new Error("desktop browser automation type-text requires text");
+  }
+  if (action === "upload" && value.filePath == null) {
+    throw new Error("desktop browser automation upload requires filePath");
+  }
+  if (action === "batch" && (!Array.isArray(value.steps) || value.steps.length === 0 || value.steps.length > 25)) {
+    throw new Error("desktop browser automation batch requires 1 to 25 steps");
+  }
+  if (value.continueOnError != null && typeof value.continueOnError !== "boolean") {
+    throw new Error("desktop browser automation continueOnError must be a boolean");
+  }
+  if (value.text != null && typeof value.text !== "string") {
+    throw new Error("desktop browser automation text must be a string");
+  }
+  if (action === "scroll" && value.pixels != null && value.to != null) {
+    throw new Error("desktop browser automation scroll accepts either pixels or to, not both");
+  }
+  if (action === "navigate" && value.url == null) {
+    throw new Error("desktop browser automation navigate requires url");
+  }
+  if (value.pixels != null && (typeof value.pixels !== "number" || !Number.isFinite(value.pixels) || Math.abs(value.pixels) > 100_000)) {
+    throw new Error("desktop browser automation pixels must be a finite number between -100000 and 100000");
+  }
+  if (value.to != null && value.to !== "top" && value.to !== "bottom" && value.to !== "page") {
+    throw new Error("desktop browser automation to must be top, bottom, or page");
+  }
+  return {
+    action,
+    ...(value.continueOnError == null ? {} : { continueOnError: value.continueOnError as boolean }),
+    ...(value.filePath == null ? {} : { filePath: normalizeNonEmptyString(value.filePath, "desktop browser automation filePath") }),
+    ...(value.selector == null ? {} : { selector: normalizeNonEmptyString(value.selector, "desktop browser automation selector") }),
+    ...(value.steps == null ? {} : { steps: (value.steps as unknown[]).map((step) => normalizeDesktopBrowserAutomationStep(step, { allowBatch: false })) }),
+    ...(value.targetSelector == null ? {} : { targetSelector: normalizeNonEmptyString(value.targetSelector, "desktop browser automation targetSelector") }),
+    ...(value.text == null ? {} : { text: String(value.text).slice(0, 20_000) }),
+    ...(value.url == null ? {} : { url: normalizeNonEmptyString(value.url, "desktop browser automation url") }),
+    ...(value.pixels == null ? {} : { pixels: value.pixels as number }),
+    ...(value.to == null ? {} : { to: value.to as "top" | "bottom" | "page" }),
+  };
+}
+
+function normalizeDesktopBrowserAutomationInput(input: unknown): DesktopBrowserAutomationInput {
+  const value = assertObject(input, "desktop browser automation input");
+  const sessionId = normalizeNonEmptyString(value.sessionId, "desktop browser automation sessionId");
+  if (!/^[A-Za-z0-9_-]{20,128}$/.test(sessionId)) {
+    throw new Error("desktop browser automation sessionId has an invalid format");
+  }
+  const { sessionId: _sessionId, ...stepInput } = value;
+  return { ...normalizeDesktopBrowserAutomationStep(stepInput), sessionId };
+}
+
+function normalizeDesktopDatabaseInput(input: unknown): DesktopDatabaseRequest {
+  const value = assertObject(input, "desktop database input");
+  const action = normalizeNonEmptyString(value.action, "desktop database action");
+  if (action === "list") {
+    assertKnownKeys(value, ["action"], "desktop database input");
+    return { action };
+  }
+  if (action === "schemas") {
+    assertKnownKeys(value, ["action", "connectionId", "selectedByUser"], "desktop database input");
+    if (value.selectedByUser != null && typeof value.selectedByUser !== "boolean") {
+      throw new Error("desktop database schemas selectedByUser must be a boolean");
+    }
+    return {
+      action,
+      connectionId: normalizeNonEmptyString(value.connectionId, "desktop database connectionId"),
+      ...(value.selectedByUser == null ? {} : { selectedByUser: value.selectedByUser }),
+    };
+  }
+  if (action === "describe") {
+    assertKnownKeys(value, ["action", "connectionId", "schema", "table"], "desktop database input");
+    return {
+      action,
+      connectionId: normalizeNonEmptyString(value.connectionId, "desktop database connectionId"),
+      schema: normalizeNonEmptyString(value.schema, "desktop database schema"),
+      table: normalizeNonEmptyString(value.table, "desktop database table"),
+    };
+  }
+  if (action === "sample") {
+    assertKnownKeys(value, ["action", "connectionId", "schema", "table", "limit"], "desktop database input");
+    if (value.limit != null && (typeof value.limit !== "number" || !Number.isInteger(value.limit) || value.limit < 1 || value.limit > 20)) {
+      throw new Error("desktop database sample limit must be an integer between 1 and 20");
+    }
+    return {
+      action,
+      connectionId: normalizeNonEmptyString(value.connectionId, "desktop database connectionId"),
+      schema: normalizeNonEmptyString(value.schema, "desktop database schema"),
+      table: normalizeNonEmptyString(value.table, "desktop database table"),
+      ...(value.limit == null ? {} : { limit: value.limit }),
+    };
+  }
+  if (action === "inspect") {
+    assertKnownKeys(value, ["action", "connectionId", "tables", "limit", "concurrency", "selectedByUser"], "desktop database input");
+    if (!Array.isArray(value.tables) || value.tables.length < 1) {
+      throw new Error("desktop database inspect tables must contain at least one table");
+    }
+    if (value.limit != null && (typeof value.limit !== "number" || !Number.isInteger(value.limit) || value.limit < 1 || value.limit > 20)) {
+      throw new Error("desktop database inspect limit must be an integer between 1 and 20");
+    }
+    if (value.concurrency != null && (value.concurrency !== 8 && value.concurrency !== 16 && value.concurrency !== 32)) {
+      throw new Error("desktop database inspect concurrency must be 8, 16, or 32");
+    }
+    if (value.selectedByUser != null && typeof value.selectedByUser !== "boolean") {
+      throw new Error("desktop database inspect selectedByUser must be a boolean");
+    }
+    const tables = value.tables.map((table, index) => {
+      const item = assertObject(table, `desktop database inspect table ${index + 1}`);
+      assertKnownKeys(item, ["schema", "table"], `desktop database inspect table ${index + 1}`);
+      return {
+        schema: normalizeNonEmptyString(item.schema, `desktop database inspect table ${index + 1} schema`),
+        table: normalizeNonEmptyString(item.table, `desktop database inspect table ${index + 1} table`),
+      };
+    });
+    return {
+      action,
+      connectionId: normalizeNonEmptyString(value.connectionId, "desktop database connectionId"),
+      tables,
+      ...(value.limit == null ? {} : { limit: value.limit }),
+      ...(value.concurrency == null ? {} : { concurrency: value.concurrency }),
+      ...(value.selectedByUser == null ? {} : { selectedByUser: value.selectedByUser }),
+    };
+  }
+  if (action === "mutate") {
+    assertKnownKeys(value, ["action", "connectionId", "operation", "schema", "table", "values", "where", "projectId", "reason"], "desktop database input");
+    if (value.operation !== "insert" && value.operation !== "update" && value.operation !== "delete") {
+      throw new Error("desktop database mutation operation must be insert, update, or delete");
+    }
+    const normalizeValues = (input: unknown, label: string): Record<string, string | number | boolean | null> | undefined => {
+      if (input == null) return undefined;
+      const record = assertObject(input, label);
+      if (Object.keys(record).length > 50) throw new Error(`${label} has too many columns`);
+      const normalized: Record<string, string | number | boolean | null> = {};
+      for (const [key, entry] of Object.entries(record)) {
+        if (entry !== null && typeof entry !== "string" && typeof entry !== "number" && typeof entry !== "boolean") {
+          throw new Error(`${label}.${key} must be a scalar JSON value`);
+        }
+        normalized[key] = entry;
+      }
+      return normalized;
+    };
+    const values = normalizeValues(value.values, "desktop database mutation values");
+    const where = normalizeValues(value.where, "desktop database mutation where");
+    return {
+      action,
+      connectionId: normalizeNonEmptyString(value.connectionId, "desktop database connectionId"),
+      operation: value.operation,
+      schema: normalizeNonEmptyString(value.schema, "desktop database schema"),
+      table: normalizeNonEmptyString(value.table, "desktop database table"),
+      ...(values == null ? {} : { values }),
+      ...(where == null ? {} : { where }),
+      ...(value.projectId == null ? {} : { projectId: normalizeNonEmptyString(value.projectId, "desktop database projectId") }),
+      reason: normalizeNonEmptyString(value.reason, "desktop database mutation reason").slice(0, 500),
+    };
+  }
+  throw new Error(`unsupported desktop database action: ${action}`);
+}
+
+function normalizeDesktopDevelopmentProcessInput(input: unknown): DesktopDevelopmentProcessInput {
+  const value = assertObject(input, "desktop development process input");
+  const action = normalizeNonEmptyString(value.action, "desktop development process action");
+  if (action !== "start" && action !== "status" && action !== "terminate") {
+    throw new Error("desktop development process action must be start, status, or terminate");
+  }
+  const ownerPid = value.ownerPid;
+  if (typeof ownerPid !== "number" || !Number.isSafeInteger(ownerPid) || ownerPid <= 0) {
+    throw new Error("desktop development process ownerPid must be a positive integer");
+  }
+  const projectId = normalizeNonEmptyString(value.projectId, "desktop development process projectId");
+  if (!/^[A-Za-z0-9._-]{1,128}$/.test(projectId)) {
+    throw new Error("desktop development process projectId has an invalid format");
+  }
+  if (action !== "start") {
+    assertKnownKeys(value, ["action", "ownerPid", "projectId"], "desktop development process input");
+    return { action, ownerPid, projectId };
+  }
+  assertKnownKeys(value, ["action", "args", "command", "cwd", "ownerPid", "port", "projectId", "windowsVerbatimArguments"], "desktop development process input");
+  const command = normalizeNonEmptyString(value.command, "desktop development process command");
+  const cwd = normalizeNonEmptyString(value.cwd, "desktop development process cwd");
+  if (!Array.isArray(value.args) || value.args.length > 64 || value.args.some((arg) => typeof arg !== "string" || arg.length > 4_096)) {
+    throw new Error("desktop development process args must be an array of at most 64 strings");
+  }
+  if (typeof value.port !== "number" || !Number.isInteger(value.port) || value.port < 1 || value.port > 65_535) {
+    throw new Error("desktop development process port must be an integer between 1 and 65535");
+  }
+  if (value.windowsVerbatimArguments != null && typeof value.windowsVerbatimArguments !== "boolean") {
+    throw new Error("desktop development process windowsVerbatimArguments must be a boolean");
+  }
+  return { action, args: value.args as string[], command, cwd, ownerPid, port: value.port, projectId, ...(value.windowsVerbatimArguments == null ? {} : { windowsVerbatimArguments: value.windowsVerbatimArguments }) };
+}
+
 function normalizeMessageType(value: unknown, label: string): string {
   if (typeof value !== "string" || value.length === 0) {
     throw new SidecarContractError(SIDECAR_ERROR_CODES.INVALID_MESSAGE, `${label} type must be a non-empty string`);
@@ -775,6 +1104,9 @@ export function normalizeDesktopSidecarMessage(input: unknown): DesktopSidecarMe
     case SIDECAR_MESSAGES.CLICK:
       assertKnownKeys(value, ["input", "type"], "desktop sidecar message");
       return { input: normalizeDesktopClickInput(value.input), type };
+    case SIDECAR_MESSAGES.BROWSER_AUTOMATION:
+      assertKnownKeys(value, ["input", "type"], "desktop sidecar message");
+      return { input: normalizeDesktopBrowserAutomationInput(value.input), type };
     case SIDECAR_MESSAGES.EXPORT_PDF:
       assertKnownKeys(value, ["input", "type"], "desktop sidecar message");
       return { input: normalizeDesktopExportPdfInput(value.input), type };
@@ -784,6 +1116,12 @@ export function normalizeDesktopSidecarMessage(input: unknown): DesktopSidecarMe
     case SIDECAR_MESSAGES.UPDATE:
       assertKnownKeys(value, ["input", "type"], "desktop sidecar message");
       return { input: normalizeDesktopUpdateInput(value.input), type };
+    case SIDECAR_MESSAGES.DATABASE:
+      assertKnownKeys(value, ["input", "type"], "desktop sidecar message");
+      return { input: normalizeDesktopDatabaseInput(value.input), type };
+    case SIDECAR_MESSAGES.DEVELOPMENT_PROCESS:
+      assertKnownKeys(value, ["input", "type"], "desktop sidecar message");
+      return { input: normalizeDesktopDevelopmentProcessInput(value.input), type };
     default:
       throw new SidecarContractError(SIDECAR_ERROR_CODES.UNKNOWN_MESSAGE, `unknown desktop sidecar message: ${type}`);
   }
@@ -791,6 +1129,7 @@ export function normalizeDesktopSidecarMessage(input: unknown): DesktopSidecarMe
 
 export const OPEN_DESIGN_SIDECAR_CONTRACT = Object.freeze({
   appKeys: APP_KEYS,
+  browserAutomationActions: DESKTOP_BROWSER_AUTOMATION_ACTIONS,
   defaults: SIDECAR_DEFAULTS,
   env: SIDECAR_RUNTIME_ENV,
   errorCodes: SIDECAR_ERROR_CODES,

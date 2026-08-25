@@ -99,7 +99,13 @@ export type DaemonAgentPayload =
    */
   | { type: 'tool_input_delta'; id: string; name: string; delta: string }
   | { type: 'tool_result'; toolUseId: string; content: string; isError?: boolean }
-  | { type: 'usage'; usage?: { input_tokens?: number; output_tokens?: number }; costUsd?: number; durationMs?: number }
+  | {
+      type: 'usage';
+      usage?: import('../api/token-usage.js').ProviderTokenUsagePayload;
+      costUsd?: number;
+      durationMs?: number;
+      measurementSource?: import('../api/token-usage.js').TokenUsageMeasurementSource;
+    }
   | { type: 'fabricated_role_marker'; marker: string; messageId?: string }
   // The agent is stuck repeating failing tool calls (see tool-loop-guard.ts).
   // `action: 'warn'` is an early heads-up the run may be looping; `'halt'` means

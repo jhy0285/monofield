@@ -1,12 +1,13 @@
 {
-  "name": "open-design",
+  "name": "monofield",
   "version": "0.11.1",
   "private": true,
   "packageManager": "pnpm@10.33.2",
   "type": "module",
-  "description": "Local-first document specification workspace: detects your installed code-agent CLI, runs document skills and style systems, streams artifacts into a sandboxed preview.",
+  "description": "MonoField is a local-first, model-independent AI workbench for code, design, and documents.",
   "license": "Apache-2.0",
   "bin": {
+    "monofield": "./apps/daemon/bin/od.mjs",
     "od": "./apps/daemon/bin/od.mjs"
   },
   "scripts": {

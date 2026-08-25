@@ -8,7 +8,7 @@ import { registerProjectCommentRoutes } from './comments.js';
 export interface RegisterProjectConversationRoutesDeps extends RouteDeps<'db' | 'paths' | 'projectStore' | 'conversations' | 'ids' | 'telemetry' | 'appConfig' | 'agents'> {}
 
 function normalizeChatSessionMode(value: unknown): ChatSessionMode {
-  return value === 'chat' ? 'chat' : 'design';
+  return value === 'chat' ? 'chat' : 'docs';
 }
 
 export function registerProjectConversationRoutes(app: Express, ctx: RegisterProjectConversationRoutesDeps): void {
@@ -93,7 +93,7 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
         ? normalizeChatSessionMode(req.body.sessionMode)
         : sourceConversation && sourceConversation.projectId === req.params.id
           ? normalizeChatSessionMode(sourceConversation.sessionMode)
-          : 'design';
+          : 'docs';
     const conv = insertConversation(db, {
       id: randomId(),
       projectId: req.params.id,

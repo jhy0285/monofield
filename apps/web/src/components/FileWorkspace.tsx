@@ -99,6 +99,8 @@ import { TabLauncherMenu } from './workspace/TabLauncherMenu';
 import { buildLauncherActions, type LauncherContext } from './workspace/tab-launcher';
 import { SideChatTab, type ActiveConversationChatState } from './workspace/SideChatTab';
 import { TerminalViewer } from './workspace/TerminalViewer';
+import { DevelopmentWorkspaceControls } from './DevelopmentWorkspaceControls';
+import { GitChangesPanel } from './GitChangesPanel';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
 import { MissingBrandFontsBanner } from './MissingBrandFontsBanner';
 import { PasteTextDialog } from './PasteTextDialog';
@@ -120,6 +122,8 @@ type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => 
 interface Props {
   projectId: string;
   projectKind: TrackingProjectKind;
+  projectMetadata?: ProjectMetadata;
+  onProjectMetadataChange?: (metadata: ProjectMetadata) => void;
   // Basename of the project's chosen working directory (e.g. "openclaw").
   // Threaded to DesignFilesPanel as the breadcrumb root label. Undefined for
   // default-storage projects.
@@ -158,6 +162,7 @@ interface Props {
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean, images?: File[]) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[], images?: File[]) => Promise<boolean | void> | boolean | void;
+  onSendBrowserReviewBatch?: (prompt: string, attachments: ChatCommentAttachment[], images?: File[]) => Promise<boolean | void> | boolean | void;
   onRequestBrowserUsePrompt?: (prompt: string) => void;
   onPluginFolderAgentAction?: (
     relativePath: string,
@@ -265,6 +270,7 @@ interface SketchState {
 export const DESIGN_FILES_TAB = '__design_files__';
 export const DESIGN_SYSTEM_TAB = '__design_system__';
 const QUESTIONS_TAB = '__questions__';
+export const GIT_CHANGES_TAB = '__git_changes__';
 const BROWSER_TAB_PREFIX = '__browser__:';
 // Keep at most this many embedded-browser `<webview>`s mounted at once. Each is
 // a full out-of-process Chromium guest (timers, JS, network, a GPU surface), so
@@ -396,6 +402,8 @@ const DESIGN_SYSTEM_IMAGE_OR_FONT_EXTENSIONS = /\.(svg|png|jpe?g|gif|webp|avif|i
 export function FileWorkspace({
   projectId,
   projectKind,
+  projectMetadata,
+  onProjectMetadataChange,
   rootDirName,
   reloading,
   resolvedDir,
@@ -419,6 +427,7 @@ export function FileWorkspace({
   onSavePreviewComment,
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
+  onSendBrowserReviewBatch,
   onRequestBrowserUsePrompt,
   onPluginFolderAgentAction,
   activePluginActionPaths,
@@ -469,6 +478,7 @@ export function FileWorkspace({
   focusQuestionsRequest = null,
 }: Props) {
   const t = useT();
+  const browserTabLabel = t('chat.designToolbox.context.browser');
   // The chat column only shows a compact Questions banner; the form itself
   // lives here, including after submission when a banner click can reopen the
   // answered preview.
@@ -526,7 +536,10 @@ export function FileWorkspace({
     setProjectFolders(EMPTY_PROJECT_FOLDERS);
   }
   const [browserTabs, setBrowserTabs] = useState<BrowserWorkspaceTab[]>(
-    () => browserTabsFromState(tabsState.browserTabs),
+    () => localizeDefaultBrowserTabLabels(
+      browserTabsFromState(tabsState.browserTabs),
+      browserTabLabel,
+    ),
   );
   // "+" launcher (file search + registry-driven create-new actions:
   // Side Chat, Terminal, Browser).
@@ -545,6 +558,11 @@ export function FileWorkspace({
   const tabsBarRef = useRef<HTMLDivElement | null>(null);
   const draggedTabNameRef = useRef<string | null>(null);
   const browserTabSequenceRef = useRef(0);
+  // Capability ids are intentionally memory-only and never written into the
+  // persisted project tab state. Same-origin popups can inherit an active
+  // automation session for their lifetime without turning project metadata
+  // into a long-lived browser credential store.
+  const browserPopupAutomationParentsRef = useRef<Map<string, string>>(new Map());
   const designFilesNavProjectIdRef = useRef(projectId);
   const designFilesNavRef = useRef<DesignFilesNavState>(createDefaultDesignFilesNavState());
   if (designFilesNavProjectIdRef.current !== projectId) {
@@ -622,14 +640,18 @@ export function FileWorkspace({
   useEffect(() => {
     setBrowserTabs([]);
     browserTabSequenceRef.current = 0;
+    browserPopupAutomationParentsRef.current.clear();
     setLauncherOpen(false);
   }, [projectId]);
 
   useEffect(() => {
-    const nextBrowserTabs = browserTabsFromState(tabsState.browserTabs);
+    const nextBrowserTabs = localizeDefaultBrowserTabLabels(
+      browserTabsFromState(tabsState.browserTabs),
+      browserTabLabel,
+    );
     setBrowserTabs(nextBrowserTabs);
     browserTabSequenceRef.current = maxBrowserTabSequence(nextBrowserTabs);
-  }, [tabsState.browserTabs]);
+  }, [tabsState.browserTabs, browserTabLabel]);
 
   function workspaceTabsState(
     tabs: string[],
@@ -654,23 +676,45 @@ export function FileWorkspace({
     commitTabsState(workspaceTabsState(persistedTabs, name));
   }
 
-  function openBrowserTab() {
+  function openBrowserTab(
+    initial?: Pick<BrowserWorkspaceTab, 'url' | 'title' | 'iconUrl'>,
+    automationParentSessionId?: string,
+  ) {
     setUploadError(null);
     const nextIndex = browserTabSequenceRef.current + 1;
     browserTabSequenceRef.current = nextIndex;
     const anchor = lastWorkspaceTabId(orderedWorkspaceTabs) ?? activeTab;
+    const initialUrl = initial?.url?.trim() ?? '';
+    const initialTitle = initial?.title?.trim() || (initialUrl ? labelFromUrl(initialUrl) : '');
     const nextTab: BrowserWorkspaceTab = {
       id: `${BROWSER_TAB_PREFIX}${nextIndex}`,
       insertAfter: anchor,
-      label: nextIndex === 1 ? 'Browser' : `Browser ${nextIndex}`,
+      label: initialTitle || (nextIndex === 1 ? browserTabLabel : `${browserTabLabel} ${nextIndex}`),
     };
+    if (initialUrl) nextTab.url = initialUrl;
+    if (initialTitle) nextTab.title = initialTitle;
+    if (initial?.iconUrl?.trim()) nextTab.iconUrl = initial.iconUrl.trim();
+    if (automationParentSessionId) {
+      browserPopupAutomationParentsRef.current.set(nextTab.id, automationParentSessionId);
+    }
     const nextTabs = [...browserTabs, nextTab];
     setBrowserTabs(nextTabs);
     setActiveTab(nextTab.id);
     commitTabsState(workspaceTabsState(persistedTabs, nextTab.id, nextTabs));
   }
 
+  function openDevelopmentUrl(url: string) {
+    const existing = browserTabs.find((tab) => tab.url === url);
+    if (existing) {
+      setActiveTab(existing.id);
+      commitTabsState(workspaceTabsState(persistedTabs, existing.id, browserTabs));
+      return;
+    }
+    openBrowserTab({ url, title: t('development.localApp') });
+  }
+
   function closeBrowserTab(tabId: string) {
+    browserPopupAutomationParentsRef.current.delete(tabId);
     const closingIndex = browserTabs.findIndex((tab) => tab.id === tabId);
     const nextTabs = browserTabs.filter((tab) => tab.id !== tabId);
     setBrowserTabs(nextTabs);
@@ -754,6 +798,7 @@ export function FileWorkspace({
       activeTab === DESIGN_FILES_TAB
       || activeTab === DESIGN_SYSTEM_TAB
       || activeTab === QUESTIONS_TAB
+      || activeTab === GIT_CHANGES_TAB
     ) return;
     if (isBrowserTabId(activeTab)) {
       if (!browserTabs.some((tab) => tab.id === activeTab)) {
@@ -1490,6 +1535,7 @@ export function FileWorkspace({
       activeTab === DESIGN_FILES_TAB
       || activeTab === DESIGN_SYSTEM_TAB
       || activeTab === QUESTIONS_TAB
+      || activeTab === GIT_CHANGES_TAB
       || isBrowserTabId(activeTab)
     ) return null;
     const onDisk = visibleFiles.find((f) => f.name === activeTab);
@@ -1813,6 +1859,9 @@ export function FileWorkspace({
     // Browser is owned by this branch's DesignBrowserPanel: spin up a browser
     // tab synchronously (no daemon round-trip) and let the launcher close.
     createBrowser: () => openBrowserTab(),
+    openGitChanges: projectMetadata?.workMode === 'development'
+      ? () => openFile(GIT_CHANGES_TAB)
+      : undefined,
     // Terminal needs only the project id — spawn the PTY here and hand the
     // resulting session id back so the launcher opens a terminal:<id> tab.
     // Surface a toast when the daemon can't start one (e.g. node-pty not
@@ -1956,10 +2005,13 @@ export function FileWorkspace({
             const kind = liveArtifact ? 'live-artifact' : onDisk?.kind ?? (isSketchName(name) ? 'sketch' : 'text');
             const isTerminal = isTerminalTabId(name);
             const isSideChat = isSideChatTabId(name);
+            const isGitChanges = name === GIT_CHANGES_TAB;
             // Terminal and side-chat tabs are not files: give them a friendly
             // label + glyph instead of the raw `terminal:<id>` / `chat:<id>` id.
             let label: string;
-            if (isTerminal) {
+            if (isGitChanges) {
+              label = t('gitChanges.title');
+            } else if (isTerminal) {
               // Number multiple terminals so the tabs stay distinguishable.
               const ordinal = tabNames.filter(isTerminalTabId).indexOf(name) + 1;
               label =
@@ -1974,8 +2026,10 @@ export function FileWorkspace({
             } else {
               label = `${liveArtifact?.title ?? name}${dirtyMark}`;
             }
-            const iconNameOverride: IconName | undefined = isTerminal
-              ? 'terminal'
+            const iconNameOverride: IconName | undefined = isGitChanges
+              ? 'fork'
+              : isTerminal
+                ? 'terminal'
               : isSideChat
                 ? 'comment'
                 : undefined;
@@ -2063,6 +2117,18 @@ export function FileWorkspace({
           ) : null}
         </div>
       </div>
+      {projectMetadata?.workMode === 'development' && onProjectMetadataChange ? (
+        <div className="ws-development-bar" data-testid="workspace-development-bar">
+          <DevelopmentWorkspaceControls
+            projectId={projectId}
+            metadata={projectMetadata}
+            resolvedDir={resolvedDir}
+            onMetadataChange={onProjectMetadataChange}
+            onOpenUrl={openDevelopmentUrl}
+            onOpenChanges={() => openFile(GIT_CHANGES_TAB)}
+          />
+        </div>
+      ) : null}
       {launcherOpen ? (
         <TabLauncherMenu
           anchor={launcherBtnRef.current}
@@ -2118,6 +2184,7 @@ export function FileWorkspace({
             aria-hidden={activeTab === browserTab.id ? undefined : true}
           >
             <DesignBrowserPanel
+              automationParentSessionId={browserPopupAutomationParentsRef.current.get(browserTab.id) ?? null}
               projectId={projectId}
               browserTabId={browserTab.id}
               resolvedDir={resolvedDir}
@@ -2129,9 +2196,15 @@ export function FileWorkspace({
               onSavePreviewComment={onSavePreviewComment}
               onRemovePreviewComment={onRemovePreviewComment}
               onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+              onSendBrowserReviewBatch={onSendBrowserReviewBatch}
               onRequestBrowserUsePrompt={onRequestBrowserUsePrompt}
+              autoVerify={
+                projectMetadata?.workMode === 'development' &&
+                projectMetadata.development?.autoVerify !== false
+              }
               onRefreshFiles={onRefreshFiles}
               onOpenFile={openFile}
+              onOpenPopup={(url, automationParentSessionId) => openBrowserTab({ url }, automationParentSessionId)}
               onPageInfoChange={(info) => updateBrowserTabInfo(browserTab.id, info)}
             />
           </div>
@@ -2261,6 +2334,8 @@ export function FileWorkspace({
             activePluginActionPaths={activePluginActionPaths}
             hiddenPluginActionPaths={hiddenPluginActionPaths}
           />
+        ) : activeTab === GIT_CHANGES_TAB ? (
+          <GitChangesPanel projectId={projectId} onOpenFile={openFile} />
         ) : isBrowserTabId(activeTab) ? (
           null
         ) : isActiveSketch && activeSketch && activeFile ? (
@@ -2329,6 +2404,7 @@ export function FileWorkspace({
             onRemovePreviewComment={onRemovePreviewComment}
             onSendBoardCommentAttachments={onSendBoardCommentAttachments}
             onFileSaved={onRefreshFiles}
+            onOpenFile={openFile}
             onOpenFileReplacing={openFileReplacing}
             commentPortalId={commentPortalId}
             onCommentModeChange={onCommentModeChange}
@@ -4872,6 +4948,26 @@ function browserTabsFromState(value: OpenTabsState['browserTabs']): BrowserWorks
     tabs.push(tab);
   }
   return tabs;
+}
+
+function localizeDefaultBrowserTabLabels(
+  tabs: BrowserWorkspaceTab[],
+  browserLabel: string,
+): BrowserWorkspaceTab[] {
+  return tabs.map((tab, index) => {
+    const defaultLabel = /^Browser(?:\s+\d+)?$/i.test(tab.label);
+    const defaultTitle = !tab.title || /^Browser(?:\s+\d+)?$/i.test(tab.title);
+    if (tab.url || !defaultLabel || !defaultTitle) return tab;
+    const suffix = /\s+(\d+)$/.exec(tab.label)?.[1];
+    const fallbackIndex = index + 1;
+    const ordinal = suffix ? Number(suffix) : fallbackIndex;
+    const localizedLabel = ordinal > 1 ? `${browserLabel} ${ordinal}` : browserLabel;
+    return {
+      ...tab,
+      label: localizedLabel,
+      ...(tab.title ? { title: localizedLabel } : {}),
+    };
+  });
 }
 
 function maxBrowserTabSequence(tabs: BrowserWorkspaceTab[]): number {

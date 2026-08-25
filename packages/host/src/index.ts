@@ -97,6 +97,99 @@ export type OpenDesignHostBrowserClearDataOptions = {
   storage?: boolean;
 };
 
+/**
+ * A safe http(s) popup request emitted by an embedded Browser guest. The
+ * desktop main process validates the URL before this crosses into the web UI;
+ * the id lets the UI route it only to the Browser tab that requested it.
+ */
+export type OpenDesignHostBrowserPopup = {
+  guestWebContentsId: number;
+  url: string;
+};
+
+export type OpenDesignHostBrowserPopupListener = (popup: OpenDesignHostBrowserPopup) => void;
+
+export const OPEN_DESIGN_BROWSER_AUTOMATION_SCOPES = [
+  "page:read",
+  "page:navigate-same-origin",
+  "page:pointer",
+  "page:click",
+  "page:type-non-sensitive",
+  "page:scroll",
+] as const;
+
+export type OpenDesignHostBrowserAutomationScope = (typeof OPEN_DESIGN_BROWSER_AUTOMATION_SCOPES)[number];
+
+export type OpenDesignHostBrowserAutomationBeginInput = {
+  guestWebContentsId: number;
+  origin: string;
+  projectId: string;
+  projectDir?: string | null;
+};
+
+export type OpenDesignHostBrowserAutomationLinkInput = OpenDesignHostBrowserAutomationBeginInput & {
+  parentSessionId: string;
+};
+
+export type OpenDesignHostBrowserAutomationSession = {
+  /** Null means the user-approved session remains active until explicitly stopped or revoked. */
+  expiresAt: string | null;
+  ok: true;
+  origin: string;
+  scopes: readonly OpenDesignHostBrowserAutomationScope[];
+  sessionId: string;
+};
+
+export type OpenDesignHostBrowserAutomationBeginResult = OpenDesignHostBrowserAutomationSession | OpenDesignHostFailure;
+
+export type OpenDesignHostBrowserAutomationStopResult =
+  | { ok: true; stopped: boolean }
+  | OpenDesignHostFailure;
+
+export type OpenDesignHostBrowserAutomationEvent = {
+  action?: string;
+  at: string;
+  message: string;
+  ok: boolean;
+  sessionId: string;
+  type: "started" | "operation" | "stopped" | "expired" | "revoked";
+};
+
+export type OpenDesignHostBrowserAutomationListener = (event: OpenDesignHostBrowserAutomationEvent) => void;
+
+export type OpenDesignHostDatabaseConnection = {
+  id: string;
+  label: string;
+  host: string;
+  database: string;
+  createdAt: string;
+  readApproval: 'prompt' | 'always';
+  accessMode: 'read-only' | 'read-write';
+  writePolicy: 'disabled' | 'approve-each' | 'always';
+};
+
+export type OpenDesignHostDatabaseConnectionInput = {
+  label: string;
+  connectionString: string;
+  writePolicy?: 'disabled' | 'approve-each' | 'always';
+};
+
+export type OpenDesignHostDatabaseReadApproval = 'prompt' | 'always';
+export type OpenDesignHostDatabaseWritePolicy = 'disabled' | 'approve-each' | 'always';
+export type OpenDesignHostDatabaseReadRequest =
+  | { action: 'list' }
+  | { action: 'schemas'; connectionId: string; selectedByUser?: boolean }
+  | { action: 'describe'; connectionId: string; schema: string; table: string }
+  | { action: 'sample'; connectionId: string; schema: string; table: string; limit?: number }
+  | {
+      action: 'inspect';
+      connectionId: string;
+      tables: Array<{ schema: string; table: string }>;
+      limit?: number;
+      concurrency?: 8 | 16 | 32;
+      selectedByUser?: boolean;
+    };
+
 export const OPEN_DESIGN_HOST_UPDATER_ACTIONS = Object.freeze({
   CHECK: "check",
   DOWNLOAD: "download",
@@ -269,9 +362,28 @@ export type OpenDesignHostUpdaterStatusListener = (status: OpenDesignHostUpdater
 export type OpenDesignHostBridge = {
   browser: {
     clearData(options?: OpenDesignHostBrowserClearDataOptions): Promise<OpenDesignHostActionResult>;
+    /** Optional while the renderer and desktop host are on mixed versions. */
+    automation?: {
+      begin(input: OpenDesignHostBrowserAutomationBeginInput): Promise<OpenDesignHostBrowserAutomationBeginResult>;
+      link?(input: OpenDesignHostBrowserAutomationLinkInput): Promise<OpenDesignHostBrowserAutomationBeginResult>;
+      stop(sessionId: string): Promise<OpenDesignHostBrowserAutomationStopResult>;
+      subscribe(listener: OpenDesignHostBrowserAutomationListener): () => void;
+    };
+    /** Optional during a desktop/web mixed-version upgrade. */
+    subscribePopup?(listener: OpenDesignHostBrowserPopupListener): () => void;
   };
   capture: {
     page(options?: OpenDesignHostCaptureOptions): Promise<OpenDesignHostCaptureResult>;
+  };
+  database?: {
+    list(): Promise<OpenDesignHostDatabaseConnection[]>;
+    /** Privileged Desktop-only read path; database credentials never enter the renderer. */
+    request(input: OpenDesignHostDatabaseReadRequest): Promise<unknown>;
+    remove(connectionId: string): Promise<OpenDesignHostActionResult>;
+    save(input: OpenDesignHostDatabaseConnectionInput): Promise<OpenDesignHostDatabaseConnection>;
+    setAccessPolicy(connectionId: string, writePolicy: OpenDesignHostDatabaseWritePolicy): Promise<OpenDesignHostDatabaseConnection>;
+    setReadApproval(connectionId: string, readApproval: OpenDesignHostDatabaseReadApproval): Promise<OpenDesignHostDatabaseConnection>;
+    test(input: OpenDesignHostDatabaseConnectionInput): Promise<OpenDesignHostActionResult>;
   };
   client: OpenDesignHostClient;
   pdf: {
@@ -282,10 +394,10 @@ export type OpenDesignHostBridge = {
   };
   project: {
     pickAndImport(init?: OpenDesignHostProjectImportInit): Promise<OpenDesignHostProjectImportResult>;
-    pickAndReplaceWorkingDir(projectId: string): Promise<OpenDesignHostProjectReplaceWorkingDirResult>;
+    pickAndReplaceWorkingDir(projectId: string, suggestedPath?: string): Promise<OpenDesignHostProjectReplaceWorkingDirResult>;
     // Optional so older host builds still satisfy the bridge shape; callers
     // must feature-detect before invoking.
-    pickWorkingDir?(): Promise<OpenDesignHostPickWorkingDirResult>;
+    pickWorkingDir?(suggestedPath?: string): Promise<OpenDesignHostPickWorkingDirResult>;
   };
   shell: {
     openExternal(url: string): Promise<OpenDesignHostActionResult>;
@@ -338,6 +450,9 @@ export function isOpenDesignHostBridge(value: unknown): value is OpenDesignHostB
 
   const capture = value.capture;
   if (!isRecord(capture) || !hasFunction(capture, "page")) return false;
+
+  const database = value.database;
+  if (database != null && (!isRecord(database) || !hasFunction(database, "list") || !hasFunction(database, "save") || !hasFunction(database, "test") || !hasFunction(database, "remove"))) return false;
 
   const project = value.project;
   if (
@@ -487,7 +602,7 @@ function unavailable(reason: string): OpenDesignHostFailure {
 
 export async function openHostExternalUrl(url: string, scope: OpenDesignHostGlobalScope = globalThis): Promise<OpenDesignHostActionResult> {
   const host = getOpenDesignHost(scope);
-  if (host == null) return unavailable("Open Design host is not available");
+  if (host == null) return unavailable("MonoField host is not available");
   try {
     return await host.shell.openExternal(url);
   } catch (error) {
@@ -497,7 +612,7 @@ export async function openHostExternalUrl(url: string, scope: OpenDesignHostGlob
 
 export async function openHostProjectPath(projectId: string, scope: OpenDesignHostGlobalScope = globalThis): Promise<OpenDesignHostActionResult> {
   const host = getOpenDesignHost(scope);
-  if (host == null) return unavailable("Open Design host is not available");
+  if (host == null) return unavailable("MonoField host is not available");
   try {
     return await host.shell.openPath(projectId);
   } catch (error) {
@@ -510,7 +625,7 @@ export async function clearHostBrowserData(
   scope: OpenDesignHostGlobalScope = globalThis,
 ): Promise<OpenDesignHostActionResult> {
   const host = getOpenDesignHost(scope);
-  if (host == null) return unavailable("Open Design host is not available");
+  if (host == null) return unavailable("MonoField host is not available");
   try {
     return await host.browser.clearData(options);
   } catch (error) {
@@ -518,12 +633,73 @@ export async function clearHostBrowserData(
   }
 }
 
+/**
+ * Listen for popup requests from the in-app Browser. Web-only clients and
+ * older desktop preloads deliberately return a no-op unsubscribe function.
+ */
+export function subscribeHostBrowserPopup(
+  listener: OpenDesignHostBrowserPopupListener,
+  scope: OpenDesignHostGlobalScope = globalThis,
+): () => void {
+  return getOpenDesignHost(scope)?.browser.subscribePopup?.(listener) ?? (() => undefined);
+}
+
+export function hostBrowserAutomationAvailable(scope: OpenDesignHostGlobalScope = globalThis): boolean {
+  return getOpenDesignHost(scope)?.browser.automation != null;
+}
+
+export async function beginHostBrowserAutomation(
+  input: OpenDesignHostBrowserAutomationBeginInput,
+  scope: OpenDesignHostGlobalScope = globalThis,
+): Promise<OpenDesignHostBrowserAutomationBeginResult> {
+  const automation = getOpenDesignHost(scope)?.browser.automation;
+  if (automation == null) return unavailable("MonoField browser automation host is not available");
+  try {
+    return await automation.begin(input);
+  } catch (error) {
+    return unavailable(error instanceof Error ? error.message : String(error));
+  }
+}
+
+export async function linkHostBrowserAutomation(
+  input: OpenDesignHostBrowserAutomationLinkInput,
+  scope: OpenDesignHostGlobalScope = globalThis,
+): Promise<OpenDesignHostBrowserAutomationBeginResult> {
+  const automation = getOpenDesignHost(scope)?.browser.automation;
+  if (automation?.link == null) return unavailable("MonoField browser automation session linking is not available");
+  try {
+    return await automation.link(input);
+  } catch (error) {
+    return unavailable(error instanceof Error ? error.message : String(error));
+  }
+}
+
+export async function stopHostBrowserAutomation(
+  sessionId: string,
+  scope: OpenDesignHostGlobalScope = globalThis,
+): Promise<OpenDesignHostBrowserAutomationStopResult> {
+  const automation = getOpenDesignHost(scope)?.browser.automation;
+  if (automation == null) return unavailable("MonoField browser automation host is not available");
+  try {
+    return await automation.stop(sessionId);
+  } catch (error) {
+    return unavailable(error instanceof Error ? error.message : String(error));
+  }
+}
+
+export function subscribeHostBrowserAutomation(
+  listener: OpenDesignHostBrowserAutomationListener,
+  scope: OpenDesignHostGlobalScope = globalThis,
+): () => void {
+  return getOpenDesignHost(scope)?.browser.automation?.subscribe(listener) ?? (() => undefined);
+}
+
 export async function captureHostPage(
   options?: OpenDesignHostCaptureOptions,
   scope: OpenDesignHostGlobalScope = globalThis,
 ): Promise<OpenDesignHostCaptureResult> {
   const host = getOpenDesignHost(scope);
-  if (host == null) return unavailable("Open Design host is not available");
+  if (host == null) return unavailable("MonoField host is not available");
   try {
     return await host.capture.page(options);
   } catch (error) {
@@ -536,7 +712,7 @@ export async function pickAndImportHostProject(
   scope: OpenDesignHostGlobalScope = globalThis,
 ): Promise<OpenDesignHostProjectImportResult> {
   const host = getOpenDesignHost(scope);
-  if (host == null) return unavailable("Open Design host is not available");
+  if (host == null) return unavailable("MonoField host is not available");
   try {
     return await host.project.pickAndImport(init);
   } catch (error) {
@@ -546,12 +722,13 @@ export async function pickAndImportHostProject(
 
 export async function pickAndReplaceHostProjectWorkingDir(
   projectId: string,
+  suggestedPath?: string,
   scope: OpenDesignHostGlobalScope = globalThis,
 ): Promise<OpenDesignHostProjectReplaceWorkingDirResult> {
   const host = getOpenDesignHost(scope);
-  if (host == null) return unavailable("Open Design host is not available");
+  if (host == null) return unavailable("MonoField host is not available");
   try {
-    return await host.project.pickAndReplaceWorkingDir(projectId);
+    return await host.project.pickAndReplaceWorkingDir(projectId, suggestedPath);
   } catch (error) {
     return unavailable(error instanceof Error ? error.message : String(error));
   }
@@ -562,15 +739,16 @@ export async function pickAndReplaceHostProjectWorkingDir(
 // this to let the user choose a working directory before the project exists;
 // the token is later spent on POST /api/projects/:id/working-dir.
 export async function pickHostWorkingDir(
+  suggestedPath?: string,
   scope: OpenDesignHostGlobalScope = globalThis,
 ): Promise<OpenDesignHostPickWorkingDirResult> {
   const host = getOpenDesignHost(scope);
-  if (host == null) return unavailable("Open Design host is not available");
+  if (host == null) return unavailable("MonoField host is not available");
   if (typeof host.project.pickWorkingDir !== "function") {
     return unavailable("host build does not support pickWorkingDir");
   }
   try {
-    return await host.project.pickWorkingDir();
+    return await host.project.pickWorkingDir(suggestedPath);
   } catch (error) {
     return unavailable(error instanceof Error ? error.message : String(error));
   }
@@ -583,7 +761,7 @@ export async function printHostPdf(
   scope: OpenDesignHostGlobalScope = globalThis,
 ): Promise<OpenDesignHostActionResult> {
   const host = getOpenDesignHost(scope);
-  if (host == null) return unavailable("Open Design host is not available");
+  if (host == null) return unavailable("MonoField host is not available");
   try {
     return await host.pdf.print(html, nonce, options);
   } catch (error) {
@@ -593,7 +771,7 @@ export async function printHostPdf(
 
 export function setHostPetVisible(visible: boolean, scope: OpenDesignHostGlobalScope = globalThis): OpenDesignHostActionResult {
   const host = getOpenDesignHost(scope);
-  if (host == null) return unavailable("Open Design host is not available");
+  if (host == null) return unavailable("MonoField host is not available");
   try {
     host.pet.setVisible(visible);
     return { ok: true };
@@ -608,7 +786,7 @@ async function runHostUpdaterAction(
   scope: OpenDesignHostGlobalScope = globalThis,
 ): Promise<OpenDesignHostUpdaterResult> {
   const host = getOpenDesignHost(scope);
-  if (host == null) return unavailable("Open Design host is not available");
+  if (host == null) return unavailable("MonoField host is not available");
   try {
     return {
       ok: true,
@@ -652,7 +830,7 @@ export async function quitHostAfterUpdaterInstallerOpen(
   scope: OpenDesignHostGlobalScope = globalThis,
 ): Promise<OpenDesignHostActionResult> {
   const host = getOpenDesignHost(scope);
-  if (host == null) return unavailable("Open Design host is not available");
+  if (host == null) return unavailable("MonoField host is not available");
   try {
     return await host.updater.quit(options);
   } catch (error) {

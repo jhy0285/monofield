@@ -17,6 +17,7 @@ export interface PluginInstallationHelpersDeps {
   PLUGIN_REGISTRY_ROOTS: string[];
   PLUGIN_LOCKFILE_PATH: string;
   PLUGIN_UPLOAD_MAX_BYTES: number;
+  managedInstallOnly?: boolean;
 }
 
 interface PluginDbLike {
@@ -162,12 +163,18 @@ export function createPluginInstallationHelpers(deps: PluginInstallationHelpersD
   }
 
   async function stageUploadedPluginZip(buffer: Buffer, source: string) {
+    if (deps.managedInstallOnly) {
+      return managedInstallBlockedResult();
+    }
     const stagedFolder = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'od-plugin-zip-'));
     await extractPluginZipToFolder(buffer, stagedFolder, deps.PLUGIN_UPLOAD_MAX_BYTES);
     return finishUploadedPluginInstall(stagedFolder, source);
   }
 
   async function stageUploadedPluginFolder(files: Array<{ buffer: Buffer; originalname: string }>, rawPaths: unknown) {
+    if (deps.managedInstallOnly) {
+      return managedInstallBlockedResult();
+    }
     const stagedFolder = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'od-plugin-folder-'));
     try {
       if (files.length === 0) return null;
@@ -190,4 +197,14 @@ export function createPluginInstallationHelpers(deps: PluginInstallationHelpersD
   }
 
   return { finishUploadedPluginInstall, stageUploadedPluginZip, stageUploadedPluginFolder };
+}
+
+function managedInstallBlockedResult(): PluginInstallResult {
+  return {
+    ok: false,
+    plugin: null,
+    warnings: [],
+    message: 'This MonoField deployment accepts plugins only from an approved company marketplace.',
+    log: ['OD_PLUGIN_INSTALL_MODE=managed blocked a local upload.'],
+  };
 }

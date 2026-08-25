@@ -1,5 +1,15 @@
 // @ts-nocheck
-import type { DesktopExportArtifactInput, DesktopExportArtifactResult, DesktopExportPdfInput, DesktopExportPdfResult } from '@open-design/sidecar-proto';
+import {
+  SIDECAR_MESSAGES,
+  normalizeDesktopSidecarMessage,
+  type DesktopBrowserAutomationInput,
+  type DesktopBrowserAutomationResult,
+  type DesktopDatabaseRequest,
+  type DesktopExportArtifactInput,
+  type DesktopExportArtifactResult,
+  type DesktopExportPdfInput,
+  type DesktopExportPdfResult,
+} from '@open-design/sidecar-proto';
 import express from 'express';
 import multer from 'multer';
 import JSZip from 'jszip';
@@ -10,7 +20,13 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import net from 'node:net';
-import { executionProfileFromStreamFormat, PLUGIN_SHARE_ACTION_PLUGIN_IDS } from '@open-design/contracts';
+import {
+  classifyInterfaceSpecSourceIntent,
+  executionProfileFromStreamFormat,
+  isInterfaceSpecGenerationRequest,
+  normalizeProviderTokenUsage,
+  PLUGIN_SHARE_ACTION_PLUGIN_IDS,
+} from '@open-design/contracts';
 import {
   composeSystemPrompt,
   resolveExclusiveSurface,
@@ -57,6 +73,7 @@ import {
 import { userFacingAgentLabel } from './user-facing-agent-label.js';
 import {
   buildBrowserUseRunState,
+  browserAutomationSessionId,
   collectBrowserUseDiscoveryFacts,
   isBrowserUseRequested,
   renderBrowserUseUnavailablePrompt,
@@ -131,6 +148,7 @@ import {
   checkWindowsCmdShimCommandLineBudget,
   checkWindowsDirectExeCommandLineBudget,
   detectAgents,
+  envWithoutMarketplaceSecrets,
   getAgentDef,
   isKnownModel,
   openDesignAmrTraceEnv,
@@ -249,6 +267,7 @@ import {
   pluginPromptBlock,
   pruneExpiredSnapshots,
   readPluginLockfile,
+  parseBundledPluginAllowlist,
   registerBuiltInAtomWorkers,
   registerBundledPlugins,
   registryRootsForDataDir,
@@ -262,9 +281,17 @@ import {
 import {
   LEGACY_OPEN_DESIGN_MARKETPLACE_MANIFEST_FILENAME,
   OPEN_DOCS_MARKETPLACE_MANIFEST_FILENAME,
+  isManagedMarketplaceCatalogUrlAllowed,
   marketplaceManifestUrlForRegistry,
   marketplaceRegistryIdFromUrl,
+  parseManagedMarketplaceAllowedCatalogUrls,
+  parseManagedMarketplaceAllowedHosts,
+  parseManagedMarketplaceAllowedLicenses,
+  parseManagedMarketplaceAuthEnv,
+  resolveManagedMarketplaceInstallHostPolicy,
+  syncManagedMarketplaceCatalogs,
 } from './plugins/marketplaces.js';
+import { isInstalledPluginAllowedByManagedDistribution } from './plugins/managed-distribution.js';
 import {
   composeMemoryBody,
   extractFromMessage,
@@ -549,6 +576,11 @@ import { createTerminalService } from './terminals.js';
 import { registerSocialShareRoutes } from './routes/social-share.js';
 import { registerOpenDocsPublicMetadataRoutes } from './routes/open-design-public-metadata.js';
 import { registerMemoryRoutes } from './routes/memory.js';
+import { registerDatabaseRoutes } from './routes/database.js';
+import { registerDevelopmentRoutes } from './routes/development.js';
+import { registerDocumentRenderRoutes } from './routes/document-render.js';
+import { DevelopmentServerService } from './development-server.js';
+import { registerDictionaryRoutes } from './routes/dictionaries.js';
 import { registerTelemetryRoutes } from './routes/telemetry.js';
 import {
   assembleExample,
@@ -703,7 +735,7 @@ const PLUGIN_REGISTRY_DIR = resolveDaemonResourceDir(
   path.join(PROJECT_ROOT, 'plugins', 'registry'),
 );
 const OFFICIAL_MARKETPLACE_ID = 'official';
-const OFFICIAL_PLUGIN_SOURCE_REPO = 'github:jhy0285/open-docs@main';
+const OFFICIAL_PLUGIN_SOURCE_REPO = 'github:jhy0285/monofield@main';
 
 function defaultMarketplaceSeedConfig(id) {
   return {
@@ -770,8 +802,49 @@ async function marketplaceSeedManifestText(id, bundledMarketplaceEntries) {
   return manifestText;
 }
 
-function createMarketplaceFetcher(seedId, bundledMarketplaceEntries) {
+const MARKETPLACE_CATALOG_MAX_BYTES = 2 * 1024 * 1024;
+const MARKETPLACE_FETCH_TIMEOUT_MS = 15_000;
+
+async function readMarketplaceCatalogText(response) {
+  if (!response.body) return '';
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let totalBytes = 0;
+  let text = '';
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > MARKETPLACE_CATALOG_MAX_BYTES) {
+        await reader.cancel('marketplace catalog size limit exceeded');
+        throw new Error('marketplace catalog size limit exceeded');
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+    return text + decoder.decode();
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function createMarketplaceFetcher(
+  seedId,
+  bundledMarketplaceEntries,
+  authEnv,
+  administratorAllowedCatalogUrls,
+) {
   return async (url) => {
+    if (
+      administratorAllowedCatalogUrls !== undefined &&
+      !isManagedMarketplaceCatalogUrlAllowed(url, administratorAllowedCatalogUrls)
+    ) {
+      return {
+        ok: false,
+        status: 403,
+        text: async () => '',
+      };
+    }
     const registryId = marketplaceRegistryIdFromUrl(url);
     if (registryId && (!seedId || registryId === seedId)) {
       const manifestText = await marketplaceSeedManifestText(registryId, bundledMarketplaceEntries);
@@ -783,16 +856,58 @@ function createMarketplaceFetcher(seedId, bundledMarketplaceEntries) {
         };
       }
     }
-    const response = await fetch(url, { redirect: 'follow' });
+    const token = typeof authEnv === 'string' && authEnv.length > 0
+      ? process.env[authEnv]
+      : undefined;
+    if (authEnv && !token) {
+      return {
+        ok: false,
+        status: 401,
+        text: async () => '',
+      };
+    }
+    // Managed or credentialed marketplace requests do not follow redirects.
+    // The destination must itself be explicitly approved, and credentials
+    // must never cross an origin boundary.
+    const response = await fetch(url, {
+      redirect: token || administratorAllowedCatalogUrls !== undefined ? 'manual' : 'follow',
+      signal: AbortSignal.timeout(MARKETPLACE_FETCH_TIMEOUT_MS),
+      ...(token ? { headers: { authorization: `Bearer ${token}` } } : {}),
+    });
+    const contentLength = Number(response.headers.get('content-length'));
+    if (Number.isFinite(contentLength) && contentLength > MARKETPLACE_CATALOG_MAX_BYTES) {
+      await response.body?.cancel().catch(() => undefined);
+      return {
+        ok: false,
+        status: 413,
+        text: async () => '',
+      };
+    }
     return {
       ok:     response.ok,
       status: response.status,
-      text:   () => response.text(),
+      text:   () => readMarketplaceCatalogText(response),
     };
   };
 }
 
 const SANDBOX_MODE_ENABLED = isSandboxModeEnabled(process.env);
+const MANAGED_PLUGIN_INSTALL_ONLY = process.env.OD_PLUGIN_INSTALL_MODE?.trim().toLowerCase() === 'managed';
+const MANAGED_BUNDLED_PLUGIN_ALLOWLIST = parseBundledPluginAllowlist(
+  process.env.OD_BUNDLED_PLUGIN_ALLOWLIST,
+);
+const MANAGED_MARKETPLACE_ALLOWED_CATALOG_URLS = parseManagedMarketplaceAllowedCatalogUrls(
+  process.env.OD_MARKETPLACE_ALLOWED_CATALOG_URLS,
+);
+const MANAGED_MARKETPLACE_ALLOWED_HOSTS = parseManagedMarketplaceAllowedHosts(
+  process.env.OD_MARKETPLACE_ALLOWED_HOSTS,
+);
+const MANAGED_MARKETPLACE_ALLOWED_LICENSES = parseManagedMarketplaceAllowedLicenses(
+  process.env.OD_MARKETPLACE_ALLOWED_LICENSES,
+);
+const MANAGED_MARKETPLACE_AUTH_ENV = parseManagedMarketplaceAuthEnv(
+  process.env.OD_MARKETPLACE_AUTH_ENV,
+);
 const RUNTIME_DATA_DIR = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT, {
   requireExplicit: SANDBOX_MODE_ENABLED,
 });
@@ -816,7 +931,7 @@ const RUNTIME_DATA_DIR_CANONICAL = (() => {
 // new data root is fresh (no app.sqlite), copy the 0.3.x .od/ payload
 // across before SQLite opens. Synchronous on purpose: openDatabase below
 // would race an async copy. See apps/daemon/src/legacy-data-migrator.ts
-// and https://github.com/jhy0285/open-docs/issues/710.
+// and https://github.com/jhy0285/monofield/issues/710.
 migrateLegacyDataDirSync({
   legacyDir: process.env.OD_LEGACY_DATA_DIR,
   dataDir: RUNTIME_DATA_DIR,
@@ -1147,7 +1262,7 @@ export function createAgentRuntimeToolPrompt(
     '',
     `- Daemon URL: \`${daemonUrl}\` (also available as \`OD_DAEMON_URL\`).`,
     '- `OD_NODE_BIN` is the absolute path to the Node-compatible runtime that started the daemon; packaged desktop installs provide this even when the user has no system `node` on PATH.',
-    '- `OD_BIN` is the absolute path to the Open Docs CLI script. On POSIX shells run wrappers with `"$OD_NODE_BIN" "$OD_BIN" tools ...`; do not call bare `od`, which may resolve to the system octal-dump command on Unix-like systems.',
+    '- `OD_BIN` is the absolute path to the MonoField CLI script. On POSIX shells run wrappers with `"$OD_NODE_BIN" "$OD_BIN" tools ...`; do not call bare `od`, which may resolve to the system octal-dump command on Unix-like systems.',
     '- On PowerShell use `& $env:OD_NODE_BIN $env:OD_BIN tools ...`; on cmd.exe use `"%OD_NODE_BIN%" "%OD_BIN%" tools ...`.',
     tokenLine,
     '- Prefer project wrapper commands through `OD_NODE_BIN` + `OD_BIN` over raw HTTP. The wrappers read these environment values automatically.',
@@ -1344,7 +1459,7 @@ function renderRunContextPrompt(selection, metadata) {
   if (Array.isArray(context.workspaceItems) && context.workspaceItems.length > 0) {
     lines.push('### Active workspace context');
     lines.push(
-      'The user did not manually choose this context; Open Docs selected the currently focused workspace tab. Use it as the default target for phrases like "this", "current", "the browser", "the terminal", or "that file" unless the user says otherwise. Use project-relative paths exactly when reading or editing project files.',
+      'The user did not manually choose this context; MonoField selected the currently focused workspace tab. Use it as the default target for phrases like "this", "current", "the browser", "the terminal", or "that file" unless the user says otherwise. Use project-relative paths exactly when reading or editing project files.',
     );
     lines.push(formatWorkspaceContextList(context.workspaceItems));
     const toolHints = renderWorkspaceContextToolHints(context.workspaceItems);
@@ -1436,20 +1551,22 @@ function buildLoginShellCommand(innerCommand) {
 }
 
 function execGhBuffered(args, opts = {}) {
-  if (process.platform === 'win32') return execFileBuffered('gh', args, opts);
+  const childEnv = envWithoutMarketplaceSecrets(opts.env ?? process.env);
+  if (process.platform === 'win32') return execFileBuffered('gh', args, { ...opts, env: childEnv });
   const shell = process.env.SHELL && process.env.SHELL.trim() ? process.env.SHELL.trim() : '/bin/zsh';
   return execFileBuffered(shell, ['-c', buildLoginShellCommand(buildGhShellCommand(args))], {
-    env: process.env,
     ...opts,
+    env: childEnv,
   });
 }
 
 function execCommandViaLoginShell(command, args, opts = {}) {
-  if (process.platform === 'win32') return execFileBuffered(command, args, opts);
+  const childEnv = envWithoutMarketplaceSecrets(opts.env ?? process.env);
+  if (process.platform === 'win32') return execFileBuffered(command, args, { ...opts, env: childEnv });
   const shell = process.env.SHELL && process.env.SHELL.trim() ? process.env.SHELL.trim() : '/bin/zsh';
   return execFileBuffered(shell, ['-c', buildLoginShellCommand(buildCommandShellCommand(command, args))], {
-    env: process.env,
     ...opts,
+    env: childEnv,
   });
 }
 
@@ -1646,7 +1763,7 @@ function githubRepoNameFromPluginName(name) {
 
 const PLUGIN_SHARE_ACTION_LABELS = {
   'publish-github': 'Publish to GitHub',
-  'contribute-open-design': 'Contribute to Open Docs',
+  'contribute-open-design': 'Contribute to MonoField',
 };
 
 const USER_PLUGIN_SOURCE_KINDS = new Set([
@@ -1693,10 +1810,10 @@ function renderPluginSharePrompt({ action, sourcePlugin, stagedPath }) {
   const title = sourcePlugin.title || sourcePlugin.id;
   if (action === 'publish-github') {
     return [
-      `Publish the local Open Docs plugin "${title}" as a new public GitHub repository.`,
+      `Publish the local MonoField plugin "${title}" as a new public GitHub repository.`,
       '',
       `The plugin source files have been copied into this project at \`${stagedPath}\`.`,
-      'Use the local daemon share endpoint so the publish flow runs through Open Docs\'s validated GitHub path:',
+      'Use the local daemon share endpoint so the publish flow runs through MonoField\'s validated GitHub path:',
       '',
       '```bash',
       `curl -sS -X POST "$OD_DAEMON_URL/api/projects/$OD_PROJECT_ID/plugins/publish-github" \\`,
@@ -1710,10 +1827,10 @@ function renderPluginSharePrompt({ action, sourcePlugin, stagedPath }) {
     ].join('\n');
   }
   return [
-    `Open a pull request to add the local Open Docs plugin "${title}" to the Open Docs repository.`,
+    `Open a pull request to add the local MonoField plugin "${title}" to the MonoField repository.`,
     '',
     `The plugin source files have been copied into this project at \`${stagedPath}\`.`,
-    'Use the local daemon share endpoint so the contribution flow runs through Open Docs\'s validated GitHub path:',
+    'Use the local daemon share endpoint so the contribution flow runs through MonoField\'s validated GitHub path:',
     '',
     '```bash',
     `curl -sS -X POST "$OD_DAEMON_URL/api/projects/$OD_PROJECT_ID/plugins/contribute-open-design" \\`,
@@ -1918,7 +2035,7 @@ export function upsertSkillPluginCandidateAssistantMessage(db, run, candidate) {
   upsertMessage(db, run.conversationId, {
     id: messageId,
     role: 'assistant',
-    content: `Open Docs found reusable skill material that can become a plugin: ${candidate.title}`,
+    content: `MonoField found reusable skill material that can become a plugin: ${candidate.title}`,
     agentId: run.agentId ?? undefined,
     events: [{
       kind: 'plugin_candidate',
@@ -1998,7 +2115,7 @@ export function daemonAgentPayloadToPersistedAgentEvent(data) {
     return { kind: 'status', label: data.label, ...(detail ? { detail } : {}) };
   }
   if (type === 'text_delta' && typeof data.delta === 'string') {
-    return { kind: 'text', text: data.delta };
+    return { kind: 'text', text: redactSecrets(data.delta) };
   }
   if (type === 'conversation_title' && typeof data.title === 'string') {
     return { kind: 'conversation_title', title: data.title };
@@ -2032,7 +2149,7 @@ export function daemonAgentPayloadToPersistedAgentEvent(data) {
     };
   }
   if (type === 'tool_use' && typeof data.id === 'string' && typeof data.name === 'string') {
-    return { kind: 'tool_use', id: data.id, name: data.name, input: normalizePersistedToolInput(data.input) };
+    return { kind: 'tool_use', id: data.id, name: data.name, input: normalizePersistedToolInput(redactAgentValue(data.input)) };
   }
   // Live-only incremental tool-input fragments are for real-time display only.
   // Returning null skips persistence so history replay isn't polluted with
@@ -2042,18 +2159,20 @@ export function daemonAgentPayloadToPersistedAgentEvent(data) {
     return {
       kind: 'tool_result',
       toolUseId: data.toolUseId,
-      content: String(data.content ?? ''),
+      content: redactSecrets(String(data.content ?? '')),
       isError: Boolean(data.isError),
     };
   }
   if (type === 'usage') {
     const usage = data.usage && typeof data.usage === 'object' ? data.usage : {};
+    const normalized = normalizeProviderTokenUsage(usage, {
+      costUsd: data.costUsd,
+      durationMs: data.durationMs,
+      measurementSource: data.measurementSource,
+    });
     return {
       kind: 'usage',
-      inputTokens: usage.input_tokens,
-      outputTokens: usage.output_tokens,
-      ...(typeof data.costUsd === 'number' ? { costUsd: data.costUsd } : {}),
-      ...(typeof data.durationMs === 'number' ? { durationMs: data.durationMs } : {}),
+      ...normalized,
     };
   }
   if (type === 'diagnostic' && typeof data.name === 'string') {
@@ -2097,8 +2216,52 @@ export function daemonAgentPayloadToPersistedAgentEvent(data) {
         : `Heads up — the agent has repeated a failing ${toolName} call ${count}× and may be stuck.`;
     return { kind: 'status', label: 'warning', detail };
   }
-  if (type === 'raw' && typeof data.line === 'string') return { kind: 'raw', line: data.line };
+  if (type === 'raw' && typeof data.line === 'string') return { kind: 'raw', line: redactSecrets(data.line) };
   return null;
+}
+
+const SENSITIVE_AGENT_FIELD = /^(?:password|passwd|pwd|secret|client[_-]?secret|private[_-]?key|access[_-]?token|refresh[_-]?token|api[_-]?key|authorization)$/i;
+
+function isEnvironmentReference(value) {
+  return typeof value === 'string' && /^\s*(?:\$\{|\{\{|env\()/i.test(value);
+}
+
+function redactAgentValue(value, key = '') {
+  if (value == null) return value;
+  if (SENSITIVE_AGENT_FIELD.test(key) && !isEnvironmentReference(value)) return '[REDACTED]';
+  if (typeof value === 'string') return redactSecrets(value);
+  if (Array.isArray(value)) return value.map((entry) => redactAgentValue(entry));
+  if (typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([entryKey, entryValue]) => [
+      entryKey,
+      redactAgentValue(entryValue, entryKey),
+    ]),
+  );
+}
+
+function redactAgentEventForExposure(data) {
+  if (!data || typeof data !== 'object') return data;
+  if (data.type === 'tool_result') {
+    return { ...data, content: redactSecrets(String(data.content ?? '')) };
+  }
+  if (data.type === 'tool_use') {
+    return { ...data, input: redactAgentValue(data.input) };
+  }
+  if (data.type === 'text_delta' && typeof data.delta === 'string') {
+    return { ...data, delta: redactSecrets(data.delta) };
+  }
+  if (data.type === 'raw' && typeof data.line === 'string') {
+    return { ...data, line: redactSecrets(data.line) };
+  }
+  if (data.type === 'error') {
+    return {
+      ...data,
+      ...(typeof data.message === 'string' ? { message: redactSecrets(data.message) } : {}),
+      ...(typeof data.raw === 'string' ? { raw: redactSecrets(data.raw) } : {}),
+    };
+  }
+  return data;
 }
 
 function normalizePersistedToolInput(input) {
@@ -2738,7 +2901,7 @@ function renderOAuthResultPage(opts) {
   const title = ok ? 'Connected' : 'Authorization failed';
   const heading = ok ? '✅ Connected' : '⚠️ Authorization failed';
   const body = ok
-    ? `Your MCP server <code>${escapeHtml(opts.serverId ?? '')}</code> is now connected. You can close this tab and return to Open Docs.`
+    ? `Your MCP server <code>${escapeHtml(opts.serverId ?? '')}</code> is now connected. You can close this tab and return to MonoField.`
     : escapeHtml(opts.message ?? 'Authorization could not be completed.');
   const accent = ok ? '#1a7f37' : '#cf222e';
   const payload = ok
@@ -2748,7 +2911,7 @@ function renderOAuthResultPage(opts) {
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>${escapeHtml(title)} — Open Docs</title>
+<title>${escapeHtml(title)} — MonoField</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <style>
   :root { color-scheme: light dark; }
@@ -3303,6 +3466,9 @@ export function createSseResponse(
 
 export type DesktopPdfExporter = (input: DesktopExportPdfInput) => Promise<DesktopExportPdfResult>;
 export type DesktopArtifactExporter = (input: DesktopExportArtifactInput) => Promise<DesktopExportArtifactResult>;
+export type DesktopDatabaseBroker = (input: DesktopDatabaseRequest) => Promise<unknown>;
+export type DesktopDevelopmentProcessBroker = (input: import('@open-design/sidecar-proto').DesktopDevelopmentProcessInput) => Promise<import('@open-design/sidecar-proto').DesktopDevelopmentProcessResult>;
+export type DesktopBrowserAutomation = (input: DesktopBrowserAutomationInput) => Promise<DesktopBrowserAutomationResult>;
 
 // Loosely typed shape — we only access `namespace`, `base`, `mode`, and
 // `source` from the runtime context when building the diagnostics export.
@@ -3316,7 +3482,10 @@ export interface DaemonRuntimeContext {
 }
 
 export interface StartServerOptions {
+  desktopBrowserAutomation?: DesktopBrowserAutomation | null;
   desktopArtifactExporter?: DesktopArtifactExporter | null;
+  desktopDatabaseBroker?: DesktopDatabaseBroker | null;
+  desktopDevelopmentProcessBroker?: DesktopDevelopmentProcessBroker | null;
   desktopPdfExporter?: DesktopPdfExporter | null;
   host?: string;
   port?: number;
@@ -3337,6 +3506,9 @@ export async function startServer({
   returnServer = false,
   desktopPdfExporter = null,
   desktopArtifactExporter = null,
+  desktopDatabaseBroker = null,
+  desktopDevelopmentProcessBroker = null,
+  desktopBrowserAutomation = null,
   runtime = null,
 }: StartServerOptions = {}) {
   host = normalizeDaemonBindHost(host);
@@ -3369,6 +3541,7 @@ export async function startServer({
 
   const app = express();
   installRouteRegistrationGuard(app);
+  const developmentServers = new DevelopmentServerService(desktopDevelopmentProcessBroker);
   // Clipper page captures are self-contained HTML with inlined images plus a
   // Figma IR, which for an image-heavy site (The Economist, news front pages)
   // runs to tens of MB — far past a normal JSON body. Give the ingest route a
@@ -3552,6 +3725,7 @@ export async function startServer({
     PLUGIN_REGISTRY_ROOTS,
     PLUGIN_LOCKFILE_PATH,
     PLUGIN_UPLOAD_MAX_BYTES,
+    managedInstallOnly: MANAGED_PLUGIN_INSTALL_ONLY,
   });
   // Wire the upload-destination bridge to this db so multer can route
   // file uploads into baseDir-rooted projects' actual folders.
@@ -3634,6 +3808,9 @@ export async function startServer({
     const result = await registerBundledPlugins({
       db,
       bundledRoot: BUNDLED_PLUGINS_DIR,
+      ...(MANAGED_PLUGIN_INSTALL_ONLY
+        ? { allowedPluginIds: MANAGED_BUNDLED_PLUGIN_ALLOWLIST }
+        : {}),
       marketplaceProvenance: {
         sourceMarketplaceId: OFFICIAL_MARKETPLACE_ID,
         marketplaceTrust:    'official',
@@ -3694,6 +3871,66 @@ export async function startServer({
     console.warn(`[plugins] registry seed failed: ${(err)?.message ?? err}`);
   }
 
+  if (MANAGED_PLUGIN_INSTALL_ONLY) {
+    try {
+      if (MANAGED_MARKETPLACE_ALLOWED_CATALOG_URLS.length === 0) {
+        console.warn('[plugins] managed marketplace catalog allowlist is empty; no company catalog was enrolled');
+      } else {
+        const sync = await syncManagedMarketplaceCatalogs(db, {
+          catalogUrls: MANAGED_MARKETPLACE_ALLOWED_CATALOG_URLS,
+          allowedHosts: MANAGED_MARKETPLACE_ALLOWED_HOSTS,
+          allowedLicenses: MANAGED_MARKETPLACE_ALLOWED_LICENSES,
+          authEnv: MANAGED_MARKETPLACE_AUTH_ENV,
+          fetcher: createMarketplaceFetcher(
+            null,
+            bundledMarketplaceEntries,
+            MANAGED_MARKETPLACE_AUTH_ENV,
+            MANAGED_MARKETPLACE_ALLOWED_CATALOG_URLS,
+          ),
+        });
+        for (const row of sync.rows) {
+          console.log(`[plugins] synchronized managed marketplace ${row.id} (${row.manifest.plugins.length} plugin(s))`);
+        }
+        for (const failure of sync.failures) {
+          console.warn(`[plugins] managed marketplace synchronization failed for ${failure.url}: ${failure.message}`);
+        }
+      }
+    } catch (err) {
+      console.warn(`[plugins] managed marketplace synchronization failed: ${(err)?.message ?? err}`);
+    }
+  }
+
+  const managedPluginDistributionPolicy = {
+    bundledPluginIds: MANAGED_BUNDLED_PLUGIN_ALLOWLIST,
+    allowedCatalogUrls: MANAGED_MARKETPLACE_ALLOWED_CATALOG_URLS,
+    allowedArchiveHosts: MANAGED_MARKETPLACE_ALLOWED_HOSTS,
+    allowedLicenses: MANAGED_MARKETPLACE_ALLOWED_LICENSES,
+  };
+  const isManagedInstalledPluginAllowed = (plugin) => {
+    if (!MANAGED_PLUGIN_INSTALL_ONLY) return true;
+    if (!plugin || typeof plugin.id !== 'string') return false;
+    return isInstalledPluginAllowedByManagedDistribution(
+      db,
+      plugin,
+      managedPluginDistributionPolicy,
+    );
+  };
+  const getPolicyAllowedSnapshot = (snapshotId) => {
+    const snapshot = getSnapshot(db, snapshotId);
+    if (!snapshot || !MANAGED_PLUGIN_INSTALL_ONLY) return snapshot;
+    const installed = getInstalledPlugin(db, snapshot.pluginId);
+    return installed && isManagedInstalledPluginAllowed(installed) ? snapshot : null;
+  };
+  const resolvePolicyPluginSnapshot = (input) => resolvePluginSnapshot({
+    ...input,
+    ...(MANAGED_PLUGIN_INSTALL_ONLY
+      ? {
+          isPluginAllowed: isManagedInstalledPluginAllowed,
+          allowRequestedCapabilities: false,
+        }
+      : {}),
+  });
+
   // Plan §3.A5 / spec §16 Phase 5 / PB2: periodic snapshot GC. Disabled
   // when OD_SNAPSHOT_GC_INTERVAL_MS is 0; otherwise one-time bootstrap
   // sweep + interval. The function returns a NOOP_HANDLE when disabled
@@ -3711,15 +3948,15 @@ export async function startServer({
   }
   void snapshotGc; // keep handle alive for the daemon's lifetime
 
-  // Warm agent-capability probes (e.g. whether the installed Claude Code
-  // build advertises --include-partial-messages) so the first /api/chat
-  // hits a populated cache even if /api/agents hasn't been called yet.
+  // Configure Orbit without launching a duplicate all-agent scan. Desktop
+  // immediately opens the incremental /api/agents stream, which warms the
+  // same capability/model caches. Running both paths here used to launch two
+  // complete probe batches and compete with the user's first CLI turn.
   void readAppConfig(RUNTIME_DATA_DIR)
     .then((config) => {
       orbitService.configure(config.orbit);
-      return detectAgents(config.agentCliEnv ?? {});
     })
-    .catch(() => detectAgents().catch(() => {}));
+    .catch(() => {});
 
   await recoverStaleLiveArtifactRefreshes({ projectsRoot: PROJECTS_DIR }).catch((error) => {
     console.warn('[od] Failed to recover stale live artifact refreshes:', error);
@@ -3736,6 +3973,79 @@ export async function startServer({
     http: { createSseResponse, requireLocalDaemonRequest },
     paths: { RUNTIME_DATA_DIR, PROJECT_ROOT, PROJECTS_DIR },
     appConfig: { readAppConfig },
+  });
+
+  registerDatabaseRoutes(app, {
+    desktopDatabaseBroker,
+    requireLocalDaemonRequest,
+    authorizeRead: (req, res) => {
+      const validation = toolTokenRegistry.validate(bearerTokenFromRequest(req), {
+        endpoint: '/api/database/read',
+        operation: 'database:read',
+      });
+      if (!validation.ok) {
+        const status = validation.code === 'TOOL_ENDPOINT_DENIED' || validation.code === 'TOOL_OPERATION_DENIED' ? 403 : 401;
+        sendApiError(res, status, validation.code, validation.message);
+        return null;
+      }
+      const project = getProject(db, validation.grant.projectId);
+      const databaseContext = project?.metadata?.databaseContext;
+      const connectionId = databaseContext?.useForDevelopment === true
+        && typeof databaseContext.connectionId === 'string'
+        ? databaseContext.connectionId.trim()
+        : '';
+      if (!connectionId) {
+        sendApiError(res, 403, 'PROJECT_DATABASE_REQUIRED', 'The active project has no database connection enabled for development.');
+        return null;
+      }
+      return { connectionId, projectId: validation.grant.projectId };
+    },
+    authorizeMutation: (req, res) => {
+      const validation = toolTokenRegistry.validate(bearerTokenFromRequest(req), {
+        endpoint: '/api/database/mutations',
+        operation: 'database:mutate',
+      });
+      if (!validation.ok) {
+        const status = validation.code === 'TOOL_ENDPOINT_DENIED' || validation.code === 'TOOL_OPERATION_DENIED' ? 403 : 401;
+        sendApiError(res, status, validation.code, validation.message);
+        return null;
+      }
+      const project = getProject(db, validation.grant.projectId);
+      const databaseContext = project?.metadata?.databaseContext;
+      const connectionId = databaseContext?.useForDevelopment === true
+        && typeof databaseContext.connectionId === 'string'
+        ? databaseContext.connectionId.trim()
+        : '';
+      if (!connectionId) {
+        sendApiError(res, 403, 'PROJECT_DATABASE_REQUIRED', 'The active project has no database connection enabled for development.');
+        return null;
+      }
+      return { connectionId, projectId: validation.grant.projectId };
+    },
+  });
+
+  app.post('/api/browser-automation', requireLocalDaemonRequest, async (req, res) => {
+    if (desktopBrowserAutomation == null) {
+      return sendApiError(res, 503, 'BROWSER_AUTOMATION_UNAVAILABLE', 'MonoField desktop browser automation is not connected');
+    }
+    try {
+      const message = normalizeDesktopSidecarMessage({
+        input: req.body,
+        type: SIDECAR_MESSAGES.BROWSER_AUTOMATION,
+      });
+      if (message.type !== SIDECAR_MESSAGES.BROWSER_AUTOMATION) {
+        return sendApiError(res, 400, 'INVALID_BROWSER_AUTOMATION_REQUEST', 'Invalid browser automation request');
+      }
+      const result = await desktopBrowserAutomation(message.input);
+      return res.status(result.ok ? 200 : 409).json(result);
+    } catch (error) {
+      return sendApiError(
+        res,
+        400,
+        'INVALID_BROWSER_AUTOMATION_REQUEST',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
   });
 
   registerAutomationRoutes(app, {
@@ -4147,6 +4457,13 @@ export async function startServer({
     conversations: conversationDeps,
     auth: authDeps,
   });
+  registerDictionaryRoutes(app, {
+    db,
+    http: httpDeps,
+    paths: pathDeps,
+    projectStore: projectStoreDeps,
+    projectFiles: projectFileDeps,
+  });
   app.post('/api/projects/:id/figma/import', (req, res) => {
     figmaUpload.single('file')(req, res, async (err) => {
       if (err) return sendMulterError(res, err);
@@ -4410,6 +4727,8 @@ export async function startServer({
 
   const pluginRouteHelpers = {
     PLUGIN_PREVIEWS_DIR,
+    managedDistributionOnly: MANAGED_PLUGIN_INSTALL_ONLY,
+    isPluginAllowed: isManagedInstalledPluginAllowed,
     applyBakedPreviews,
     pluginUpload,
     pluginInstallation,
@@ -4435,10 +4754,17 @@ export async function startServer({
         if (!plugin) return res.status(404).json({ error: { code: 'plugin-not-found', message: `No installed plugin with id "${id}".`, data: { id } } });
         if (plugin.sourceKind === 'bundled') return res.status(409).json({ error: { code: 'bundled-plugin', message: `Plugin "${id}" was shipped bundled with the daemon and upgrades only via daemon-image upgrade. The bundled boot walker re-registers bundled plugins on every boot.`, data: { id, sourceKind: plugin.sourceKind } } });
         source = plugin.source;
-        if (policy === 'latest' && plugin.sourceMarketplaceEntryName) {
+        if (plugin.sourceMarketplaceEntryName) {
           const { resolvePluginInMarketplaces } = await import('./plugins/marketplaces.js');
-          marketplaceResolution = resolvePluginInMarketplaces(db, plugin.sourceMarketplaceEntryName);
-          if (marketplaceResolution) source = marketplaceResolution.source;
+          const lookupName = policy === 'latest'
+            ? plugin.sourceMarketplaceEntryName
+            : `${plugin.sourceMarketplaceEntryName}@${plugin.sourceMarketplaceEntryVersion ?? plugin.version}`;
+          marketplaceResolution = resolvePluginInMarketplaces(
+            db,
+            lookupName,
+            MANAGED_PLUGIN_INSTALL_ONLY ? { allowedVisibilities: ['enterprise'] } : {},
+          );
+          if (policy === 'latest' && marketplaceResolution) source = marketplaceResolution.source;
         }
         if (!source) return res.status(409).json({ error: { code: 'missing-source', message: `Plugin "${id}" has no recorded install source — cannot upgrade. Reinstall via 'od plugin install --source <...>' to set one.`, data: { id } } });
       } else {
@@ -4449,17 +4775,61 @@ export async function startServer({
         const looksAbsolute = source.startsWith('/') || source.startsWith('./') || source.startsWith('~') || path.isAbsolute(source);
         const looksGithub = source.startsWith('github:');
         const looksHttps = /^https:\/\//i.test(source);
+        if (MANAGED_PLUGIN_INSTALL_ONLY && (looksAbsolute || looksGithub || looksHttps)) {
+          return res.status(403).json({
+            error: {
+              code: 'managed-marketplace-required',
+              message: 'This deployment accepts plugin installs only by name from an approved company marketplace.',
+              data: { installMode: 'managed' },
+            },
+          });
+        }
         if (!looksAbsolute && !looksGithub && !looksHttps) {
           const { resolvePluginInMarketplaces } = await import('./plugins/marketplaces.js');
           let lookupName = source;
           const lockfile = await readPluginLockfile(PLUGIN_LOCKFILE_PATH);
           const locked = lockfile.plugins[source];
           if (locked?.version && !source.includes('@')) lookupName = `${source}@${locked.version}`;
-          const resolved = resolvePluginInMarketplaces(db, lookupName);
+          const resolved = resolvePluginInMarketplaces(
+            db,
+            lookupName,
+            MANAGED_PLUGIN_INSTALL_ONLY ? { allowedVisibilities: ['enterprise'] } : {},
+          );
           if (!resolved) return res.status(404).json({ error: { code: 'plugin-not-found', message: `No marketplace plugin named "${source}". Add a marketplace via 'od marketplace add <url>' or pass a github: / https:// / local source.`, data: { name: source } } });
           marketplaceResolution = resolved;
           source = resolved.source;
         }
+      }
+      let managedMarketplaceHostPolicy = null;
+      if (MANAGED_PLUGIN_INSTALL_ONLY) {
+        if (marketplaceResolution?.marketplaceVisibility !== 'enterprise') {
+          return res.status(403).json({
+            error: {
+              code: 'managed-marketplace-required',
+              message: 'The selected plugin is not resolved from an approved company marketplace.',
+              data: { installMode: 'managed' },
+            },
+          });
+        }
+        const hostDecision = resolveManagedMarketplaceInstallHostPolicy({
+          catalogUrl: marketplaceResolution.marketplaceUrl,
+          archiveUrl: marketplaceResolution.source,
+          packageLicense: marketplaceResolution.license,
+          marketplacePolicy: marketplaceResolution.marketplacePolicy,
+          administratorAllowedCatalogUrls: MANAGED_MARKETPLACE_ALLOWED_CATALOG_URLS,
+          administratorAllowedHosts: MANAGED_MARKETPLACE_ALLOWED_HOSTS,
+          administratorAllowedLicenses: MANAGED_MARKETPLACE_ALLOWED_LICENSES,
+        });
+        if (!hostDecision.ok) {
+          return res.status(403).json({
+            error: {
+              code: 'managed-marketplace-host-not-allowed',
+              message: 'The marketplace catalog or package source is not allowed by administrator policy.',
+              data: { installMode: 'managed', reason: hostDecision.reason },
+            },
+          });
+        }
+        managedMarketplaceHostPolicy = hostDecision;
       }
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
@@ -4469,9 +4839,26 @@ export async function startServer({
       if (mode === 'upgrade') writeEvent('progress', { kind: 'progress', phase: 'resolving', message: `Upgrading ${id} from ${source} (policy=${body.policy === 'pinned' ? 'pinned' : 'latest'})` });
       try {
         const basePlugin = mode === 'upgrade' ? getInstalledPlugin(db, id) : null;
+        let enterpriseMarketplaceInstall = {};
+        if (marketplaceResolution?.marketplaceVisibility === 'enterprise') {
+          const { marketplaceEvidenceForResolution } = await import('./plugins/marketplaces.js');
+          const effectivePolicy = managedMarketplaceHostPolicy?.policy
+            ?? marketplaceResolution.marketplacePolicy;
+          const effectiveAllowedHosts = managedMarketplaceHostPolicy?.allowedHosts
+            ?? marketplaceResolution.marketplacePolicy.allowedHosts;
+          enterpriseMarketplaceInstall = {
+            marketplacePolicy: effectivePolicy,
+            marketplaceEvidence: marketplaceEvidenceForResolution(marketplaceResolution),
+            marketplaceAuthEnv: MANAGED_PLUGIN_INSTALL_ONLY
+              ? MANAGED_MARKETPLACE_AUTH_ENV ?? undefined
+              : marketplaceResolution.marketplaceAuthEnv ?? undefined,
+            marketplaceAllowedHosts: effectiveAllowedHosts,
+          };
+        }
         for await (const ev of installPlugin(db, {
           source,
           roots: PLUGIN_REGISTRY_ROOTS,
+          ...enterpriseMarketplaceInstall,
           ...(mode === 'upgrade' ? { eventKind: 'upgraded' } : {}),
           sourceMarketplaceId: marketplaceResolution?.marketplaceId ?? basePlugin?.sourceMarketplaceId,
           sourceMarketplaceEntryName: marketplaceResolution?.pluginName ?? basePlugin?.sourceMarketplaceEntryName,
@@ -4493,6 +4880,14 @@ export async function startServer({
       }
     },
     handleShareProject: async (req, res) => {
+      if (MANAGED_PLUGIN_INSTALL_ONLY) {
+        return res.status(403).json({
+          error: {
+            code: 'managed-plugin-sharing-blocked',
+            message: 'Public plugin sharing is disabled in managed distribution mode. Publish through the company SCM and approval pipeline.',
+          },
+        });
+      }
       try {
         const sourcePlugin = getInstalledPlugin(db, req.params.id);
         if (!sourcePlugin) return sendApiError(res, 404, 'NOT_FOUND', 'plugin not found');
@@ -4506,13 +4901,21 @@ export async function startServer({
         const now = Date.now(); const id = randomId(); const cid = randomId(); const sourceSlug = githubRepoNameFromPluginName(sourcePlugin.id); const stagedPath = `plugin-source/${sourceSlug}`; const prompt = renderPluginSharePrompt({ action, sourcePlugin, stagedPath }); const metadata = { kind: 'prototype' }; const projectRoot = await ensureProject(PROJECTS_DIR, id, metadata); await copyPluginFolderForProjectContext(sourcePlugin.fsPath, path.join(projectRoot, 'plugin-source', sourceSlug));
         insertProject(db, { id, name: `${PLUGIN_SHARE_ACTION_LABELS[action]}: ${sourcePlugin.title || sourcePlugin.id}`, skillId: null, designSystemId: null, pendingPrompt: prompt, metadata, createdAt: now, updatedAt: now });
         insertConversation(db, { id: cid, projectId: id, title: null, createdAt: now, updatedAt: now });
-        const registry = await loadPluginRegistryView(); const connectorProbe = buildConnectorProbe(connectorService); const resolved = resolvePluginSnapshot({ db, body: { pluginId: actionPluginId, pluginInputs: { source_plugin_id: sourcePlugin.id, source_plugin_title: sourcePlugin.title || sourcePlugin.id, source_plugin_version: sourcePlugin.version, source_plugin_path: sourcePlugin.fsPath, plugin_context_path: stagedPath }, locale: typeof body.locale === 'string' ? body.locale : undefined }, projectId: id, conversationId: cid, registry, connectorProbe });
+        const registry = await loadPluginRegistryView(); const connectorProbe = buildConnectorProbe(connectorService); const resolved = resolvePolicyPluginSnapshot({ db, body: { pluginId: actionPluginId, pluginInputs: { source_plugin_id: sourcePlugin.id, source_plugin_title: sourcePlugin.title || sourcePlugin.id, source_plugin_version: sourcePlugin.version, source_plugin_path: sourcePlugin.fsPath, plugin_context_path: stagedPath }, locale: typeof body.locale === 'string' ? body.locale : undefined }, projectId: id, conversationId: cid, registry, connectorProbe });
         if (resolved && !resolved.ok) return res.status(resolved.status).json(resolved.body);
         const project = getProject(db, id); if (!project) return sendApiError(res, 500, 'INTERNAL_ERROR', 'created project could not be loaded');
         res.json({ ok: true, project, conversationId: cid, ...(resolved?.ok ? { appliedPluginSnapshotId: resolved.snapshotId } : {}), actionPluginId, sourcePluginId: sourcePlugin.id, stagedPath, prompt, message: `Created a ${PLUGIN_SHARE_ACTION_LABELS[action]} task for ${sourcePlugin.title || sourcePlugin.id}.` });
       } catch (err) { res.status(400).json({ ok: false, message: String(err?.message || err) }); }
     },
     handlePluginTrust: async (req, res) => {
+      if (MANAGED_PLUGIN_INSTALL_ONLY) {
+        return res.status(403).json({
+          error: {
+            code: 'managed-plugin-policy-blocked',
+            message: 'Local plugin trust changes are disabled in managed distribution mode.',
+          },
+        });
+      }
       try {
         const plugin = getInstalledPlugin(db, req.params.id); if (!plugin) return res.status(404).json({ error: 'plugin not found' });
         const body = req.body && typeof req.body === 'object' ? req.body : {}; const action = body.action === 'revoke' ? 'revoke' : 'grant';
@@ -4527,26 +4930,48 @@ export async function startServer({
       } catch (err) { res.status(500).json({ error: String(err) }); }
     },
     handlePluginStats: async (res) => {
-      try { const { pluginInventoryStats, snapshotInventoryStats } = await import('./plugins/stats.js'); const installed = listInstalledPlugins(db); const inventoryRows = db.prepare(`SELECT status, project_id, run_id, applied_at FROM applied_plugin_snapshots`).all(); res.json({ plugins: pluginInventoryStats(installed), snapshots: snapshotInventoryStats(inventoryRows), generatedAt: Date.now() }); } catch (err) { res.status(500).json({ error: String(err) }); }
+      try { const { pluginInventoryStats, snapshotInventoryStats } = await import('./plugins/stats.js'); const installed = listInstalledPlugins(db).filter(isManagedInstalledPluginAllowed); const inventoryRows = db.prepare(`SELECT plugin_id, status, project_id, run_id, applied_at FROM applied_plugin_snapshots`).all().filter((row) => { if (!MANAGED_PLUGIN_INSTALL_ONLY) return true; const plugin = getInstalledPlugin(db, row.plugin_id); return Boolean(plugin && isManagedInstalledPluginAllowed(plugin)); }); res.json({ plugins: pluginInventoryStats(installed), snapshots: snapshotInventoryStats(inventoryRows), generatedAt: Date.now() }); } catch (err) { res.status(500).json({ error: String(err) }); }
     },
     handleAppliedPluginExport: async (req, res) => {
+      if (MANAGED_PLUGIN_INSTALL_ONLY) {
+        return res.status(403).json({
+          error: {
+            code: 'managed-plugin-export-blocked',
+            message: 'Plugin package export is disabled in managed distribution mode. Publish through the company SCM and approval pipeline.',
+          },
+        });
+      }
       try { const body = req.body && typeof req.body === 'object' ? req.body : {}; const target = body.target === 'od' || body.target === 'claude-plugin' || body.target === 'agent-skill' ? body.target : null; if (!target) return res.status(400).json({ error: 'target must be one of: od, claude-plugin, agent-skill' }); const outDir = typeof body.outDir === 'string' && body.outDir.length > 0 ? body.outDir : null; if (!outDir) return res.status(400).json({ error: 'outDir is required' }); const { exportPlugin, ExportError } = await import('./plugins/export.js'); try { const result = await exportPlugin({ db, target, outDir, ...(typeof body.snapshotId === 'string' ? { snapshotId: body.snapshotId } : {}), ...(typeof body.projectId === 'string' ? { projectId: body.projectId } : {}) }); res.json({ ok: true, ...result }); } catch (err) { if (err instanceof ExportError) return res.status(404).json({ error: err.message }); throw err; } } catch (err) { res.status(500).json({ error: String(err) }); }
     },
     handleProjectInstallFolder: async (req, res) => {
-      try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const relativePath = normalizeProjectPluginFolderPath(body.path); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const folder = await resolveProjectChildDirectory(projectRoot, relativePath); const warnings = []; const log = []; let plugin = null; let message = 'Install finished.'; for await (const ev of installPlugin(db, { source: folder, roots: PLUGIN_REGISTRY_ROOTS })) { if (ev.message) log.push(ev.message); if (Array.isArray(ev.warnings)) warnings.splice(0, warnings.length, ...ev.warnings); if (ev.kind === 'success') { plugin = ev.plugin; message = `Installed ${ev.plugin.title}.`; break; } if (ev.kind === 'error') { message = ev.message; break; } } res.status(plugin ? 200 : 400).json({ ok: Boolean(plugin), plugin, warnings, message, log }); } catch (err) { const code = err && err.code; const status = code === 'ENOENT' || code === 'ENOTDIR' ? 404 : 400; sendApiError(res, status, status === 404 ? 'PLUGIN_FOLDER_NOT_FOUND' : 'BAD_REQUEST', String(err?.message || err)); }
+      try { if (MANAGED_PLUGIN_INSTALL_ONLY) return res.status(403).json({ ok: false, code: 'managed-marketplace-required', message: 'This deployment accepts plugins only from an approved company marketplace.' }); const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const relativePath = normalizeProjectPluginFolderPath(body.path); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const folder = await resolveProjectChildDirectory(projectRoot, relativePath); const warnings = []; const log = []; let plugin = null; let message = 'Install finished.'; for await (const ev of installPlugin(db, { source: folder, roots: PLUGIN_REGISTRY_ROOTS })) { if (ev.message) log.push(ev.message); if (Array.isArray(ev.warnings)) warnings.splice(0, warnings.length, ...ev.warnings); if (ev.kind === 'success') { plugin = ev.plugin; message = `Installed ${ev.plugin.title}.`; break; } if (ev.kind === 'error') { message = ev.message; break; } } res.status(plugin ? 200 : 400).json({ ok: Boolean(plugin), plugin, warnings, message, log }); } catch (err) { const code = err && err.code; const status = code === 'ENOENT' || code === 'ENOTDIR' ? 404 : 400; sendApiError(res, status, status === 404 ? 'PLUGIN_FOLDER_NOT_FOUND' : 'BAD_REQUEST', String(err?.message || err)); }
     },
     handleProjectPluginCli: async (req, res, action) => {
-      try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const relativePath = normalizeProjectPluginFolderPath(body.path); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const folder = await resolveProjectChildDirectory(projectRoot, relativePath); const subcommand = action === 'publish-github' ? 'publish-repo' : 'open-design-pr'; const timeout = action === 'publish-github' ? 240_000 : 300_000; const result = await execCommandViaLoginShell(OD_NODE_BIN, [OD_BIN, 'plugin', subcommand, folder, '--json'], { timeout }); const payload = result.stdout ? JSON.parse(result.stdout) : null; if (!result.ok || !payload?.ok) return res.status(500).json({ ok: false, code: payload?.error?.label || (action === 'publish-github' ? 'publish-repo-failed' : 'open-design-pr-failed'), message: payload?.error?.stderr || payload?.error?.stdout || (action === 'publish-github' ? 'GitHub repo publish failed.' : 'Open Docs PR creation failed.'), log: payload?.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [result.stderr || result.stdout || `${subcommand} failed`] }); res.json({ ok: true, message: action === 'publish-github' ? (payload.repoUrl ? `Published plugin to ${payload.repoUrl}.` : 'Published plugin to GitHub.') : (payload.prUrl ? `Opened Open Docs PR flow at ${payload.prUrl}.` : 'Opened Open Docs PR flow.'), ...(payload.repoUrl ? { url: payload.repoUrl } : {}), ...(payload.prUrl ? { url: payload.prUrl } : {}), log: payload.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [] }); } catch (err) { res.status(400).json({ ok: false, message: String(err?.message || err), log: [] }); }
+      if (MANAGED_PLUGIN_INSTALL_ONLY) {
+        return res.status(403).json({
+          error: {
+            code: 'managed-plugin-sharing-blocked',
+            message: 'Public plugin sharing is disabled in managed distribution mode. Publish through the company SCM and approval pipeline.',
+          },
+        });
+      }
+      try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const relativePath = normalizeProjectPluginFolderPath(body.path); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const folder = await resolveProjectChildDirectory(projectRoot, relativePath); const subcommand = action === 'publish-github' ? 'publish-repo' : 'open-design-pr'; const timeout = action === 'publish-github' ? 240_000 : 300_000; const result = await execCommandViaLoginShell(OD_NODE_BIN, [OD_BIN, 'plugin', subcommand, folder, '--json'], { timeout }); const payload = result.stdout ? JSON.parse(result.stdout) : null; if (!result.ok || !payload?.ok) return res.status(500).json({ ok: false, code: payload?.error?.label || (action === 'publish-github' ? 'publish-repo-failed' : 'open-design-pr-failed'), message: payload?.error?.stderr || payload?.error?.stdout || (action === 'publish-github' ? 'GitHub repo publish failed.' : 'MonoField PR creation failed.'), log: payload?.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [result.stderr || result.stdout || `${subcommand} failed`] }); res.json({ ok: true, message: action === 'publish-github' ? (payload.repoUrl ? `Published plugin to ${payload.repoUrl}.` : 'Published plugin to GitHub.') : (payload.prUrl ? `Opened MonoField PR flow at ${payload.prUrl}.` : 'Opened MonoField PR flow.'), ...(payload.repoUrl ? { url: payload.repoUrl } : {}), ...(payload.prUrl ? { url: payload.prUrl } : {}), log: payload.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [] }); } catch (err) { res.status(400).json({ ok: false, message: String(err?.message || err), log: [] }); }
     },
     handleCandidateDraft: async (req, res) => {
       if (!isLocalSameOrigin(req, resolvedPort)) return res.status(403).json({ error: 'cross-origin request rejected' });
       try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const result = await generateSkillPluginDraft(db, projectRoot, req.params.id, req.params.candidateId); if (!result) return sendApiError(res, 404, 'NOT_FOUND', 'plugin candidate not found'); res.status(result.ok ? 200 : 422).json(result); } catch (err) { res.status(400).json({ ok: false, message: String(err?.message || err) }); }
     },
     handleCandidateShareTask: async (req, res) => {
+      if (MANAGED_PLUGIN_INSTALL_ONLY) {
+        return res.status(403).json({ error: { code: 'managed-plugin-sharing-blocked', message: 'Public plugin sharing is disabled in managed distribution mode.' } });
+      }
       if (!isLocalSameOrigin(req, resolvedPort)) return res.status(403).json({ error: 'cross-origin request rejected' });
       try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const action = body.action === 'publish-github' || body.action === 'contribute-open-design' ? body.action : null; if (!action) return sendApiError(res, 400, 'BAD_REQUEST', 'plugin share action is required'); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const draft = await generateSkillPluginDraft(db, projectRoot, req.params.id, req.params.candidateId); if (!draft) return sendApiError(res, 404, 'NOT_FOUND', 'plugin candidate not found'); if (!draft.validation.ok) return res.status(422).json({ ok: false, code: 'plugin-draft-invalid', message: 'Generated plugin draft is invalid.', draft }); const task = pluginShareTaskStore.createAndStart(req.params.id, { action, path: draft.draftPath }, draft.folder); res.status(202).json({ taskId: task.id, action, path: draft.draftPath, status: task.status, startedAt: task.startedAt, draft }); } catch (err) { res.status(400).json({ ok: false, message: String(err?.message || err) }); }
     },
     handleProjectShareTask: async (req, res) => {
+      if (MANAGED_PLUGIN_INSTALL_ONLY) {
+        return res.status(403).json({ error: { code: 'managed-plugin-sharing-blocked', message: 'Public plugin sharing is disabled in managed distribution mode.' } });
+      }
       if (!isLocalSameOrigin(req, resolvedPort)) return res.status(403).json({ error: 'cross-origin request rejected' });
       try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const action: PluginShareAction | null = body.action === 'publish-github' || body.action === 'contribute-open-design' ? body.action : null; if (!action) return sendApiError(res, 400, 'BAD_REQUEST', 'plugin share action is required'); const relativePath = normalizeProjectPluginFolderPath(body.path); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const folder = await resolveProjectChildDirectory(projectRoot, relativePath); const task = pluginShareTaskStore.createAndStart(req.params.id, { action, path: relativePath }, folder); res.status(202).json({ taskId: task.id, action, path: relativePath, status: task.status, startedAt: task.startedAt }); } catch (err) { const code = err && err.code; const status = code === 'ENOENT' || code === 'ENOTDIR' ? 404 : 400; sendApiError(res, status, status === 404 ? 'PLUGIN_FOLDER_NOT_FOUND' : 'BAD_REQUEST', String(err?.message || err)); }
     },
@@ -4634,10 +5059,10 @@ export async function startServer({
       installFromLocalFolder,
       applyPlugin,
       doctorPlugin,
-      getSnapshot,
+      getSnapshot: getPolicyAllowedSnapshot,
       pruneExpiredSnapshots,
       readPluginLockfile,
-      resolvePluginSnapshot,
+      resolvePluginSnapshot: resolvePolicyPluginSnapshot,
       MissingInputError,
       pluginPromptBlock,
       listSkillPluginCandidates,
@@ -4656,6 +5081,23 @@ export async function startServer({
     bundledMarketplaceEntries,
     createMarketplaceFetcher,
     marketplaceRegistryIdFromUrl,
+    managedInstallOnly: MANAGED_PLUGIN_INSTALL_ONLY,
+    managedAllowedCatalogUrls: MANAGED_MARKETPLACE_ALLOWED_CATALOG_URLS,
+    managedAllowedHosts: MANAGED_MARKETPLACE_ALLOWED_HOSTS,
+    managedAllowedLicenses: MANAGED_MARKETPLACE_ALLOWED_LICENSES,
+    managedAuthEnv: MANAGED_MARKETPLACE_AUTH_ENV,
+  });
+  registerDevelopmentRoutes(app, {
+    db,
+    http: httpDeps,
+    paths: pathDeps,
+    developmentServers,
+  });
+  registerDocumentRenderRoutes(app, {
+    db,
+    http: httpDeps,
+    paths: pathDeps,
+    projectFiles: projectFileDeps,
   });
   registerPluginAssetRoutes(app, {
     db,
@@ -4664,12 +5106,14 @@ export async function startServer({
     assetCacheRewriteUrl,
     isCacheableExternalUrl,
     assembleExample,
+    isPluginAllowed: isManagedInstalledPluginAllowed,
   });
 
   registerGenuiRoutes(app, {
     db,
     design,
     paths: { PROJECTS_DIR },
+    plugins: { getSnapshot: getPolicyAllowedSnapshot },
   });
 
   registerProjectPluginRoutes(app, {
@@ -4683,10 +5127,10 @@ export async function startServer({
       installFromLocalFolder,
       applyPlugin,
       doctorPlugin,
-      getSnapshot,
+      getSnapshot: getPolicyAllowedSnapshot,
       pruneExpiredSnapshots,
       readPluginLockfile,
-      resolvePluginSnapshot,
+      resolvePluginSnapshot: resolvePolicyPluginSnapshot,
       MissingInputError,
       pluginPromptBlock,
       listSkillPluginCandidates,
@@ -4728,7 +5172,7 @@ export async function startServer({
     ) {
       try {
         pluginDesignSystemId = designSystemIdFromPluginSnapshot(
-          getSnapshot(db, appliedPluginSnapshotId),
+          getPolicyAllowedSnapshot(appliedPluginSnapshotId),
         );
       } catch (err) {
         console.warn(
@@ -4886,7 +5330,7 @@ export async function startServer({
       && appliedPluginSnapshotId.length > 0
     ) {
       try {
-        const snap = getSnapshot(db, appliedPluginSnapshotId);
+        const snap = getPolicyAllowedSnapshot(appliedPluginSnapshotId);
         if (snap?.pluginId) {
           const { getSnapshotContextCraft } = await import('./plugins/context-craft.js');
           for (const craft of getSnapshotContextCraft(snap)) {
@@ -5139,7 +5583,7 @@ export async function startServer({
       && appliedPluginSnapshotId.length > 0
     ) {
       try {
-        const snap = getSnapshot(db, appliedPluginSnapshotId);
+        const snap = getPolicyAllowedSnapshot(appliedPluginSnapshotId);
         if (snap) pluginBlock = pluginPromptBlock(snap);
       } catch (err) {
         console.warn(
@@ -5163,7 +5607,7 @@ export async function startServer({
       && appliedPluginSnapshotId.length > 0
     ) {
       try {
-        const snap = getSnapshot(db, appliedPluginSnapshotId);
+        const snap = getPolicyAllowedSnapshot(appliedPluginSnapshotId);
         const stages = snap?.pipeline?.stages ?? [];
         if (stages.length > 0) {
           const { loadAtomBodies } = await import('./plugins/atom-bodies.js');
@@ -5356,6 +5800,8 @@ export async function startServer({
       locale,
       research,
       context,
+      interfaceSpecCollectionReset,
+      browserVerification,
       titleGeneration,
     } = chatBody;
     run.analyticsTelemetry = {
@@ -5386,7 +5832,7 @@ export async function startServer({
         ? getConversation(db, conversationId)
         : null;
     const runSessionMode =
-      sessionMode === 'chat' || sessionMode === 'design'
+      sessionMode === 'chat' || sessionMode === 'docs' || sessionMode === 'design'
         ? normalizeConversationSessionMode(sessionMode)
         : normalizeConversationSessionMode(conversationSession?.sessionMode);
     const def = getAgentDef(agentId);
@@ -5430,14 +5876,29 @@ export async function startServer({
     ) {
       return design.runs.fail(run, 'BAD_REQUEST', 'message required');
     }
+    const normalizedBrowserVerification = (() => {
+      if (!browserVerification || typeof browserVerification !== 'object' || Array.isArray(browserVerification)) return null;
+      const sessionId = typeof browserVerification.sessionId === 'string' ? browserVerification.sessionId.trim() : '';
+      const origin = typeof browserVerification.origin === 'string' ? browserVerification.origin.trim() : '';
+      const url = typeof browserVerification.url === 'string' ? browserVerification.url.trim() : '';
+      if (!/^[A-Za-z0-9_-]{20,128}$/.test(sessionId)) return null;
+      try {
+        const parsedUrl = new URL(url);
+        if (parsedUrl.origin !== origin || !['http:', 'https:'].includes(parsedUrl.protocol)) return null;
+      } catch {
+        return null;
+      }
+      return { sessionId, origin, url };
+    })();
     const browserUseRunState = buildBrowserUseRunState({
-      requested: isBrowserUseRequested(message, currentPrompt, systemPrompt),
+      requested: normalizedBrowserVerification != null || isBrowserUseRequested(message, currentPrompt, systemPrompt),
       agentId: def.id,
+      sessionId: normalizedBrowserVerification?.sessionId ?? browserAutomationSessionId(message, currentPrompt, systemPrompt),
     });
     if (browserUseRunState) {
       run.browserUse = browserUseRunState;
       design.runs.emit(run, 'diagnostic', {
-        type: 'browser_use_unavailable',
+        type: browserUseRunState.available ? 'browser_use_available' : 'browser_use_unavailable',
         ...browserUseRunState,
       });
     }
@@ -5544,6 +6005,18 @@ export async function startServer({
       const v = validateLinkedDirs(projectRecord.metadata.linkedDirs);
       return v.dirs ?? [];
     })();
+    // Folder-opened projects execute the agent with metadata.baseDir as cwd.
+    // It is a valid codebase source in its own right; linkedDirs are only
+    // supplemental read-only references. Keep a unified source list for
+    // source-selection gates such as interface-spec collection.
+    const projectBaseDir = typeof projectRecord?.metadata?.baseDir === 'string'
+      && projectRecord.metadata.baseDir.trim().length > 0
+      ? projectRecord.metadata.baseDir
+      : null;
+    const sourceDirs = Array.from(new Set([
+      ...(projectBaseDir ? [projectBaseDir] : []),
+      ...linkedDirs,
+    ]));
     const cwdHint = cwd
       ? formatDesignFilesWorkspaceHint(cwd, existingProjectFiles, existingProjectFolders)
       : '';
@@ -5552,13 +6025,52 @@ export async function startServer({
           linkedDirs.map((d) => `- \`${d}\``).join('\n')
         }`
       : '';
+    const resetWorkingDir =
+      interfaceSpecCollectionReset &&
+      typeof interfaceSpecCollectionReset === 'object' &&
+      typeof interfaceSpecCollectionReset.workingDir === 'string' &&
+      sourceDirs.includes(interfaceSpecCollectionReset.workingDir)
+        ? interfaceSpecCollectionReset.workingDir
+        : null;
+    const interfaceSpecCollectionResetPrompt =
+      projectRecord?.metadata?.kind === 'interface-spec' &&
+      resetWorkingDir &&
+      classifyInterfaceSpecSourceIntent(
+        typeof currentPrompt === 'string' ? currentPrompt : message,
+      ) !== 'manual'
+        ? [
+            '# Required interface-spec preflight',
+            '',
+            'The user explicitly switched this project to a different source workspace and is starting a new interface-spec collection.',
+            `Source folder: ${JSON.stringify(resetWorkingDir)}`,
+            '',
+            'For this turn, do not inspect code, call database tools, reuse prior answers, or create any artifact. Emit only the fixed `<question-form id="interface-spec-options">` from the active Interface Spec Collector skill. The user must answer that new form before any collection starts.',
+          ].join('\n')
+        : '';
+    const interfaceSpecSourceRequiredPrompt =
+      projectRecord?.metadata?.kind === 'interface-spec' &&
+      sourceDirs.length === 0 &&
+      isInterfaceSpecGenerationRequest(
+        typeof currentPrompt === 'string' ? currentPrompt : message,
+      ) &&
+      classifyInterfaceSpecSourceIntent(
+        typeof currentPrompt === 'string' ? currentPrompt : message,
+      ) === 'codebase'
+        ? [
+            '# Required interface-spec source folder',
+            '',
+            'This is an explicit interface-spec collection request, but the user has not selected a working source folder.',
+            '',
+            'For this turn, do not inspect the managed project directory, call database tools, reuse prior collection context, create an artifact, or emit the `interface-spec-options` form. Explain that the user must first choose a valid Working folder/codebase in the composer. Stop after that explanation.',
+          ].join('\n')
+        : '';
     const attachmentHint = formatProjectAttachmentHint(safeAttachments);
     // Plan §3.A3 / spec §9: thread plugin context onto every tool token
     // so the connector execute route can re-validate the §5.3
     // capability gate without re-reading the SQLite snapshot row.
     let pluginGrantContext = null;
     if (cwd && typeof projectId === 'string' && projectId && run?.appliedPluginSnapshotId) {
-      const snap = getSnapshot(db, run.appliedPluginSnapshotId);
+      const snap = getPolicyAllowedSnapshot(run.appliedPluginSnapshotId);
       if (snap) {
         const installed = getInstalledPlugin(db, snap.pluginId);
         pluginGrantContext = {
@@ -5835,6 +6347,18 @@ export async function startServer({
       currentStableHash,
     });
     const browserUsePromptGuard = renderBrowserUseUnavailablePrompt(run.browserUse ?? null);
+    const automaticBrowserVerificationPrompt = normalizedBrowserVerification && run.browserUse?.available
+      ? [
+          '## Required post-edit browser verification',
+          '',
+          `The user enabled automatic verification for the bound page: ${normalizedBrowserVerification.url}`,
+          'If this run changes code that can affect the interface or user-visible behavior, you must:',
+          '1. Run the relevant build, typecheck, or focused tests.',
+          `2. Reload the bound page using \`od browser navigate --session ${normalizedBrowserVerification.sessionId} --url ${normalizedBrowserVerification.url}\`.`,
+          `3. Inspect both DOM state and a screenshot with \`od browser snapshot --session ${normalizedBrowserVerification.sessionId}\` and \`od browser screenshot --session ${normalizedBrowserVerification.sessionId} --out .open-agent/verification/latest.png\`.`,
+          '4. Exercise the affected interaction when safe, and report exact evidence. Never claim browser verification if a command failed or the page was not reachable.',
+        ].join('\n')
+      : '';
     const titleGenerationRequested =
       titleGeneration &&
       typeof titleGeneration === 'object' &&
@@ -5850,8 +6374,8 @@ export async function startServer({
         ].join('\n')
       : '';
     const clientInstructionParts = includeStableInstructions
-      ? [researchCommandContract, runContextPrompt, browserUsePromptGuard, titleGenerationPrompt, systemPrompt]
-      : [researchCommandContract, runContextPrompt, browserUsePromptGuard, titleGenerationPrompt];
+      ? [researchCommandContract, runContextPrompt, browserUsePromptGuard, automaticBrowserVerificationPrompt, titleGenerationPrompt, interfaceSpecCollectionResetPrompt, interfaceSpecSourceRequiredPrompt, systemPrompt]
+      : [researchCommandContract, runContextPrompt, browserUsePromptGuard, automaticBrowserVerificationPrompt, titleGenerationPrompt, interfaceSpecCollectionResetPrompt, interfaceSpecSourceRequiredPrompt];
     const clientInstructionPrompt = clientInstructionParts
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
       .filter(Boolean)
@@ -6014,14 +6538,19 @@ export async function startServer({
     // SIGTERM'd while the user was still filling out the form.
     let questionFormPending = false;
     const send = (event, data) => {
+      const exposedData = event === 'agent'
+        ? redactAgentEventForExposure(data)
+        : event === 'error'
+          ? redactAgentValue(data)
+          : data;
       if (
         event === 'agent' &&
-        data &&
-        data.type === 'text_delta' &&
-        typeof data.delta === 'string' &&
+        exposedData &&
+        exposedData.type === 'text_delta' &&
+        typeof exposedData.delta === 'string' &&
         clarifyingQuestionText.length < CLARIFYING_QUESTION_BUFFER_CAP
       ) {
-        clarifyingQuestionText = (clarifyingQuestionText + data.delta).slice(
+        clarifyingQuestionText = (clarifyingQuestionText + exposedData.delta).slice(
           0,
           CLARIFYING_QUESTION_BUFFER_CAP,
         );
@@ -6034,14 +6563,14 @@ export async function startServer({
       }
       if (
         event === 'agent' &&
-        data &&
-        data.type === 'text_delta' &&
-        typeof data.delta === 'string'
+        exposedData &&
+        exposedData.type === 'text_delta' &&
+        typeof exposedData.delta === 'string'
       ) {
-        visibleAssistantText += data.delta;
+        visibleAssistantText += exposedData.delta;
       }
-      persistRunEventToAssistantMessage(db, run, event, data);
-      design.runs.emit(run, event, data);
+      persistRunEventToAssistantMessage(db, run, event, exposedData);
+      design.runs.emit(run, event, exposedData);
     };
     const retryAnalyticsBase = (decision, failure, errorCode) => {
       const runProjectKind = resolveRunProjectKindForAnalytics({
@@ -6081,7 +6610,7 @@ export async function startServer({
       // file descriptors. After a few hundred retries the daemon
       // accumulates 10k+ FDs and posix_spawn returns EBADF.
       //
-      // See: https://github.com/jhy0285/open-docs/issues/4100
+      // See: https://github.com/jhy0285/monofield/issues/4100
       if (!child) return;
       const destroyStream = (stream) => {
         if (!stream || stream.destroyed) return;
@@ -6338,7 +6867,7 @@ export async function startServer({
     });
 
     // External MCP servers configured by the user in Settings → External MCP.
-    // Open Docs relays them to the agent so the model can call those tools.
+    // MonoField relays them to the agent so the model can call those tools.
     // Two delivery shapes today:
     //   - Claude Code: write a `.mcp.json` into the project cwd. Claude Code
     //     auto-loads that file at spawn (same format the CLI accepts via
@@ -7068,6 +7597,14 @@ export async function startServer({
             OD_PROJECT_DIR: cwd,
           }
         : {}),
+      ...(projectRecord?.metadata?.workMode
+        ? { OD_PROJECT_WORK_MODE: projectRecord.metadata.workMode }
+        : {}),
+      ...(projectRecord?.metadata?.databaseContext?.useForDevelopment === true
+        && typeof projectRecord.metadata.databaseContext.connectionId === 'string'
+        && projectRecord.metadata.databaseContext.connectionId.trim()
+        ? { OD_PROJECT_DATABASE_ID: projectRecord.metadata.databaseContext.connectionId.trim() }
+        : {}),
     };
     if (run.cancelRequested || design.runs.isTerminal(run.status)) {
       cleanupPromptFile();
@@ -7647,7 +8184,7 @@ export async function startServer({
           'ROLE_MARKER_HALLUCINATION',
           `Run terminated: model emitted fabricated role marker (\`${marker}\`). ` +
             'No further tokens or tool calls accepted from this turn. ' +
-            'See https://github.com/jhy0285/open-docs/issues/3247.',
+            'See https://github.com/jhy0285/monofield/issues/3247.',
           { retryable: true },
         ),
       );
@@ -8617,7 +9154,7 @@ export async function startServer({
       systemPrompt: [
         renderOrbitTemplateSystemPrompt(template),
         systemPrompt,
-        'You are Orbit, an autonomous activity-summary agent inside Open Docs.',
+        'You are Orbit, an autonomous activity-summary agent inside MonoField.',
         'You must discover connectors and connector tools yourself through the OD CLI; the daemon has not chosen tools for you.',
         'You must create and register a Live Artifact as the final deliverable. Do not merely describe what you would do.',
         'Do not ask follow-up questions, do not emit <question-form>, and do not wait for user input. This run is unattended; pick reasonable defaults and complete the artifact.',
@@ -8817,7 +9354,7 @@ export async function startServer({
         : null;
       let resolved;
       try {
-        resolved = resolvePluginSnapshot({
+        resolved = resolvePolicyPluginSnapshot({
           db,
           body: {
             pluginId: primaryPluginId,
@@ -9144,6 +9681,7 @@ export async function startServer({
       daemonShuttingDown = true;
       await design.runs.shutdownActive({ graceMs: resolveChatRunShutdownGraceMs() });
       await terminalService.shutdownActive();
+      await developmentServers.shutdown();
       await design.analytics.shutdown();
     };
     let server;

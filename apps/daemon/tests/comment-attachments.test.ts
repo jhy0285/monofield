@@ -379,7 +379,7 @@ describe('preview comment persistence', () => {
       id: 'message-1',
       role: 'user',
       content: 'make the deck',
-      sessionMode: 'design',
+      sessionMode: 'docs',
       runContext: {
         workspaceItems: [
           {
@@ -395,7 +395,7 @@ describe('preview comment persistence', () => {
     });
 
     expect(listMessages(db, 'conversation-1')[0]).toMatchObject({
-      sessionMode: 'design',
+      sessionMode: 'docs',
       runContext: {
         workspaceItems: [
           {

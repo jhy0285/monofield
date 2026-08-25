@@ -28,7 +28,7 @@ export function registerOpenDocsPublicMetadataRoutes(
     try {
       const stats = await openDocsPublicMetadata.readGithubRepoStats();
       const payload: OpenDocsGithubRepoResponse = {
-        repo: 'jhy0285/open-docs',
+        repo: 'jhy0285/monofield',
         stargazers_count: stats.stargazersCount,
         fetchedAt: stats.fetchedAt,
         stale: stats.stale,
@@ -43,7 +43,7 @@ export function registerOpenDocsPublicMetadataRoutes(
     try {
       const release = await openDocsPublicMetadata.readLatestReleaseInfo();
       const payload: OpenDocsGithubLatestReleaseResponse = {
-        repo: 'jhy0285/open-docs',
+        repo: 'jhy0285/monofield',
         tag_name: release.tagName,
         html_url: release.htmlUrl,
         fetchedAt: release.fetchedAt,

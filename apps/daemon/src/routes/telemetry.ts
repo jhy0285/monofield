@@ -33,8 +33,8 @@ export function registerTelemetryRoutes(app: Express, deps: RegisterTelemetryRou
   const analyticsService = createAnalyticsService({ dataDir });
   let cachedAppVersion: any = null;
 
-  // Open Docs exposes the inherited analytics config shape for compatibility,
-  // but the response is always disabled because Open Docs does not send product
+  // MonoField exposes the inherited analytics config shape for compatibility,
+  // but the response is always disabled because MonoField does not send product
   // telemetry.
   app.get('/api/analytics/config', async (_req, res) => {
     const baseline = readPublicConfigResponse();

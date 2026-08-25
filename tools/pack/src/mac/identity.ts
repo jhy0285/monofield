@@ -26,7 +26,7 @@ export function resolveMacInstallIdentity(config: Pick<ToolPackConfig, "namespac
   const channel = releaseChannelFromVersion(config.appVersion)
     ?? releaseChannelFromNamespace(config.namespace, SIDECAR_DEFAULTS.namespace);
   const channelIdentity = channel == null
-    ? { appId: "io.open-design.desktop", productName: PRODUCT_NAME }
+    ? { appId: "io.monofield.desktop", productName: PRODUCT_NAME }
     : releaseInstallIdentity(channel);
   const publicAppBundleName = `${channelIdentity.productName}.app`;
   const systemAppBundleName = channel != null

@@ -1,12 +1,17 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import nodePath from 'node:path';
-import { parseInterfaceSpecDocument, parseScreenSpecDocument } from '@open-design/contracts';
+import {
+  createInterfaceSpecDocumentFromManualDraft,
+  parseInterfaceSpecDocument,
+  parseScreenSpecDocument,
+} from '@open-design/contracts';
 import { renderInterfaceSpecXlsx } from './doc-renderers/interface-spec/render-xlsx.js';
 import { renderInterfaceSpecHtml } from './doc-renderers/interface-spec/render-html.js';
 import { renderScreenSpecPptx } from './doc-renderers/screen-spec/render-pptx.js';
 import { renderScreenSpecHtml } from './doc-renderers/screen-spec/render-html.js';
 
 const USAGE = `Usage:
+  od docs create-manual-interface-spec --input <manual-draft.json> [--out <interface-spec.json>]
   od docs render-interface-spec  --input <interface-spec.json> [--out <workbook.xlsx>] [--style <style.json>]
   od docs preview-interface-spec --input <interface-spec.json> [--out <preview.html>]
   od docs render-screen-spec     --input <screen-spec.json>    [--out <deck.pptx>]
@@ -29,6 +34,7 @@ export async function runDocsCli(args: string[]): Promise<DocsCliResult> {
     return { exitCode: command ? 0 : 1 };
   }
   if (
+    command !== 'create-manual-interface-spec' &&
     command !== 'render-interface-spec' &&
     command !== 'preview-interface-spec' &&
     command !== 'render-screen-spec' &&
@@ -53,7 +59,11 @@ export async function runDocsCli(args: string[]): Promise<DocsCliResult> {
     }
   }
   if (!inputPath) {
-    console.error('Missing required --input <interface-spec.json>');
+    console.error(
+      command === 'create-manual-interface-spec'
+        ? 'Missing required --input <manual-draft.json>'
+        : 'Missing required --input <interface-spec.json>',
+    );
     return { exitCode: 1 };
   }
 
@@ -74,6 +84,28 @@ export async function runDocsCli(args: string[]): Promise<DocsCliResult> {
   }
 
   const inputDir = nodePath.dirname(nodePath.resolve(inputPath));
+
+  if (command === 'create-manual-interface-spec') {
+    const created = createInterfaceSpecDocumentFromManualDraft(json);
+    if (!created.ok) {
+      console.error(created.error);
+      return { exitCode: 1 };
+    }
+    const target = outPath ?? nodePath.join(inputDir, 'interface-spec.json');
+    await writeFile(target, `${JSON.stringify(created.doc, null, 2)}\n`, 'utf8');
+    console.log(
+      JSON.stringify(
+        {
+          output: nodePath.resolve(target),
+          endpointCount: created.doc.endpoints.length,
+          warnings: created.issues.map((issue) => issue.message),
+        },
+        null,
+        2,
+      ),
+    );
+    return { exitCode: 0 };
+  }
 
   if (command === 'render-screen-spec' || command === 'preview-screen-spec') {
     const isPreview = command === 'preview-screen-spec';

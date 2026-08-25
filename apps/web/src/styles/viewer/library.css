@@ -975,8 +975,9 @@
 }
 
 .library-ds-card-content:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--selected-soft);
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  box-shadow: none;
   background: var(--bg-hover);
 }
 
@@ -2315,7 +2316,7 @@
   border: 2px solid var(--bg-panel);
   border-radius: var(--radius-pill);
   background: var(--accent);
-  color: white;
+  color: var(--accent-contrast);
   box-shadow: var(--shadow-xs);
   opacity: 0;
   transform: scale(0.9);
@@ -2367,7 +2368,7 @@
 
 .memory-connector-picker.is-selected .memory-connector-picker-box {
   background: var(--accent);
-  color: white;
+  color: var(--accent-contrast);
 }
 
 .memory-connector-connect-button {

@@ -615,7 +615,7 @@ function codexExecutableGuidance(
   ) {
     return '';
   }
-  return ` Configured Codex path failed: ${configuredOverridePath}. Open Docs also detected a PATH Codex CLI at ${pathResolvedPath}. Update CODEX_BIN or clear the custom path to use the detected binary.`;
+  return ` Configured Codex path failed: ${configuredOverridePath}. MonoField also detected a PATH Codex CLI at ${pathResolvedPath}. Update CODEX_BIN or clear the custom path to use the detected binary.`;
 }
 
 function codexExecutableFallbackSuccessDetail(
@@ -668,7 +668,23 @@ export function redactSecrets(
   let redacted = text
     .replace(/Bearer\s+[A-Za-z0-9_\-.+/=]+/gi, 'Bearer [REDACTED]')
     .replace(/(x-api-key|api-key|x-goog-api-key)\s*[:=]\s*[^\s,;"']+/gi, '$1: [REDACTED]')
-    .replace(/([?&]key=)[^&\s]+/gi, '$1[REDACTED]');
+    .replace(/([?&](?:key|api_key|api-key)=)[^&#\s]+/gi, '$1[REDACTED]')
+    .replace(
+      /(\b(?:jdbc:)?(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|redis):\/\/[^:\s/@]+:)[^@\s/]+(@)/gi,
+      '$1[REDACTED]$2',
+    )
+    .replace(
+      /((?:["'])?(?:password|passwd|pwd|client[_-]?secret|private[_-]?key|access[_-]?token|refresh[_-]?token|api[_-]?key|secret)(?:["'])?\s*[:=]\s*)(["'])(.*?)\2/gi,
+      (_match, prefix: string, quote: string, value: string) =>
+        /^\s*(?:\$\{|\{\{|env\()/i.test(value)
+          ? `${prefix}${quote}${value}${quote}`
+          : `${prefix}${quote}[REDACTED]${quote}`,
+    )
+    .replace(
+      /(\b(?:password|passwd|pwd|client[_-]?secret|private[_-]?key|access[_-]?token|refresh[_-]?token|api[_-]?key|secret)\b\s*[:=]\s*)([^\s,;#}\r\n]+)/gi,
+      (_match, prefix: string, value: string) =>
+        /^(?:\$\{|\{\{|env\()/i.test(value) ? `${prefix}${value}` : `${prefix}[REDACTED]`,
+    );
   for (const secret of exactSecrets) {
     if (typeof secret !== 'string' || secret.length === 0) continue;
     redacted = redacted.replace(new RegExp(escapeRegExp(secret), 'g'), '[REDACTED]');
@@ -1103,7 +1119,7 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
           authorization: `Bearer ${apiKey}`,
           ...(new URL(baseUrl).hostname === 'openrouter.ai' ? {
             'HTTP-Referer': 'https://opendesign.dev',
-            'X-Title': 'Open Docs',
+            'X-Title': 'MonoField',
           } : {}),
         },
         body: {
@@ -1860,7 +1876,7 @@ function runQuietCommand(command: string, args: string[], cwd: string): Promise<
 async function prepareOpenCodeConnectionTestCwd(tempDir: string): Promise<void> {
   await fsp.writeFile(
     path.join(tempDir, 'README.md'),
-    'Open Docs OpenCode connection test.\n',
+    'MonoField OpenCode connection test.\n',
     'utf8',
   );
   try {

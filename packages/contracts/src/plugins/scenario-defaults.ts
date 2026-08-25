@@ -63,7 +63,7 @@ export const DEFAULT_SCENARIO_PLUGIN_BY_KIND: Record<ProjectKind, DefaultScenari
   // "headline + subtitle + absolute footer" collision).
   deck:      'example-simple-deck',
   // Screen specification projects use the generic generation router until the
-  // dedicated Screen Spec editor/renderer is ported into the Open Docs shell.
+  // dedicated Screen Spec editor/renderer is ported into the MonoField shell.
   'screen-spec': 'od-screen-spec',
   'interface-spec': 'od-interface-spec',
   template:  'od-new-generation',

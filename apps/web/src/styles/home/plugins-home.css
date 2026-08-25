@@ -123,7 +123,7 @@
   color: var(--text);
 }
 .plugins-home__search .plugins-home__search-clear:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 @media (max-width: 720px) {
@@ -194,10 +194,10 @@
 .plugins-home__chip--saved.is-active {
   background: var(--accent);
   border-color: var(--accent);
-  color: white;
+  color: var(--accent-contrast);
 }
 .plugins-home__chip--saved.is-active .plugins-home__chip-count {
-  color: white;
+  color: var(--accent-contrast);
   opacity: 0.85;
 }
 
@@ -325,10 +325,10 @@
 .plugins-home__pill--all.is-active {
   background: var(--accent);
   border-color: var(--accent);
-  color: white;
+  color: var(--accent-contrast);
 }
 .plugins-home__pill--all.is-active .plugins-home__pill-count {
-  color: white;
+  color: var(--accent-contrast);
   opacity: 0.85;
 }
 .plugins-home__pill--sub-all {
@@ -454,7 +454,7 @@
   contain-intrinsic-size: 400px 340px;
 }
 .plugins-home__card--gallery:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 .plugins-home__gallery-bar {
@@ -496,7 +496,7 @@
   color: var(--accent);
 }
 .plugins-home__gallery-name:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -1155,7 +1155,7 @@ button.home-templates-reveal__hint:hover {
   color: var(--text-muted);
 }
 button.home-templates-reveal__hint:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 3px;
   opacity: 1;
 }

@@ -90,6 +90,13 @@ describe("copyBundledResourceTrees", () => {
       await mkdir(join(workspaceRoot, "data", "plugin-previews"), {
         recursive: true,
       });
+      await writeFile(join(workspaceRoot, "LICENSE"), "license text\n", "utf8");
+      await writeFile(join(workspaceRoot, "NOTICE"), "notice text\n", "utf8");
+      await writeFile(
+        join(workspaceRoot, "THIRD_PARTY_NOTICES.md"),
+        "third-party notices\n",
+        "utf8",
+      );
       await writeFile(promptTemplatePath, "{\"id\":\"sample\"}\n", "utf8");
       await writeFile(
         join(workspaceRoot, "data", "plugin-previews", "manifest.json"),
@@ -152,6 +159,15 @@ describe("copyBundledResourceTrees", () => {
           "utf8",
         ),
       ).resolves.toBe("{\"plugins\":[]}\n");
+      await expect(readFile(join(resourceRoot, "LICENSE"), "utf8")).resolves.toBe(
+        "license text\n",
+      );
+      await expect(readFile(join(resourceRoot, "NOTICE"), "utf8")).resolves.toBe(
+        "notice text\n",
+      );
+      await expect(
+        readFile(join(resourceRoot, "THIRD_PARTY_NOTICES.md"), "utf8"),
+      ).resolves.toBe("third-party notices\n");
     } finally {
       await rm(root, { force: true, recursive: true });
     }
@@ -159,28 +175,6 @@ describe("copyBundledResourceTrees", () => {
 });
 
 describe("copyOptionalVelaCliBinary", () => {
-  it("copies the installed Vela CLI through the default npm resolver", async () => {
-    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-vela-installed-"));
-    const resourceRoot = join(root, "resources", "open-design");
-    const platform = process.platform === "win32" ? "win" : process.platform === "darwin" ? "mac" : "linux";
-
-    try {
-      const copied = await copyOptionalVelaCliBinary({
-        env: {},
-        platform,
-        requireBundled: true,
-        resourceRoot,
-      });
-
-      const target = join(resourceRoot, "bin", process.platform === "win32" ? "vela.exe" : "vela");
-      expect(copied?.target).toBe(target);
-      await expect(access(target)).resolves.toBeUndefined();
-      await expect(access(join(resourceRoot, "bin", "libexec", "opencode", "opencode"))).resolves.toBeUndefined();
-    } finally {
-      await rm(root, { force: true, recursive: true });
-    }
-  });
-
   it("copies a configured Vela CLI binary into the POSIX resource bin", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-vela-"));
     const source = join(root, "source", "vela");

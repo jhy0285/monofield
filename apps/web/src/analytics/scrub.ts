@@ -1,5 +1,5 @@
 // Pure privacy scrubbing helpers retained for local tests and defensive
-// exception-string cleanup. Open Docs does not send product telemetry.
+// exception-string cleanup. MonoField does not send product telemetry.
 
 export type CaptureResult = {
   event: string;

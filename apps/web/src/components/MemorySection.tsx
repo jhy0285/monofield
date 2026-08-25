@@ -393,8 +393,8 @@ function describeExtractionFailure(record: MemoryExtractionRecord): FriendlyExtr
   const haystack = `${parsed.message} ${parsed.code} ${record.error}`.toLowerCase();
   const source =
     record.kind === 'connector'
-      ? 'Connected apps were read, but OpenDocs could not turn that context into memory.'
-      : 'OpenDocs could not run memory extraction for this chat.';
+      ? 'Connected apps were read, but MonoField could not turn that context into memory.'
+      : 'MonoField could not run memory extraction for this chat.';
 
   if (
     parsed.status === 401
@@ -1291,7 +1291,7 @@ export function MemorySection({
       } else if (!result.attemptedLLM) {
         setConnectorError(
           describeConnectorReadIssue(result)
-          ?? 'No memory suggestions found. OpenDocs could not read useful content from the selected app yet.',
+          ?? 'No memory suggestions found. MonoField could not read useful content from the selected app yet.',
         );
       } else {
         setConnectorStatus(
@@ -2080,7 +2080,7 @@ export function MemorySection({
               <div>
                 <h4>Choose sources</h4>
                 <p className="hint">
-                  Select connected apps first. OpenDocs only scans the apps you choose.
+                  Select connected apps first. MonoField only scans the apps you choose.
                 </p>
               </div>
               <span className="memory-source-badge">

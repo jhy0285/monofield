@@ -33,9 +33,12 @@ import {
 import type {
   InstalledPluginRecord,
   MarketplaceTrust,
+  MarketplacePackageEvidence,
+  MarketplaceSecurityPolicy,
   PluginSourceKind,
   TrustTier,
 } from '@open-design/contracts';
+import { evaluateMarketplacePackagePolicy } from '@open-design/contracts';
 import type Database from 'better-sqlite3';
 import { recordPluginEvent } from './events.js';
 import { upsertPluginLockfileEntry } from './lockfile.js';
@@ -88,6 +91,13 @@ export interface InstallOptions {
   resolvedRef?: string;
   manifestDigest?: string;
   archiveIntegrity?: string;
+  // Enterprise marketplace credentials are referenced by environment-variable
+  // name only. The secret is resolved immediately before the request and is
+  // never written to SQLite, the plugin lockfile, or install events.
+  marketplaceAuthEnv?: string;
+  marketplaceAllowedHosts?: string[];
+  marketplacePolicy?: MarketplaceSecurityPolicy;
+  marketplaceEvidence?: MarketplacePackageEvidence;
   // Optional runtime-data lockfile path. Daemon routes pass
   // `<OD_DATA_DIR>/od-plugin-lock.json`; tests can point at temp dirs.
   lockfilePath?: string;
@@ -106,6 +116,14 @@ const SAFE_BASENAME = /^[a-z0-9][a-z0-9._-]*$/;
 const GITHUB_SOURCE_RE = /^github:([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+)(.*)$/;
 const HTTPS_SOURCE_RE = /^https:\/\//i;
 const GITHUB_REF_SEGMENT_RE = /^[A-Za-z0-9._-]+$/;
+const MARKETPLACE_POLICY_CHECKED = Symbol('marketplace-policy-checked');
+const PLUGIN_ARCHIVE_FETCH_TIMEOUT_MS = 30_000;
+
+type StagedInstallOptions = InstallOptions & {
+  _stagedFolder?: string;
+  _stagedSourceKind?: PluginSourceKind;
+  _marketplacePolicyChecked?: typeof MARKETPLACE_POLICY_CHECKED;
+};
 
 interface GithubArchiveCandidate {
   ref: string;
@@ -292,7 +310,11 @@ async function* installFromGithubContents(
   contentsUrl: string,
 ): AsyncGenerator<InstallEvent, void, void> {
   if (!candidate.subpath) return;
-  const fetcher = opts.fetcher ?? defaultFetcher;
+  const fetcher = opts.fetcher ?? ((url: string) => defaultFetcher(
+    url,
+    opts.marketplaceAuthEnv,
+    opts.marketplaceAllowedHosts,
+  ));
   const maxBytes = opts.maxBytes ?? DEFAULT_MAX_BYTES;
   const tmpRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-plugin-github-contents-'));
   const stagingFolder = path.join(tmpRoot, 'plugin');
@@ -327,13 +349,30 @@ async function* installFromGithubContents(
       return;
     }
 
+    const computedIntegrity = `sha256:${budget.hash.digest('hex')}`;
+    if (opts.archiveIntegrity && !integrityMatches(opts.archiveIntegrity, computedIntegrity)) {
+      yield {
+        kind: 'error',
+        message: `Archive integrity mismatch: expected ${opts.archiveIntegrity}, got ${computedIntegrity}`,
+        warnings: [],
+      };
+      return;
+    }
+    const policyFailure = marketplacePolicyFailure(opts, computedIntegrity);
+    if (policyFailure) {
+      yield { kind: 'error', message: policyFailure, warnings: [] };
+      return;
+    }
     yield* installFromLocalFolder(db, {
       ...opts,
-      archiveIntegrity: opts.archiveIntegrity ?? `sha256:${budget.hash.digest('hex')}`,
+      archiveIntegrity: opts.archiveIntegrity ?? computedIntegrity,
       source: opts.source,
       _stagedFolder: stagingFolder,
       _stagedSourceKind: 'github',
-    } as InstallOptions & { _stagedFolder?: string; _stagedSourceKind?: PluginSourceKind });
+      _marketplacePolicyChecked: opts.marketplacePolicy
+        ? MARKETPLACE_POLICY_CHECKED
+        : undefined,
+    } as StagedInstallOptions);
   } finally {
     await fsp.rm(tmpRoot, { recursive: true, force: true }).catch(() => undefined);
   }
@@ -460,7 +499,11 @@ async function* installFromArchiveUrl(
   url: string,
   subpath: string | undefined,
 ): AsyncGenerator<InstallEvent, void, void> {
-  const fetcher = opts.fetcher ?? defaultFetcher;
+  const fetcher = opts.fetcher ?? ((requestUrl: string) => defaultFetcher(
+    requestUrl,
+    opts.marketplaceAuthEnv,
+    opts.marketplaceAllowedHosts,
+  ));
   const maxBytes = opts.maxBytes ?? DEFAULT_MAX_BYTES;
   const tmpRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-plugin-archive-'));
   try {
@@ -493,9 +536,16 @@ async function* installFromArchiveUrl(
       };
       return;
     }
+    const policyFailure = marketplacePolicyFailure(opts, computedIntegrity);
+    if (policyFailure) {
+      yield { kind: 'error', message: policyFailure, warnings: [] };
+      return;
+    }
     yield { kind: 'progress', phase: 'copying', message: 'Extracting archive' };
     let symlinkSeen = false;
     let traversalSeen = false;
+    let declaredExtractedBytes = 0;
+    let oversizedEntrySetSeen = false;
     try {
       // The tar package handles gzip decompression. We pass `strip: 1`
       // because codeload tarballs always wrap the repo in a single
@@ -509,7 +559,7 @@ async function* installFromArchiveUrl(
           cwd: tmpRoot,
           strip: 1,
           filter: (filePath, entry) => {
-            const entryType = (entry as { type?: string }).type;
+            const { type: entryType, size: entrySize } = entry as { type?: string; size?: number };
             if (entryType === 'SymbolicLink' || entryType === 'Link') {
               symlinkSeen = true;
               return false;
@@ -517,6 +567,13 @@ async function* installFromArchiveUrl(
             if (filePath.includes('..')) {
               traversalSeen = true;
               return false;
+            }
+            if (typeof entrySize === 'number' && Number.isFinite(entrySize) && entrySize > 0) {
+              declaredExtractedBytes += entrySize;
+              if (declaredExtractedBytes > maxBytes) {
+                oversizedEntrySetSeen = true;
+                return false;
+              }
             }
             return true;
           },
@@ -542,6 +599,14 @@ async function* installFromArchiveUrl(
       yield {
         kind: 'error',
         message: 'Archive contains path-traversal segments — refusing to stage',
+        warnings: [],
+      };
+      return;
+    }
+    if (oversizedEntrySetSeen) {
+      yield {
+        kind: 'error',
+        message: `Archive declared extracted content exceeds ${maxBytes} bytes`,
         warnings: [],
       };
       return;
@@ -580,20 +645,96 @@ async function* installFromArchiveUrl(
       // copy / re-parse / persist phases without forking the function.
       _stagedFolder: stagingFolder,
       _stagedSourceKind: opts.source.startsWith('github:') ? 'github' : 'url',
-    } as InstallOptions & { _stagedFolder?: string; _stagedSourceKind?: PluginSourceKind });
+      _marketplacePolicyChecked: opts.marketplacePolicy
+        ? MARKETPLACE_POLICY_CHECKED
+        : undefined,
+    } as StagedInstallOptions);
   } finally {
     await fsp.rm(tmpRoot, { recursive: true, force: true }).catch(() => undefined);
   }
 }
 
-async function defaultFetcher(url: string): ReturnType<ArchiveFetcher> {
-  const response = await fetch(url, { redirect: 'follow' });
+function marketplacePolicyFailure(opts: InstallOptions, computedIntegrity: string): string | null {
+  if (!opts.marketplacePolicy && !opts.marketplaceEvidence) return null;
+  if (!opts.marketplacePolicy || !opts.marketplaceEvidence) {
+    return 'Enterprise marketplace policy blocked activation: incomplete policy context';
+  }
+  const digestVerified = Boolean(
+    opts.archiveIntegrity && integrityMatches(opts.archiveIntegrity, computedIntegrity),
+  );
+  const evaluation = evaluateMarketplacePackagePolicy(opts.marketplacePolicy, {
+    ...opts.marketplaceEvidence,
+    digest: digestVerified
+      ? {
+          state: 'satisfied',
+          checkedBy: 'open-docs:sha256-installer',
+          checkedAt: new Date().toISOString(),
+          value: computedIntegrity,
+          subjectDigest: computedIntegrity,
+        }
+      : { state: 'missing' },
+  });
+  if (evaluation.installable) return null;
+  const codes = evaluation.findings.map((finding) => finding.code).join(', ');
+  return `Enterprise marketplace policy blocked activation: ${codes}`;
+}
+
+async function defaultFetcher(
+  url: string,
+  authEnv?: string,
+  allowedHosts?: string[],
+): ReturnType<ArchiveFetcher> {
+  const token = authEnv ? process.env[authEnv] : undefined;
+  if (authEnv && !token) {
+    return { ok: false, status: 401, statusText: `credential environment variable ${authEnv} is not set`, body: null };
+  }
+  const hasHostPolicy = allowedHosts !== undefined;
+  if (token || hasHostPolicy) {
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return { ok: false, status: 400, statusText: 'invalid marketplace archive URL', body: null };
+    }
+    const hostname = parsed.hostname.toLowerCase().replace(/\.$/, '');
+    if (
+      parsed.protocol !== 'https:' ||
+      parsed.username.length > 0 ||
+      parsed.password.length > 0 ||
+      !marketplaceHostMatches(hostname, allowedHosts ?? [])
+    ) {
+      return {
+        ok: false,
+        status: 403,
+        statusText: `marketplace archive request is not allowed for host ${hostname}`,
+        body: null,
+      };
+    }
+  }
+  // An enterprise archive must be served directly. Following a redirect can
+  // bypass the host policy even when no credential is attached; with a token
+  // it can additionally disclose the credential across an origin boundary.
+  const response = await fetch(url, {
+    redirect: token || hasHostPolicy ? 'manual' : 'follow',
+    signal: AbortSignal.timeout(PLUGIN_ARCHIVE_FETCH_TIMEOUT_MS),
+    ...(token ? { headers: { authorization: `Bearer ${token}` } } : {}),
+  });
   return {
     ok: response.ok,
     status: response.status,
     statusText: response.statusText,
     body: response.body ? Readable.fromWeb(response.body as never) : null,
   };
+}
+
+function marketplaceHostMatches(hostname: string, allowedHosts: readonly string[]): boolean {
+  const normalizedHostname = hostname.trim().toLowerCase().replace(/\.$/, '');
+  return allowedHosts.some((rawPattern) => {
+    const pattern = rawPattern.trim().toLowerCase().replace(/\.$/, '');
+    if (!pattern.startsWith('*.')) return normalizedHostname === pattern;
+    const suffix = pattern.slice(2);
+    return normalizedHostname.length > suffix.length && normalizedHostname.endsWith(`.${suffix}`);
+  });
 }
 
 async function writeArchiveAndDigest(
@@ -656,7 +797,7 @@ function sanitizeRelativePath(input: string): string {
 
 export async function* installFromLocalFolder(
   db: SqliteDb,
-  opts: InstallOptions & { _stagedFolder?: string; _stagedSourceKind?: PluginSourceKind },
+  opts: StagedInstallOptions,
 ): AsyncGenerator<InstallEvent, void, void> {
   const warnings: string[] = [];
   const roots = opts.roots ?? defaultRegistryRoots();
@@ -667,6 +808,18 @@ export async function* installFromLocalFolder(
   const recordedSource = opts.source;
   const recordedSourceKind: PluginSourceKind = opts._stagedSourceKind ?? 'local';
   const maxBytes = opts.maxBytes ?? DEFAULT_MAX_BYTES;
+
+  if (
+    (opts.marketplacePolicy || opts.marketplaceEvidence) &&
+    opts._marketplacePolicyChecked !== MARKETPLACE_POLICY_CHECKED
+  ) {
+    yield {
+      kind: 'error',
+      message: 'Enterprise marketplace policy requires a verified immutable archive; local-folder activation is blocked.',
+      warnings,
+    };
+    return;
+  }
 
   yield { kind: 'progress', phase: 'resolving', message: `Resolving ${sourceFolder}` };
 

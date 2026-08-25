@@ -138,6 +138,73 @@ describe("open-design sidecar contract", () => {
     expect(() => normalizeDesktopSidecarMessage({ input: { selector: "" }, type: SIDECAR_MESSAGES.CLICK })).toThrow();
   });
 
+  it("validates desktop development process ownership messages", () => {
+    const start = {
+      input: { action: "start", args: ["-m", "http.server"], command: "C:\\Python\\python.exe", cwd: "C:\\work", ownerPid: 100, port: 8000, projectId: "project-1" },
+      type: SIDECAR_MESSAGES.DEVELOPMENT_PROCESS,
+    } as const;
+    expect(normalizeDesktopSidecarMessage(start)).toEqual(start);
+    expect(normalizeDesktopSidecarMessage({ input: { action: "status", ownerPid: 100, projectId: "project-1" }, type: SIDECAR_MESSAGES.DEVELOPMENT_PROCESS })).toMatchObject({ input: { action: "status" } });
+    expect(() => normalizeDesktopSidecarMessage({ ...start, input: { ...start.input, port: 0 } })).toThrow(/between 1 and 65535/i);
+    expect(() => normalizeDesktopSidecarMessage({ ...start, input: { ...start.input, args: "-m" } })).toThrow(/array/i);
+  });
+
+  it("accepts only the finite browser automation protocol", () => {
+    const sessionId = "browser_session_1234567890";
+    expect(normalizeDesktopSidecarMessage({
+      input: { action: "snapshot", sessionId },
+      type: SIDECAR_MESSAGES.BROWSER_AUTOMATION,
+    })).toEqual({ input: { action: "snapshot", sessionId }, type: "browser-automation" });
+    expect(normalizeDesktopSidecarMessage({
+      input: { action: "type-text", selector: "#name", sessionId, text: "Ada" },
+      type: SIDECAR_MESSAGES.BROWSER_AUTOMATION,
+    })).toEqual({
+      input: { action: "type-text", selector: "#name", sessionId, text: "Ada" },
+      type: "browser-automation",
+    });
+    expect(normalizeDesktopSidecarMessage({
+      input: {
+        action: "batch",
+        continueOnError: true,
+        sessionId,
+        steps: [
+          { action: "hover", selector: "#menu" },
+          { action: "drag", selector: "#card", targetSelector: "#column" },
+          { action: "upload", filePath: "C:/project/fixture.png", selector: "#file" },
+        ],
+      },
+      type: SIDECAR_MESSAGES.BROWSER_AUTOMATION,
+    })).toEqual({
+      input: {
+        action: "batch",
+        continueOnError: true,
+        sessionId,
+        steps: [
+          { action: "hover", selector: "#menu" },
+          { action: "drag", selector: "#card", targetSelector: "#column" },
+          { action: "upload", filePath: "C:/project/fixture.png", selector: "#file" },
+        ],
+      },
+      type: "browser-automation",
+    });
+    expect(() => normalizeDesktopSidecarMessage({
+      input: { action: "evaluate", sessionId },
+      type: SIDECAR_MESSAGES.BROWSER_AUTOMATION,
+    })).toThrow();
+    expect(() => normalizeDesktopSidecarMessage({
+      input: { action: "click", sessionId },
+      type: SIDECAR_MESSAGES.BROWSER_AUTOMATION,
+    })).toThrow();
+    expect(() => normalizeDesktopSidecarMessage({
+      input: { action: "snapshot", javascript: "document.cookie", sessionId },
+      type: SIDECAR_MESSAGES.BROWSER_AUTOMATION,
+    })).toThrow();
+    expect(() => normalizeDesktopSidecarMessage({
+      input: { action: "batch", sessionId, steps: [{ action: "batch", steps: [{ action: "snapshot" }] }] },
+      type: SIDECAR_MESSAGES.BROWSER_AUTOMATION,
+    })).toThrow();
+  });
+
   it("requires DaemonStatusSnapshot to carry desktopAuthGateActive (PR #974 round 6)", () => {
     // The TS compiler enforces that `desktopAuthGateActive: boolean` is
     // present on every constructed snapshot — tools-dev's split-start
@@ -248,5 +315,81 @@ describe("open-design sidecar contract", () => {
         type: SIDECAR_MESSAGES.UPDATE,
       }),
     ).toThrow(/unsupported fields/);
+  });
+
+  it("permits only constrained database broker requests", () => {
+    expect(normalizeDesktopSidecarMessage({ input: { action: "list" }, type: SIDECAR_MESSAGES.DATABASE })).toEqual({
+      input: { action: "list" }, type: "database",
+    });
+    expect(normalizeDesktopSidecarMessage({
+      input: { action: "sample", connectionId: "db-1", schema: "public", table: "orders", limit: 5 },
+      type: SIDECAR_MESSAGES.DATABASE,
+    })).toEqual({
+      input: { action: "sample", connectionId: "db-1", schema: "public", table: "orders", limit: 5 }, type: "database",
+    });
+    expect(normalizeDesktopSidecarMessage({
+      input: {
+        action: "inspect",
+        connectionId: "db-1",
+        tables: [{ schema: "public", table: "orders" }, { schema: "public", table: "users" }],
+        limit: 5,
+        concurrency: 16,
+        selectedByUser: true,
+      },
+      type: SIDECAR_MESSAGES.DATABASE,
+    })).toEqual({
+      input: {
+        action: "inspect",
+        connectionId: "db-1",
+        tables: [{ schema: "public", table: "orders" }, { schema: "public", table: "users" }],
+        limit: 5,
+        concurrency: 16,
+        selectedByUser: true,
+      },
+      type: "database",
+    });
+    const manyTables = Array.from({ length: 501 }, (_, index) => ({ schema: "public", table: `table_${index}` }));
+    const manyTableMessage = normalizeDesktopSidecarMessage({
+      input: { action: "inspect", connectionId: "db-1", tables: manyTables },
+      type: SIDECAR_MESSAGES.DATABASE,
+    });
+    expect(manyTableMessage).toMatchObject({
+      type: SIDECAR_MESSAGES.DATABASE,
+      input: { action: "inspect", tables: manyTables },
+    });
+    expect(normalizeDesktopSidecarMessage({
+      input: {
+        action: "mutate",
+        connectionId: "db-1",
+        operation: "update",
+        schema: "public",
+        table: "orders",
+        values: { status: "paid" },
+        where: { id: 42 },
+        projectId: "project-1",
+        reason: "Verify the checkout flow",
+      },
+      type: SIDECAR_MESSAGES.DATABASE,
+    })).toEqual({
+      input: {
+        action: "mutate",
+        connectionId: "db-1",
+        operation: "update",
+        schema: "public",
+        table: "orders",
+        values: { status: "paid" },
+        where: { id: 42 },
+        projectId: "project-1",
+        reason: "Verify the checkout flow",
+      },
+      type: "database",
+    });
+    expect(() => normalizeDesktopSidecarMessage({
+      input: { action: "inspect", connectionId: "db-1", tables: manyTables, concurrency: 12 },
+      type: SIDECAR_MESSAGES.DATABASE,
+    })).toThrow(/concurrency must be 8, 16, or 32/);
+    expect(() => normalizeDesktopSidecarMessage({
+      input: { action: "query", connectionId: "db-1", sql: "select * from users" }, type: SIDECAR_MESSAGES.DATABASE,
+    })).toThrow(/unsupported desktop database action/);
   });
 });

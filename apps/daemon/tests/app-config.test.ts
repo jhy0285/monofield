@@ -17,7 +17,7 @@ import { readAppConfig, writeAppConfig } from '../src/app-config.js';
 import { isLocalSameOrigin } from '../src/origin-validation.js';
 
 // Default telemetry preference applied when an existing config has no
-// telemetry block (fresh install, pre-disclosure). Open Docs ships with
+// telemetry block (fresh install, pre-disclosure). MonoField ships with
 // telemetry fully off by default — see `app-config.ts#applyTelemetryDefaults`
 // and `state/config.ts#DEFAULT_CONFIG` for the matching client default.
 const DEFAULT_TELEMETRY = {

@@ -7,6 +7,7 @@ interface Props {
   mode: ChatSessionMode;
   onChange?: (mode: ChatSessionMode) => void;
   disabled?: boolean;
+  popoverPlacement?: 'above' | 'below';
 }
 
 const MODE_META: Array<{
@@ -28,7 +29,7 @@ const MODE_META: Array<{
     queryKeys: ['chat.mode.chat.query1', 'chat.mode.chat.query2', 'chat.mode.chat.query3'],
   },
   {
-    mode: 'design',
+    mode: 'docs',
     icon: 'sparkles',
     labelKey: 'chat.mode.design.label',
     titleKey: 'chat.mode.design.title',
@@ -109,7 +110,12 @@ function ModeDescriptionCard({
   );
 }
 
-export function SessionModeToggle({ mode, onChange, disabled = false }: Props) {
+export function SessionModeToggle({
+  mode,
+  onChange,
+  disabled = false,
+  popoverPlacement = 'above',
+}: Props) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const [previewMode, setPreviewMode] = useState<ChatSessionMode | null>(null);
@@ -155,7 +161,7 @@ export function SessionModeToggle({ mode, onChange, disabled = false }: Props) {
 
   return (
     <div
-      className="session-mode-toggle"
+      className={`session-mode-toggle session-mode-toggle--${popoverPlacement}`}
       ref={rootRef}
       onPointerLeave={() => {
         if (!open) setPreviewMode(null);

@@ -191,6 +191,46 @@ export interface InterfaceSpecStyleOverride {
   borderColor?: string;
 }
 
+/**
+ * The current SI workbook remains the default. The other built-ins keep the
+ * exact sheet/cell contract and vary only deterministic workbook styling, so
+ * preview and export never drift structurally.
+ */
+export const INTERFACE_SPEC_TEMPLATE_STYLES = {
+  'si-standard': null,
+  compact: {
+    fills: {
+      section: 'FFE2E8F0',
+      header: 'FFE2E8F0',
+      label: 'FFF1F5F9',
+      listHeader: 'FFE2E8F0',
+    },
+    borderColor: 'FFCBD5E1',
+  },
+  review: {
+    fills: {
+      section: 'FFFFF2CC',
+      header: 'FFFFF2CC',
+      label: 'FFFFF8E7',
+      listHeader: 'FFFFE699',
+    },
+    borderColor: 'FFE0B84F',
+  },
+} satisfies Record<string, InterfaceSpecStyleOverride | null>;
+
+export function mergeInterfaceSpecStyles(
+  base?: InterfaceSpecStyleOverride | null,
+  override?: InterfaceSpecStyleOverride | null,
+): InterfaceSpecStyleOverride | null {
+  if (!base && !override) return null;
+  const borderColor = override?.borderColor ?? base?.borderColor;
+  return {
+    fonts: { ...(base?.fonts ?? {}), ...(override?.fonts ?? {}) },
+    fills: { ...(base?.fills ?? {}), ...(override?.fills ?? {}) },
+    ...(borderColor ? { borderColor } : {}),
+  };
+}
+
 export interface ResolvedTheme {
   fonts: Record<keyof typeof FONTS, PresetFont>;
   fills: Record<keyof typeof FILL_COLORS, string>;

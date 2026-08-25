@@ -256,7 +256,7 @@
   min-width: 32px;
 }
 .sketch-tool:hover { background: var(--bg-subtle); }
-.sketch-tool.active { background: var(--accent); color: white; border-color: var(--accent); }
+.sketch-tool.active { background: var(--accent); color: var(--accent-contrast); border-color: var(--accent); }
 .sketch-divider { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
 .sketch-color { width: 32px; height: 28px; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; }
 .sketch-size { width: 80px; background: transparent; border: none; }
@@ -339,7 +339,7 @@
   transform: translateY(0);
 }
 .chat-example:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -415,7 +415,7 @@
 }
 .chat-example:hover .chat-example-cta {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast);
   transform: translateX(2px);
 }
 
@@ -445,7 +445,7 @@
   flex-shrink: 0;
   border-radius: var(--radius-sm);
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast);
 }
 .chat-connect-repo-body {
   display: flex;
@@ -588,7 +588,7 @@
   border-radius: var(--radius-xs);
   border: 1.5px solid var(--border-soft);
   background: var(--bg-panel);
-  color: #fff;
+  color: var(--green-contrast);
 }
 .prose-block .md-task-item[data-checked="true"] .md-task-check {
   background: var(--green);
@@ -651,7 +651,7 @@
   appearance: none;
   border: none;
   background: transparent;
-  color: var(--text-faint);
+  color: var(--text-muted);
   font: inherit;
   font-size: 11.5px;
   display: inline-flex;

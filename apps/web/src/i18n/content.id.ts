@@ -21,7 +21,7 @@ export const ID_SKILL_COPY: Record<string, { description?: string; examplePrompt
   },
   'agent-browser': {
     description:
-      'CLI otomasi browser untuk AI agent. Gunakan saat pengguna perlu memeriksa,\nmenguji, atau mengotomatiskan perilaku browser: menavigasi halaman, mengisi formulir,\nmengeklik tombol, mengambil tangkapan layar, mengekstrak data halaman, membaca konteks tab browser\nOpen Docs yang dipilih, menguji aplikasi web, dogfooding pratinjau\nOpen Docs, QA, perburuan bug, atau meninjau kualitas aplikasi. Utamakan URL pratinjau\nOpen Docs lokal kecuali pengguna secara eksplisit meminta penjelajahan eksternal.',
+      'CLI otomasi browser untuk AI agent. Gunakan saat pengguna perlu memeriksa,\nmenguji, atau mengotomatiskan perilaku browser: menavigasi halaman, mengisi formulir,\nmengeklik tombol, mengambil tangkapan layar, mengekstrak data halaman, membaca konteks tab browser\nMonoField yang dipilih, menguji aplikasi web, dogfooding pratinjau\nMonoField, QA, perburuan bug, atau meninjau kualitas aplikasi. Utamakan URL pratinjau\nMonoField lokal kecuali pengguna secara eksplisit meminta penjelajahan eksternal.',
     examplePrompt:
       'CLI otomasi browser untuk AI agent.',
   },
@@ -849,7 +849,7 @@ export const ID_SKILL_COPY: Record<string, { description?: string; examplePrompt
   },
   'ui-ux-pro-max': {
     description:
-      'Entri UI/UX Pro Max khusus katalog. Template, data, dan alur kerja pencarian upstream lengkap tidak disertakan dalam Open Docs.',
+      'Entri UI/UX Pro Max khusus katalog. Template, data, dan alur kerja pencarian upstream lengkap tidak disertakan dalam MonoField.',
     examplePrompt:
       'Entri UI/UX Pro Max khusus katalog.',
   },

@@ -45,17 +45,15 @@ export function parseCodexDebugModels(stdout: string): RuntimeModelOption[] | nu
 }
 
 export function codexNeedsDangerFullAccessSandbox(
-  platform: NodeJS.Platform = process.platform,
+  _platform: NodeJS.Platform = process.platform,
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
-  // Operator override for deployments where Codex cannot create its
-  // workspace-write sandbox, for example unprivileged Linux containers.
-  // Only danger-full-access is accepted; unknown values keep the default path.
-  if (env.OD_CODEX_SANDBOX?.trim() === 'danger-full-access') return true;
-  if (platform === 'win32') return true;
-  // WSL reports `linux` but Codex still hits the Windows read-only
-  // workspace-write sandbox path when launched from there (#2834).
-  return Boolean(env.WSL_DISTRO_NAME?.trim());
+  // Fail closed on every platform. A working folder is a task root, not a
+  // license to write anywhere on the machine. Older native Windows Codex
+  // builds may reject shell commands in workspace-write mode; administrators
+  // can explicitly opt into the compatibility mode below, but MonoField must
+  // never silently broaden access merely because it runs on Windows or WSL.
+  return env.OD_CODEX_SANDBOX?.trim() === 'danger-full-access';
 }
 
 export const codexAgentDef = {
@@ -76,6 +74,9 @@ export const codexAgentDef = {
     },
     fallbackModels: [
       DEFAULT_MODEL_OPTION,
+      { id: 'gpt-5.6-sol', label: 'GPT-5.6 Sol' },
+      { id: 'gpt-5.6-terra', label: 'GPT-5.6 Terra' },
+      { id: 'gpt-5.6-luna', label: 'GPT-5.6 Luna' },
       { id: 'gpt-5.5', label: 'gpt-5.5' },
       { id: 'gpt-5.4', label: 'gpt-5.4' },
       { id: 'gpt-5.4-mini', label: 'gpt-5.4-mini' },
@@ -95,6 +96,7 @@ export const codexAgentDef = {
       { id: 'medium', label: 'Medium' },
       { id: 'high', label: 'High' },
       { id: 'xhigh', label: 'XHigh' },
+      { id: 'max', label: 'Max' },
     ],
     // Prompt is delivered via stdin pipe (gated by `promptViaStdin: true`
     // below) to avoid Windows `spawn ENAMETOOLONG` while keeping Codex on
@@ -110,12 +112,9 @@ export const codexAgentDef = {
       options = {},
       runtimeContext = {},
     ) => {
-      // Codex CLI's `workspace-write` sandbox blocks shell invocations on
-      // Windows ("powershell.exe ... rejected: blocked by policy", #1721),
-      // because Codex has no working OS-level sandbox on Windows and falls
-      // back to a coarse policy that rejects any shell. macOS (Seatbelt)
-      // and Linux (Landlock+seccomp) keep workspace-write because their
-      // sandbox enforcement permits shell while restricting writes.
+      // Workspace-write is the secure default on every platform. The only
+      // escape hatch is the explicit administrator-controlled
+      // OD_CODEX_SANDBOX=danger-full-access compatibility setting above.
       const needsDangerFullAccess = codexNeedsDangerFullAccessSandbox();
       const args = needsDangerFullAccess
         ? ['exec', '--json', '--skip-git-repo-check', '--sandbox', 'danger-full-access']

@@ -474,7 +474,7 @@ process.exit(1);
     );
   });
 
-  // Open Docs ships with the AMR runtime disabled unless OD_ENABLE_AMR=1
+  // MonoField ships with the AMR runtime disabled unless OD_ENABLE_AMR=1
   // (runtimes/registry.ts reads it at import time), so the AMR chat flow
   // only exists when that gate was set before the daemon loaded.
   it.skipIf(process.env.OD_ENABLE_AMR !== '1')('survives transient AMR Link catalog failures without aborting the run', async () => {

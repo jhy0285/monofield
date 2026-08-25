@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, ToolTokenRegistry } from '../src/tool-tokens.js';
+import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, DEFAULT_TOOL_TOKEN_TTL_MS, ToolTokenRegistry } from '../src/tool-tokens.js';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -84,6 +84,16 @@ describe('run-scoped tool tokens', () => {
 
     expect(grant.allowedEndpoints).toEqual([...CHAT_TOOL_ENDPOINTS]);
     expect(grant.allowedOperations).toEqual([...CHAT_TOOL_OPERATIONS]);
+    registry.clear();
+  });
+
+  it('keeps an active development run authorized for up to eight hours', () => {
+    const registry = new ToolTokenRegistry();
+    const grant = registry.mint({ runId: 'run-long', projectId: 'project-a', nowMs: 1_000 });
+
+    expect(DEFAULT_TOOL_TOKEN_TTL_MS).toBe(8 * 60 * 60 * 1_000);
+    expect(grant.expiresAt).toBe(new Date(1_000 + DEFAULT_TOOL_TOKEN_TTL_MS).toISOString());
+    expect(registry.validate(grant.token, { nowMs: 1_000 + DEFAULT_TOOL_TOKEN_TTL_MS - 1 })).toMatchObject({ ok: true });
     registry.clear();
   });
 });

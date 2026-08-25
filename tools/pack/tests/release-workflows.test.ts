@@ -22,7 +22,7 @@ function countOccurrences(content: string, needle: string): number {
 
 describe("release workflows", () => {
   it("requires Vela CLI only for beta mac arm64 packaging", async () => {
-    const [beta, betaSelfHosted, preview, prerelease, stable, stablePrepare, buildMac, buildWin, prepareMac, prepareWin, publishPlatform, winLifecycle, desktopUpdater, macBuild, macFs, installUnsafeDmg, winApp, macWorkspace, linuxPack] = await Promise.all([
+    const [beta, betaSelfHosted, preview, prerelease, stable, stablePrepare, buildMac, buildWin, prepareMac, prepareWin, publishPlatform, winLifecycle, desktopUpdater, macBuild, macFs, installUnsafeDmg, winApp, macWorkspace, linuxPack, releaseLanes] = await Promise.all([
       readFile(new URL("../../../.github/workflows/release-beta.yml", import.meta.url), "utf8"),
       readFile(new URL("../../../.github/workflows/release-beta-s.yml", import.meta.url), "utf8"),
       readFile(new URL("../../../.github/workflows/release-preview.yml", import.meta.url), "utf8"),
@@ -42,6 +42,7 @@ describe("release workflows", () => {
       readFile(new URL("../src/win/app.ts", import.meta.url), "utf8"),
       readFile(new URL("../src/mac/workspace.ts", import.meta.url), "utf8"),
       readFile(new URL("../src/linux.ts", import.meta.url), "utf8"),
+      readFile(new URL("../../../tools/release/resources/lanes/open-design.json", import.meta.url), "utf8"),
     ]);
     const mac = sectionBetween(beta, "  build_mac_arm64:", "  build_mac_x64:");
     const macX64 = sectionBetween(beta, "  build_mac_x64:", "  build_win_x64:");
@@ -143,7 +144,17 @@ describe("release workflows", () => {
     }
     expect(betaSelfHosted).toContain("mac_arm64_update_metadata_url:");
     expect(betaSelfHosted).toContain("mac_arm64_delivery_mode:");
-    expect(betaSelfHosted).toContain('default: "https://s3.nexu.space/od-releases"');
+    expect(betaSelfHosted).not.toContain("s3.nexu.space");
+    const publicOriginInputBlocks = betaSelfHosted.match(
+      /^      release_public_origin:\r?\n(?:^        .*\r?\n)*/gm,
+    ) ?? [];
+    expect(publicOriginInputBlocks).toHaveLength(2);
+    for (const inputBlock of publicOriginInputBlocks) expect(inputBlock).not.toContain("default:");
+    expect(betaSelfHosted).toContain("RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin }}");
+    expect(betaSelfHosted).toContain("OPEN_DESIGN_STABLE_METADATA_URL: ${{ inputs.release_public_origin }}/stable/latest/metadata.json");
+    expect(betaSelfHosted).toContain('if [[ ! "$RELEASE_PUBLIC_ORIGIN" =~ ^https://');
+    expect(betaSelfHosted).toContain("release_public_origin must be an explicit HTTPS URL without credentials, query, or fragment");
+    expect((JSON.parse(releaseLanes) as { lanes: { betas: Record<string, unknown> } }).lanes.betas).not.toHaveProperty("publicOrigin");
     expect(betaSelfHosted).toContain("internal-updater");
     expect(betaSelfHosted).toContain("public-notarized");
     expect(selfHostedMac).toContain("RELEASE_DELIVERY_MODE: ${{ inputs.mac_arm64_delivery_mode }}");
@@ -179,8 +190,8 @@ describe("release workflows", () => {
     expect(prepareMac).toContain('RELEASE_ASSET_SUFFIX="${RELEASE_ASSET_SUFFIX:-}"');
     expect(prepareWin).toContain("[AllowEmptyString()]");
     expect(prepareWin).toContain("$sourcePayload = [string]$build.payloadPath");
-    expect(prepareWin).toContain("open-design-$ReleaseVersion$ReleaseAssetSuffix-win-x64-payload.7z");
-    expect(publishPlatform).toContain("open-design-${releaseVersion}${assetSuffix}-win-x64-payload.7z");
+    expect(prepareWin).toContain("monofield-$ReleaseVersion$ReleaseAssetSuffix-win-x64-payload.7z");
+    expect(publishPlatform).toContain("monofield-${releaseVersion}${assetSuffix}-win-x64-payload.7z");
     expect(publishPlatform).toContain("payload: assetEntry(payload)");
     expect(publishPlatform).toContain("versionLockObjectKey(releaseVersion, countedReleaseChannel)");
     expect(publishPlatform).toContain("assertCurrentVersionReservation(storage, releaseVersion, versionLockKey, countedReleaseChannel)");
@@ -193,7 +204,7 @@ describe("release workflows", () => {
     expect(winLifecycle).toContain("removedLauncherNamespaceRoot");
     expect(buildWin).toContain('Measure-Step "validate launcher payload artifact"');
     expect(buildWin).toContain('Measure-Step "validate launcher payload update fixture"');
-    expect(buildWin).toContain('Test-JsonString $manifest.entry.executable "entry.executable" "payload/Open Design.exe"');
+    expect(buildWin).toContain('Test-JsonString $manifest.entry.executable "entry.executable" "payload/MonoField.exe"');
     for (const workspaceBuild of [winApp, macWorkspace, linuxPack]) {
       const sidecarProtoBuild = 'await runPnpm(config, ["--filter", "@open-design/sidecar-proto", "build"])';
       const launcherProtoBuild = 'await runPnpm(config, ["--filter", "@open-design/launcher-proto", "build"])';

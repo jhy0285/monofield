@@ -106,6 +106,7 @@ import { randomUUID } from '../utils/uuid';
 import { DEFAULT_NOTIFICATIONS } from '../state/config';
 import type { TodoItem } from '../runtime/todos';
 import { appendErrorStatusEvent } from '../runtime/chat-events';
+import { getActiveBrowserVerification } from '../runtime/browser-verification';
 import { RESUME_CONTINUE_PROMPT } from '../runtime/resume';
 import { cancelBrandExtraction, extractBrandFromHtml, finalizeBrandProject } from '../runtime/brands';
 import { getBrandBrowser, BRAND_BROWSER_TAB_ID } from '../runtime/brand-browser-bridge';
@@ -487,7 +488,7 @@ function historyWithWorkspaceContext(
     '',
     '',
     '<active-workspace-context>',
-    'Open Docs selected the currently focused workspace tab as the default context for this turn.',
+    'MonoField selected the currently focused workspace tab as the default context for this turn.',
     ...items.map((item, index) => {
       const details = [
         item.path ? `path: ${item.path}` : null,
@@ -886,6 +887,39 @@ export function ProjectView({
   const detailedProject = projectDetail.project?.id === project.id ? projectDetail.project : null;
   const currentProject =
     detailedProject && detailedProject.updatedAt >= project.updatedAt ? detailedProject : project;
+  const metadataPatchRevisionRef = useRef(0);
+  const metadataPatchQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const handleProjectMetadataChange = useCallback((metadata: ProjectMetadata) => {
+    const revision = metadataPatchRevisionRef.current + 1;
+    metadataPatchRevisionRef.current = revision;
+    const previous = currentProject;
+    const optimistic: Project = {
+      ...currentProject,
+      metadata,
+      // useProjectDetail prefers the server snapshot on equal timestamps. A
+      // strictly newer optimistic record keeps controls responsive while the
+      // PATCH is in flight instead of snapping toggles back immediately.
+      updatedAt: Math.max(Date.now(), currentProject.updatedAt + 1),
+    };
+    onProjectChange(optimistic);
+
+    // Serialize metadata writes so rapid toggle/select changes cannot arrive
+    // at the daemon out of order and persist an older choice last.
+    metadataPatchQueueRef.current = metadataPatchQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        const saved = await patchProject(currentProject.id, { metadata });
+        if (revision !== metadataPatchRevisionRef.current) return;
+        if (saved) {
+          onProjectChange(saved);
+          return;
+        }
+        // Keep the UI honest on a failed save. A later successful change has a
+        // newer revision and therefore cannot be rolled back by this request.
+        onProjectChange(previous);
+        void projectDetail.refresh();
+      });
+  }, [currentProject, onProjectChange, projectDetail.refresh]);
   const projectDesignSystemId = resolveProjectDesignSystemId(currentProject);
   const projectIsDesignSystemProject = isDesignSystemProject(currentProject);
   const designSystemBrandId = projectIsDesignSystemProject
@@ -968,7 +1002,7 @@ export function ProjectView({
     () => conversations.find((conversation) => conversation.id === activeConversationId) ?? null,
     [conversations, activeConversationId],
   );
-  const activeSessionMode = activeConversation?.sessionMode ?? 'design';
+  const activeSessionMode = activeConversation?.sessionMode ?? 'docs';
   const [messagesConversationId, setMessagesConversationId] = useState<string | null>(null);
   const [failedMessagesConversationId, setFailedMessagesConversationId] = useState<string | null>(null);
   const [conversationLoadError, setConversationLoadError] = useState<string | null>(null);
@@ -4394,6 +4428,11 @@ export function ProjectView({
           // CLI without relying on its agent-id re-derivation.
           runtimeType: config.agentId === 'amr' ? ('amr_cloud' as const) : ('local_cli' as const),
         };
+        const browserVerification =
+          project.metadata?.workMode === 'development' &&
+          project.metadata.development?.autoVerify !== false
+            ? getActiveBrowserVerification(project.id)
+            : undefined;
         void streamViaDaemon({
           agentId: config.agentId,
           history: nextHistory,
@@ -4413,6 +4452,8 @@ export function ProjectView({
           sessionMode: runSessionMode,
           appliedPluginSnapshotId:
             meta?.appliedPluginSnapshotId ?? meta?.appliedPluginSnapshot?.snapshotId ?? null,
+          interfaceSpecCollectionReset: meta?.interfaceSpecCollectionReset,
+          ...(browserVerification ? { browserVerification } : {}),
           research: meta?.research,
           mediaExecution: mediaExecutionPolicyForProjectMetadata(project.metadata),
           model: choice?.model ?? null,
@@ -4540,13 +4581,23 @@ export function ProjectView({
           model: config.model,
           apiProtocol: config.apiProtocol,
           skillId: project.skillId ?? null,
-          sessionMode: (runSessionMode === 'design' ? 'design' : 'ask') as
+          sessionMode: (runSessionMode === 'docs' ? 'design' : 'ask') as
             | 'design'
             | 'ask',
         };
         trackRunCreated(analytics.track, buildByokRunCreatedProps(byokRunBase));
         const byokRunStartedAt = startedAt;
         let accumulatedAssistantText = '';
+        let byokUsageReported = false;
+        const estimatedByokInputTokens = Math.max(
+          1,
+          Math.ceil(
+            (
+              systemPrompt.length +
+              apiHistory.reduce((sum, message) => sum + (message.content?.length ?? 0), 0)
+            ) / 4,
+          ),
+        );
         const emitByokRunFinished = (
           result: 'success' | 'failed' | 'cancelled',
           artifactCount: number,
@@ -4568,7 +4619,25 @@ export function ProjectView({
             handlers.onDelta(delta);
             handlers.onAgentEvent({ kind: 'text', text: delta });
           },
+          onUsage: (usage) => {
+            if (usage.measurementSource === 'provider_usage') byokUsageReported = true;
+            handlers.onAgentEvent({ kind: 'usage', ...usage });
+          },
           onDone: () => {
+            if (!byokUsageReported) {
+              const estimatedOutputTokens = Math.max(
+                1,
+                Math.ceil(accumulatedAssistantText.length / 4),
+              );
+              handlers.onAgentEvent({
+                kind: 'usage',
+                inputTokens: estimatedByokInputTokens,
+                outputTokens: estimatedOutputTokens,
+                totalTokens: estimatedByokInputTokens + estimatedOutputTokens,
+                durationMs: Math.max(0, Date.now() - byokRunStartedAt),
+                measurementSource: 'estimated',
+              });
+            }
             handlers.onDone();
             // Count artifacts produced this turn from the project file diff,
             // mirroring the daemon's run_finished artifact_count. The
@@ -4985,6 +5054,29 @@ export function ProjectView({
     },
     [handleSend, project.id, currentConversationQueueDisabled],
   );
+  const handleSendBrowserReviewBatch = useCallback(
+    async (prompt: string, commentAttachments: ChatCommentAttachment[], images: File[] = []) => {
+      if (currentConversationQueueDisabled) return false;
+      const cleanPrompt = prompt.trim();
+      if (!cleanPrompt || commentAttachments.length === 0) return false;
+      let uploaded: ChatAttachment[] = [];
+      if (images.length > 0) {
+        const result = await uploadProjectFiles(project.id, images);
+        if (result.failed.length > 0) return false;
+        uploaded = result.uploaded;
+      }
+      setWorkspaceFocused(false);
+      setCommentInspectorActive(false);
+      await handleSend(
+        cleanPrompt,
+        uploaded,
+        commentAttachments.map(commentTaskContextAttachment),
+        { queueOnly: true, entryFrom: 'comment' },
+      );
+      return true;
+    },
+    [currentConversationQueueDisabled, handleSend, project.id],
+  );
   const commentQueueOnSend = currentConversationBusy && !currentConversationQueueDisabled;
 
   const handleContinueRemainingTasks = useCallback(
@@ -5274,7 +5366,7 @@ export function ProjectView({
     ],
   );
 
-  // "Share to Open Docs" — kicks off the bundled `od-share-to-community`
+  // "Share to MonoField" — kicks off the bundled `od-share-to-community`
   // scenario in the active conversation. We just inject the trigger prompt
   // through the standard chat-send path; the agent then loads SKILL.md and
   // drives the rest. Keep this preparing state alive for the resulting chat
@@ -6604,9 +6696,7 @@ export function ProjectView({
               byokSpeechVoice={byokSpeechVoiceOverride}
               onChangeByokSpeechVoice={setByokSpeechVoiceOverride}
               projectMetadata={currentProject.metadata}
-              onProjectMetadataChange={(metadata) => {
-                onProjectChange({ ...project, metadata });
-              }}
+              onProjectMetadataChange={handleProjectMetadataChange}
               activeWorkspaceContext={activeWorkspaceContext}
               workspaceContexts={workspaceContexts}
               currentSkillId={project.skillId}
@@ -6686,6 +6776,8 @@ export function ProjectView({
         <FileWorkspace
           projectId={project.id}
           projectKind={projectKindToTracking(currentProject.metadata?.kind, currentProject.metadata?.videoModel) ?? 'prototype'}
+          projectMetadata={currentProject.metadata}
+          onProjectMetadataChange={handleProjectMetadataChange}
           rootDirName={(() => {
             const baseDir = currentProject.metadata?.baseDir;
             return typeof baseDir === 'string'
@@ -6716,6 +6808,7 @@ export function ProjectView({
           onSavePreviewComment={savePreviewComment}
           onRemovePreviewComment={removePreviewComment}
           onSendBoardCommentAttachments={handleSendBoardCommentAttachments}
+          onSendBrowserReviewBatch={handleSendBrowserReviewBatch}
           onRequestBrowserUsePrompt={handleBrowserUsePrompt}
           onPluginFolderAgentAction={handlePluginFolderAgentAction}
           activePluginActionPaths={activePluginActionPaths}
@@ -7186,7 +7279,7 @@ function latestDesignSystemActivityEvents(messages: ChatMessage[]): AgentEvent[]
 }
 
 function pluginWorkflowTitle(action: PluginFolderAgentAction): string {
-  return action === 'publish' ? 'Publish repo' : 'Open Docs PR';
+  return action === 'publish' ? 'Publish repo' : 'MonoField PR';
 }
 
 function pluginWorkflowCliCommand(action: PluginFolderAgentAction, relativePath: string): string {
@@ -7205,7 +7298,7 @@ function pluginWorkflowPlannedSteps(action: PluginFolderAgentAction): string[] {
     ];
   }
   return [
-    'Ensure the Open Docs fork exists',
+    'Ensure the MonoField fork exists',
     'Clone the fork and prepare a branch',
     'Copy the plugin into plugins/community',
     'Push the branch and open the PR form',

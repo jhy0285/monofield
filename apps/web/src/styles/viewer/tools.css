@@ -246,10 +246,10 @@
 .plugin-action-button--primary {
   border-color: var(--accent);
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast);
 }
 .plugin-action-button--primary:hover:not(:disabled) {
-  color: #fff;
+  color: var(--accent-contrast);
   filter: brightness(0.85);
 }
 .plugin-action-card__notice {
@@ -582,13 +582,13 @@
   gap: 6px;
   background: var(--accent);
   border-color: var(--accent);
-  color: white;
+  color: var(--accent-contrast);
   box-shadow: 0 6px 14px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 .viewer-action-export:hover:not(:disabled) {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
-  color: white;
+  color: var(--accent-contrast);
 }
 @keyframes export-ready-nudge {
   0% {

@@ -32,16 +32,53 @@ describe('DISCOVERY_AND_PHILOSOPHY (contracts copy) — TodoWrite plan item coun
     expect(prompt).not.toMatch(/5[–\-]10\s+short\s+imperative/);
   });
 
-  it('uses a top-level Chat mode override for conversational sessions', () => {
+  it('uses the lean ask/software-development prompt for conversational sessions', () => {
     const prompt = composeSystemPrompt({ sessionMode: 'chat' });
 
-    expect(prompt).toContain('# Chat mode — standard conversation');
-    expect(prompt).toContain('https://github.com/jhy0285/open-docs');
-    expect(prompt).toContain('https://github.com/jhy0285/open-docs');
-    expect(prompt).toContain('do not emit a default discovery `<question-form>`');
-    expect(prompt.indexOf('# Chat mode — standard conversation')).toBeLessThan(
+    expect(prompt).toContain('# Ask / software development mode');
+    expect(prompt).not.toContain('RULE 1 — turn 1 must emit');
+    expect(prompt).not.toContain('# Identity and workflow charter');
+    expect(prompt.length).toBeLessThan(4_000);
+  });
+
+  it('uses a top-level Docs mode guidance override for explanatory questions', () => {
+    const prompt = composeSystemPrompt({ sessionMode: 'docs' });
+
+    expect(prompt).toContain('# Docs mode — distinguish guidance from generation');
+    expect(prompt).toContain('answer directly in clear prose');
+    expect(prompt).toContain('Do not emit a discovery or artifact-options');
+    expect(prompt.indexOf('# Docs mode — distinguish guidance from generation')).toBeLessThan(
       prompt.indexOf(DISCOVERY_AND_PHILOSOPHY),
     );
+  });
+
+  it('exposes the encrypted approval-gated database workflow to filesystem agents', () => {
+    const prompt = composeSystemPrompt({
+      streamFormat: 'jsonl',
+      metadata: { kind: 'other', databaseContext: { connectionId: 'db-development', useForDevelopment: true } },
+    });
+
+    expect(prompt).toContain('# Connected project database');
+    expect(prompt).toContain('database list --json');
+    expect(prompt).toContain('structured mutation operations');
+    expect(prompt).toContain('“Approve each write” opens a Desktop confirmation');
+    expect(prompt).toContain('“Always allow” runs those structured mutations without a per-operation dialog');
+    expect(prompt).toContain('DDL, raw SQL, credential fields');
+    expect(prompt).toContain('explicit no-codebase/manual/new-design interface specification must not inspect');
+  });
+
+  it('does not advertise database CLI tools to plain API runs', () => {
+    const prompt = composeSystemPrompt({
+      streamFormat: 'plain',
+      metadata: { kind: 'other', databaseContext: { connectionId: 'db-development', useForDevelopment: true } },
+    });
+
+    expect(prompt).not.toContain('# Connected project database');
+  });
+
+  it('does not spend database prompt tokens when no project database is connected', () => {
+    const prompt = composeSystemPrompt({ streamFormat: 'jsonl' });
+    expect(prompt).not.toContain('# Connected project database');
   });
 });
 

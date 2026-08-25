@@ -1,6 +1,11 @@
-﻿import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, Dispatch, SetStateAction } from 'react';
 import { Button, VisuallyHidden } from '@open-design/components';
+import {
+  getOpenDesignHost,
+  type OpenDesignHostDatabaseConnection,
+  type OpenDesignHostDatabaseWritePolicy,
+} from '@open-design/host';
 import type { AmrWalletSnapshot } from '@open-design/contracts';
 import { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 import {
@@ -52,6 +57,7 @@ import {
 import { amrProfileBadgeLabel } from '../runtime/amr-guidance';
 import { ExportDiagnosticsRow } from './ExportDiagnosticsButton';
 import { Icon } from './Icon';
+import { DictionaryLibrarySection } from './DictionaryLibrarySection';
 import {
   CUSTOM_MODEL_SENTINEL,
   SearchableModelSelect,
@@ -157,8 +163,10 @@ import {
   DEFAULT_ACCENT_COLOR,
   applyAppearanceToDocument,
   normalizeAccentColor,
+  observeSystemAppearance,
   resolveAccentColor,
 } from '../state/appearance';
+import appearanceStyles from './AppearanceSettings.module.css';
 import { isAutosaveDraftOnlyChange } from '../App';
 import {
   FAILURE_SOUNDS,
@@ -188,6 +196,8 @@ export type SettingsSection =
   | 'projectLocations'
   | 'memory'
   | 'privacy'
+  | 'database'
+  | 'dictionaries'
   // 'library' is consumed by the EntryShell library route ??App opens it
   // via this same openSettings entry point, so SettingsSection must
   // accept the token even though SettingsDialog itself has no Library
@@ -585,7 +595,7 @@ function cleanAgentVersionLabel(
 }
 
 function displayAgentName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
-  return agent.id === 'amr' ? 'Open Docs AMR' : agent.name;
+  return agent.id === 'amr' ? 'MonoField AMR' : agent.name;
 }
 
 const AGENT_CLI_ENV_FIELDS = [
@@ -1433,7 +1443,7 @@ export function SettingsDialog({
     } finally {
       setVersionChecking(false);
     }
-    window.open('https://github.com/jhy0285/open-docs/releases', '_blank', 'noopener,noreferrer');
+    window.open('https://github.com/jhy0285/monofield/releases', '_blank', 'noopener,noreferrer');
   }, [versionChecking, appVersionInfo, t]);
 
   // Precise inverse of App.handleCompleteOnboarding: flip
@@ -2895,6 +2905,8 @@ export function SettingsDialog({
     },
     notifications: { title: t('settings.notifications'), subtitle: t('settings.notificationsHint') },
     privacy: { title: t('settings.privacy'), subtitle: t('settings.privacyHint') },
+    database: { title: t('settings.databaseTitle'), subtitle: t('settings.databaseSubtitle') },
+    dictionaries: { title: t('settings.dictionaryLibraryTitle'), subtitle: t('settings.dictionaryLibrarySubtitle') },
     pet: { title: t('pet.title'), subtitle: t('pet.subtitle') },
     skills: { title: t('settings.skills'), subtitle: t('settings.skillsHint') },
     designSystems: {
@@ -3440,6 +3452,28 @@ export function SettingsDialog({
               <span>
                 <strong>{t('settings.privacy')}</strong>
                 <small>{t('settings.privacyHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'database' ? ' active' : ''}`}
+              onClick={() => setActiveSection('database')}
+            >
+              <Icon name="settings" size={18} />
+              <span>
+                <strong>{t('settings.databaseTitle')}</strong>
+                <small>{t('settings.databaseNavHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'dictionaries' ? ' active' : ''}`}
+              onClick={() => setActiveSection('dictionaries')}
+            >
+              <Icon name="file-text" size={18} />
+              <span>
+                <strong>{t('settings.dictionaryLibraryTitle')}</strong>
+                <small>{t('settings.dictionaryLibraryNavHint')}</small>
               </span>
             </button>
             <button
@@ -4851,8 +4885,20 @@ export function SettingsDialog({
             <PrivacySection cfg={cfg} setCfg={setCfg} />
           ) : null}
 
+          {activeSection === 'database' ? <DatabaseConnectionsSection /> : null}
+
+          {activeSection === 'dictionaries' ? <DictionaryLibrarySection /> : null}
+
           {activeSection === 'about' ? (
             <section className="settings-section">
+              <div className="settings-about-identity">
+                <img src="/app-icon.svg?v=monofield-1" alt="" draggable={false} />
+                <div>
+                  <h3>{t('app.brand')}</h3>
+                  <p>{t('settings.aboutDescriptor')}</p>
+                  <span>{t('settings.aboutTrustLine')}</span>
+                </div>
+              </div>
               {appVersionInfo ? (
                 <dl className="settings-about-list">
                   <div className="settings-about-version-row">
@@ -4908,6 +4954,18 @@ export function SettingsDialog({
                 <Button onClick={handleResetOnboarding}>
                   {t('settings.resetOnboardingButton')}
                 </Button>
+              </div>
+              <div className="settings-about-notices">
+                <h4>{t('settings.openSourceNoticesTitle')}</h4>
+                <p>{t('settings.openSourceNoticesBody')}</p>
+                <a
+                  href="https://github.com/nexu-io/open-design"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {t('settings.openSourceNoticesUpstream')}
+                </a>
+                <small>{t('settings.openSourceNoticesDistribution')}</small>
               </div>
             </section>
           ) : null}
@@ -6305,19 +6363,10 @@ function MediaProvidersSection({
       return next.size === current.size ? current : next;
     });
   }, [cfg.mediaProviders]);
-  const visibleProviders = MEDIA_PROVIDERS.filter(
-    (p) => p.settingsVisible !== false,
-  );
-  // Split the catalog into two surfaces:
-  //   - "Available" ??daemon ships a real client, user can paste a key
-  //     and it works. Rendered as full editable cards.
-  //   - "Coming soon" ??listed for transparency / roadmap signaling but
-  //     the daemon has no client yet, so the form fields would be
-  //     disabled placeholders. Hiding them behind a <details> keeps the
-  //     primary list focused (was 16 cards, now 8) without dropping the
-  //     informational value.
-  const availableProviders = visibleProviders
-    .filter((p) => p.integrated)
+  // Only expose providers backed by a real daemon implementation. Roadmap
+  // entries belong in product documentation, not as inert settings controls.
+  const availableProviders = MEDIA_PROVIDERS
+    .filter((p) => p.settingsVisible !== false && p.integrated)
     .slice()
     .sort((a, b) => {
       const aEntry = cfg.mediaProviders?.[a.id];
@@ -6327,10 +6376,6 @@ function MediaProvidersSection({
       if (aConfigured !== bConfigured) return aConfigured ? -1 : 1;
       return a.label.localeCompare(b.label);
     });
-  const comingSoonProviders = visibleProviders
-    .filter((p) => !p.integrated)
-    .slice()
-    .sort((a, b) => a.label.localeCompare(b.label));
   const updateProvider = (
     provider: MediaProvider,
     patch: {
@@ -6456,10 +6501,8 @@ function MediaProvidersSection({
           const hasPendingEdit = Boolean(entry.apiKey.trim());
           const isSavedState = Boolean((hasPendingEdit || entry.apiKeyConfigured) && !hasPendingEdit);
           const tail = entry.apiKeyTail?.trim();
-          // Every provider rendered in the main list is integrated by
-          // construction (see availableProviders filter), so the inputs
-          // are always editable here. Non-integrated entries live in
-          // the "Coming soon" <details> below.
+          // Every provider rendered in the list is integrated by construction,
+          // so the inputs are always editable here.
           const disabled = false;
           const supportsCustomModel = provider.supportsCustomModel === true;
           const requiresCredentials = provider.credentialsRequired !== false;
@@ -6611,59 +6654,6 @@ function MediaProvidersSection({
           );
         })}
       </div>
-      {comingSoonProviders.length > 0 ? (
-        // Roadmap drawer. We still want to advertise that we know
-        // these providers exist (so users don't ask "where is Fal?"),
-        // but disabled placeholder cards in the main list were noise.
-        // Closed by default ??opens to a compact name + hint + docs
-        // link list, no inputs because there's nothing to wire up yet.
-        // TODO(i18n): inline English placeholders; promote to locale
-        // keys when we touch this section again.
-        <details className="library-group media-provider-coming-soon">
-          <summary className="memory-details-summary">
-            <span className="memory-details-title">
-              {t('tasks.comingSoon')}
-            </span>
-            <span className="filter-pill-count">
-              {comingSoonProviders.length}
-            </span>
-          </summary>
-          <p className="hint" style={{ marginTop: 4, marginBottom: 8 }}>
-            {t('settings.mediaProviderComingSoonHint')}
-          </p>
-          <ul className="media-provider-coming-soon-list">
-            {comingSoonProviders.map((provider) => {
-              const docsHref = sanitizeHttpsUrl(provider.docsUrl);
-              return (
-                <li
-                  key={provider.id}
-                  className="media-provider-coming-soon-item"
-                >
-                  <div className="media-provider-coming-soon-meta">
-                    <span className="media-provider-name">
-                      {provider.label}
-                    </span>
-                    <span className="media-provider-hint">
-                      {provider.hint}
-                    </span>
-                  </div>
-                  {docsHref ? (
-                    <a
-                      href={docsHref}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="ghost-link"
-                    >
-                      {t('settings.agentInstall.docs')}
-                      <Icon name="external-link" size={11} />
-                    </a>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-        </details>
-      ) : null}
     </section>
   );
 }
@@ -6682,7 +6672,7 @@ function MediaProvidersSection({
 // Important: every snippet uses absolute paths to the daemon's current
 // Node-compatible runtime and built cli.js, fetched at runtime. macOS
 // and Linux ship a system /usr/bin/od (octal-dump) that shadows any
-// `od` we might add to PATH, and most Open Docs users run from
+// `od` we might add to PATH, and most MonoField users run from
 // source where `od` is not installed globally. The installer panel
 // must NOT reference bare `od`.
 type McpClientId =
@@ -7315,12 +7305,12 @@ function IntegrationsSection() {
 
 const THEMES: Array<{
   value: AppTheme;
-  labelKey: 'settings.themeLight' | 'settings.themeDark' | 'settings.themeCyberpunk';
-  icon: 'sun' | 'moon' | 'sparkles';
+  labelKey: 'settings.themeSystem' | 'settings.themeLight' | 'settings.themeDark';
+  icon: 'settings' | 'sun' | 'moon';
 }> = [
+  { value: 'system', labelKey: 'settings.themeSystem', icon: 'settings' },
   { value: 'light', labelKey: 'settings.themeLight', icon: 'sun' },
   { value: 'dark', labelKey: 'settings.themeDark', icon: 'moon' },
-  { value: 'cyberpunk', labelKey: 'settings.themeCyberpunk', icon: 'sparkles' },
 ];
 
 function AppearanceSection({
@@ -7332,84 +7322,151 @@ function AppearanceSection({
 }) {
   const { t } = useI18n();
   const analytics = useAnalytics();
-  const current =
-    cfg.theme === 'dark' || cfg.theme === 'cyberpunk'
-      ? cfg.theme
-      : 'light';
-  const currentAccent = normalizeAccentColor(cfg.accentColor) ?? DEFAULT_ACCENT_COLOR;
-  const accentLabel = t('pet.fieldAccent');
-  const defaultAccentLabel = t('pet.fieldAccentDefault');
-  const customAccentLabel = t('pet.fieldAccentCustom');
+  const current: AppTheme = cfg.theme === 'cyberpunk' ? 'dark' : (cfg.theme ?? 'light');
+  const currentAccent = resolveAccentColor(cfg.accentColor);
+  const [hexDraft, setHexDraft] = useState(currentAccent);
+  const [hexInvalid, setHexInvalid] = useState(false);
+
+  useEffect(() => {
+    setHexDraft(currentAccent);
+    setHexInvalid(false);
+  }, [currentAccent]);
+
+  const selectAccent = useCallback((accentColor: string) => {
+    setCfg((value) => ({ ...value, accentColor }));
+    setHexDraft(accentColor);
+    setHexInvalid(false);
+  }, [setCfg]);
+
+  const commitHexDraft = useCallback(() => {
+    const normalized = normalizeAccentColor(hexDraft);
+    if (normalized == null) {
+      setHexInvalid(true);
+      return;
+    }
+    selectAccent(normalized);
+  }, [hexDraft, selectAccent]);
 
   // Apply the draft theme immediately so the user sees a live preview
   // before hitting Save. SettingsDialog's cleanup reverts this on cancel.
   useLayoutEffect(() => {
-    applyAppearanceToDocument({
+    const apply = () => applyAppearanceToDocument({
       theme: current,
-      accentColor: currentAccent,
+      accentColor: cfg.accentColor,
     });
-  }, [current, currentAccent]);
-
-  const setAccentColor = (color: string) => {
-    setCfg((c) => ({ ...c, accentColor: normalizeAccentColor(color) ?? c.accentColor ?? DEFAULT_ACCENT_COLOR }));
-  };
+    apply();
+    return observeSystemAppearance(current, apply);
+  }, [cfg.accentColor, current]);
 
   return (
-    <section className="settings-section">
-      <div className="seg-control" role="group" aria-label={t('settings.appearance')} style={{ '--seg-cols': THEMES.length } as React.CSSProperties}>
-        {THEMES.map(({ value, labelKey, icon }) => (
-          <button
-            key={value}
-            type="button"
-            className={'seg-btn' + (current === value ? ' active' : '')}
-            aria-pressed={current === value}
-            onClick={() => {
-              trackSettingsAppearanceClick(analytics.track, {
-                page_name: 'settings',
-                area: 'appearance',
-                element: value,
-              });
-              setCfg((c) => ({ ...c, theme: value }));
-            }}
-          >
-            {icon ? <Icon name={icon} size={14} aria-hidden="true" /> : null}
-            <span className="seg-title">{t(labelKey)}</span>
-          </button>
-        ))}
+    <section className={`settings-section ${appearanceStyles.section}`}>
+      <div className={appearanceStyles.block}>
+        <div className={appearanceStyles.heading}>
+          <strong>{t('settings.appearanceThemeTitle')}</strong>
+          <span>{t('settings.appearanceThemeHint')}</span>
+        </div>
+        <div className="seg-control" role="group" aria-label={t('settings.appearanceThemeTitle')} style={{ '--seg-cols': THEMES.length } as React.CSSProperties}>
+          {THEMES.map(({ value, labelKey, icon }) => (
+            <button
+              key={value}
+              type="button"
+              className={'seg-btn' + (current === value ? ' active' : '')}
+              aria-pressed={current === value}
+              onClick={() => {
+                trackSettingsAppearanceClick(analytics.track, {
+                  page_name: 'settings',
+                  area: 'appearance',
+                  element: value,
+                });
+                setCfg((c) => ({ ...c, theme: value }));
+              }}
+            >
+              <Icon name={icon} size={14} aria-hidden="true" />
+              <span className="seg-title">{t(labelKey)}</span>
+            </button>
+          ))}
+        </div>
       </div>
-      <div className="field">
-        <span className="field-label">{accentLabel}</span>
-        <div className="pet-swatches" role="radiogroup" aria-label={accentLabel}>
+
+      <div className={appearanceStyles.block}>
+        <div className={appearanceStyles.heading}>
+          <strong>{t('settings.accentTitle')}</strong>
+          <span>{t('settings.accentHint')}</span>
+        </div>
+        <div className={appearanceStyles.swatches} role="radiogroup" aria-label={t('settings.accentTitle')}>
           {ACCENT_SWATCHES.map((color) => {
-            const active = currentAccent === color;
+            const selected = currentAccent === color;
             return (
               <button
                 key={color}
                 type="button"
-                className={`pet-swatch${active ? ' active' : ''}`}
-                style={{ background: color }}
-                aria-label={color === DEFAULT_ACCENT_COLOR ? defaultAccentLabel : color}
-                aria-checked={active}
                 role="radio"
+                aria-checked={selected}
+                aria-label={`${color === DEFAULT_ACCENT_COLOR ? t('settings.accentDefault') : t('settings.accentPreset')} ${color}`}
+                title={color === DEFAULT_ACCENT_COLOR ? t('settings.accentDefault') : color}
+                className={`${appearanceStyles.swatch}${selected ? ` ${appearanceStyles.swatchSelected}` : ''}${color === DEFAULT_ACCENT_COLOR ? ` ${appearanceStyles.swatchMonochrome}` : ''}`}
+                style={{ '--appearance-swatch': color } as CSSProperties}
                 onClick={() => {
                   trackSettingsAppearanceClick(analytics.track, {
                     page_name: 'settings',
                     area: 'appearance',
                     element: 'accent_color',
-                    color,
                   });
-                  setAccentColor(color);
+                  selectAccent(color);
                 }}
-              />
+              >
+                {selected ? <Icon name="check" size={14} aria-hidden="true" /> : null}
+              </button>
             );
           })}
-          <input
-            type="color"
-            aria-label={customAccentLabel}
-            className="pet-swatch-picker"
-            value={currentAccent}
-            onChange={(e) => setAccentColor(e.target.value)}
-          />
+        </div>
+
+        <div className={appearanceStyles.customRow}>
+          <label className={appearanceStyles.colorPicker}>
+            <span>{t('settings.accentCustom')}</span>
+            <input
+              type="color"
+              value={currentAccent}
+              aria-label={t('settings.accentCustom')}
+              onChange={(event) => selectAccent(event.target.value.toLowerCase())}
+            />
+          </label>
+          <label className={appearanceStyles.hexField}>
+            <span>{t('settings.accentHexLabel')}</span>
+            <input
+              value={hexDraft}
+              aria-invalid={hexInvalid}
+              spellCheck={false}
+              inputMode="text"
+              placeholder="#2563eb"
+              onChange={(event) => {
+                setHexDraft(event.target.value);
+                setHexInvalid(false);
+              }}
+              onBlur={commitHexDraft}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  commitHexDraft();
+                }
+              }}
+            />
+          </label>
+        </div>
+        {hexInvalid ? <p className={appearanceStyles.error} role="alert">{t('settings.accentInvalid')}</p> : null}
+      </div>
+
+      <div className={appearanceStyles.preview} aria-label={t('settings.appearancePreview')}>
+        <span className={appearanceStyles.previewLabel}>{t('settings.appearancePreview')}</span>
+        <div className={appearanceStyles.previewControls}>
+          <Button type="button" variant="primary">{t('settings.appearancePreviewButton')}</Button>
+          <span className={appearanceStyles.previewSelected}>
+            <Icon name="check" size={13} aria-hidden="true" />
+            {t('settings.appearancePreviewSelected')}
+          </span>
+          <button type="button" className={appearanceStyles.previewFocus}>
+            {t('settings.appearancePreviewFocus')}
+          </button>
         </div>
       </div>
     </section>
@@ -7740,6 +7797,120 @@ function NotificationsSection({
           </>
         ) : null}
       </div>
+    </section>
+  );
+}
+
+function DatabaseConnectionsSection() {
+  const { t } = useI18n();
+  const [connections, setConnections] = useState<OpenDesignHostDatabaseConnection[]>([]);
+  const [label, setLabel] = useState('');
+  const [host, setHost] = useState('localhost');
+  const [port, setPort] = useState('5432');
+  const [database, setDatabase] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [writePolicy, setWritePolicy] = useState<OpenDesignHostDatabaseWritePolicy>('disabled');
+  const [status, setStatus] = useState<string | null>(null);
+  const desktopDatabase = getOpenDesignHost()?.database;
+
+  const refresh = useCallback(async () => {
+    if (desktopDatabase == null) return;
+    try {
+      setConnections(await desktopDatabase.list());
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : t('settings.databaseLoadFailed'));
+    }
+  }, [desktopDatabase, t]);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  const connectionString = () => `postgresql://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${host.trim()}:${port.trim()}/${encodeURIComponent(database.trim())}`;
+  const submit = async (mode: 'test' | 'save') => {
+    if (desktopDatabase == null) return;
+    if (!label.trim() || !host.trim() || !database.trim() || !username.trim() || !password) {
+      setStatus(t('settings.databaseRequired'));
+      return;
+    }
+    setStatus(mode === 'test' ? t('settings.databaseTesting') : t('settings.databaseSaving'));
+    try {
+      const input = { label: label.trim(), connectionString: connectionString(), writePolicy };
+      if (mode === 'test') {
+        const result = await desktopDatabase.test(input);
+        setStatus(result.ok ? t('settings.databaseTestSucceeded') : result.reason);
+      } else {
+        const saved = await desktopDatabase.save(input);
+        // The three access levels already express the user's connection consent.
+        // Reads do not need a second, overlapping approval policy.
+        await desktopDatabase.setReadApproval(saved.id, 'always');
+        setPassword('');
+        setStatus(t('settings.databaseSaved'));
+        await refresh();
+      }
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : t('settings.databaseConnectionFailed'));
+    }
+  };
+
+  const updateAccessPolicy = async (
+    connection: OpenDesignHostDatabaseConnection,
+    nextWritePolicy: OpenDesignHostDatabaseWritePolicy,
+  ) => {
+    if (desktopDatabase == null) return;
+    try {
+      await desktopDatabase.setAccessPolicy(connection.id, nextWritePolicy);
+      await desktopDatabase.setReadApproval(connection.id, 'always');
+      setStatus(t('settings.databaseAccessPolicySaved'));
+      await refresh();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : t('settings.databaseConnectionFailed'));
+    }
+  };
+
+  if (desktopDatabase == null) {
+    return <section className="settings-section"><p className="hint">{t('settings.databaseUnavailable')}</p></section>;
+  }
+  return (
+    <section className="settings-section settings-section-card">
+      <p className="hint">{t('settings.databaseSecurityHint')}</p>
+      <div className={appearanceStyles.databaseCallout}>
+        <strong>{t('settings.databaseDevelopmentTitle')}</strong>
+        <p>{t('settings.databaseDevelopmentHint')}</p>
+        <code>{t('settings.databaseUseExample')}</code>
+      </div>
+      <div className="settings-grid">
+        <label className="field"><span>{t('settings.databaseName')}</span><input value={label} onChange={(event) => setLabel(event.target.value)} placeholder={t('settings.databaseNamePlaceholder')} /></label>
+        <label className="field"><span>{t('settings.databaseHost')}</span><input value={host} onChange={(event) => setHost(event.target.value)} /></label>
+        <label className="field"><span>{t('settings.databasePort')}</span><input inputMode="numeric" value={port} onChange={(event) => setPort(event.target.value)} /></label>
+        <label className="field"><span>{t('settings.databaseDatabase')}</span><input value={database} onChange={(event) => setDatabase(event.target.value)} /></label>
+        <label className="field"><span>{t('settings.databaseUsername')}</span><input autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} /></label>
+        <label className="field"><span>{t('settings.databasePassword')}</span><input autoComplete="new-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+        <label className="field"><span>{t('settings.databaseWritePolicy')}</span><select value={writePolicy} onChange={(event) => setWritePolicy(event.target.value as OpenDesignHostDatabaseWritePolicy)}><option value="disabled">{t('settings.databaseWriteDisabled')}</option><option value="approve-each">{t('settings.databaseWriteApproveEach')}</option><option value="always">{t('settings.databaseWriteAlways')}</option></select></label>
+      </div>
+      <div className="settings-actions">
+        <Button variant="ghost" onClick={() => void submit('test')}>{t('settings.databaseTest')}</Button>
+        <Button onClick={() => void submit('save')}>{t('settings.databaseSave')}</Button>
+      </div>
+      {status ? <p className="hint" role="status">{status}</p> : null}
+      {connections.length > 0 ? <div className="settings-about-list">{connections.map((connection) => (
+        <div key={connection.id} className="settings-about-version-row">
+          <span>
+            {connection.label}{' '}
+            <small>{connection.host} / {connection.database}</small>{' '}
+            <small className={appearanceStyles.databaseCapability}>{t('settings.databaseCurrentCapability')}</small>
+          </span>
+          <label className="field settings-database-approval-field">
+            <span>{t('settings.databaseWritePolicy')}</span>
+            <select value={connection.writePolicy ?? 'disabled'} onChange={(event) => void updateAccessPolicy(connection, event.target.value as OpenDesignHostDatabaseWritePolicy)}>
+              <option value="disabled">{t('settings.databaseWriteDisabled')}</option>
+              <option value="approve-each">{t('settings.databaseWriteApproveEach')}</option>
+              <option value="always">{t('settings.databaseWriteAlways')}</option>
+            </select>
+          </label>
+          <Button variant="ghost" onClick={() => void desktopDatabase.remove(connection.id).then(refresh)}>{t('settings.databaseRemove')}</Button>
+        </div>
+      ))}</div> : null}
+      <p className="hint">{t('settings.databaseWriteRoadmap')}</p>
     </section>
   );
 }

@@ -4,11 +4,11 @@
   "name": "open-docs-community",
   "version": "0.2.0",
   "owner": {
-    "name": "Open Docs Community",
-    "url": "https://github.com/jhy0285/open-docs"
+    "name": "MonoField Community",
+    "url": "https://github.com/jhy0285/monofield"
   },
   "metadata": {
-    "description": "Default Open Docs community plugin registry seed. Entries remain restricted until the user installs and trusts them; upstream source, publisher, homepage, and license metadata are preserved per entry.",
+    "description": "Default MonoField community plugin registry seed. Entries remain restricted until the user installs and trusts them; upstream source, publisher, homepage, and license metadata are preserved per entry.",
     "version": "0.2.0"
   },
   "plugins": [

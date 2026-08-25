@@ -309,7 +309,7 @@ describe('EntryShell settings menu', () => {
       }
       if (url.endsWith('/api/github/open-docs')) {
         return jsonResponse({
-          repo: 'jhy0285/open-docs',
+          repo: 'jhy0285/monofield',
           stargazers_count: 56100,
           fetchedAt: Date.now(),
           stale: false,
@@ -357,7 +357,7 @@ describe('EntryShell new project rail', () => {
         }
         if (url.endsWith('/api/github/open-docs')) {
           return jsonResponse({
-            repo: 'jhy0285/open-docs',
+            repo: 'jhy0285/monofield',
             stargazers_count: 0,
             fetchedAt: Date.now(),
             stale: false,

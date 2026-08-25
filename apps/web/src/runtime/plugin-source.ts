@@ -49,8 +49,8 @@ export interface PluginSourceLinks {
   contributeOnGithub: boolean;
 }
 
-const OPEN_DOCS_REPO_URL = 'https://github.com/jhy0285/open-docs';
-const OPEN_DOCS_REPO_LABEL = 'jhy0285/open-docs';
+const OPEN_DOCS_REPO_URL = 'https://github.com/jhy0285/monofield';
+const OPEN_DOCS_REPO_LABEL = 'jhy0285/monofield';
 
 const GITHUB_SOURCE_RE = /^github:([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+)(?:@([A-Za-z0-9._/-]+))?(?:\/(.+))?$/;
 const GITHUB_PROFILE_RE = /^https?:\/\/(?:www\.)?github\.com\/([A-Za-z0-9](?:[A-Za-z0-9-]{0,38}[A-Za-z0-9])?)(?:[\/?#].*)?$/;

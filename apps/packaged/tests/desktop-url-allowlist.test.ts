@@ -101,7 +101,10 @@ describe('isAllowedChildWindowUrl (issue #911)', () => {
 describe('isAllowedEmbeddedBrowserUrl', () => {
   it('allows external http(s) references, project-served content, and about:blank', () => {
     expect(isAllowedEmbeddedBrowserUrl('https://example.com')).toBe(true);
+    expect(isAllowedEmbeddedBrowserUrl('http://localhost:3000')).toBe(true);
+    expect(isAllowedEmbeddedBrowserUrl('http://app.localhost:3000')).toBe(true);
     expect(isAllowedEmbeddedBrowserUrl('http://127.0.0.1:17579/index.html')).toBe(true);
+    expect(isAllowedEmbeddedBrowserUrl('http://[::1]:5173/index.html')).toBe(true);
     expect(isAllowedEmbeddedBrowserUrl('about:blank')).toBe(true);
   });
 

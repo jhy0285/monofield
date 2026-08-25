@@ -105,6 +105,17 @@ describe('RendererRegistry', () => {
     expect(registry.resolve({ file, isDeckHint: false })).toBeNull();
   });
 
+  it('opens canonical interface and screen spec JSON files in structured editors', () => {
+    expect(artifactRendererRegistry.resolve({
+      file: baseFile({ name: 'interface-spec.json', kind: 'code', mime: 'application/json' }),
+      isDeckHint: false,
+    })?.renderer.id).toBe('interface-spec');
+    expect(artifactRendererRegistry.resolve({
+      file: baseFile({ name: 'screen-spec.json', kind: 'code', mime: 'application/json' }),
+      isDeckHint: false,
+    })?.renderer.id).toBe('screen-spec');
+  });
+
   it('exposes conservative streaming contract values', () => {
     expect(HtmlRenderer.supportsStreaming).toBe(false);
     expect(DeckHtmlRenderer.supportsStreaming).toBe(false);

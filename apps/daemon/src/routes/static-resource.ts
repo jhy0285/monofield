@@ -145,7 +145,14 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       aborted = true;
     });
     try {
-      for await (const agent of detectAgentsStream(agentCliEnv)) {
+      for await (const agent of detectAgentsStream(agentCliEnv, {
+        priorityAgentId:
+          typeof config.agentId === 'string' ? config.agentId : null,
+        // CLI detection launches version/help/model/auth probes. Four adapters
+        // at a time keeps the UI incremental without flooding Windows with
+        // dozens of competing processes during the user's first prompt.
+        concurrency: 4,
+      })) {
         if (aborted) break;
         res.write(`event: agent\ndata: ${JSON.stringify(agent)}\n\n`);
       }
@@ -698,7 +705,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       try {
         const runtimeRoot = fs.realpathSync.native(RUNTIME_DATA_DIR_CANONICAL);
         if (sourceRoot === runtimeRoot || sourceRoot.startsWith(`${runtimeRoot}${path.sep}`)) {
-          return sendApiError(res, 400, 'BAD_REQUEST', 'cannot import Open Docs runtime data');
+          return sendApiError(res, 400, 'BAD_REQUEST', 'cannot import MonoField runtime data');
         }
       } catch {
         // The runtime data directory may not exist yet in first-run tests.
@@ -882,7 +889,7 @@ function normalizeDesignSystemCraftApplies(value: unknown): string[] | undefined
 export function assembleExample(templateHtml: string, slidesHtml: string, title: string) {
   return templateHtml
     .replace('<!-- SLIDES_HERE -->', slidesHtml)
-    .replace(/<title>.*?<\/title>/, `<title>${title} | Open Docs Example</title>`);
+    .replace(/<title>.*?<\/title>/, `<title>${title} | MonoField Example</title>`);
 }
 
 export function rewriteSkillAssetUrls(html: string, skillId: string) {

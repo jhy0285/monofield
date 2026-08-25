@@ -42,7 +42,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
         if (!req.file)
           return res.status(400).json({ error: 'zip file required' });
         const originalName =
-          req.file.originalname || 'Open Docs export.zip';
+          req.file.originalname || 'MonoField export.zip';
         if (!/\.zip$/i.test(originalName)) {
           fs.promises.unlink(req.file.path).catch(() => {});
           return res.status(400).json({ error: 'expected a .zip file' });
@@ -50,7 +50,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
         const id = randomId();
         const now = Date.now();
         const baseName =
-          originalName.replace(/\.zip$/i, '').trim() || 'Open Docs import';
+          originalName.replace(/\.zip$/i, '').trim() || 'MonoField import';
         const imported = await importClaudeDesignZip(
           req.file.path,
           projectDir(PROJECTS_DIR, id),
@@ -62,7 +62,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
           name: baseName,
           skillId: null,
           designSystemId: null,
-          pendingPrompt: `Imported from Open Docs ZIP: ${originalName}. Continue editing ${imported.entryFile}.`,
+          pendingPrompt: `Imported from MonoField ZIP: ${originalName}. Continue editing ${imported.entryFile}.`,
           metadata: {
             kind: 'prototype',
             importedFrom: 'claude-design',
@@ -76,7 +76,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
         insertConversation(db, {
           id: cid,
           projectId: id,
-          title: 'Imported Open Docs project',
+          title: 'Imported MonoField project',
           createdAt: now,
           updatedAt: now,
         });
@@ -638,8 +638,8 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
   // would otherwise pass the daemon middleware) cannot escalate to
   // daemon-origin privileges through script execution.
   //
-  // See jhy0285/open-docs#368 and the architecture lock at
-  // https://github.com/jhy0285/open-docs/issues/368#issuecomment-4366243218.
+  // See jhy0285/monofield#368 and the architecture lock at
+  // https://github.com/jhy0285/monofield/issues/368#issuecomment-4366243218.
   app.get('/api/projects/:id/export/*splat', async (req, res) => {
     try {
       if (!isSafeId(req.params.id)) {

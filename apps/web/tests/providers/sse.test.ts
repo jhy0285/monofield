@@ -68,6 +68,36 @@ describe('streamViaDaemon', () => {
     expect(body.currentPrompt).toBe('post-consent revision');
   });
 
+  it('forwards an approved project browser session for ordinary post-edit verification', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/events') return sseResponse('event: end\ndata: {"code":0,"status":"succeeded"}\n\n');
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'codex',
+      history: [{ id: '1', role: 'user', content: '버튼 색을 수정해줘' }],
+      signal: new AbortController().signal,
+      handlers,
+      browserVerification: {
+        origin: 'http://127.0.0.1:4173',
+        sessionId: 'browser_session_1234567890',
+        url: 'http://127.0.0.1:4173/orders',
+      },
+    });
+
+    const [, createRunInit] = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit];
+    expect(JSON.parse(String(createRunInit.body)).browserVerification).toEqual({
+      origin: 'http://127.0.0.1:4173',
+      sessionId: 'browser_session_1234567890',
+      url: 'http://127.0.0.1:4173/orders',
+    });
+  });
+
   it('does not surface an error when a still-running same-run retry later succeeds', async () => {
     // The daemon emits the `error` frame for the failed first attempt BEFORE it
     // decides to retry. At that moment the run status is still `running` (the
@@ -335,7 +365,7 @@ describe('streamViaDaemon', () => {
     ]);
 
     expect(transcript).toContain('## user');
-    expect(transcript).toContain('[Open Design truncated 1000 chars from this prior message');
+    expect(transcript).toContain('[MonoField truncated 1000 chars from this prior message');
     expect(transcript).not.toContain('x'.repeat(13_000));
     expect(transcript).toContain('small answer');
   });

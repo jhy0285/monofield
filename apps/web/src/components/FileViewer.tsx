@@ -75,6 +75,8 @@ import {
   exportReactComponentAsHtml,
   exportReactComponentAsZip,
   captureHostIframeSnapshot,
+  captureSandboxedHtmlSnapshot,
+  exportAsImage,
   imageDataUrlToBlob,
   openSandboxedPreviewInNewTab,
   prepareImageExportTarget,
@@ -149,6 +151,7 @@ import {
 import { MANUAL_EDIT_STYLE_PROPS, type ManualEditBridgeMessage, type ManualEditHistoryEntry, type ManualEditPatch, type ManualEditStyles, type ManualEditTarget } from '../edit-mode/types';
 import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 import { ScreenSpecEditor } from './screen-spec/ScreenSpecEditor';
+import { InterfaceSpecEditor } from './interface-spec/InterfaceSpecEditor';
 
 function resolveChromeActionsHost(): HTMLElement | null {
   return document.querySelector<HTMLElement>(APP_CHROME_FILE_ACTIONS_SELECTOR)
@@ -953,6 +956,7 @@ interface Props {
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[], images?: File[]) => Promise<boolean | void> | boolean | void;
   onFileSaved?: () => Promise<void> | void;
+  onOpenFile?: (name: string) => void;
   // Open `openName` as a tab (focusing it) and close `closeName` in one
   // atomic tab-state update. The React module pointer uses this to jump to the
   // HTML entry that renders a module and drop the dead-end module tab.
@@ -985,6 +989,7 @@ export function FileViewer({
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
   onFileSaved,
+  onOpenFile,
   onOpenFileReplacing,
   commentPortalId,
   onCommentModeChange,
@@ -1052,8 +1057,11 @@ export function FileViewer({
   if (rendererMatch?.renderer.id === 'svg') {
     return <SvgViewer projectId={projectId} file={file} />;
   }
+  if (rendererMatch?.renderer.id === 'interface-spec') {
+    return <InterfaceSpecEditor projectId={projectId} file={file} onFileSaved={onFileSaved} onOpenFile={onOpenFile} />;
+  }
   if (rendererMatch?.renderer.id === 'screen-spec') {
-    return <ScreenSpecEditor projectId={projectId} file={file} onFileSaved={onFileSaved} />;
+    return <ScreenSpecEditor projectId={projectId} file={file} onFileSaved={onFileSaved} onOpenFile={onOpenFile} />;
   }
   if (file.kind === 'image') {
     return <ImageViewer projectId={projectId} file={file} />;
@@ -5079,7 +5087,6 @@ function HtmlViewer({
     { message: string; tone: 'default' | 'success' | 'error' | 'loading' } | null
   >(null);
   const [shareLinkFeedback, setShareLinkFeedback] = useState<'copied' | 'failed' | null>(null);
-  const [shareGuideToast, setShareGuideToast] = useState<string | null>(null);
   const [selectedSideCommentIds, setSelectedSideCommentIds] = useState<Set<string>>(() => new Set());
   const [commentSidePanelCollapsed, setCommentSidePanelCollapsed] = useState(false);
   const [strokePoints, setStrokePoints] = useState<StrokePoint[]>([]);
@@ -6642,6 +6649,14 @@ function HtmlViewer({
       if (patch.kind !== 'set-style') {
         setManualEditFrozenSource(result.source);
       }
+      // A manual content edit keeps the preview transport frozen while the
+      // inspector is open. Bump the viewer reload key so both the srcdoc frame
+      // and any cached URL-load frame observe the newly persisted bytes after
+      // Save (the file-list refresh may arrive on a later event-loop turn).
+      // Style saves already reconcile their live preview separately; reloading
+      // those debounced updates would cause avoidable flicker. This is done
+      // only after the POST succeeds, so a failed save never looks changed.
+      if (patch.kind !== 'set-style') setReloadKey((key) => key + 1);
       setManualEditHistory((current) => [entry, ...current]);
       setManualEditUndone([]);
       setManualEditDraft((current) => ({ ...current, fullSource: result.source }));
@@ -7732,6 +7747,7 @@ function HtmlViewer({
   const exportTitle = file.name.replace(/\.html?$/i, '') || file.name;
   const artifactKind = file.artifactManifest?.kind ?? file.artifactKind ?? null;
   const rendererId = file.artifactManifest?.renderer ?? null;
+  const isStructuredInterfaceSpec = source?.includes('data-open-docs-kind="interface-spec"') === true;
   const isDeckArtifact = isDeck || artifactKind === 'deck' || rendererId === 'deck-html' || file.kind === 'presentation';
   const isMarkdownArtifact =
     artifactKind === 'markdown-document' ||
@@ -7849,28 +7865,45 @@ function HtmlViewer({
     const visibleIframe = iframeRef.current ?? srcDocPreviewIframeRef.current;
     const hostSnapshot = await captureHostIframeSnapshot(visibleIframe);
     if (hostSnapshot) return hostSnapshot;
+    const captureBrowserFallback = (iframe: HTMLIFrameElement) => captureSandboxedHtmlSnapshot(
+      previewSource ?? '',
+      {
+        width: iframe.clientWidth,
+        height: iframe.clientHeight,
+        baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
+      },
+    );
 
     if (!useUrlLoadPreview) {
       const activeIframe = srcDocPreviewIframeRef.current ?? iframeRef.current;
       if (!activeIframe) return null;
       await waitForIframeLoadOrTimeout(activeIframe, 250);
       await waitForAnimationFrame();
-      return requestPreviewSnapshotWithRetry(activeIframe);
+      const snapshot = await requestPreviewSnapshotWithRetry(activeIframe);
+      if (snapshot) return snapshot;
+      return captureBrowserFallback(activeIframe);
     }
 
     const urlIframe = iframeRef.current ?? urlPreviewIframeRef.current;
     if (urlIframe) {
       await waitForIframeLoadOrTimeout(urlIframe, 250);
       await waitForAnimationFrame();
-      const urlSnapshot = await requestPreviewSnapshotWithRetry(urlIframe);
+      // URL-loaded artifact iframes are sandboxed and normally have no
+      // snapshot bridge. Avoid spending three growing retries on that known
+      // dead end before trying the browser-safe source capture.
+      const urlSnapshot = await requestPreviewSnapshot(urlIframe, 1_500);
       if (urlSnapshot) return urlSnapshot;
+      const fallbackSnapshot = await captureBrowserFallback(urlIframe);
+      if (fallbackSnapshot) return fallbackSnapshot;
     }
 
     const srcDocIframe = srcDocPreviewIframeRef.current;
     if (!srcDocIframe) {
       const activeIframe = iframeRef.current;
       if (!activeIframe) return null;
-      return requestPreviewSnapshotWithRetry(activeIframe);
+      const snapshot = await requestPreviewSnapshotWithRetry(activeIframe);
+      if (snapshot) return snapshot;
+      return captureBrowserFallback(activeIframe);
     }
 
     if (useLazySrcDocTransport && !srcDocShellReady) {
@@ -7882,7 +7915,9 @@ function HtmlViewer({
     const restoreVisibility = temporarilyExposeIframeForSnapshot(srcDocIframe);
     try {
       await waitForAnimationFrame();
-      return requestPreviewSnapshotWithRetry(srcDocIframe);
+      const snapshot = await requestPreviewSnapshotWithRetry(srcDocIframe);
+      if (snapshot) return snapshot;
+      return captureBrowserFallback(srcDocIframe);
     } finally {
       restoreVisibility();
     }
@@ -7891,6 +7926,9 @@ function HtmlViewer({
     srcDocShellReady,
     useLazySrcDocTransport,
     useUrlLoadPreview,
+    previewSource,
+    projectId,
+    file.name,
   ]);
 
   const handleCopyScreenshot = useCallback(async () => {
@@ -7905,25 +7943,22 @@ function HtmlViewer({
         return;
       }
       const result = await copyImageDataUrlToClipboard(snap.dataUrl);
-      setExportToast(
-        result === 'copied'
-          ? { message: t('fileViewer.screenshotCopied'), tone: 'success' }
-          : {
-              message: t(
-                result === 'denied'
-                  ? 'fileViewer.screenshotClipboardDenied'
-                  : 'fileViewer.screenshotCaptureFailed',
-              ),
-              tone: 'error',
-            },
-      );
+      if (result === 'copied') {
+        setExportToast({ message: t('fileViewer.screenshotCopied'), tone: 'success' });
+        return;
+      }
+      // Capturing finishes after the browser's transient user-activation
+      // window in some browsers, so clipboard.write can be denied even though
+      // the PNG is valid. Download it rather than dropping the capture.
+      exportAsImage(snap.dataUrl, `${exportTitle}-screenshot`);
+      setExportToast({ message: t('fileViewer.exportImageSaved'), tone: 'success' });
     } catch (err) {
       console.warn('[handleCopyScreenshot] failed:', err);
       setExportToast({ message: t('fileViewer.screenshotCaptureFailed'), tone: 'error' });
     } finally {
       screenshotInFlightRef.current = false;
     }
-  }, [captureExportImageSnapshot, t]);
+  }, [captureExportImageSnapshot, exportTitle, t]);
 
   const prepareImageExportBlob = useCallback(async (format: ImageExportFormat) => {
     const prepareId = imageExportPrepareIdRef.current + 1;
@@ -8744,21 +8779,25 @@ function HtmlViewer({
               >
                 <RemixIcon name="mark-pen-line" size={15} />
               </button>
-              <span className="viewer-toolbar-tool-divider" aria-hidden />
-              <button
-                className={`viewer-action viewer-action-icon od-tooltip${manualEditMode ? ' active' : ''}`}
-                type="button"
-                data-testid="manual-edit-mode-toggle"
-                data-tooltip={t('fileViewer.edit')}
-                data-tooltip-placement="bottom"
-                title={t('fileViewer.edit')}
-                aria-label={t('fileViewer.edit')}
-                aria-pressed={manualEditMode}
-                onClick={activateManualEditTool}
-              >
-                <RemixIcon name="edit-line" size={15} />
-              </button>
-              <span className="viewer-toolbar-tool-divider" aria-hidden />
+              {!isStructuredInterfaceSpec ? (
+                <>
+                  <span className="viewer-toolbar-tool-divider" aria-hidden />
+                  <button
+                    className={`viewer-action viewer-action-icon od-tooltip${manualEditMode ? ' active' : ''}`}
+                    type="button"
+                    data-testid="manual-edit-mode-toggle"
+                    data-tooltip={t('fileViewer.edit')}
+                    data-tooltip-placement="bottom"
+                    title={t('fileViewer.edit')}
+                    aria-label={t('fileViewer.edit')}
+                    aria-pressed={manualEditMode}
+                    onClick={activateManualEditTool}
+                  >
+                    <RemixIcon name="edit-line" size={15} />
+                  </button>
+                  <span className="viewer-toolbar-tool-divider" aria-hidden />
+                </>
+              ) : <span className="viewer-toolbar-tool-divider" aria-hidden />}
               <button
                 type="button"
                 className={`viewer-action viewer-comment-count-trigger viewer-comment-toggle od-tooltip${boardMode && commentCreateMode ? ' active' : ''}`}
@@ -8871,11 +8910,11 @@ function HtmlViewer({
                   </button>
                   {deployMenuOpen ? (
                     <div className="share-menu-popover" role="menu">
-                      <div className="share-menu-section-label" role="presentation">
-                        {t('fileViewer.shareMenuShareLink')}
-                      </div>
                       {sharePageUrl ? (
                         <>
+                          <div className="share-menu-section-label" role="presentation">
+                            {t('fileViewer.shareMenuShareLink')}
+                          </div>
                           <button
                             type="button"
                             className="share-menu-item"
@@ -8920,43 +8959,9 @@ function HtmlViewer({
                               ) : null}
                             </span>
                           </button>
+                          <div className="share-menu-divider" />
                         </>
-                      ) : (
-                        <button
-                          type="button"
-                          className="share-menu-item share-menu-guide"
-                          role="menuitem"
-                          title={shareUnavailableHint}
-                          onClick={() => {
-                            // Share-intent-but-blocked signal: user wants a
-                            // share link but nothing is deployed yet.
-                            trackShareOptionPopoverClick(
-                              analytics.track,
-                              {
-                                page_name: 'artifact',
-                                area: 'share_option_popover',
-                                artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
-                                artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
-                                element: 'publish_required_guide',
-                                project_id: projectId,
-                                project_kind: projectKind,
-                              },
-                              { requestId: analytics.newRequestId() },
-                            );
-                            setShareGuideToast(shareUnavailableHint);
-                          }}
-                        >
-                          <span className="share-menu-icon"><RemixIcon name="link" size={15} /></span>
-                          <span className="share-menu-text">
-                            <span>
-                              {streaming
-                                ? t('fileViewer.shareAfterGenerationComplete')
-                                : t('fileViewer.shareLinkPublishGuide')}
-                            </span>
-                          </span>
-                        </button>
-                      )}
-                      <div className="share-menu-divider" />
+                      ) : null}
                       <div className="share-menu-section-label" role="presentation">
                         {t('fileViewer.shareMenuPublishOnline')}
                       </div>
@@ -9987,15 +9992,6 @@ function HtmlViewer({
           ttlMs={3600}
           onDismiss={() => setImageExportSavedToast(null)}
         />
-      ) : null}
-      {shareGuideToast && typeof document !== 'undefined' ? createPortal(
-        <Toast
-          message={shareGuideToast}
-          placement="top"
-          ttlMs={2200}
-          onDismiss={() => setShareGuideToast(null)}
-        />,
-        document.body,
       ) : null}
     </div>
   );

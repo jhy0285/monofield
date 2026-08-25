@@ -140,12 +140,12 @@
 .viewer-action.primary {
   background: var(--accent);
   border: 1px solid var(--accent);
-  color: white;
+  color: var(--accent-contrast);
 }
 .viewer-action.primary:hover:not(:disabled) {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
-  color: white;
+  color: var(--accent-contrast);
 }
 /* Primary actions support a subtle in-flight affordance via data-running. Keeps
    layout stable (unlike :disabled-only) so locale text width doesn't jump. */
@@ -1509,6 +1509,7 @@
 }
 .comment-side-panel {
   --comment-accent: #ff5a3c;
+  --comment-accent-contrast: #111111;
   --comment-accent-strong: color-mix(in srgb, var(--comment-accent) 78%, var(--text));
   --comment-accent-surface: color-mix(in srgb, var(--comment-accent) 10%, var(--bg-panel));
   --comment-accent-surface-strong: color-mix(in srgb, var(--comment-accent) 18%, var(--bg-panel));
@@ -1630,8 +1631,8 @@
   justify-content: center;
   padding: 0 4px;
   border-radius: var(--radius-pill);
-  background: #ff5a3c;
-  color: #fff;
+  background: var(--comment-accent);
+  color: var(--comment-accent-contrast);
   font-size: 10px;
   font-weight: 700;
   line-height: 1;
@@ -1765,7 +1766,7 @@
   align-items: center;
   justify-content: center;
   padding: 0;
-  color: #fff;
+  color: var(--comment-accent-contrast);
   flex-shrink: 0;
 }
 .comment-side-check.checked {
@@ -1830,7 +1831,7 @@
   align-items: center;
   gap: 4px;
   background: var(--comment-accent);
-  color: #fff;
+  color: var(--comment-accent-contrast);
   border: 1px solid var(--comment-accent);
   border-radius: var(--radius-sm);
   padding: 5px 10px;
@@ -1838,9 +1839,9 @@
   cursor: pointer;
 }
 .comment-side-selectbar .primary:disabled {
-  background: color-mix(in srgb, var(--comment-accent) 45%, var(--bg-panel));
-  border-color: color-mix(in srgb, var(--comment-accent) 45%, var(--border));
-  color: color-mix(in srgb, #fff 68%, var(--text-muted));
+  background: var(--control-disabled-bg);
+  border-color: var(--control-disabled-border);
+  color: var(--control-disabled-text);
   cursor: not-allowed;
 }
 .comment-side-selectbar .primary:hover:not(:disabled) {

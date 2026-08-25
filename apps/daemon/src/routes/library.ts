@@ -584,7 +584,7 @@ export function registerLibraryRoutes(app: Express, ctx: RegisterLibraryRoutesDe
         id: conversationId,
         projectId,
         title: null,
-        sessionMode: 'design',
+        sessionMode: 'docs',
         createdAt: now,
         updatedAt: now,
       });

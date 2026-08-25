@@ -20,6 +20,8 @@ import {
   METHOD_ACTION_MAP,
   resolveTheme,
   type InterfaceSpecStyleOverride,
+  INTERFACE_SPEC_TEMPLATE_STYLES,
+  mergeInterfaceSpecStyles,
   type PresetFont,
   type ResolvedTheme,
 } from './preset-data.js';
@@ -313,6 +315,14 @@ export function resolveAuthRow(
   }
 
   switch (scheme.type) {
+    case 'undecided':
+      return {
+        nameEn: '(auth)',
+        nameKo: '인증 여부',
+        dataType: 'TBD',
+        note: '인증 방식 확인 필요',
+        example: {},
+      };
     case 'bearer': {
       const name = scheme.name ?? 'Authorization';
       const note = scheme.valueFormat ?? 'Bearer {accessToken}';
@@ -363,8 +373,8 @@ export function resolveAuthRow(
 }
 
 export function buildRequestExample(ep: InterfaceEndpoint, authRow: ResolvedAuthRow | null): unknown {
-  // A verbatim example (e.g. captured from a live probe) wins over the
-  // type-derived sample so the workbook shows the real request shape.
+  // A supplied example (captured or statically synthesized) wins over the
+  // type-derived fallback so the workbook preserves its reviewed shape.
   if (ep.requestExample !== undefined) return ep.requestExample;
   const out: Record<string, unknown> = { body: buildNestedSamplePayload(ep.requestFields) };
   if (authRow && Object.keys(authRow.example).length > 0) out['headers'] = authRow.example;
@@ -372,8 +382,8 @@ export function buildRequestExample(ep: InterfaceEndpoint, authRow: ResolvedAuth
 }
 
 export function buildResponseExample(ep: InterfaceEndpoint): unknown {
-  // A verbatim example (full envelope, from a real call) wins over the
-  // type-derived sample.
+  // A supplied example (captured or statically synthesized) wins over the
+  // type-derived fallback.
   if (ep.responseExample !== undefined) return ep.responseExample;
   let resultPayload: unknown;
   if (ep.responseFields.length > 0) {
@@ -667,10 +677,25 @@ function writeDetailSheet(
     row += 1;
   });
 
+  const staticExampleSuffix = ep.exampleSource === 'static-analysis'
+    ? ' (static analysis; not executed)'
+    : '';
   row += samples.gapBeforeRequestSample;
-  row = writeJsonSampleBlock(ws, merged, row, samples.requestTitle, buildRequestExample(ep, authRow));
+  row = writeJsonSampleBlock(
+    ws,
+    merged,
+    row,
+    `${samples.requestTitle}${staticExampleSuffix}`,
+    buildRequestExample(ep, authRow),
+  );
   row += samples.gapBetweenSamples;
-  writeJsonSampleBlock(ws, merged, row, samples.responseTitle, buildResponseExample(ep));
+  writeJsonSampleBlock(
+    ws,
+    merged,
+    row,
+    `${samples.responseTitle}${staticExampleSuffix}`,
+    buildResponseExample(ep),
+  );
 }
 
 function applyDetailSheetPreset(ws: Ws, merged: Set<string>, theme: ResolvedTheme): void {
@@ -855,7 +880,9 @@ export async function renderInterfaceSpecXlsx(
   doc: InterfaceSpecDocument,
   options: RenderInterfaceSpecXlsxOptions = {},
 ): Promise<RenderInterfaceSpecXlsxResult> {
-  const theme = resolveTheme(options.style);
+  const theme = resolveTheme(
+    mergeInterfaceSpecStyles(INTERFACE_SPEC_TEMPLATE_STYLES[doc.templatePreset], options.style),
+  );
   const issues = validateInterfaceSpecDocument(doc);
   const fatal = issues.filter((issue) => issue.severity === 'fatal');
   if (fatal.length > 0) {

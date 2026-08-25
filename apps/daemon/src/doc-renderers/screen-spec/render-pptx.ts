@@ -19,7 +19,7 @@ import {
  * Deterministic ScreenSpecDocument → PPTX renderer.
  *
  * Ported from Screen Spec Studio (wireFrame repo, renderers/pptx/
- * renderPptx.ts) with two adaptations for the Open Docs daemon:
+ * renderPptx.ts) with two adaptations for the MonoField daemon:
  * - runs in Node (image sizes parsed from data-URL bytes, output is a
  *   Buffer instead of a browser Blob), and
  * - renders one slide per entry in `document.screens` instead of a single
@@ -79,8 +79,8 @@ export async function renderScreenSpecPptx(
   const first = doc.screens[0];
   const pptx = new PptxGenJS();
   pptx.layout = PPTX_LAYOUT.name;
-  pptx.author = first?.author || 'Open Docs';
-  pptx.company = first?.companyName || 'Open Docs';
+  pptx.author = first?.author || 'MonoField';
+  pptx.company = first?.companyName || 'MonoField';
   pptx.subject = 'Screen specification';
   pptx.title = doc.name;
   pptx.theme = {
@@ -540,7 +540,7 @@ function renderFooter(slide: Slide, screen: ScreenSpecScreen): void {
     { x: footer.x + footer.w, y: footer.y - 0.08 },
     { color: PPTX_THEME.colors.border, width: 0.75 },
   );
-  slide.addText(screen.companyName || 'Open Docs', {
+  slide.addText(screen.companyName || 'MonoField', {
     x: footer.x,
     y: footer.y,
     w: 3,

@@ -91,7 +91,7 @@ describe('DesignSystemsTab', () => {
     expect(screen.getByTestId('design-systems-sidebar-skeleton')).toBeTruthy();
     expect(screen.getByTestId('design-systems-preview-skeleton')).toBeTruthy();
     expect(screen.getByTestId('design-systems-loading-row-0')).toBeTruthy();
-    expect(screen.getByText('Loading design systems…')).toBeTruthy();
+    expect(screen.getByText('Loading document styles…')).toBeTruthy();
     expect(container.querySelector('.loading-spinner')).toBeNull();
   });
 
@@ -141,7 +141,7 @@ describe('DesignSystemsTab', () => {
     expect(screen.queryByRole('tab', { name: 'Template' })).toBeNull();
     expect(screen.getByRole('tab', { name: 'Your systems' }).textContent).toContain('1');
     expect(screen.getByRole('tab', { name: 'Official presets' }).textContent).toContain('1');
-    expect(screen.getByRole('tab', { name: 'Enterprise' }).textContent).toContain('Coming soon');
+    expect(screen.queryByRole('tab', { name: 'Enterprise' })).toBeNull();
   });
 
   it('separates user-created design systems from the official preset library', () => {
@@ -299,9 +299,9 @@ describe('DesignSystemsTab', () => {
     );
 
     fireEvent.click(await screen.findByTestId('design-kit-more-actions'));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Download design system (.zip + SKILLS.md)' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Download document style (.zip + SKILLS.md)' }));
 
-    expect(screen.getByText('Download design system (.zip + SKILLS.md)')).toBeTruthy();
+    expect(screen.getByText('Download document style (.zip + SKILLS.md)')).toBeTruthy();
     resolveDownload(true);
 
     await waitFor(() => expect(screen.getByText('Done')).toBeTruthy());

@@ -14,6 +14,53 @@ const VALID_BODY = `{
 }`;
 
 describe('splitOnQuestionForms', () => {
+  it('parses and normalizes a manual interface-spec draft', () => {
+    const input = `<question-form id="interface-spec-manual-draft">${JSON.stringify({
+      title: 'Manual spec',
+      questions: [{
+        id: 'draft',
+        label: 'Draft',
+        type: 'interface-spec-manual',
+        required: true,
+        draft: {
+          documentName: 'Orders API',
+          assistMode: 'ai',
+          reviewStage: 'intake',
+          businessContext: '주문 생성 업무',
+          referenceFiles: [{ name: '용어사전.xlsx', path: '_open-docs/interface-spec-inputs/terms.xlsx', role: 'dictionary' }],
+          templatePreset: 'review',
+          endpoints: [{
+            interfaceName: '주문 생성',
+            interfaceId: 'if-ord-001',
+            method: 'post',
+            path: '/api/orders',
+            auth: 'bearer',
+            requestMode: 'ai',
+            responseMode: 'manual',
+            requestFields: [{ name: 'customerId', type: 'UUID', minSize: '1', maxSize: '36', required: 'TBD', suggested: true, evidence: '용어사전.xlsx' }],
+            responseFields: [{ nameEn: 'orderId', required: 'Y' }],
+          }],
+        },
+      }],
+    })}</question-form>`;
+    const segment = splitOnQuestionForms(input)[0];
+    expect(segment?.kind).toBe('form');
+    if (segment?.kind !== 'form') throw new Error('expected form');
+    const question = segment.form.questions[0];
+    expect(question?.type).toBe('interface-spec-manual');
+    expect(question?.interfaceSpecDraft).toMatchObject({
+      documentName: 'Orders API',
+      version: '1.0',
+      assistMode: 'ai',
+      reviewStage: 'intake',
+      businessContext: '주문 생성 업무',
+      referenceFiles: [{ name: '용어사전.xlsx', role: 'dictionary' }],
+      templatePreset: 'review',
+      endpoints: [{ method: 'POST', auth: 'bearer', requestMode: 'ai', responseMode: 'manual', requestFields: [{ nameEn: 'customerId', dataType: 'UUID', minSize: '1', maxSize: '36', required: 'TBD', suggested: true, evidence: '용어사전.xlsx' }] }],
+    });
+    expect(JSON.parse(String(question?.defaultValue))).toEqual(question?.interfaceSpecDraft);
+  });
+
   it('normalizes string and object question options', () => {
     const input = [
       '<question-form id="discovery" title="Quick brief">',
@@ -53,6 +100,29 @@ describe('splitOnQuestionForms', () => {
         value: 'Desktop web',
         description: 'Browser-first prototype',
       },
+    ]);
+  });
+
+  it('parses project file, saved dictionary, and approved database context controls', () => {
+    const input = `<question-form>{
+      "questions": [
+        { "id": "mapping", "label": "Mapping", "type": "file", "accept": ".csv,.xlsx,.xlsm", "storage": "mapping" },
+        { "id": "dictionary", "label": "Dictionary", "type": "saved-dictionary" },
+        { "id": "database", "label": "Database sample", "type": "database-context", "sampleRows": 99,
+          "showWhen": { "questionId": "mode", "values": ["database-sample"] } },
+        { "id": "mode", "label": "Example mode", "type": "radio",
+          "options": [{ "label": "Format sample", "value": "format", "example": "{ \\"id\\": 1 }" }] }
+      ]
+    }</question-form>`;
+
+    const segment = splitOnQuestionForms(input)[0];
+    expect(segment).toMatchObject({ kind: 'form' });
+    if (segment?.kind !== 'form') throw new Error('expected parsed form segment');
+    expect(segment.form.questions).toMatchObject([
+      { type: 'file', accept: '.csv,.xlsx,.xlsm', storage: 'mapping' },
+      { type: 'dictionary' },
+      { type: 'database-context', sampleRows: 20, showWhen: { questionId: 'mode', values: ['database-sample'] } },
+      { options: [{ label: 'Format sample', value: 'format', example: '{ "id": 1 }' }] },
     ]);
   });
 

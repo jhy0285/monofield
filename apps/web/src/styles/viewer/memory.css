@@ -455,7 +455,7 @@
   border: 1px solid var(--accent);
   border-radius: var(--radius-sm);
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast);
   font-size: 12px;
   cursor: pointer;
   white-space: nowrap;
@@ -612,7 +612,7 @@
   width: 14px;
   left: 3px;
   bottom: 3px;
-  background-color: white;
+  background-color: var(--text-strong);
   border-radius: 50%;
   transition: transform 0.2s;
 }
@@ -623,6 +623,7 @@
 
 .toggle-switch input:checked + .toggle-slider::before {
   transform: translateX(16px);
+  background-color: var(--accent-contrast);
 }
 
 .toggle-switch-sm {
@@ -637,6 +638,7 @@
 
 .toggle-switch-sm input:checked + .toggle-slider::before {
   transform: translateX(13px);
+  background-color: var(--accent-contrast);
 }
 /* Manual edit mode */
 .manual-edit-workspace {
@@ -1525,7 +1527,7 @@
 }
 
 .privacy-consent-policy-link:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }

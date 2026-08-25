@@ -33,7 +33,77 @@ export type QuestionType =
   | 'select'
   | 'text'
   | 'textarea'
-  | 'direction-cards';
+  | 'file'
+  | 'dictionary'
+  | 'database-context'
+  | 'domain-mapping'
+  | 'direction-cards'
+  | 'interface-spec-manual';
+
+export type InterfaceSpecManualTemplate = 'si-standard' | 'compact' | 'review';
+export type InterfaceSpecManualAssistMode = 'ai' | 'manual';
+export type InterfaceSpecManualReviewStage = 'intake' | 'review';
+export type InterfaceSpecManualFieldMode = 'ai' | 'manual' | 'none';
+export type InterfaceSpecManualReferenceRole =
+  | 'requirements'
+  | 'output-template'
+  | 'dictionary'
+  | 'sample'
+  | 'api-standard'
+  | 'other';
+export type InterfaceSpecManualAuth =
+  | 'undecided'
+  | 'none'
+  | 'bearer'
+  | 'api-key'
+  | 'session-cookie'
+  | 'custom';
+
+export interface InterfaceSpecManualFieldDraft {
+  id: string;
+  nameEn: string;
+  nameKo: string;
+  dataType: string;
+  minSize: string;
+  maxSize: string;
+  required: 'Y' | 'N' | 'TBD';
+  note: string;
+  suggested?: boolean;
+  evidence: string;
+}
+
+export interface InterfaceSpecManualReferenceFile {
+  id: string;
+  name: string;
+  path: string;
+  role: InterfaceSpecManualReferenceRole;
+}
+
+export interface InterfaceSpecManualEndpointDraft {
+  id: string;
+  interfaceName: string;
+  interfaceId: string;
+  method: string;
+  path: string;
+  auth: InterfaceSpecManualAuth;
+  businessPurpose: string;
+  requestMode: InterfaceSpecManualFieldMode;
+  responseMode: InterfaceSpecManualFieldMode;
+  requestFields: InterfaceSpecManualFieldDraft[];
+  responseFields: InterfaceSpecManualFieldDraft[];
+}
+
+export interface InterfaceSpecManualDraft {
+  documentName: string;
+  version: string;
+  department: string;
+  assistMode: InterfaceSpecManualAssistMode;
+  reviewStage: InterfaceSpecManualReviewStage;
+  businessContext: string;
+  referenceFiles: InterfaceSpecManualReferenceFile[];
+  templatePreset: InterfaceSpecManualTemplate;
+  endpoints: InterfaceSpecManualEndpointDraft[];
+}
 
 /**
  * Rich card metadata for a single `direction-cards` option. The picker
@@ -63,6 +133,13 @@ export interface FormOption {
   label: string;
   value: string;
   description?: string;
+  /** A concise concrete example shown only after this option is selected. */
+  example?: string;
+}
+
+export interface FormQuestionVisibility {
+  questionId: string;
+  values: string[];
 }
 
 export interface FormQuestion {
@@ -78,6 +155,20 @@ export interface FormQuestion {
   maxSelections?: number;
   /** Only present when `type === 'direction-cards'`. Mapped to options by `id`. */
   cards?: DirectionCard[];
+  /** Natural-language values extracted for the no-codebase interface editor. */
+  interfaceSpecDraft?: InterfaceSpecManualDraft;
+  /** Optional browser accept filter for a `file` question. */
+  accept?: string;
+  /** Number of redacted database sample rows to attach (1-20, default 5). */
+  sampleRows?: number;
+  /** Legacy database-context hint; the UI always uses explicit table selection. */
+  databaseMode?: 'candidates' | 'manual';
+  /** Domains discovered from the codebase for the post-scan mapping form. */
+  domains?: string[];
+  /** Project-managed destination for a file answer. */
+  storage?: 'dictionary' | 'mapping';
+  /** Shows this control only for a selected answer in the same form. */
+  showWhen?: FormQuestionVisibility;
 }
 
 export interface QuestionForm {
@@ -261,7 +352,26 @@ function mapRawQuestion(q: unknown, index: number): FormQuestion | null {
       ? qo.maxSelections
       : undefined;
   const cards = parseDirectionCards(qo.cards);
-  const defaultValue = parseDefaultValue(qo, options);
+  const interfaceSpecDraft =
+    type === 'interface-spec-manual' ? parseInterfaceSpecManualDraft(qo.draft) : undefined;
+  const accept = typeof qo.accept === 'string' ? qo.accept : undefined;
+  const sampleRows =
+    typeof qo.sampleRows === 'number' && Number.isInteger(qo.sampleRows)
+      ? Math.min(20, Math.max(1, qo.sampleRows))
+      : undefined;
+  const databaseMode =
+    qo.databaseMode === 'manual' || qo.databaseMode === 'candidates'
+      ? qo.databaseMode
+      : undefined;
+  const domains = type === 'domain-mapping' && Array.isArray(qo.domains)
+    ? qo.domains.filter((domain): domain is string => typeof domain === 'string' && domain.trim().length > 0)
+    : undefined;
+  const storage = qo.storage === 'dictionary' || qo.storage === 'mapping' ? qo.storage : undefined;
+  const showWhen = parseShowWhen(qo.showWhen);
+  const defaultValue =
+    interfaceSpecDraft !== undefined
+      ? JSON.stringify(interfaceSpecDraft)
+      : parseDefaultValue(qo, options);
   return {
     id,
     label,
@@ -273,6 +383,13 @@ function mapRawQuestion(q: unknown, index: number): FormQuestion | null {
     ...(defaultValue !== undefined ? { defaultValue } : {}),
     ...(maxSelections !== undefined && type === 'checkbox' ? { maxSelections } : {}),
     ...(cards ? { cards } : {}),
+    ...(interfaceSpecDraft ? { interfaceSpecDraft } : {}),
+    ...(accept ? { accept } : {}),
+    ...(sampleRows !== undefined && type === 'database-context' ? { sampleRows } : {}),
+    ...(databaseMode !== undefined && type === 'database-context' ? { databaseMode } : {}),
+    ...(domains && domains.length > 0 ? { domains } : {}),
+    ...(storage ? { storage } : {}),
+    ...(showWhen ? { showWhen } : {}),
   };
 }
 
@@ -460,6 +577,10 @@ function shapeStreamingQuestions(rawQuestions: unknown, closedCount: number): Fo
     const isClosed = index < closedCount;
     const hasId = typeof q.id === 'string' && q.id.trim().length > 0;
     if (!isClosed && !hasId) return;
+    // The manual interface editor carries one nested draft object. Showing it
+    // before that object closes would freeze an early, incomplete default in
+    // QuestionForm state and lose values that arrive later in the stream.
+    if (!isClosed && normalizeType(q.type) === 'interface-spec-manual') return;
     const mapped = mapRawQuestion(raw, index);
     if (mapped) out.push(mapped);
   });
@@ -518,6 +639,12 @@ function normalizeType(raw: unknown): QuestionType {
   if (lower === 'checkbox' || lower === 'multi' || lower === 'multiple') return 'checkbox';
   if (lower === 'select' || lower === 'dropdown') return 'select';
   if (lower === 'textarea' || lower === 'long' || lower === 'paragraph') return 'textarea';
+  if (lower === 'file' || lower === 'upload') return 'file';
+  if (lower === 'dictionary' || lower === 'saved-dictionary') return 'dictionary';
+  if (lower === 'database-context' || lower === 'database' || lower === 'db-context') {
+    return 'database-context';
+  }
+  if (lower === 'domain-mapping' || lower === 'domain-map') return 'domain-mapping';
   if (
     lower === 'direction-cards' ||
     lower === 'directions' ||
@@ -525,7 +652,112 @@ function normalizeType(raw: unknown): QuestionType {
     lower === 'direction'
   )
     return 'direction-cards';
+  if (
+    lower === 'interface-spec-manual' ||
+    lower === 'interface-spec-draft' ||
+    lower === 'manual-interface-spec'
+  )
+    return 'interface-spec-manual';
   return 'text';
+}
+
+export function parseInterfaceSpecManualDraft(raw: unknown): InterfaceSpecManualDraft | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const obj = raw as Record<string, unknown>;
+  const text = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
+  const auth = (value: unknown): InterfaceSpecManualAuth =>
+    value === 'none' || value === 'bearer' || value === 'api-key' ||
+    value === 'session-cookie' || value === 'custom'
+      ? value
+      : 'undecided';
+  const templatePreset: InterfaceSpecManualTemplate =
+    obj.templatePreset === 'compact' || obj.templatePreset === 'review'
+      ? obj.templatePreset
+      : 'si-standard';
+  const assistMode: InterfaceSpecManualAssistMode = obj.assistMode === 'ai' ? 'ai' : 'manual';
+  const reviewStage: InterfaceSpecManualReviewStage = obj.reviewStage === 'intake' ? 'intake' : 'review';
+  const fieldMode = (value: unknown): InterfaceSpecManualFieldMode =>
+    value === 'ai' || value === 'none' ? value : 'manual';
+  const referenceRole = (value: unknown): InterfaceSpecManualReferenceRole =>
+    value === 'requirements' || value === 'output-template' || value === 'dictionary' ||
+    value === 'sample' || value === 'api-standard'
+      ? value
+      : 'other';
+
+  const parseFields = (value: unknown, prefix: string): InterfaceSpecManualFieldDraft[] =>
+    (Array.isArray(value) ? value : []).flatMap((entry, index) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
+      const field = entry as Record<string, unknown>;
+      const required = field.required === 'Y' || field.required === 'N' ? field.required : 'TBD';
+      return [{
+        id: text(field.id) || `${prefix}-${index + 1}`,
+        nameEn: text(field.nameEn) || text(field.name),
+        nameKo: text(field.nameKo) || text(field.label),
+        dataType: text(field.dataType) || text(field.type),
+        minSize: text(field.minSize),
+        maxSize: text(field.maxSize),
+        required,
+        note: text(field.note),
+        ...(field.suggested === true ? { suggested: true } : {}),
+        evidence: text(field.evidence),
+      }];
+    });
+
+  const referenceFiles = (Array.isArray(obj.referenceFiles) ? obj.referenceFiles : []).flatMap((entry, index) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
+    const reference = entry as Record<string, unknown>;
+    const path = text(reference.path);
+    const name = text(reference.name) || path.split(/[\\/]/).pop() || '';
+    if (!path || !name) return [];
+    return [{
+      id: text(reference.id) || `reference-${index + 1}`,
+      name,
+      path,
+      role: referenceRole(reference.role),
+    }];
+  });
+
+  const endpoints = (Array.isArray(obj.endpoints) ? obj.endpoints : []).flatMap((entry, index) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
+    const endpoint = entry as Record<string, unknown>;
+    return [{
+      id: text(endpoint.id) || `endpoint-${index + 1}`,
+      interfaceName: text(endpoint.interfaceName),
+      interfaceId: text(endpoint.interfaceId),
+      method: text(endpoint.method).toUpperCase(),
+      path: text(endpoint.path),
+      auth: auth(endpoint.auth),
+      businessPurpose: text(endpoint.businessPurpose),
+      requestMode: fieldMode(endpoint.requestMode),
+      responseMode: fieldMode(endpoint.responseMode),
+      requestFields: parseFields(endpoint.requestFields, `endpoint-${index + 1}-request`),
+      responseFields: parseFields(endpoint.responseFields, `endpoint-${index + 1}-response`),
+    }];
+  });
+
+  return {
+    documentName: text(obj.documentName),
+    version: text(obj.version) || '1.0',
+    department: text(obj.department),
+    assistMode,
+    reviewStage,
+    businessContext: text(obj.businessContext),
+    referenceFiles,
+    templatePreset,
+    endpoints: endpoints.length > 0 ? endpoints : [{
+      id: 'endpoint-1',
+      interfaceName: '',
+      interfaceId: '',
+      method: '',
+      path: '',
+      auth: 'undecided',
+      businessPurpose: '',
+      requestMode: 'manual',
+      responseMode: 'manual',
+      requestFields: [],
+      responseFields: [],
+    }],
+  };
 }
 
 function parseOptions(raw: unknown): FormOption[] | undefined {
@@ -553,11 +785,26 @@ function parseOption(raw: unknown): FormOption | null {
     typeof obj.description === 'string' && obj.description.trim().length > 0
       ? obj.description.trim()
       : undefined;
+  const example =
+    typeof obj.example === 'string' && obj.example.trim().length > 0
+      ? obj.example.trim()
+      : undefined;
   return {
     label,
     value,
     ...(description ? { description } : {}),
+    ...(example ? { example } : {}),
   };
+}
+
+function parseShowWhen(raw: unknown): FormQuestionVisibility | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const obj = raw as Record<string, unknown>;
+  const questionId = typeof obj.questionId === 'string' ? obj.questionId.trim() : '';
+  const values = Array.isArray(obj.values)
+    ? obj.values.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    : [];
+  return questionId && values.length > 0 ? { questionId, values } : undefined;
 }
 
 function parseDefaultValue(

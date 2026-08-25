@@ -1,28 +1,27 @@
 # Third-Party Notices
 
-Open Docs is a derivative of the Apache-2.0 licensed
+MonoField is a derivative of the Apache-2.0 licensed
 [Open Design](https://github.com/nexu-io/open-design) project. See `NOTICE`
 for the upstream attribution and fork provenance, and `LICENSE` for the
 Apache License 2.0 text that covers the repository as a whole.
 
 This file records the third-party components bundled inside this repository
-that carry their own licenses. It was last verified on 2026-07-07.
+that carry their own licenses. It was last verified on 2026-08-06.
 
 ## Bundled plugins, skills, and design templates
 
 Plugin, skill, and design-template descriptors (`open-design.json`) declare
 their own `license` field. As of the verification date the breakdown across
-476 bundled descriptors is:
+477 bundled descriptors is:
 
 | License | Count |
 | --- | --- |
 | MIT | 349 |
 | CC-BY-4.0 | 91 |
-| Apache-2.0 | 35 |
-| undeclared | 1 |
+| Apache-2.0 | 37 |
 
-51 component directories additionally bundle their own `LICENSE` file
-(36 under `design-templates/`, 24 under `plugins/`, 15 under `skills/`).
+73 component directories additionally bundle their own `LICENSE` file
+(36 under `design-templates/`, 24 under `plugins/`, 13 under `skills/`).
 These files must be preserved and distributed with their component.
 
 Representative upstream authors of bundled MIT-licensed template packs:
@@ -32,11 +31,8 @@ Representative upstream authors of bundled MIT-licensed template packs:
 - `design-templates/html-ppt-zhangzara-*/` — Zara Zhang, MIT
 - `plugins/community/hallmark/` — Nutlope, MIT
 
-## Items to resolve before redistribution
+## Release checks
 
-- `plugins/community/deep-think-maximum-cognitive-effort-protocol-mq8kvw92/`
-  declares no `license`, `author`, or `homepage`. Verify its origin and
-  either obtain license terms or remove it from distributed builds.
 - Run a formal dependency license scan (e.g. `license-report`) against the
   pnpm workspace before each public release. A spot check on 2026-07-07
   found no GPL/AGPL/LGPL packages, but the lockfile changes over time.

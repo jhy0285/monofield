@@ -418,7 +418,7 @@
 .updater-popup__button--primary {
   border-color: var(--accent);
   background: var(--accent);
-  color: #ffffff;
+  color: var(--accent-contrast);
 }
 
 @media (max-width: 560px) {
@@ -460,7 +460,7 @@
 .modal-rename .row button.primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast);
 }
 .modal-rename .row button.primary:disabled {
   opacity: 0.5;
@@ -499,7 +499,7 @@
 .modal-confirm .row button.primary.danger {
   background: var(--red);
   border-color: var(--red);
-  color: #fff;
+  color: var(--red-contrast);
 }
 .modal-confirm .row button.primary.danger:hover { filter: brightness(0.95); }
 
@@ -634,7 +634,7 @@
    * line inside the 920px settings modal while still wrapping cleanly
    * on narrow viewports (the modal width clamps to 100vw - 48px) and
    * for the longest locales (German, French). 50ch was forcing even
-   * the English subtitle onto two lines. See jhy0285/open-docs#743. */
+   * the English subtitle onto two lines. See jhy0285/monofield#743. */
   max-width: 72ch;
 }
 .modal-foot {
@@ -702,7 +702,7 @@
   transform: translateY(0);
 }
 .settings-chrome-btn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
   color: var(--text);
 }
@@ -1135,7 +1135,7 @@
   box-shadow: 0 4px 14px color-mix(in srgb, var(--shadow-color, #000) 12%, transparent);
 }
 .settings-sidebar-toggle:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 .modal-settings.settings-sidebar-collapsed .settings-sidebar-toggle {
@@ -1364,7 +1364,7 @@
 .protocol-chip.active {
   background: var(--selected);
   border-color: color-mix(in srgb, var(--selected) 86%, var(--text-strong));
-  color: #fff;
+  color: var(--selected-contrast);
   font-weight: 600;
   box-shadow:
     0 0 0 3px var(--selected-soft),
@@ -1373,7 +1373,7 @@
 .protocol-chip.active:hover {
   background: color-mix(in srgb, var(--selected) 88%, var(--text-strong));
   border-color: color-mix(in srgb, var(--selected) 80%, var(--text-strong));
-  color: #fff;
+  color: var(--selected-contrast);
 }
 
 .settings-section { display: flex; flex-direction: column; gap: 12px; }
@@ -1595,7 +1595,7 @@
   align-items: center;
   justify-content: center;
   background: linear-gradient(135deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 70%, #000) 100%);
-  color: #fff;
+  color: var(--accent-contrast);
   box-shadow: 0 6px 14px color-mix(in srgb, var(--accent) 32%, transparent);
   flex-shrink: 0;
 }
@@ -1675,7 +1675,7 @@
   gap: 6px;
   padding: 7px 14px;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast);
   border: 1px solid var(--accent);
   border-radius: var(--radius-sm);
   font-size: 12.5px;
@@ -1691,7 +1691,7 @@
   transform: translateY(-1px);
 }
 .orbit-run-cta:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 .orbit-run-cta:disabled {
@@ -1704,7 +1704,7 @@
   border-color: transparent;
 }
 .orbit-run-cta .icon-spin {
-  color: #fff;
+  color: var(--accent-contrast);
 }
 
 @media (max-width: 620px) {
@@ -1884,7 +1884,7 @@
   color: var(--accent-strong);
 }
 .orbit-switch:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 .orbit-switch:disabled,
@@ -1918,12 +1918,15 @@
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--text-strong);
   box-shadow: 0 1px 3px rgba(28, 27, 26, 0.22);
   transition: transform 180ms cubic-bezier(0.2, 0, 0.2, 1);
 }
 .orbit-switch.is-on .orbit-switch-track { background: var(--accent); }
-.orbit-switch.is-on .orbit-switch-thumb { transform: translateX(14px); }
+.orbit-switch.is-on .orbit-switch-thumb {
+  transform: translateX(14px);
+  background: var(--accent-contrast);
+}
 .orbit-switch-text {
   font-variant-numeric: tabular-nums;
   min-width: 22px;
@@ -2389,7 +2392,7 @@
   height: 22px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 70%, #000) 100%);
-  color: var(--btn-primary-fg, #fff);
+  color: var(--accent-contrast);
   box-shadow: 0 4px 10px color-mix(in srgb, var(--accent) 32%, transparent);
 }
 @media (prefers-reduced-motion: reduce) {
@@ -2440,7 +2443,7 @@
   font-size: 12.5px;
   font-weight: 600;
   letter-spacing: 0.005em;
-  color: var(--btn-primary-fg, #fff);
+  color: var(--accent-contrast);
   background: linear-gradient(135deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 70%, #000) 100%);
   border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
   border-radius: var(--radius-pill);

@@ -33,19 +33,19 @@ LangString OD_REMOVE_LOCAL_DATA_TITLE 1046 "Remover dados locais"
 LangString OD_REMOVE_LOCAL_DATA_TITLE 1049 "Удалить локальные данные"
 LangString OD_REMOVE_LOCAL_DATA_TITLE 1065 "حذف داده‌های محلی"
 
-LangString OD_REMOVE_LOCAL_DATA_HINT 1033 "Choose whether the uninstaller should remove Open Design data stored on this computer."
-LangString OD_REMOVE_LOCAL_DATA_HINT 2052 "请选择卸载程序是否删除此电脑上保存的 Open Design 数据。"
-LangString OD_REMOVE_LOCAL_DATA_HINT 1028 "請選擇解除安裝程式是否刪除此電腦上儲存的 Open Design 資料。"
-LangString OD_REMOVE_LOCAL_DATA_HINT 1046 "Escolha se o desinstalador deve remover os dados do Open Design armazenados neste computador."
-LangString OD_REMOVE_LOCAL_DATA_HINT 1049 "Выберите, должен ли деинсталлятор удалить данные Open Design, сохраненные на этом компьютере."
-LangString OD_REMOVE_LOCAL_DATA_HINT 1065 "انتخاب کنید که حذف‌کننده داده‌های Open Design ذخیره‌شده در این رایانه را حذف کند یا نه."
+LangString OD_REMOVE_LOCAL_DATA_HINT 1033 "Choose whether the uninstaller should remove MonoField data stored on this computer."
+LangString OD_REMOVE_LOCAL_DATA_HINT 2052 "请选择卸载程序是否删除此电脑上保存的 MonoField 数据。"
+LangString OD_REMOVE_LOCAL_DATA_HINT 1028 "請選擇解除安裝程式是否刪除此電腦上儲存的 MonoField 資料。"
+LangString OD_REMOVE_LOCAL_DATA_HINT 1046 "Escolha se o desinstalador deve remover os dados do MonoField armazenados neste computador."
+LangString OD_REMOVE_LOCAL_DATA_HINT 1049 "Выберите, должен ли деинсталлятор удалить данные MonoField, сохраненные на этом компьютере."
+LangString OD_REMOVE_LOCAL_DATA_HINT 1065 "انتخاب کنید که حذف‌کننده داده‌های MonoField ذخیره‌شده در این رایانه را حذف کند یا نه."
 
-LangString OD_REMOVE_LOCAL_DATA_CHECKBOX 1033 "Remove local Open Design data:"
-LangString OD_REMOVE_LOCAL_DATA_CHECKBOX 2052 "删除本地 Open Design 数据："
-LangString OD_REMOVE_LOCAL_DATA_CHECKBOX 1028 "刪除本機 Open Design 資料："
-LangString OD_REMOVE_LOCAL_DATA_CHECKBOX 1046 "Remover dados locais do Open Design:"
-LangString OD_REMOVE_LOCAL_DATA_CHECKBOX 1049 "Удалить локальные данные Open Design:"
-LangString OD_REMOVE_LOCAL_DATA_CHECKBOX 1065 "حذف داده‌های محلی Open Design:"
+LangString OD_REMOVE_LOCAL_DATA_CHECKBOX 1033 "Remove local MonoField data:"
+LangString OD_REMOVE_LOCAL_DATA_CHECKBOX 2052 "删除本地 MonoField 数据："
+LangString OD_REMOVE_LOCAL_DATA_CHECKBOX 1028 "刪除本機 MonoField 資料："
+LangString OD_REMOVE_LOCAL_DATA_CHECKBOX 1046 "Remover dados locais do MonoField:"
+LangString OD_REMOVE_LOCAL_DATA_CHECKBOX 1049 "Удалить локальные данные MonoField:"
+LangString OD_REMOVE_LOCAL_DATA_CHECKBOX 1065 "حذف داده‌های محلی MonoField:"
 
 !macro customUnWelcomePage
   !insertmacro MUI_UNPAGE_WELCOME
@@ -83,7 +83,7 @@ FunctionEnd
     StrCpy $odLocalDataRoot "${localDataRoot}"
   \${EndIf}
   \${If} $odRemoveLocalData != "0"
-    DetailPrint "Removing local Open Design data: $odLocalDataRoot"
+    DetailPrint "Removing local MonoField data: $odLocalDataRoot"
     RMDir /r "$odLocalDataRoot"
   \${EndIf}
 !macroend

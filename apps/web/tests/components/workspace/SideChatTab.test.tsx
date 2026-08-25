@@ -52,7 +52,7 @@ describe('SideChatTab', () => {
         updatedAt: Date.now(),
         projectId: 'project-1',
         messageCount: 0,
-        sessionMode: 'design',
+        sessionMode: 'docs',
       },
     ] as unknown as Conversation[];
 

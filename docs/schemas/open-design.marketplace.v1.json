@@ -1,8 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://open-design.ai/schemas/marketplace.v1.json",
-  "title": "Open Design plugin marketplace index (v1)",
-  "description": "Schema for `open-design-marketplace.json` federated catalog files. See docs/plugins-spec.md §6.",
+  "$comment": "The legacy $id, schema filename, and `plugins` collection name are retained for v1 compatibility. New MonoField catalogs should use the `open-docs-marketplace.json` filename.",
+  "title": "MonoField package marketplace index (v1)",
+  "description": "Schema for preferred `open-docs-marketplace.json` and legacy `open-design-marketplace.json` federated catalog files. Entries may distribute plugins, skills, templates, or MCP servers. See docs/plugins-spec.md §6.",
   "type": "object",
   "required": ["specVersion", "name", "version", "plugins"],
   "additionalProperties": true,
@@ -29,11 +30,13 @@
     },
     "plugins": {
       "type": "array",
+      "description": "Marketplace package entries. The `plugins` property name is retained for v1 compatibility.",
       "items": {
         "type": "object",
         "required": ["name", "source", "version"],
         "properties": {
           "name":    { "type": "string", "minLength": 1 },
+          "packageKind": { "$ref": "#/$defs/PackageKind" },
           "source":  { "type": "string", "minLength": 1 },
           "version": { "type": "string", "minLength": 1 },
           "ref":     { "type": "string" },
@@ -43,10 +46,12 @@
               "type":           { "type": "string" },
               "archive":        { "type": "string" },
               "integrity":      { "type": "string" },
-              "manifestDigest": { "type": "string" }
+              "manifestDigest": { "type": "string" },
+              "oci":            { "$ref": "#/$defs/OciDistribution" }
             },
             "additionalProperties": true
           },
+          "supplyChain": { "$ref": "#/$defs/SupplyChainReferences" },
           "versions": {
             "type": "array",
             "items": {
@@ -54,6 +59,7 @@
               "required": ["version"],
               "properties": {
                 "version": { "type": "string", "minLength": 1 },
+                "packageKind": { "$ref": "#/$defs/PackageKind" },
                 "source":  { "type": "string", "minLength": 1 },
                 "ref":     { "type": "string" },
                 "dist": {
@@ -62,10 +68,12 @@
                     "type":           { "type": "string" },
                     "archive":        { "type": "string" },
                     "integrity":      { "type": "string" },
-                    "manifestDigest": { "type": "string" }
+                    "manifestDigest": { "type": "string" },
+                    "oci":            { "$ref": "#/$defs/OciDistribution" }
                   },
                   "additionalProperties": true
                 },
+                "supplyChain": { "$ref": "#/$defs/SupplyChainReferences" },
                 "integrity":      { "type": "string" },
                 "manifestDigest": { "type": "string" },
                 "deprecated": {
@@ -123,6 +131,44 @@
     }
   },
   "$defs": {
+    "PackageKind": {
+      "type": "string",
+      "description": "The installable MonoField package type. Omitted entries retain legacy `plugin` behavior.",
+      "enum": ["plugin", "skill", "template", "mcp-server"]
+    },
+    "OciDistribution": {
+      "type": "object",
+      "description": "A content-addressed OCI distribution target. The installer must pull and verify the declared digest rather than trusting a mutable tag.",
+      "required": ["reference", "digest"],
+      "properties": {
+        "reference": { "type": "string", "minLength": 1 },
+        "digest":    { "type": "string", "minLength": 1 },
+        "mediaType": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": true
+    },
+    "SupplyChainReference": {
+      "type": "object",
+      "description": "A publisher-provided evidence location. Presence is not proof of verification; the installer or registry adapter must verify it locally.",
+      "required": ["ref"],
+      "properties": {
+        "ref":       { "type": "string", "minLength": 1 },
+        "digest":    { "type": "string", "minLength": 1 },
+        "mediaType": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": true
+    },
+    "SupplyChainReferences": {
+      "type": "object",
+      "description": "References to signature, provenance, SBOM, and organization approval evidence. These references do not grant trust by themselves.",
+      "properties": {
+        "signature":  { "$ref": "#/$defs/SupplyChainReference" },
+        "provenance": { "$ref": "#/$defs/SupplyChainReference" },
+        "sbom":       { "$ref": "#/$defs/SupplyChainReference" },
+        "approval":   { "$ref": "#/$defs/SupplyChainReference" }
+      },
+      "additionalProperties": true
+    },
     "LocalizedText": {
       "type": "object",
       "minProperties": 1,

@@ -12,6 +12,33 @@ export function required(name: string): string {
   return value;
 }
 
+export function normalizePublicOrigin(value: string, name = "RELEASE_PUBLIC_ORIGIN"): string {
+  const trimmed = value.trim();
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new Error(`${name} must be an explicit HTTPS URL`);
+  }
+
+  if (
+    parsed.protocol !== "https:"
+    || parsed.hostname.length === 0
+    || parsed.username.length > 0
+    || parsed.password.length > 0
+    || parsed.search.length > 0
+    || parsed.hash.length > 0
+  ) {
+    throw new Error(`${name} must be an explicit HTTPS URL without credentials, query, or fragment`);
+  }
+
+  return trimmed.replace(/\/+$/, "");
+}
+
+export function requiredPublicOrigin(name = "RELEASE_PUBLIC_ORIGIN"): string {
+  return normalizePublicOrigin(required(name), name);
+}
+
 export function optional(name: string, fallback = ""): string {
   const value = process.env[name];
   return value == null || value.length === 0 ? fallback : value;
@@ -66,7 +93,7 @@ export function contentType(name: string): string {
 }
 
 export function publicUrl(publicOrigin: string, prefix: string, name: string): string {
-  return `${publicOrigin.replace(/\/+$/, "")}/${prefix.replace(/^\/+|\/+$/g, "")}/${name}`;
+  return `${normalizePublicOrigin(publicOrigin)}/${prefix.replace(/^\/+|\/+$/g, "")}/${name}`;
 }
 
 export function githubInfo(): Record<string, unknown> {

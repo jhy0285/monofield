@@ -67,6 +67,14 @@ export interface ResolveSnapshotInput {
   // plugins that declared `od.context.designSystem.primary: true` get
   // bound to the project's DS at apply time.
   activeProjectDesignSystem?: { id: string; title?: string } | undefined;
+  // Managed enterprise distributions inject an administrator-owned policy
+  // predicate here. It is evaluated for both newly-selected plugins and
+  // previously-pinned snapshots, so enabling managed mode cannot reactivate
+  // an unapproved plugin that was installed or applied in open mode.
+  isPluginAllowed?: (plugin: InstalledPluginRecord) => boolean;
+  // Caller-supplied grantCaps are a convenience in open mode. Managed mode
+  // disables them so HTTP/CLI callers cannot bypass administrator grants.
+  allowRequestedCapabilities?: boolean;
 }
 
 export interface ResolveSnapshotOk {
@@ -151,6 +159,14 @@ export function resolvePluginSnapshot(input: ResolveSnapshotInput): ResolveSnaps
   }
   if (!fields.pluginId && !fields.snapshotId) return null;
 
+  if (input.allowRequestedCapabilities === false && fields.grantCaps.length > 0) {
+    return managedPolicyError(
+      'managed-capability-grant-blocked',
+      'Managed plugin policy does not allow request-scoped capability grants.',
+      { requestedCapabilities: fields.grantCaps },
+    );
+  }
+
   // Path 1: explicit snapshot id — look it up and verify status.
   if (fields.snapshotId) {
     const snapshot = getSnapshot(input.db, fields.snapshotId);
@@ -186,6 +202,16 @@ export function resolvePluginSnapshot(input: ResolveSnapshotInput): ResolveSnaps
         },
       };
     }
+    if (input.isPluginAllowed) {
+      const installed = getInstalledPlugin(input.db, snapshot.pluginId);
+      if (!installed || !input.isPluginAllowed(installed)) {
+        return managedPolicyError(
+          'managed-plugin-not-approved',
+          `Plugin "${snapshot.pluginId}" is not approved by the managed distribution policy.`,
+          { snapshotId: snapshot.snapshotId, pluginId: snapshot.pluginId },
+        );
+      }
+    }
     return finalizeOk({
       input,
       snapshot,
@@ -208,6 +234,13 @@ export function resolvePluginSnapshot(input: ResolveSnapshotInput): ResolveSnaps
         },
       },
     };
+  }
+  if (input.isPluginAllowed && !input.isPluginAllowed(plugin)) {
+    return managedPolicyError(
+      'managed-plugin-not-approved',
+      `Plugin "${plugin.id}" is not approved by the managed distribution policy.`,
+      { pluginId: plugin.id },
+    );
   }
 
   let applyComputed;
@@ -293,6 +326,19 @@ export function resolvePluginSnapshot(input: ResolveSnapshotInput): ResolveSnaps
     applyResult: { ...result, appliedPlugin: persisted },
     created: true,
   });
+}
+
+function managedPolicyError(
+  code: string,
+  message: string,
+  data: Record<string, unknown>,
+): ResolveSnapshotError {
+  return {
+    ok: false,
+    status: 403,
+    exitCode: 77,
+    body: { error: { code, message, data } },
+  };
 }
 
 function finalizeOk(args: {

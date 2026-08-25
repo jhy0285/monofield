@@ -146,7 +146,7 @@ export function syncAmrAttributionWithOnboardingProfile(
   return next;
 }
 
-// Open Docs does not mirror AMR attribution into product telemetry. This helper
+// MonoField does not mirror AMR attribution into product telemetry. This helper
 // therefore returns null unless a later AMR task introduces an explicit,
 // user-approved handoff identifier.
 export function amrHandoffDeviceId(input: {
@@ -235,13 +235,13 @@ function readReusableAmrAttribution(
 async function mirrorAmrEntryToAmrAnalytics(
   _attribution: AmrEntryAttribution,
 ): Promise<void> {
-  // Open Docs does not mirror AMR analytics in the MVP.
+  // MonoField does not mirror AMR analytics in the MVP.
 }
 async function mirrorAmrOnboardingProfileToAmrAnalytics(
   _attribution: AmrEntryAttribution,
   _now: Date,
 ): Promise<void> {
-  // Open Docs does not mirror AMR analytics in the MVP.
+  // MonoField does not mirror AMR analytics in the MVP.
 }
 function isValidAmrAttribution(value: Partial<AmrEntryAttribution>): value is AmrEntryAttribution {
   return value.sourceProduct === 'open_design'

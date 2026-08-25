@@ -41,6 +41,8 @@ export interface LauncherContext {
    * round-trip — so it returns void and creates/focuses the tab itself.
    */
   createBrowser?: () => void;
+  /** Focus the project-scoped Git changes and patch viewer. */
+  openGitChanges?: () => void;
 }
 
 export interface LauncherAction {
@@ -92,6 +94,15 @@ export function buildLauncherActions(ctx: LauncherContext): LauncherAction[] {
       run: (runCtx) => {
         runCtx.createBrowser?.();
       },
+    });
+  }
+  if (ctx.openGitChanges) {
+    actions.push({
+      id: 'git-changes',
+      iconName: 'fork',
+      labelKey: 'gitChanges.title',
+      descriptionKey: 'gitChanges.description',
+      run: (runCtx) => runCtx.openGitChanges?.(),
     });
   }
   return actions;

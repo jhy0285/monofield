@@ -31,6 +31,7 @@ const LIVE_ARTIFACT_ID_RANDOM_SUFFIX_LENGTH = LIVE_ARTIFACT_ID_RANDOM_BYTES * 2;
 const MAX_LIVE_ARTIFACT_STORAGE_ID_LENGTH = 128;
 const MAX_LIVE_ARTIFACT_SLUG_LENGTH = 128;
 const FALLBACK_LIVE_ARTIFACT_SLUG = 'live-artifact';
+const WINDOWS_RENAME_RETRY_CODES = new Set(['EACCES', 'EBUSY', 'EPERM']);
 
 function isPathInside(parentDir: string, targetPath: string): boolean {
   const relative = path.relative(parentDir, targetPath);
@@ -342,6 +343,22 @@ export async function ensureLiveArtifactStoreLayout(
 
 function stableJson(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+async function renameWithWindowsRetry(source: string, target: string): Promise<void> {
+  const maxAttempts = process.platform === 'win32' ? 5 : 1;
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await rename(source, target);
+      return;
+    } catch (error) {
+      const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
+      if (attempt >= maxAttempts || typeof code !== 'string' || !WINDOWS_RENAME_RETRY_CODES.has(code)) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, attempt * 25));
+    }
+  }
 }
 
 async function writeFileAtomic(filePath: string, contents: string): Promise<void> {
@@ -713,7 +730,7 @@ export async function createLiveArtifact(options: CreateLiveArtifactOptions): Pr
 
   try {
     const writtenArtifact = await writeLiveArtifactFiles(tempPaths, persisted.value, templateHtml, provenanceJson);
-    await rename(tempPaths.artifactDir, finalPaths.artifactDir);
+    await renameWithWindowsRetry(tempPaths.artifactDir, finalPaths.artifactDir);
     return { artifact: writtenArtifact, paths: finalPaths };
   } catch (error) {
     await rm(tempPaths.artifactDir, { recursive: true, force: true });
@@ -915,7 +932,7 @@ async function writeLiveArtifactSuccessfulSnapshot(
       writeFile(resolveInside(tempSnapshotDir, LIVE_ARTIFACT_PREVIEW_FILE, 'live artifact snapshot path escapes snapshot dir'), options.previewHtml, 'utf8'),
       writeFile(resolveInside(tempSnapshotDir, LIVE_ARTIFACT_PROVENANCE_FILE, 'live artifact snapshot path escapes snapshot dir'), stableJson(options.provenanceJson), 'utf8'),
     ]);
-    await rename(tempSnapshotDir, finalSnapshotDir);
+    await renameWithWindowsRetry(tempSnapshotDir, finalSnapshotDir);
   } catch (error) {
     await rm(tempSnapshotDir, { recursive: true, force: true });
     throw error;

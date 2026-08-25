@@ -1,8 +1,8 @@
 // Lovart-style left navigation rail for the entry view.
 //
-// Renders a narrow icon-only column. The first slot is the brand logo,
-// followed by the primary destinations users expect to keep in reach:
-// New project, home, projects, brand kit, automations, plugins,
+// Renders a narrow icon-only column. The MonoField file mark is also the Home
+// destination, followed by the primary destinations users expect to keep in reach:
+// New project, projects, brand kit, automations, plugins,
 // and integrations. Footer controls are reserved for lower-frequency
 // support affordances such as the help launcher.
 // Language switching and other account-scoped controls live behind the
@@ -18,6 +18,7 @@ export type EntryView =
   | 'home'
   | 'onboarding'
   | 'projects'
+  | 'open-work'
   | 'tasks'
   | 'plugins'
   | 'design-systems'
@@ -63,9 +64,7 @@ function NavButton({ active, ariaLabel, tooltip, onClick, testId, children }: Na
 export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose }: Props) {
   const t = useT();
   const brandLabel = t('app.brand');
-  const homeLabel = t('entry.navHome');
-  const isHome = view === 'home';
-
+  const openWorkLabel = t('entry.navOpenWork');
   // Once opened the rail stays docked (Manus-style); navigating between
   // destinations no longer collapses it.
   const selectView = (next: EntryView) => {
@@ -106,7 +105,7 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose }
             data-testid="entry-nav-logo"
           >
             <img
-              src="/app-icon.svg"
+              src="/app-icon.svg?v=monofield-1"
               alt=""
               className="entry-nav-rail__logo-img"
               draggable={false}
@@ -133,15 +132,6 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose }
           <Icon name="plus" size={18} />
         </NavButton>
         <NavButton
-          active={isHome}
-          ariaLabel={homeLabel}
-          tooltip={homeLabel}
-          onClick={() => selectView('home')}
-          testId="entry-nav-home"
-        >
-          <Icon name="home" size={18} />
-        </NavButton>
-        <NavButton
           active={view === 'projects'}
           ariaLabel={t('entry.navProjects')}
           tooltip={t('entry.navProjects')}
@@ -149,6 +139,15 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose }
           testId="entry-nav-projects"
         >
           <Icon name="folder" size={18} />
+        </NavButton>
+        <NavButton
+          active={view === 'open-work'}
+          ariaLabel={openWorkLabel}
+          tooltip={openWorkLabel}
+          onClick={() => selectView('open-work')}
+          testId="entry-nav-open-work"
+        >
+          <Icon name="globe" size={18} />
         </NavButton>
         <NavButton
           active={view === 'design-systems'}

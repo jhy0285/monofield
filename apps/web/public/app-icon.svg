@@ -1,9 +1,10 @@
 <svg width="444" height="444" viewBox="0 0 444 444" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="444" height="444" rx="98" fill="#202020"/>
-  <rect x="106" y="58" width="232" height="328" rx="28" fill="#F7F4EC"/>
-  <path d="M258 58v72c0 13.255 10.745 24 24 24h56" fill="#E8DDCF"/>
-  <path d="M258 58v72c0 13.255 10.745 24 24 24h56" stroke="#202020" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M158 211h128M158 263h128M158 315h82" stroke="#202020" stroke-width="22" stroke-linecap="round"/>
-  <circle cx="314" cy="322" r="42" fill="#D65A31"/>
-  <path d="M295 322h38M314 303v38" stroke="#F7F4EC" stroke-width="14" stroke-linecap="round"/>
+  <rect width="444" height="444" rx="104" fill="#090909"/>
+  <path
+    d="M92 312V138L222 306L352 138V312"
+    stroke="#FAFAF8"
+    stroke-width="40"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
 </svg>

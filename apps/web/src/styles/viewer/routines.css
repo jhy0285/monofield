@@ -34,7 +34,7 @@
 }
 .project-actions-button-primary {
   background: var(--accent);
-  color: var(--accent-text, white);
+  color: var(--accent-contrast);
   border-color: var(--accent);
 }
 .project-actions-button-primary:hover:not(:disabled) {
@@ -406,7 +406,7 @@
 }
 
 .routines-radio:has(input:focus-visible) {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -556,7 +556,7 @@
   border-color: var(--text);
 }
 .routines-history-link:focus-visible {
-  outline: 2px solid var(--selected);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 .routines-history-link:active {
@@ -1043,7 +1043,7 @@
   border: 1px solid color-mix(in srgb, var(--selected) 88%, #000);
   border-radius: 14px 14px 4px 14px;
   background: var(--selected);
-  color: #fff;
+  color: var(--selected-contrast);
   line-height: 1.45;
   font-size: 13.5px;
   box-shadow: var(--shadow-xs);
@@ -1378,7 +1378,7 @@
   background: var(--bg-subtle);
 }
 .app .chat-design-artifact:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 .app .chat-design-artifact-more {
@@ -1655,16 +1655,16 @@
   box-sizing: border-box;
 }
 .app .composer-send:disabled {
-  background: var(--bg-subtle);
-  border-color: var(--border);
-  color: var(--text-faint);
-  cursor: default;
+  background: var(--control-disabled-bg);
+  border-color: var(--control-disabled-border);
+  color: var(--control-disabled-text);
+  cursor: not-allowed;
 }
 .chat-composer-fixed-layer .composer-send:disabled {
-  background: var(--bg-subtle);
-  border-color: var(--border);
-  color: var(--text-faint);
-  cursor: default;
+  background: var(--control-disabled-bg);
+  border-color: var(--control-disabled-border);
+  color: var(--control-disabled-text);
+  cursor: not-allowed;
 }
 /* The pill renders under `.app` (legacy header host) and under
    `.chat-composer-fixed-layer` (its current home in the composer toolbar).
@@ -2654,6 +2654,10 @@
   outline: none;
   border-color: transparent;
   box-shadow: none;
+}
+.project-ds-picker-search:focus-within {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 /* Inline Clear / Create actions sit flush against the search field so the
    popover header reads as one row (search + reset + create new system). */

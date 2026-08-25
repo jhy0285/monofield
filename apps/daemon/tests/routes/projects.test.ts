@@ -135,6 +135,42 @@ describe('GET /api/projects/:id resolvedDir', () => {
     expect(path.isAbsolute(detail.resolvedDir)).toBe(true);
   });
 
+  it('stores docs mode and normalizes the legacy design mode', async () => {
+    const projectIds: string[] = [];
+
+    try {
+      for (const requestedMode of ['docs', 'design']) {
+        const projectId = `proj-session-mode-${requestedMode}-${Date.now()}-${Math.random()}`;
+        projectIds.push(projectId);
+        const createResp = await fetch(`${baseUrl}/api/projects`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: projectId,
+            name: `Session mode ${requestedMode}`,
+            conversationMode: requestedMode,
+          }),
+        });
+        expect(createResp.status).toBe(200);
+
+        const conversationsResp = await fetch(
+          `${baseUrl}/api/projects/${projectId}/conversations`,
+        );
+        expect(conversationsResp.status).toBe(200);
+        const conversations = (await conversationsResp.json()) as {
+          conversations: Array<{ sessionMode: string }>;
+        };
+        expect(conversations.conversations[0]?.sessionMode).toBe('docs');
+      }
+    } finally {
+      await Promise.all(
+        projectIds.map((projectId) =>
+          fetch(`${baseUrl}/api/projects/${projectId}`, { method: 'DELETE' }),
+        ),
+      );
+    }
+  });
+
   it('persists skipDiscoveryBrief for batch-created projects', async () => {
     const projectId = `proj-skip-discovery-${Date.now()}`;
     const createResp = await fetch(`${baseUrl}/api/projects`, {

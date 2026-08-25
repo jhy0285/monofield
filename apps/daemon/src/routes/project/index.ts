@@ -22,6 +22,8 @@ import { connectorService } from '../../connectors/service.js';
 import type { RouteDeps } from '../../server-context.js';
 import { listSkills } from '../../skills.js';
 import { isSafeId } from '../../projects.js';
+import { validateLinkedDirs } from '../../linked-dirs.js';
+import { scanDatabaseCandidates } from '../../database-candidates.js';
 import {
   BUILT_IN_PROJECT_LOCATION_ID,
   allProjectLocations,
@@ -904,7 +906,7 @@ export function daemonSanitizeTitleInDoc(html: string): string {
 }
 
 function normalizeChatSessionMode(value: unknown): ChatSessionMode {
-  return value === 'chat' ? 'chat' : 'design';
+  return value === 'chat' ? 'chat' : 'docs';
 }
 
 export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDeps) {
@@ -1417,7 +1419,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             && req.body.appliedPluginSnapshotId.trim().length > 0;
       let resolveBody =
         explicitPlugin ? (req.body as Record<string, unknown>) : null;
-      if (!resolveBody && initialSessionMode === 'design') {
+      if (!resolveBody && initialSessionMode === 'docs') {
         const fallbackPluginId = defaultScenarioPluginIdForProjectMetadata(projectMetadata);
         if (fallbackPluginId && getInstalledPlugin(db, fallbackPluginId)) {
           resolveBody = { ...(req.body || {}), pluginId: fallbackPluginId };
@@ -2077,6 +2079,29 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       /** @type {import('@open-design/contracts').ProjectFilesResponse} */
       const body = { files };
       res.json(body);
+    } catch (err: any) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+    }
+  });
+
+  app.get('/api/projects/:id/database/candidates', async (req, res) => {
+    try {
+      const project = getProject(db, req.params.id);
+      if (!project) {
+        sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+        return;
+      }
+      const requestedSchemas = String(req.query.schemas ?? '')
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
+      const metadata = project.metadata ?? {};
+      const linked = validateLinkedDirs((metadata as { linkedDirs?: unknown }).linkedDirs ?? []);
+      const roots = linked.dirs ?? [];
+      const baseDir = (metadata as { baseDir?: unknown }).baseDir;
+      if (typeof baseDir === 'string' && baseDir.trim()) roots.push(baseDir);
+      const candidates = await scanDatabaseCandidates(roots, requestedSchemas);
+      res.json({ candidates });
     } catch (err: any) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err));
     }

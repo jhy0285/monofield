@@ -77,6 +77,26 @@
   border: 1px solid var(--border);
 }
 
+.issueDetails {
+  padding: 8px 12px;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.issueDetails summary { cursor: pointer; color: var(--text); }
+.issueDetails ul { margin: 8px 0 0; padding-left: 18px; }
+.issueDetails li + li { margin-top: 4px; }
+
+.commandRow { display: flex; gap: 7px; margin-top: 9px; }
+.commandRow input { flex: 1; min-width: 0; height: 34px; padding: 0 9px; border: 1px solid var(--control-border); border-radius: 6px; background: var(--bg); color: var(--text); }
+.commandRow input:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.commandSuccess, .commandError { margin: 7px 0 0; font-size: 11px; }
+.commandSuccess { color: var(--text-muted); }
+.commandError { color: var(--red); }
+
 .noticeBanner {
   background: var(--accent-tint);
   border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
@@ -271,7 +291,7 @@
 }
 
 .markerSelected {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 

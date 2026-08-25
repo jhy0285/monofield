@@ -141,7 +141,7 @@
 }
 
 .automations-view__new:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -735,7 +735,7 @@
 }
 
 .automation-template-card:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -1107,7 +1107,7 @@
 .automation-mention-item.is-selected .automation-mention-item__icon {
   border-color: var(--accent, #79a8ff);
   background: var(--accent, #79a8ff);
-  color: #fff;
+  color: var(--accent-contrast);
 }
 
 .automation-mention-item__body {
@@ -1527,7 +1527,7 @@
 .automation-popover__weekday.is-active {
   background: var(--accent, #79a8ff);
   border-color: var(--accent, #79a8ff);
-  color: #fff;
+  color: var(--accent-contrast);
 }
 
 .automation-popover__row {

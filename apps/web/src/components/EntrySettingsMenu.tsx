@@ -37,12 +37,12 @@ export type EntrySettingsSection =
 
 const ENTRY_THEME_OPTIONS: Array<{
   value: AppTheme;
-  icon: 'sun' | 'moon' | 'sparkles';
-  labelKey: 'settings.themeLight' | 'settings.themeDark' | 'settings.themeCyberpunk';
+  icon: 'settings' | 'sun' | 'moon';
+  labelKey: 'settings.themeSystem' | 'settings.themeLight' | 'settings.themeDark';
 }> = [
+  { value: 'system', icon: 'settings', labelKey: 'settings.themeSystem' },
   { value: 'light', icon: 'sun', labelKey: 'settings.themeLight' },
   { value: 'dark', icon: 'moon', labelKey: 'settings.themeDark' },
-  { value: 'cyberpunk', icon: 'sparkles', labelKey: 'settings.themeCyberpunk' },
 ];
 
 interface Props {
@@ -74,10 +74,7 @@ export function EntrySettingsMenu({
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const langListRef = useRef<HTMLDivElement | null>(null);
-  const activeTheme =
-    config.theme === 'dark' || config.theme === 'cyberpunk'
-      ? config.theme
-      : 'light';
+  const activeTheme = config.theme === 'cyberpunk' ? 'dark' : (config.theme ?? 'light');
 
   useEffect(() => {
     if (!open) setLangOpen(false);
@@ -299,6 +296,23 @@ export function EntrySettingsMenu({
                 }}
               >
                 Work contact: whdudwls0285@lgcns.com
+              </a>
+              <a
+                className="entry-settings-menu__contact-link"
+                href="https://github.com/jhy0285/monofield"
+                rel="noreferrer"
+                role="menuitem"
+                target="_blank"
+                onClick={() => {
+                  trackSettingsPopoverClick(analytics.track, {
+                    page_name: pageName,
+                    area: 'settings_popover',
+                    element: 'contact_github',
+                  });
+                  setOpen(false);
+                }}
+              >
+                GitHub: jhy0285/monofield
               </a>
             </div>
           </section>

@@ -87,7 +87,7 @@ interface ActionNotice {
 
 // Display-only refinement of ProjectFileKind. The contract `kind` lumps all
 // source under `code`; the Design Files surface splits CSS/SCSS/etc. into a
-// dedicated "Stylesheets" section to mirror Open Docs. Everything else
+// dedicated "Stylesheets" section to mirror MonoField. Everything else
 // maps 1:1 to its kind.
 type FileCategory = ProjectFileKind | 'stylesheet';
 
@@ -176,7 +176,7 @@ const USEFUL_TIPS: ReadonlyArray<{ key: keyof Dict; url?: string }> = [
   { key: 'designFiles.usefulInfoTip14' },
   { key: 'designFiles.usefulInfoTip15' },
   { key: 'designFiles.usefulInfoTip5' },
-  { key: 'designFiles.usefulInfoTip7', url: 'https://github.com/jhy0285/open-docs' },
+  { key: 'designFiles.usefulInfoTip7', url: 'https://github.com/jhy0285/monofield' },
 ];
 const TIP_TYPE_MS = 32; // per-character typing speed
 const TIP_HOLD_MS = 3800; // pause on a fully-typed tip before advancing
@@ -190,7 +190,7 @@ function prefersReducedMotion(): boolean {
 }
 
 // Footer "tip" line that types out one tip at a time (typewriter), holds, then
-// advances to the next — mirroring Open Docs's empty-state hint. Under
+// advances to the next — mirroring MonoField's empty-state hint. Under
 // prefers-reduced-motion the full tip is shown immediately and just cycles.
 function RotatingTip() {
   const t = useT();
@@ -262,7 +262,7 @@ function RotatingTip() {
 
 /**
  * Full-panel browser for a project's `.od/projects/<id>/` folder. Mirrors
- * Open Docs's "Design Files" surface: a single-line toolbar (up / refresh
+ * MonoField's "Design Files" surface: a single-line toolbar (up / refresh
  * / breadcrumbs + actions), semantic sections (Folders, Stylesheets, Scripts,
  * Documents, Images …), hover-revealed row checkbox + menu, a right-side
  * preview pane, and a static "useful info" footer. Triggered as a sticky
@@ -1122,7 +1122,7 @@ export function DesignFilesPanel({
                               void handlePluginFolderAgentAction(folder.path, 'contribute')
                             }
                           >
-                            {sharingFolder === `contribute:${folder.path}` ? 'Sending…' : 'Open Docs PR'}
+                            {sharingFolder === `contribute:${folder.path}` ? 'Sending…' : 'MonoField PR'}
                           </button>
                         </div>
                       ) : null}

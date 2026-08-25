@@ -1,5 +1,5 @@
 /* ============================================================
-   Use Open Docs Everywhere — modal that documents Open Docs'
+   Use MonoField Everywhere — modal that documents MonoField'
    non-UI surfaces (CLI, MCP, HTTP, Skills) and lets the user copy
    a one-shot guide into their agent (Claude Code, Codex, openclaw,
    hermes, etc.).
@@ -297,7 +297,7 @@
 }
 .use-everywhere-modal__primary {
   background: var(--accent);
-  color: var(--accent-on, #fff);
+  color: var(--accent-contrast);
   border: 1px solid var(--accent);
 }
 .use-everywhere-modal__primary:hover {
@@ -333,7 +333,7 @@
   border-color: var(--border-strong);
 }
 .use-everywhere-chip:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 .use-everywhere-chip__icon {

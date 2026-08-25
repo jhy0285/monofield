@@ -1,4 +1,5 @@
 import type {
+  AttachDictionaryToProjectResponse,
   ConnectorAuthConfigPrepareResponse,
   ConnectorDetail,
   ConnectorConnectResponse,
@@ -17,6 +18,11 @@ import type {
   ReplaceProjectWorkingDirResponse,
   SocialShareRequest,
   SocialShareResponse,
+  DictionaryLibraryDetail,
+  DictionaryLibraryDetailResponse,
+  DictionaryLibraryListResponse,
+  DictionaryProjectSnapshot,
+  ProjectDictionarySnapshotsResponse,
 } from '@open-design/contracts';
 import type {
   AgentInfo,
@@ -902,7 +908,7 @@ export interface ConnectorActionResult {
 }
 
 function popupBlockedMessage(): string {
-  return 'Popup blocked. Allow popups for Open Docs and try again.';
+  return 'Popup blocked. Allow popups for MonoField and try again.';
 }
 
 export async function openExternalUrl(url: string): Promise<boolean> {
@@ -1406,6 +1412,80 @@ export async function fetchProjectFiles(projectId: string): Promise<ProjectFile[
   } catch {
     return [];
   }
+}
+
+async function dictionaryResponse<T>(response: Response, fallback: string): Promise<T> {
+  const payload = (await response.json().catch(() => null)) as T | { error?: { message?: string } } | null;
+  if (!response.ok) {
+    const error = payload as { error?: { message?: string } } | null;
+    throw new Error(error?.error?.message ?? `${fallback} (${response.status})`);
+  }
+  return payload as T;
+}
+
+export async function fetchDictionaryLibraries(): Promise<DictionaryLibraryListResponse['dictionaries']> {
+  const response = await fetch('/api/dictionaries');
+  const payload = await dictionaryResponse<DictionaryLibraryListResponse>(response, 'Could not load dictionaries');
+  return payload.dictionaries ?? [];
+}
+
+export async function fetchDictionaryLibrary(dictionaryId: string): Promise<DictionaryLibraryDetail> {
+  const response = await fetch(`/api/dictionaries/${encodeURIComponent(dictionaryId)}`);
+  const payload = await dictionaryResponse<DictionaryLibraryDetailResponse>(response, 'Could not load dictionary');
+  return payload.dictionary;
+}
+
+export async function uploadDictionaryLibrary(file: File, name: string): Promise<DictionaryLibraryDetail> {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('name', name);
+  const response = await fetch('/api/dictionaries', { method: 'POST', body: form });
+  const payload = await dictionaryResponse<DictionaryLibraryDetailResponse>(response, 'Could not add dictionary');
+  return payload.dictionary;
+}
+
+export async function uploadDictionaryVersion(dictionaryId: string, file: File) {
+  const form = new FormData();
+  form.append('file', file);
+  const response = await fetch(`/api/dictionaries/${encodeURIComponent(dictionaryId)}/versions`, {
+    method: 'POST',
+    body: form,
+  });
+  return await dictionaryResponse<{ version: DictionaryLibraryDetail['latestVersion'] }>(response, 'Could not add dictionary version');
+}
+
+export async function renameDictionaryLibrary(dictionaryId: string, name: string): Promise<DictionaryLibraryDetail> {
+  const response = await fetch(`/api/dictionaries/${encodeURIComponent(dictionaryId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  const payload = await dictionaryResponse<DictionaryLibraryDetailResponse>(response, 'Could not rename dictionary');
+  return payload.dictionary;
+}
+
+export async function deleteDictionaryLibrary(dictionaryId: string): Promise<void> {
+  const response = await fetch(`/api/dictionaries/${encodeURIComponent(dictionaryId)}`, { method: 'DELETE' });
+  await dictionaryResponse<{ ok: true }>(response, 'Could not delete dictionary');
+}
+
+export async function attachDictionaryToProject(
+  projectId: string,
+  versionId: string,
+): Promise<DictionaryProjectSnapshot> {
+  const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/dictionaries/attach`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ versionId }),
+  });
+  const payload = await dictionaryResponse<AttachDictionaryToProjectResponse>(response, 'Could not attach dictionary');
+  return payload.snapshot;
+}
+
+export async function fetchProjectDictionarySnapshots(projectId: string): Promise<DictionaryProjectSnapshot[]> {
+  const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/dictionaries`);
+  const payload = await dictionaryResponse<ProjectDictionarySnapshotsResponse>(response, 'Could not load project dictionaries');
+  return payload.snapshots ?? [];
 }
 
 export async function fetchProjectFolders(projectId: string): Promise<ProjectFolder[]> {

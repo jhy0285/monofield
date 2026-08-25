@@ -117,7 +117,7 @@ export function buildDesignManifestContent(opts: {
   files?: string[];
   kind?: 'html' | 'react';
 }): string {
-  const title = opts.title || 'Open Docs artifact';
+  const title = opts.title || 'MonoField artifact';
   const requestedEntryFile = opts.entryFile || 'index.html';
   const { files, htmlFiles, screenHtmlFiles, cssFiles, jsFiles, assetFiles, entryFile } = designFileMap(requestedEntryFile, opts.files);
   const screenFiles = screenHtmlFiles.length > 0 ? screenHtmlFiles : [entryFile];
@@ -208,7 +208,7 @@ export function buildDesignHandoffContent(opts: {
   files?: string[];
   kind?: 'html' | 'react';
 }): string {
-  const title = opts.title || 'Open Docs artifact';
+  const title = opts.title || 'MonoField artifact';
   const requestedEntryFile = opts.entryFile || 'index.html';
   const { files, htmlFiles, cssFiles, jsFiles, assetFiles, entryFile } = designFileMap(requestedEntryFile, opts.files);
   const accentLikelyBrandLed =
@@ -231,7 +231,7 @@ This archive is the source of truth for turning the design into production code.
 - Build production UI from the exported design, not a loose reinterpretation.
 - Preserve typography scale, spacing rhythm, color tokens, border radii, shadows, motion timing, and component states.
 - Replace static placeholders only when the target app has real data or functional equivalents.
-- Keep generated product UI free of Open Docs chrome, preview labels, or design-process annotations.
+- Keep generated product UI free of MonoField chrome, preview labels, or design-process annotations.
 - Treat this handoff as a visual contract: if implementation choices conflict, match the exported pixels and behavior first, then refactor internals.
 
 ## Source map
@@ -262,7 +262,7 @@ For responsive web exports, treat these as a modern breakpoint system for one ad
 - Preserve real copy, labels, and data shown in the export. Do not replace specific text with generic marketing filler.
 - Preserve interactive affordances: hover, focus, pressed, disabled, loading, validation, copy/share, tab/accordion, modal/sheet, and keyboard states where present.
 - Preserve accessibility semantics when converting: headings stay hierarchical, controls remain buttons/links/inputs, focus states stay visible.
-- Do not keep prototype-only annotations, frame labels, or Open Docs chrome in the production UI.
+- Do not keep prototype-only annotations, frame labels, or MonoField chrome in the production UI.
 
 ## CJX-ready UX contract
 - Use \`${DESIGN_MANIFEST_FILENAME}\` as the machine-readable map for screens, app modules, OS widgets, landing pages, tokens, interactions, and viewport checks.
@@ -440,13 +440,25 @@ export async function captureHostRegionSnapshot(
         height: Math.max(1, Math.round(clipRect.height)),
       }
     : undefined;
-  try {
-    const result = await captureHostPage(clip ? { clip } : undefined);
-    if (result.ok && result.dataUrl && result.w >= 1 && result.h >= 1) {
-      return { dataUrl: result.dataUrl, w: result.w, h: result.h };
+  // Electron can briefly reject capturePage while a BrowserWindow is being
+  // revealed, resized, or switching between the URL and srcdoc transports.
+  // Treat that as transient and retry a couple of times before handing back
+  // to the iframe/browser fallback. Without this small retry window a mark
+  // submitted immediately after opening the draw toolbar becomes a note-only
+  // annotation even though the preview is already visibly painted.
+  const retryDelays = [0, 50, 150];
+  for (let attempt = 0; attempt < retryDelays.length; attempt += 1) {
+    const delay = retryDelays[attempt] ?? 0;
+    if (delay > 0) await new Promise<void>((resolve) => window.setTimeout(resolve, delay));
+    try {
+      const result = await captureHostPage(clip ? { clip } : undefined);
+      if (result.ok && result.dataUrl && result.w >= 1 && result.h >= 1) {
+        return { dataUrl: result.dataUrl, w: result.w, h: result.h };
+      }
+    } catch {
+      // Try the next compositor attempt, then let the caller use its
+      // sandboxed iframe snapshot fallback.
     }
-  } catch {
-    /* fall through to null so the caller can use the bridge */
   }
   return null;
 }
@@ -461,12 +473,80 @@ export async function captureHostIframeSnapshot(
 ): Promise<PreviewSnapshot | null> {
   if (!iframe) return null;
   const rect = iframe.getBoundingClientRect();
+  if (!Number.isFinite(rect.width) || !Number.isFinite(rect.height) || rect.width < 1 || rect.height < 1) {
+    return null;
+  }
   return captureHostRegionSnapshot({
     left: rect.left,
     top: rect.top,
     width: rect.width,
     height: rect.height,
   });
+}
+
+/**
+ * Last-resort browser capture for artifacts whose sandboxed snapshot bridge
+ * cannot rasterize SVG foreignObject. The source is loaded into an isolated
+ * iframe with scripts disabled, so artifact code never executes while this
+ * fallback reads the rendered DOM.
+ */
+export async function captureSandboxedHtmlSnapshot(
+  html: string,
+  options: { width: number; height: number; baseHref?: string },
+): Promise<PreviewSnapshot | null> {
+  if (typeof document === 'undefined' || !html.trim()) return null;
+  const width = Math.max(1, Math.round(options.width));
+  const height = Math.max(1, Math.round(options.height));
+  const frame = document.createElement('iframe');
+  frame.setAttribute('sandbox', 'allow-same-origin');
+  frame.setAttribute('aria-hidden', 'true');
+  frame.tabIndex = -1;
+  frame.style.cssText = [
+    'position:fixed',
+    'left:-100000px',
+    'top:0',
+    `width:${width}px`,
+    `height:${height}px`,
+    'visibility:hidden',
+    'pointer-events:none',
+    'border:0',
+  ].join(';');
+  frame.srcdoc = buildSrcdoc(html, options.baseHref ? { baseHref: options.baseHref } : undefined);
+
+  const loaded = new Promise<boolean>((resolve) => {
+    const timeout = window.setTimeout(() => resolve(false), 8_000);
+    frame.addEventListener('load', () => {
+      window.clearTimeout(timeout);
+      resolve(true);
+    }, { once: true });
+  });
+  document.body.appendChild(frame);
+  try {
+    if (!(await loaded)) return null;
+    const doc = frame.contentDocument;
+    const root = doc?.documentElement;
+    if (!root) return null;
+    const { default: html2canvas } = await import('html2canvas');
+    const canvas = await html2canvas(root, {
+      allowTaint: false,
+      backgroundColor: doc?.body
+        ? getComputedStyle(doc.body).backgroundColor || '#ffffff'
+        : '#ffffff',
+      height,
+      logging: false,
+      useCORS: true,
+      width,
+      windowHeight: height,
+      windowWidth: width,
+    });
+    if (canvas.width < 1 || canvas.height < 1) return null;
+    return { dataUrl: canvas.toDataURL('image/png'), w: canvas.width, h: canvas.height };
+  } catch (err) {
+    console.warn('[captureSandboxedHtmlSnapshot] failed:', err);
+    return null;
+  } finally {
+    frame.remove();
+  }
 }
 
 /** Convert a data-URL to a Blob without re-encoding through canvas. */

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   buildBrowserUseRunState,
+  browserAutomationSessionId,
   collectBrowserUseDiscoveryFacts,
   isBrowserUseRequested,
   renderBrowserUseUnavailablePrompt,
@@ -25,7 +26,10 @@ describe('browser use diagnostics', () => {
   it('detects Browser Use prompts from the Open Design Browser menu', () => {
     expect(isBrowserUseRequested('hello')).toBe(false);
     expect(isBrowserUseRequested('@agent-browser\n\nBrowser tab context:')).toBe(true);
-    expect(isBrowserUseRequested('Use the selected Open Docs Browser tab as the bound target.')).toBe(true);
+    expect(isBrowserUseRequested('Use the selected MonoField Browser tab as the bound target.')).toBe(true);
+    expect(isBrowserUseRequested('MonoField browser automation session: browser_session_1234567890')).toBe(true);
+    expect(browserAutomationSessionId('MonoField browser automation session: browser_session_1234567890'))
+      .toBe('browser_session_1234567890');
   });
 
   it('returns a missing-registry snapshot without reading socket contents', () => {
@@ -96,6 +100,24 @@ describe('browser use diagnostics', () => {
         registryPath: join(tempDir, 'missing'),
       }),
     })).toBeNull();
+  });
+
+  it('marks an explicitly approved desktop session available for any CLI agent', () => {
+    const state = buildBrowserUseRunState({
+      requested: true,
+      agentId: 'claude',
+      sessionId: 'browser_session_1234567890',
+      diagnostics: collectBrowserUseDiscoveryFacts({ registryPath: join(tempDir, 'missing') }),
+    });
+    expect(state).toMatchObject({
+      requested: true,
+      available: true,
+      sessionId: 'browser_session_1234567890',
+    });
+    const prompt = renderBrowserUseUnavailablePrompt(state);
+    expect(prompt).toContain('browser snapshot --session browser_session_1234567890');
+    expect(prompt).toContain('Do not launch another browser');
+    expect(prompt).toContain('visible native pointer');
   });
 
   it('renders a prompt guard that blocks raw Chrome fallback', () => {

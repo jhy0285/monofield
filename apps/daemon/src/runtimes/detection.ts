@@ -337,6 +337,13 @@ export async function detectAgents(
   return results;
 }
 
+export type AgentDetectionStreamOptions = {
+  /** Probe this configured runtime first so the active model is ready early. */
+  priorityAgentId?: string | null;
+  /** Bound child-process fan-out to avoid competing with the user's first run. */
+  concurrency?: number;
+};
+
 // Streaming variant: yields each agent the moment its probe settles, in
 // completion order rather than registry order, so the UI can paint a card
 // as soon as it resolves instead of waiting for the slowest CLI. The model
@@ -345,19 +352,44 @@ export async function detectAgents(
 // that don't care about incremental delivery (cache warm, analytics, chat).
 export async function* detectAgentsStream(
   configuredEnvByAgent: Record<string, Record<string, string>> = {},
+  options: AgentDetectionStreamOptions = {},
 ): AsyncGenerator<DetectedAgent> {
-  const tagged = AGENT_DEFS.map((def, index) =>
-    safeProbe(def, configuredEnvByAgent?.[def.id] ?? {}).then((agent) => {
-      rememberDetectedLiveModels(def, configuredEnvByAgent?.[def.id] ?? {}, agent);
-      return { index, agent };
-    }),
-  );
-  const pending = new Set(tagged.keys());
-  while (pending.size > 0) {
-    const { index, agent } = await Promise.race(
-      tagged.filter((_, i) => pending.has(i)),
+  const priorityAgentId = options.priorityAgentId?.trim() || null;
+  const orderedDefs = priorityAgentId
+    ? [
+        ...AGENT_DEFS.filter((def) => def.id === priorityAgentId),
+        ...AGENT_DEFS.filter((def) => def.id !== priorityAgentId),
+      ]
+    : [...AGENT_DEFS];
+  const requestedConcurrency = Number.isFinite(options.concurrency)
+    ? Math.floor(options.concurrency ?? orderedDefs.length)
+    : orderedDefs.length;
+  const concurrency = Math.max(1, Math.min(orderedDefs.length, requestedConcurrency));
+  let nextIndex = 0;
+  let taskId = 0;
+  const pending = new Map<number, Promise<{ taskId: number; agent: DetectedAgent }>>();
+
+  const launchNext = () => {
+    const def = orderedDefs[nextIndex];
+    if (!def) return;
+    nextIndex += 1;
+    const currentTaskId = taskId;
+    taskId += 1;
+    const configuredEnv = configuredEnvByAgent?.[def.id] ?? {};
+    pending.set(
+      currentTaskId,
+      safeProbe(def, configuredEnv).then((agent) => {
+        rememberDetectedLiveModels(def, configuredEnv, agent);
+        return { taskId: currentTaskId, agent };
+      }),
     );
-    pending.delete(index);
+  };
+
+  for (let index = 0; index < concurrency; index += 1) launchNext();
+  while (pending.size > 0) {
+    const { taskId: settledTaskId, agent } = await Promise.race(pending.values());
+    pending.delete(settledTaskId);
     yield agent;
+    launchNext();
   }
 }

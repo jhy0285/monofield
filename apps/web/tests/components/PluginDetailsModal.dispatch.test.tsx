@@ -381,7 +381,7 @@ describe('PluginDetailsModal common metadata coverage', () => {
     expect(html).not.toContain('plugin-meta-sections__heading');
   });
 
-  it('routes bundled plugin source links to the Open Docs repo', () => {
+  it('routes bundled plugin source links to the MonoField repo', () => {
     const html = render(
       pluginWithMeta({
         id: 'official-link-meta',
@@ -390,8 +390,8 @@ describe('PluginDetailsModal common metadata coverage', () => {
       }),
     );
 
-    expect(html).toContain('href="https://github.com/jhy0285/open-docs"');
-    expect(html).toContain('jhy0285/open-docs');
+    expect(html).toContain('href="https://github.com/jhy0285/monofield"');
+    expect(html).toContain('jhy0285/monofield');
     expect(html).toContain('Official');
   });
 });

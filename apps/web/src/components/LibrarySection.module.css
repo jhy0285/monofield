@@ -426,6 +426,7 @@
 .selectCheck[data-checked='true'] {
   background: var(--selected);
   border-color: var(--selected);
+  color: var(--selected-contrast);
 }
 
 .badge {
@@ -443,16 +444,23 @@
   backdrop-filter: blur(4px);
 }
 .badge[data-source='clipper'] {
-  background: color-mix(in srgb, var(--accent) 88%, transparent);
+  background: var(--accent);
+  color: var(--accent-contrast);
 }
 .badge[data-source='generated'] {
-  background: color-mix(in srgb, var(--purple) 88%, transparent);
+  background: var(--purple-bg);
+  color: var(--purple);
+  border: 1px solid var(--purple-border);
 }
 .badge[data-source='design-system'] {
-  background: color-mix(in srgb, var(--green) 88%, transparent);
+  background: var(--green-bg);
+  color: var(--green);
+  border: 1px solid var(--green-border);
 }
 .badge[data-source='agent-task'] {
-  background: color-mix(in srgb, var(--amber) 88%, transparent);
+  background: var(--amber-bg);
+  color: var(--amber);
+  border: 1px solid color-mix(in srgb, var(--amber) 42%, transparent);
 }
 
 /* Kind badge — always visible, top-right, tinted per asset kind. */
@@ -582,7 +590,7 @@
   border: 1px solid var(--accent);
   border-radius: 8px;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;

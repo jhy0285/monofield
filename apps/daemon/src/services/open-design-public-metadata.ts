@@ -66,9 +66,9 @@ export interface OpenDocsPublicMetadataServiceOptions {
   now?: () => number;
 }
 
-const OPEN_DESIGN_GITHUB_REPO_API = 'https://api.github.com/repos/jhy0285/open-docs';
-const OPEN_DESIGN_GITHUB_REPO_WEB_URL = 'https://github.com/jhy0285/open-docs';
-const OPEN_DESIGN_GITHUB_RELEASE_LATEST_API = 'https://api.github.com/repos/jhy0285/open-docs/releases/latest';
+const OPEN_DESIGN_GITHUB_REPO_API = 'https://api.github.com/repos/jhy0285/monofield';
+const OPEN_DESIGN_GITHUB_REPO_WEB_URL = 'https://github.com/jhy0285/monofield';
+const OPEN_DESIGN_GITHUB_RELEASE_LATEST_API = 'https://api.github.com/repos/jhy0285/monofield/releases/latest';
 const OPEN_DESIGN_GITHUB_CACHE_TTL_MS = 60 * 60 * 1000;
 const OPEN_DESIGN_GITHUB_TIMEOUT_MS = 4_000;
 const OPEN_DESIGN_DISCORD_INVITE_CODE = '9ptkbbqRu';

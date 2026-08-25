@@ -88,7 +88,7 @@ vi.mock('../../src/components/AssistantMessage', () => ({
           disabled={shareToOpenDocsBusy}
           onClick={onShareToOpenDocs}
         >
-          {shareToOpenDocsBusy ? 'Preparing package…' : 'Share to Open Docs'}
+          {shareToOpenDocsBusy ? 'Preparing package…' : 'Share to MonoField'}
         </button>
       ) : null}
     </>
@@ -472,7 +472,7 @@ describe('ChatPane streaming state', () => {
         role: 'user',
         content: 'Generate the refinement glow-up deck',
         createdAt: 1,
-        sessionMode: 'design',
+        sessionMode: 'docs',
         runContext: {
           workspaceItems: [
             {
@@ -684,7 +684,7 @@ Expected output:
     expect(screen.getByTestId('assistant-streaming-assistant-1').textContent).toBe('streaming');
   });
 
-  it('keeps Share to Open Docs busy on the assistant turn that started packaging', () => {
+  it('keeps Share to MonoField busy on the assistant turn that started packaging', () => {
     const onShareToOpenDocs = vi.fn();
     const completedAssistant: ChatMessage = {
       id: 'assistant-1',
@@ -732,7 +732,7 @@ Expected output:
         {...commonProps}
         messages={[
           ...initialMessages,
-          { id: 'user-2', role: 'user', content: 'Share to Open Docs', createdAt: 4 },
+          { id: 'user-2', role: 'user', content: 'Share to MonoField', createdAt: 4 },
           {
             id: 'assistant-2',
             role: 'assistant',

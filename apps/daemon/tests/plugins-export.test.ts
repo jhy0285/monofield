@@ -77,12 +77,15 @@ describe('exportPlugin', () => {
     );
     expect(manifest.provenance.snapshotId).toBe(snap.snapshotId);
     expect(manifest.provenance.manifestSourceDigest).toBe('a'.repeat(64));
+    // Unknown source licensing must stay unknown instead of being silently
+    // relicensed as MIT in the exported package.
+    expect(manifest).not.toHaveProperty('license');
   });
 
   it('target=claude-plugin writes SKILL.md + .claude-plugin/plugin.json', async () => {
     const snap = persistSampleSnapshot();
     const result = await exportPlugin({ db, snapshotId: snap.snapshotId, target: 'claude-plugin', outDir: tmpDir });
-    expect(result.files.some((f) => f.endsWith('.claude-plugin/plugin.json'))).toBe(true);
+    expect(result.files.some((f) => f.replace(/\\/g, '/').endsWith('.claude-plugin/plugin.json'))).toBe(true);
     const cpRaw = await readFile(path.join(result.folder, '.claude-plugin', 'plugin.json'), 'utf8');
     const cp = JSON.parse(cpRaw);
     expect(cp.name).toBe('sample-plugin');

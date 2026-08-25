@@ -4,7 +4,11 @@ export {
   getAgentDef,
   readLocalAgentProfileDefs,
 } from './runtimes/registry.js';
-export { detectAgents, detectAgentsStream } from './runtimes/detection.js';
+export {
+  clearAgentDetectionCache,
+  detectAgents,
+  detectAgentsStream,
+} from './runtimes/detection-cache.js';
 export {
   resolveOnPath,
   inspectAgentExecutableResolution,
@@ -12,7 +16,11 @@ export {
 } from './runtimes/executables.js';
 export { applyAgentLaunchEnv, resolveAgentLaunch } from './runtimes/launch.js';
 export { resolveAgentBin } from './runtimes/resolution.js';
-export { openDesignAmrTraceEnv, spawnEnvForAgent } from './runtimes/env.js';
+export {
+  envWithoutMarketplaceSecrets,
+  openDesignAmrTraceEnv,
+  spawnEnvForAgent,
+} from './runtimes/env.js';
 export { buildLiveArtifactsMcpServersForAgent } from './runtimes/mcp.js';
 export {
   checkPromptArgvBudget,

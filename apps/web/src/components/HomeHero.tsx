@@ -29,6 +29,7 @@ import type {
   InputFieldSpec,
   InstalledPluginRecord,
   McpServerConfig,
+  ProjectWorkMode,
 } from '@open-design/contracts';
 import { DesignSystemPicker } from './DesignSystemPicker';
 import type { SkillSummary } from '../types';
@@ -82,6 +83,7 @@ import { assetTitle } from './LibraryAssetMeta';
 import { libraryAssetRawUrl } from '../providers/registry';
 import type { LibraryAsset } from '@open-design/contracts';
 import { WorkingDirPicker } from './WorkingDirPicker';
+import { ProjectWorkModeToggle } from './ProjectWorkModeToggle';
 import {
   LexicalComposerInput,
   type LexicalComposerInputHandle,
@@ -133,6 +135,8 @@ interface Props {
   onSubmitScenario?: (scenario: PlaceholderScenario) => void;
   sessionMode?: ChatSessionMode;
   onSessionModeChange?: (mode: ChatSessionMode) => void;
+  workMode?: ProjectWorkMode;
+  onWorkModeChange?: (mode: ProjectWorkMode) => void;
   activePluginTitle: string | null;
   // True when the active plugin chip shows a user-picked plugin (Community card
   // or example-prompt preset) rather than a task-type chip's default plugin —
@@ -265,8 +269,10 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onSubmit,
     onSubmitScenario = () => undefined,
     firstRunGuide,
-    sessionMode = 'design',
+    sessionMode = 'docs',
     onSessionModeChange,
+    workMode = 'creation',
+    onWorkModeChange,
     activePluginTitle,
     activePluginIsExplicit = false,
     activePluginRecord = null,
@@ -1071,16 +1077,21 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
 
   return (
     <section className="home-hero" data-testid="home-hero">
-      <div className="home-hero__brand" aria-hidden>
+      <div className="home-hero__brand">
         <span className="home-hero__brand-mark">
-          <img src="/app-icon.svg" alt="" draggable={false} />
+          <img src="/app-icon.svg?v=monofield-1" alt="" draggable={false} />
         </span>
-        <span className="home-hero__brand-name">Open Docs</span>
+        <span className="home-hero__brand-name">{t('app.brand')}</span>
       </div>
       <h1 className="home-hero__title">{t('homeHero.title')}</h1>
       <p className="home-hero__subtitle">
         {t('homeHero.subtitlePrefix')}
       </p>
+      <p className="home-hero__trust">{t('homeHero.trustLine')}</p>
+
+      {onWorkModeChange ? (
+        <ProjectWorkModeToggle value={workMode} onChange={onWorkModeChange} />
+      ) : null}
 
       <div
         className={`home-hero__input-card${
@@ -1586,7 +1597,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 onConfirm={(assets) => importLibraryAssets(assets)}
               />
             ) : null}
-            <TemplatePicker
+            {workMode === 'creation' ? <TemplatePicker
               templates={templateChips}
               activeChipId={activeChipId}
               previewChipId={previewTemplateId}
@@ -1602,8 +1613,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 setPreviewTemplateId(null);
                 onClearActiveChip();
               }}
-            />
-            {footerInputFields.length > 0 ? (
+            /> : null}
+            {workMode === 'creation' && footerInputFields.length > 0 ? (
               <div className="home-hero__footer-options" data-testid="home-hero-footer-options">
                 {footerInputFields.map((field) => (
                   <FooterInputOption
@@ -1629,6 +1640,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 mode={sessionMode}
                 onChange={onSessionModeChange}
                 disabled={submitting}
+                popoverPlacement="below"
               />
             ) : null}
             {executionSwitcher ? (
@@ -1657,7 +1669,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
 
       {onDesignSystemChange || onPickWorkingDir ? (
         <div className="home-hero__workdir-row">
-          {onDesignSystemChange ? (
+          {workMode === 'creation' && onDesignSystemChange ? (
             <DesignSystemPicker
               variant="home"
               designSystems={designSystems}
@@ -1665,7 +1677,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               onChange={onDesignSystemChange}
             />
           ) : null}
-          {onDesignSystemChange && onPickWorkingDir ? (
+          {workMode === 'creation' && onDesignSystemChange && onPickWorkingDir ? (
             <span className="home-hero__workdir-divider" aria-hidden />
           ) : null}
           {onPickWorkingDir ? (
@@ -1701,7 +1713,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         </div>
       ) : null}
 
-      {activeCreateChip ? null : (
+      {workMode === 'development' || activeCreateChip ? null : (
         <div className="home-hero__template-section" data-testid="home-hero-template-section">
           <div className="home-hero__template-heading">
             {t('homeHero.startWithTemplate')}
@@ -1745,7 +1757,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         </div>
       )}
 
-      {activeSubChips.length > 0 && isSubChipParent(activeChipId) ? (
+      {workMode === 'creation' && activeSubChips.length > 0 && isSubChipParent(activeChipId) ? (
         <SubTypeRow
           subChips={activeSubChips}
           selectedSlug={selectedSubcategory}
@@ -1773,7 +1785,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         />
       ) : null}
 
-      {filteredExamplePlugins.length > 0 && activeChipId ? (
+      {workMode === 'creation' && filteredExamplePlugins.length > 0 && activeChipId ? (
         <PluginPromptPresets
           chipId={activeChipId}
           plugins={filteredExamplePlugins}
@@ -1783,7 +1795,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           onPick={pickExamplePluginPreset}
           pulseFirstPreset={guidePulseFirstPreset}
         />
-      ) : activePromptExamples.length > 0 ? (
+      ) : workMode === 'creation' && activePromptExamples.length > 0 ? (
         <div
           className="home-hero__prompt-examples"
           data-testid="home-hero-prompt-examples"

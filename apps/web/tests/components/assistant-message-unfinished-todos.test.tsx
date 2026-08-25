@@ -142,10 +142,11 @@ describe('AssistantMessage unfinished todo state', () => {
     );
 
     expect(screen.getByText(/32s/)).toBeTruthy();
-    expect(screen.getByText(/1439 out/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Usage: Measured' })).toBeTruthy();
+    expect(screen.getAllByText('1,439').length).toBeGreaterThan(0);
   });
 
-  it('hides zero cost because it is not reliable billing data', () => {
+  it('shows an explicitly reported zero cost inside the usage disclosure', () => {
     render(
       <AssistantMessage
         message={{
@@ -162,11 +163,11 @@ describe('AssistantMessage unfinished todo state', () => {
       />,
     );
 
-    expect(screen.getByText(/1439 out/)).toBeTruthy();
-    expect(screen.queryByText(/\$0\.0000/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Usage: Measured' })).toBeTruthy();
+    expect(screen.getByText('$0.00')).toBeTruthy();
   });
 
-  it('hides costs that round to zero in the current display precision', () => {
+  it('keeps precision for very small reported costs', () => {
     render(
       <AssistantMessage
         message={{
@@ -183,8 +184,8 @@ describe('AssistantMessage unfinished todo state', () => {
       />,
     );
 
-    expect(screen.getByText(/1439 out/)).toBeTruthy();
-    expect(screen.queryByText(/\$0\.0000/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Usage: Measured' })).toBeTruthy();
+    expect(screen.getByText('$0.000010')).toBeTruthy();
   });
 
   it('shows positive usage cost when billing data is present', () => {
@@ -204,7 +205,7 @@ describe('AssistantMessage unfinished todo state', () => {
       />,
     );
 
-    expect(screen.getByText(/\$0\.0123/)).toBeTruthy();
+    expect(screen.getByText('$0.01')).toBeTruthy();
   });
 
   it('does not synthesize a growing elapsed time for completed messages without endedAt', () => {
@@ -224,7 +225,7 @@ describe('AssistantMessage unfinished todo state', () => {
       />,
     );
 
-    expect(screen.getByText(/1439 out/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Usage: Measured' })).toBeTruthy();
     expect(screen.queryByText(/\d+m \d{2}s/)).toBeNull();
   });
 

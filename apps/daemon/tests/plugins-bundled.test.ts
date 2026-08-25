@@ -8,7 +8,7 @@ import Database from 'better-sqlite3';
 import { migratePlugins } from '../src/plugins/persistence.js';
 import { listInstalledPlugins, upsertInstalledPlugin } from '../src/plugins/registry.js';
 import type { InstalledPluginRecord } from '@open-design/contracts';
-import { registerBundledPlugins } from '../src/plugins/bundled.js';
+import { parseBundledPluginAllowlist, registerBundledPlugins } from '../src/plugins/bundled.js';
 
 let db: Database.Database;
 let tmpRoot: string;
@@ -42,6 +42,12 @@ afterEach(async () => {
 });
 
 describe('registerBundledPlugins', () => {
+  it('normalizes a managed bundled-plugin allowlist and ignores unsafe ids', () => {
+    expect([...parseBundledPluginAllowlist(
+      ' Interface-Spec,screen-spec,../escape,interface-spec,with space ',
+    )]).toEqual(['interface-spec', 'screen-spec']);
+  });
+
   it('registers every <bundledRoot>/<tier>/<id>/ folder under source_kind=bundled', async () => {
     // Build a layout with one atom + one scenario:
     //   <bundledRoot>/atoms/discovery-question-form/{open-design.json,SKILL.md}
@@ -102,6 +108,47 @@ describe('registerBundledPlugins', () => {
 
     const result = await registerBundledPlugins({ db, bundledRoot: tmpRoot });
     expect(result.registered.map((r) => r.id)).toEqual(['sample-plugin']);
+  });
+
+  it('registers and retains only administrator-allowlisted bundled plugins', async () => {
+    for (const id of ['approved', 'legacy-brand-template']) {
+      const folder = path.join(tmpRoot, 'design-systems', id);
+      await mkdir(folder, { recursive: true });
+      await writeFile(path.join(folder, 'open-design.json'), SAMPLE_MANIFEST(id));
+      await writeFile(path.join(folder, 'SKILL.md'), SAMPLE_SKILL(id));
+    }
+
+    await registerBundledPlugins({ db, bundledRoot: tmpRoot });
+    expect(listInstalledPlugins(db).map((row) => row.id).sort()).toEqual([
+      'approved',
+      'legacy-brand-template',
+    ]);
+
+    const result = await registerBundledPlugins({
+      db,
+      bundledRoot: tmpRoot,
+      allowedPluginIds: new Set(['approved']),
+    });
+
+    expect(result.registered.map((row) => row.id)).toEqual(['approved']);
+    expect(result.pruned).toEqual(['legacy-brand-template']);
+    expect(listInstalledPlugins(db).map((row) => row.id)).toEqual(['approved']);
+  });
+
+  it('treats an empty managed allowlist as fail-closed', async () => {
+    const folder = path.join(tmpRoot, 'sample-plugin');
+    await mkdir(folder, { recursive: true });
+    await writeFile(path.join(folder, 'open-design.json'), SAMPLE_MANIFEST('sample-plugin'));
+    await writeFile(path.join(folder, 'SKILL.md'), SAMPLE_SKILL('sample-plugin'));
+
+    const result = await registerBundledPlugins({
+      db,
+      bundledRoot: tmpRoot,
+      allowedPluginIds: new Set(),
+    });
+
+    expect(result.registered).toEqual([]);
+    expect(listInstalledPlugins(db)).toEqual([]);
   });
 
   it('is idempotent — re-running upserts the same row', async () => {

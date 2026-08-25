@@ -19,6 +19,10 @@ import { isOpenAICompatible, streamMessageOpenAI } from './openai-compatible';
 import { streamMessageSenseAudio } from './senseaudio-compatible';
 import { streamMessageAIHubMix } from './aihubmix-compatible';
 import { usesAnthropicProxy } from '../utils/apiProtocol';
+import {
+  normalizeProviderTokenUsage,
+  type TokenUsageMetrics,
+} from '@open-design/contracts';
 
 // Re-export for convenience
 export { isOpenAICompatible } from './openai-compatible';
@@ -27,6 +31,7 @@ export interface StreamHandlers {
   onDelta: (textDelta: string) => void;
   onDone: (fullText: string) => void;
   onError: (err: Error) => void;
+  onUsage?: (usage: TokenUsageMetrics) => void;
 }
 
 export function makeClient(cfg: AppConfig): Anthropic {
@@ -99,7 +104,8 @@ export async function streamMessage(
       handlers.onDelta(delta);
     });
 
-    await stream.finalMessage();
+    const finalMessage = await stream.finalMessage();
+    handlers.onUsage?.(normalizeProviderTokenUsage(finalMessage.usage));
     handlers.onDone(acc);
   } catch (err) {
     if ((err as Error).name === 'AbortError') return;

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ProjectFile, ScreenSpecDocument } from '@open-design/contracts';
 import { parseScreenSpecDocument, validateScreenSpecDocument } from '@open-design/contracts';
 import type { ArtifactManifest } from '../../artifacts/types';
-import { useT } from '../../i18n';
+import { useI18n } from '../../i18n';
 import { fetchProjectFileText, writeProjectTextFileDetailed } from '../../providers/registry';
 import {
   addCalloutAtPosition,
@@ -12,6 +12,7 @@ import {
   addCheckpoint,
   addLevel,
   addScreen,
+  applyScreenSpecCommand,
   deleteCallout,
   deleteCalloutRelation,
   deleteCheckpoint,
@@ -29,6 +30,7 @@ import {
 } from './editor-model';
 import { CalloutTable, CheckpointEditor, MetadataPanel, RelationEditor } from './panels';
 import { ScreenSpecCanvas } from './ScreenSpecCanvas';
+import { DocumentRenderActions } from '../document-spec/DocumentRenderActions';
 import styles from './ScreenSpecEditor.module.css';
 
 /**
@@ -42,6 +44,7 @@ interface Props {
   projectId: string;
   file: ProjectFile;
   onFileSaved?: () => Promise<void> | void;
+  onOpenFile?: (name: string) => void;
 }
 
 type LoadState =
@@ -49,8 +52,8 @@ type LoadState =
   | { phase: 'error'; message: string }
   | { phase: 'ready' };
 
-export function ScreenSpecEditor({ projectId, file, onFileSaved }: Props) {
-  const t = useT();
+export function ScreenSpecEditor({ projectId, file, onFileSaved, onOpenFile }: Props) {
+  const { t, locale } = useI18n();
   const [loadState, setLoadState] = useState<LoadState>({ phase: 'loading' });
   const [doc, setDoc] = useState<ScreenSpecDocument | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -61,6 +64,8 @@ export function ScreenSpecEditor({ projectId, file, onFileSaved }: Props) {
   const [screenIndex, setScreenIndex] = useState(0);
   const [selectedCalloutNo, setSelectedCalloutNo] = useState<number | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [command, setCommand] = useState('');
+  const [commandResult, setCommandResult] = useState<{ ok: boolean; message: string } | null>(null);
   const dirtyRef = useRef(false);
   dirtyRef.current = dirty;
 
@@ -102,8 +107,16 @@ export function ScreenSpecEditor({ projectId, file, onFileSaved }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, file.name, file.mtime, reloadKey]);
 
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+
   const issues = useMemo(() => (doc ? validateScreenSpecDocument(doc) : []), [doc]);
   const fatalIssues = issues.filter((issue) => issue.severity === 'fatal');
+  const warningIssues = issues.filter((issue) => issue.severity === 'warning');
 
   const mutateDoc = useCallback((update: (doc: ScreenSpecDocument) => ScreenSpecDocument) => {
     setDoc((prev) => (prev ? update(prev) : prev));
@@ -118,8 +131,8 @@ export function ScreenSpecEditor({ projectId, file, onFileSaved }: Props) {
     [mutateDoc, screenIndex],
   );
 
-  async function save() {
-    if (!doc || saving) return;
+  async function save(): Promise<boolean> {
+    if (!doc || saving) return false;
     setSaving(true);
     setSaveError('');
     const manifest: ArtifactManifest = {
@@ -130,7 +143,7 @@ export function ScreenSpecEditor({ projectId, file, onFileSaved }: Props) {
       title: doc.name,
       entry: file.name,
       status: 'complete',
-      exports: file.artifactManifest?.exports?.length ? file.artifactManifest.exports : ['txt', 'zip'],
+      exports: ['pptx', 'txt', 'zip'],
     };
     const result = await writeProjectTextFileDetailed(
       projectId,
@@ -141,12 +154,13 @@ export function ScreenSpecEditor({ projectId, file, onFileSaved }: Props) {
     setSaving(false);
     if (!result.ok) {
       setSaveError(result.message);
-      return;
+      return false;
     }
     setDirty(false);
     setSavedFlash(true);
     window.setTimeout(() => setSavedFlash(false), 1500);
     await onFileSaved?.();
+    return true;
   }
 
   if (loadState.phase === 'loading') {
@@ -227,6 +241,7 @@ export function ScreenSpecEditor({ projectId, file, onFileSaved }: Props) {
           <button
             className="viewer-action"
             onClick={() => {
+              if (dirty && !window.confirm(locale === 'ko' ? '저장하지 않은 변경사항을 버리고 다시 불러올까요?' : 'Discard unsaved changes and reload?')) return;
               setDirty(false);
               setReloadKey((n) => n + 1);
             }}
@@ -235,6 +250,16 @@ export function ScreenSpecEditor({ projectId, file, onFileSaved }: Props) {
           >
             {t('screenSpec.reload')}
           </button>
+          <DocumentRenderActions
+            dirty={dirty}
+            fatalCount={fatalIssues.length}
+            inputFile={file.name}
+            kind="screen-spec"
+            onOpenFile={onOpenFile}
+            onRefresh={onFileSaved}
+            onSave={save}
+            projectId={projectId}
+          />
           <button
             className="viewer-action"
             disabled={!dirty || saving}
@@ -275,6 +300,12 @@ export function ScreenSpecEditor({ projectId, file, onFileSaved }: Props) {
             {fatalIssues.map((issue) => issue.message).join(' / ')}
           </div>
         )}
+        {warningIssues.length > 0 && (
+          <details className={styles.issueDetails}>
+            <summary>{locale === 'ko' ? `검토 권장 ${warningIssues.length}건` : `${warningIssues.length} validation warning(s)`}</summary>
+            <ul>{warningIssues.map((issue, index) => <li key={`${issue.code}-${index}`}>{issue.message}</li>)}</ul>
+          </details>
+        )}
 
         {screen ? (
           <div className={styles.layout}>
@@ -311,6 +342,26 @@ export function ScreenSpecEditor({ projectId, file, onFileSaved }: Props) {
               />
             </div>
             <div className={styles.rightColumn}>
+              <section className={styles.panel}>
+                <div className={styles.panelHeading}>
+                  <div><h3>{locale === 'ko' ? '빠른 자연어 수정' : 'Quick natural-language edit'}</h3><p className={styles.panelHint}>{locale === 'ko' ? '자주 쓰는 수정은 모델 호출 없이 즉시 적용합니다.' : 'Common edits apply instantly without a model call.'}</p></div>
+                </div>
+                <div className={styles.commandRow}>
+                  <input value={command} placeholder={locale === 'ko' ? '예: 1번 설명을 로그인 버튼으로 바꿔줘' : 'Example: change marker 1 description to Login button'} onChange={(event) => setCommand(event.target.value)} onKeyDown={(event) => {
+                    if (event.key !== 'Enter') return;
+                    event.preventDefault();
+                    const result = applyScreenSpecCommand(screen, command);
+                    setCommandResult(result);
+                    if (result.ok) { mutateScreen(() => result.screen); setCommand(''); }
+                  }} />
+                  <button className={styles.smallButton} type="button" disabled={!command.trim()} onClick={() => {
+                    const result = applyScreenSpecCommand(screen, command);
+                    setCommandResult(result);
+                    if (result.ok) { mutateScreen(() => result.screen); setCommand(''); }
+                  }}>{locale === 'ko' ? '적용' : 'Apply'}</button>
+                </div>
+                {commandResult ? <p className={commandResult.ok ? styles.commandSuccess : styles.commandError} role="status">{commandResult.message}</p> : null}
+              </section>
               <CalloutTable
                 callouts={screen.callouts}
                 onDeleteCallout={(no) => {

@@ -9,7 +9,7 @@
 //   3. Size cap rejection blocks a tarball that exceeds maxBytes.
 //   4. Symlink entries inside an archive are rejected.
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -94,6 +94,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.unstubAllGlobals();
   db.close();
   await rm(tmpRoot, { recursive: true, force: true });
 });
@@ -278,6 +279,182 @@ describe('archive installer', () => {
     }
     expect(success).toBe(false);
     expect(error).toMatch(/integrity mismatch/);
+  });
+
+  it('activates a standard enterprise package only after verifying its catalog-pinned digest', async () => {
+    const tarball = await buildFixtureTarball({ rootPrefix: 'sample-plugin-1.0.0' });
+    const integrity = `sha256:${createHash('sha256').update(tarball).digest('hex')}`;
+    let success = false;
+    let error: string | undefined;
+    for await (const ev of installPlugin(db, {
+      source: 'https://packages.company.example/sample-plugin-1.0.0.tgz',
+      roots: { userPluginsRoot: pluginsRoot },
+      fetcher: makeFetcher(tarball),
+      archiveIntegrity: integrity,
+      marketplacePolicy: {
+        allowedVisibilities: ['enterprise'],
+        allowedHosts: ['packages.company.example'],
+        allowedLicenses: ['Apache-2.0'],
+        requireHttps: true,
+        requireDigest: true,
+        requireSignature: false,
+        requireProvenance: false,
+        requireSbom: false,
+        requireApproval: false,
+        allowDirectUrlInstall: false,
+      },
+      marketplaceEvidence: {
+        packageId: 'company/sample-plugin',
+        packageKind: 'plugin',
+        version: '1.0.0',
+        visibility: 'enterprise',
+        sourceUrl: 'https://packages.company.example/sample-plugin-1.0.0.tgz',
+        directUrl: false,
+        license: 'Apache-2.0',
+        digest: { state: 'unknown', value: integrity },
+        signature: { state: 'missing' },
+        provenance: { state: 'missing' },
+        sbom: { state: 'missing' },
+        approval: { state: 'missing' },
+      },
+    })) {
+      if (ev.kind === 'success') success = true;
+      if (ev.kind === 'error') error = ev.message;
+    }
+    expect(error).toBeUndefined();
+    expect(success).toBe(true);
+  });
+
+  it('keeps high-assurance enterprise packages quarantined when verifier evidence is unavailable', async () => {
+    const tarball = await buildFixtureTarball({ rootPrefix: 'sample-plugin-1.0.0' });
+    const integrity = `sha256:${createHash('sha256').update(tarball).digest('hex')}`;
+    let error: string | undefined;
+    for await (const ev of installPlugin(db, {
+      source: 'https://packages.company.example/sample-plugin-1.0.0.tgz',
+      roots: { userPluginsRoot: pluginsRoot },
+      fetcher: makeFetcher(tarball),
+      archiveIntegrity: integrity,
+      marketplacePolicy: {
+        allowedVisibilities: ['enterprise'],
+        allowedHosts: ['packages.company.example'],
+        allowedLicenses: ['Apache-2.0'],
+        requireHttps: true,
+        requireDigest: true,
+        requireSignature: true,
+        requireProvenance: true,
+        requireSbom: true,
+        requireApproval: true,
+        allowDirectUrlInstall: false,
+      },
+      marketplaceEvidence: {
+        packageId: 'company/sample-plugin',
+        packageKind: 'plugin',
+        version: '1.0.0',
+        visibility: 'enterprise',
+        sourceUrl: 'https://packages.company.example/sample-plugin-1.0.0.tgz',
+        directUrl: false,
+        license: 'Apache-2.0',
+        digest: { state: 'unknown', value: integrity },
+        signature: { state: 'unknown', reference: 'oci://signature' },
+        provenance: { state: 'unknown', reference: 'oci://provenance' },
+        sbom: { state: 'unknown', reference: 'oci://sbom' },
+        approval: { state: 'unknown', reference: 'tuf://stable/sample-plugin' },
+      },
+    })) {
+      if (ev.kind === 'error') error = ev.message;
+    }
+    expect(error).toContain('Enterprise marketplace policy blocked activation');
+    expect(error).toContain('SIGNATURE_REQUIRED');
+    expect(error).toContain('PROVENANCE_REQUIRED');
+    expect(db.prepare(`SELECT COUNT(*) AS count FROM installed_plugins`).get()).toEqual({ count: 0 });
+  });
+
+  it('fails closed when only one half of marketplace policy context is provided', async () => {
+    const tarball = await buildFixtureTarball({ rootPrefix: 'sample-plugin-1.0.0' });
+    const integrity = `sha256:${createHash('sha256').update(tarball).digest('hex')}`;
+    const policy = {
+      allowedVisibilities: ['enterprise'] as const,
+      allowedHosts: ['packages.company.example'],
+      allowedLicenses: ['Apache-2.0'],
+      requireHttps: true,
+      requireDigest: true,
+      requireSignature: false,
+      requireProvenance: false,
+      requireSbom: false,
+      requireApproval: false,
+      allowDirectUrlInstall: false,
+    };
+    const evidence = {
+      packageId: 'company/sample-plugin',
+      packageKind: 'plugin' as const,
+      version: '1.0.0',
+      visibility: 'enterprise' as const,
+      sourceUrl: 'https://packages.company.example/sample-plugin-1.0.0.tgz',
+      directUrl: false,
+      license: 'Apache-2.0',
+    };
+
+    for (const partialContext of [
+      { marketplacePolicy: policy },
+      { marketplaceEvidence: evidence },
+    ]) {
+      let error: string | undefined;
+      for await (const ev of installPlugin(db, {
+        source: evidence.sourceUrl,
+        roots: { userPluginsRoot: pluginsRoot },
+        fetcher: makeFetcher(tarball),
+        archiveIntegrity: integrity,
+        ...partialContext,
+      })) {
+        if (ev.kind === 'error') error = ev.message;
+      }
+      expect(error).toContain('incomplete policy context');
+    }
+    expect(db.prepare(`SELECT COUNT(*) AS count FROM installed_plugins`).get()).toEqual({ count: 0 });
+  });
+
+  it('blocks a policy-restricted archive host before making a network request', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    let error: string | undefined;
+
+    for await (const ev of installPlugin(db, {
+      source: 'https://unapproved.example/sample-plugin-1.0.0.tgz',
+      roots: { userPluginsRoot: pluginsRoot },
+      marketplaceAllowedHosts: ['packages.company.example'],
+    })) {
+      if (ev.kind === 'error') error = ev.message;
+    }
+
+    expect(error).toContain('403');
+    expect(error).toContain('not allowed');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('does not follow redirects for an enterprise archive even without a bearer token', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 302,
+      statusText: 'Found',
+      body: null,
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    for await (const _ev of installPlugin(db, {
+      source: 'https://packages.company.example/sample-plugin-1.0.0.tgz',
+      roots: { userPluginsRoot: pluginsRoot },
+      marketplaceAllowedHosts: ['packages.company.example'],
+    })) {
+      // The response is intentionally not installable; only request policy is under test.
+    }
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://packages.company.example/sample-plugin-1.0.0.tgz',
+      expect.objectContaining({
+        redirect: 'manual',
+        signal: expect.any(AbortSignal),
+      }),
+    );
   });
 
   it('rejects archives that exceed the size cap', async () => {

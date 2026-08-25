@@ -117,7 +117,7 @@ function screenSection(screen: ScreenSpecScreen, index: number): string {
         ${checkpointBox(screen)}
       </div>
     </div>
-    <div class="footer">${esc(screen.companyName || 'Open Docs')} · Ver ${esc(screen.version || '-')}</div>
+    <div class="footer">${esc(screen.companyName || 'MonoField')} · Ver ${esc(screen.version || '-')}</div>
   </section>`;
 }
 

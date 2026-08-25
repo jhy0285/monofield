@@ -8,6 +8,7 @@ describe('sessionModeToTracking', () => {
   });
 
   it('keeps `design` as `design`', () => {
+    expect(sessionModeToTracking('docs')).toBe('design');
     expect(sessionModeToTracking('design')).toBe('design');
   });
 

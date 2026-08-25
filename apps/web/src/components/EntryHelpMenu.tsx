@@ -22,7 +22,7 @@ import {
 import { Icon } from './Icon';
 import { useT } from '../i18n';
 
-const REPO = 'https://github.com/jhy0285/open-docs';
+const REPO = 'https://github.com/jhy0285/monofield';
 const ISSUES_URL = `${REPO}/issues/new`;
 const PRS_URL = `${REPO}/pulls`;
 const RELEASES_URL = `${REPO}/releases`;

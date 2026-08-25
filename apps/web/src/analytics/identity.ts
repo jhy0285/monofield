@@ -1,5 +1,5 @@
 // Browser-side local identity helpers retained for compatibility with older
-// call sites. Open Docs telemetry is disabled, so the provider no longer calls
+// call sites. MonoField telemetry is disabled, so the provider no longer calls
 // these helpers to create product-analytics identities.
 
 import type { AnalyticsClientType } from '@open-design/contracts/analytics';
@@ -72,7 +72,7 @@ export function claimRunTurnIndex(): { turnIndex: number; isFirstRun: boolean } 
   }
 }
 
-// Desktop packaged builds install the Open Docs host bridge so the
+// Desktop packaged builds install the MonoField host bridge so the
 // same web bundle can distinguish desktop runs from browser visits.
 // Falls back to 'web' when the host bridge isn't present.
 export function detectClientType(): AnalyticsClientType {

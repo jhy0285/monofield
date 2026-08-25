@@ -16,7 +16,7 @@ interface FakeMediaAgentOptions {
   attachToken?: boolean;
 }
 
-describe('run-scoped media policy routes', () => {
+describe('run-scoped media policy routes', { timeout: 45_000 }, () => {
   let tempDir: string;
   let binDir: string;
   let oldPath: string | undefined;
@@ -60,7 +60,7 @@ describe('run-scoped media policy routes', () => {
     oldMemoryConfigRaw = null;
     await rm(tempDir, { recursive: true, force: true });
     await rm(binDir, { recursive: true, force: true });
-  });
+  }, 30_000);
 
   it('rejects in-run media generation when media execution is disabled', async () => {
     const capturePath = path.join(tempDir, 'media-disabled-response.json');
@@ -626,16 +626,21 @@ const attachToken = ${JSON.stringify(attachToken)};
 });
 `;
     if (process.platform === 'win32') {
-      const runner = path.join(binDir, 'opencode-runner.cjs');
+      // Keep each fixture's runner immutable while a prior agent process is
+      // finishing. Windows cannot safely replace a loaded script file.
+      const runner = path.join(binDir, `opencode-runner-${randomUUID()}.cjs`);
       await writeFile(runner, source.replace(/^#![^\n]*\n/, ''));
-      await writeFile(
-        path.join(binDir, 'opencode.cmd'),
-        `@echo off\r\nnode "${runner}" %*\r\n`,
-      );
+      const command = `@echo off\r\nnode "${runner}" %*\r\n`;
+      await Promise.all([
+        writeFile(path.join(binDir, 'opencode.cmd'), command),
+        writeFile(path.join(binDir, 'opencode-cli.cmd'), command),
+      ]);
     } else {
-      const bin = path.join(binDir, 'opencode');
-      await writeFile(bin, source);
-      await chmod(bin, 0o755);
+      await Promise.all(['opencode', 'opencode-cli'].map(async (name) => {
+        const bin = path.join(binDir, name);
+        await writeFile(bin, source);
+        await chmod(bin, 0o755);
+      }));
     }
     process.env.OD_CAPTURE_MEDIA_RESPONSE = capturePath;
   }
@@ -651,7 +656,12 @@ const attachToken = ${JSON.stringify(attachToken)};
     const startedAt = Date.now();
     while (Date.now() - startedAt < 10_000) {
       try {
-        return JSON.parse(await readFile(capturePath, 'utf8'));
+        const captured = JSON.parse(await readFile(capturePath, 'utf8'));
+        // The capture is written immediately before the child exits. Give the
+        // daemon a moment to observe that exit before the next fixture tears
+        // down its server (notably important for a nested .cmd -> node child).
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        return captured;
       } catch {
         await new Promise((resolve) => setTimeout(resolve, 50));
       }

@@ -86,7 +86,7 @@
 .chipActive {
   background: var(--text);
   border-color: var(--text);
-  color: #fff;
+  color: var(--inverted-contrast);
 }
 
 .body {
@@ -258,7 +258,7 @@
   height: 18px;
   border-radius: 999px;
   background: var(--selected);
-  color: #fff;
+  color: var(--selected-contrast);
 }
 
 .label {

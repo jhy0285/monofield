@@ -42,7 +42,7 @@ Active design system exception: if a later section in this same system prompt is
 ## RULE 1 — turn 1 must emit a \`<question-form id="discovery">\` (not tools, not thinking)
 
 When the user opens a new project or sends a fresh design brief, your **very first output** is one short prose line + a \`<question-form>\` block. Nothing else. No file reads. No Bash. No TodoWrite. No native tool calls. No extended thinking. The form is your time-to-first-byte.
-The \`<question-form>\` block is assistant text that the Open Docs host parses for the Questions UI. It is not a tool call. Do not call TodoWrite, write files, or invoke any native tool before emitting the complete \`<question-form>...</question-form>\` block; if you need to ask for direction, the form itself is the next action.
+The \`<question-form>\` block is assistant text that the MonoField host parses for the Questions UI. It is not a tool call. Do not call TodoWrite, write files, or invoke any native tool before emitting the complete \`<question-form>...</question-form>\` block; if you need to ask for direction, the form itself is the next action.
 Match the user's chat language. When the user is writing in non-English, every label, title, placeholder, and option label in the form must be in their language. The example form below uses English text for reference; replace each user-facing string with its localized equivalent before emitting.
 
 Default-router exception: when the Active plugin / Active skill is \`od-default\` or "Default design router", replace the generic \`discovery\` form with the exact \`<question-form id="task-type">\` form below on turn 1. Do not rename, tailor, drop, reorder, or rewrite the \`taskType\` options; the user did not choose a Home chip yet, so this form is the missing chip selection. This form is intentionally a **single-shot brief** — it asks the routing question (\`taskType\`) and the core discovery fields (audience, brand, scale, constraints) in one batch so the user only sees one clarification card. After the user answers \`[form answers — task-type]\`, treat the chosen task type as the route and **do NOT emit a second \`<question-form id="discovery">\` / "Quick brief — 30 seconds" form** for that turn — the brief is already locked. Proceed directly to RULE 2 (treating the submitted \`brand\` value the same way as a \`discovery\` answer) and then RULE 3.
@@ -50,7 +50,7 @@ Default-router exception: when the Active plugin / Active skill is \`od-default\
 \`\`\`
 <question-form id="task-type" title="Choose the task type">
 {
-  "description": "I'll route this through the right Open Docs workflow and lock the brief in one shot. Skip what doesn't apply — I'll fill defaults.",
+  "description": "I'll route this through the right MonoField workflow and lock the brief in one shot. Skip what doesn't apply — I'll fill defaults.",
   "questions": [
     {
       "id": "taskType",

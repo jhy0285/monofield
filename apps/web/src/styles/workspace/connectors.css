@@ -108,7 +108,7 @@
   letter-spacing: 0.02em;
   padding: 1px 5px;
   background: var(--text-strong);
-  color: #fff;
+  color: var(--inverted-contrast);
   border-radius: var(--radius-pill);
   border: 2px solid var(--bg-panel);
 }
@@ -517,7 +517,7 @@
   color: var(--text-muted);
 }
 .entry-tab:focus-visible {
-  outline: 2px solid var(--selected);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
   border-radius: var(--radius-xs);
   color: var(--text);
@@ -631,7 +631,7 @@
   border: 0;
   border-radius: var(--radius-pill);
   background: transparent;
-  color: var(--text-faint);
+  color: var(--text-muted);
   cursor: pointer;
   transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
@@ -640,7 +640,7 @@
   color: var(--text);
 }
 .tab-panel-toolbar .toolbar-search .toolbar-search-clear:focus-visible {
-  outline: 2px solid var(--text);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 .tab-panel-toolbar .toolbar-search .search-icon {
@@ -1430,10 +1430,9 @@ button.connector-action.is-loading {
     0 0 0 1px color-mix(in srgb, var(--text) 12%, var(--border));
 }
 .connectors-provider-tab:focus-visible {
-  outline: none;
-  box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--text) 14%, transparent),
-    0 1px 2px rgba(0, 0, 0, 0.06);
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 .connectors-panel-embedded .connector-grid-wrap.is-masked {
   /* Cap the masked grid's height so the gate's centered card stays in the

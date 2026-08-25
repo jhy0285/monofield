@@ -126,7 +126,7 @@
   opacity: 0.34;
 }
 .db-icon-btn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 .db-icon-btn.is-spinning svg {
@@ -428,6 +428,156 @@
   margin: 6px 4px;
   background: color-mix(in srgb, var(--border) 70%, transparent);
 }
+.db-browser-access {
+  position: relative;
+  display: inline-flex;
+}
+.db-browser-access-trigger.db-icon-btn {
+  width: auto;
+  min-width: 68px;
+  gap: 5px;
+  padding: 0 8px;
+}
+.db-browser-access-trigger.is-inspect {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  background: color-mix(in srgb, var(--accent-tint) 62%, transparent);
+  color: var(--accent-strong);
+}
+.db-browser-access-trigger.is-automate {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent-tint) 72%, var(--bg-panel));
+  color: var(--accent-strong);
+}
+.db-browser-access-label {
+  font-size: 11.5px;
+  font-weight: 650;
+  line-height: 1;
+}
+.db-browser-access-menu {
+  width: min(390px, calc(100vw - 28px));
+  padding: 8px;
+}
+.db-browser-access-head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 7px 9px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+.db-browser-access-head strong {
+  color: var(--text);
+  font-size: 12.5px;
+}
+.db-browser-access-head small {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+.db-browser-access-options {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px 0;
+}
+.db-menu button.db-browser-access-option {
+  min-height: 58px;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+}
+.db-menu button.db-browser-access-option.is-selected {
+  background: color-mix(in srgb, var(--accent-tint) 64%, transparent);
+}
+.db-menu button.db-browser-access-option.is-unavailable {
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0.72;
+}
+.db-menu button.db-browser-access-option.is-unavailable:hover {
+  background: color-mix(in srgb, var(--bg-subtle) 70%, transparent);
+}
+.db-browser-access-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.db-browser-access-copy > span {
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 650;
+}
+.db-browser-access-copy small {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.db-browser-access-availability {
+  align-self: start;
+  margin-top: 2px;
+  padding: 3px 6px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg-subtle) 82%, transparent);
+  color: var(--text-soft);
+  font-size: 10px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.db-browser-access-foot,
+.db-browser-use-safety {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent-tint) 46%, var(--bg-subtle));
+  color: var(--text-muted);
+  font-size: 10.75px;
+  line-height: 1.4;
+}
+.db-browser-access-foot {
+  padding: 8px;
+}
+.db-browser-access-foot > span {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+}
+.db-browser-access-foot small {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.db-browser-access-foot button.db-browser-automation-stop {
+  width: auto;
+  flex: 0 0 auto;
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, #c53b3b 38%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, #c53b3b 8%, var(--bg-panel));
+  color: #a32f2f;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+}
+.db-browser-access-foot i,
+.db-browser-use-safety i {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--accent-strong);
+}
 .db-browser-use-menu {
   width: min(430px, calc(100vw - 28px));
   max-height: min(620px, calc(100vh - 112px));
@@ -452,6 +602,13 @@
   color: var(--text-muted);
   font-size: 11.5px;
   line-height: 1.35;
+}
+.db-browser-use-safety {
+  padding: 7px 8px;
+}
+.db-browser-use-safety strong {
+  color: var(--text);
+  font-weight: 650;
 }
 .db-browser-use-search {
   display: grid;
@@ -654,6 +811,390 @@
 .db-fallback iframe {
   background: #fff;
 }
+
+.db-agent-pointer-status {
+  position: absolute;
+  z-index: 170;
+  top: 12px;
+  right: 12px;
+  max-width: min(310px, calc(100% - 24px));
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 7px 6px 11px;
+  border: 1px solid color-mix(in srgb, var(--control-border) 82%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-panel) 93%, transparent);
+  color: var(--text);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(14px);
+}
+
+.db-agent-pointer-live {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-tint);
+  animation: db-agent-pointer-live 1.8s ease-in-out infinite;
+}
+
+.db-agent-pointer-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.db-agent-pointer-copy strong,
+.db-agent-pointer-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.db-agent-pointer-copy strong {
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.db-agent-pointer-copy small {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.db-agent-pointer-status button {
+  min-width: 48px;
+  height: 28px;
+  border: 1px solid color-mix(in srgb, var(--red) 44%, var(--control-border));
+  border-radius: 7px;
+  background: var(--control-bg);
+  color: var(--red);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.db-agent-pointer-status button:hover {
+  border-color: var(--red);
+  background: color-mix(in srgb, var(--red) 10%, var(--control-bg));
+}
+
+.db-agent-pointer-status button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+@keyframes db-agent-pointer-live {
+  0%, 100% { opacity: 0.6; transform: scale(0.86); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .db-agent-pointer-live {
+    animation: none;
+  }
+}
+
+/* ---- Browser review tray ------------------------------------------------ */
+.db-review-tray {
+  position: relative;
+  z-index: 180;
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: minmax(150px, 0.72fr) minmax(260px, 2fr) max-content;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  background: color-mix(in srgb, var(--bg-panel) 92%, var(--accent-tint) 8%);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--border) 32%, transparent);
+}
+.db-review-tray-head {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.db-review-tray-head strong {
+  color: var(--text-strong);
+  font-size: 12.5px;
+  line-height: 1.2;
+}
+.db-review-tray-head span {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  line-height: 1.25;
+}
+.db-review-list {
+  min-width: 0;
+  max-height: 112px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+.db-review-list li {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 18px max-content minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 3px 4px 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+.db-review-index {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  line-height: 1;
+  text-align: right;
+}
+.db-review-kind {
+  min-width: 48px;
+  padding: 3px 7px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent-tint) 82%, var(--bg));
+  color: var(--accent-strong);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+}
+.db-review-list li[data-kind='visual'] .db-review-kind {
+  background: color-mix(in srgb, #ffede8 78%, var(--bg));
+  color: #a84629;
+}
+.db-review-list li[data-kind='tweak'] .db-review-kind {
+  background: color-mix(in srgb, #eee9ff 78%, var(--bg));
+  color: #6650a4;
+}
+.db-review-summary {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 11.5px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.db-review-remove {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.db-review-remove:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.db-review-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.db-review-actions button {
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.db-review-actions button.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+.db-review-actions button:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
+/* ---- Explicit browser automation approval ------------------------------ */
+.db-automation-dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 320;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--text-strong) 24%, transparent);
+  backdrop-filter: blur(4px);
+}
+.db-automation-dialog {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 14px;
+  width: min(560px, 100%);
+  padding: 22px;
+  border: 1px solid color-mix(in srgb, #9b5de5 28%, var(--border));
+  border-radius: 18px;
+  background: var(--bg-panel);
+  color: var(--text);
+  box-shadow: 0 28px 80px rgba(28, 27, 26, 0.28);
+}
+.db-automation-dialog-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: color-mix(in srgb, #9b5de5 14%, var(--bg-subtle));
+  color: #7c3aed;
+}
+.db-automation-dialog-copy {
+  min-width: 0;
+}
+.db-automation-kicker {
+  color: #7c3aed;
+  font-size: 10.5px;
+  font-weight: 750;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.db-automation-dialog h3 {
+  margin: 4px 0 9px;
+  font-size: 18px;
+  letter-spacing: -.02em;
+}
+.db-automation-dialog p,
+.db-automation-dialog li {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.db-automation-dialog p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.db-automation-dialog ul {
+  margin: 12px 0 0;
+  padding-left: 18px;
+}
+.db-automation-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+.db-automation-dialog-actions button {
+  min-height: 34px;
+  padding: 0 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+}
+.db-automation-dialog-actions button.is-primary {
+  border-color: #7c3aed;
+  background: #7c3aed;
+  color: #fff;
+}
+.db-automation-dialog-actions button:disabled {
+  opacity: .55;
+  cursor: default;
+}
+.db-load-error {
+  position: absolute;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--bg) 92%, var(--text) 8%);
+}
+.db-load-error-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  width: min(560px, 100%);
+  padding: 22px;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, var(--accent) 18%);
+  border-radius: 16px;
+  background: var(--bg-panel);
+  color: var(--text);
+  box-shadow: 0 18px 48px rgba(28, 27, 26, 0.18);
+}
+.db-load-error-card > svg {
+  flex: 0 0 auto;
+  color: var(--accent-strong);
+}
+.db-load-error-copy {
+  min-width: 0;
+}
+.db-load-error-copy strong {
+  display: block;
+  font-size: 15px;
+}
+.db-load-error-copy p {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.db-load-error-copy code {
+  display: block;
+  max-width: 100%;
+  margin-top: 10px;
+  overflow: hidden;
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.db-load-error-copy .db-load-error-hint {
+  color: var(--text);
+}
+.db-load-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.db-load-error-actions button {
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, var(--accent) 22%);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+.db-load-error-actions button:first-child {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+}
+.db-load-error-actions button:hover {
+  filter: brightness(0.97);
+}
 .db-comment-layer {
   position: absolute;
   inset: 0;
@@ -696,9 +1237,49 @@
   background: #da6138;
   box-shadow: 0 4px 12px rgba(218, 97, 56, 0.34);
 }
+.db-visual-review-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 35;
+  overflow: hidden;
+  pointer-events: none;
+}
+.db-visual-review-marker {
+  position: absolute;
+  min-width: 12px;
+  min-height: 12px;
+  box-sizing: border-box;
+  border: 2px solid #da6138;
+  border-radius: var(--radius);
+  background: rgba(218, 97, 56, 0.16);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.72), 0 6px 18px rgba(218, 97, 56, 0.18);
+}
+.db-visual-review-marker span {
+  position: absolute;
+  top: -13px;
+  right: -13px;
+  min-width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fff;
+  border-radius: var(--radius-pill);
+  background: #da6138;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(218, 97, 56, 0.34);
+  font-size: 11px;
+  font-weight: 700;
+}
 .design-browser .comment-popover,
 .db-comment-popover {
   z-index: 240;
+}
+.db-comment-popover-dismiss-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 239;
+  background: transparent;
 }
 .db-comment-popover textarea {
   width: 100%;
@@ -750,6 +1331,17 @@
 }
 
 @container design-browser (max-width: 760px) {
+  .db-review-tray {
+    grid-template-columns: minmax(0, 1fr) max-content;
+  }
+  .db-review-list {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .db-review-actions {
+    grid-column: 2;
+    grid-row: 1;
+  }
   .db-chrome {
     grid-template-columns: minmax(0, auto) minmax(120px, 420px) max-content;
     gap: 6px;
@@ -760,6 +1352,13 @@
     padding-inline: 6px;
   }
   .db-viewport-label {
+    display: none;
+  }
+  .db-browser-access-trigger.db-icon-btn {
+    min-width: 32px;
+    padding-inline: 7px;
+  }
+  .db-browser-access-label {
     display: none;
   }
   .db-action-mark,

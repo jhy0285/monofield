@@ -663,7 +663,7 @@
 .design-card-checkbox.checked {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast);
 }
 .design-card.is-selected {
   border-color: var(--accent);
@@ -724,7 +724,7 @@
   border-radius: var(--radius-pill);
   border: 0;
   background: var(--red);
-  color: #fff;
+  color: var(--red-contrast);
   font-size: 12px;
   cursor: pointer;
 }
@@ -927,7 +927,7 @@
 
 /* Grid card keyboard focus (cards carry role="button" on a div). */
 .design-card:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
   border-color: var(--border-strong);
 }
@@ -1043,7 +1043,7 @@
   transform: none;
 }
 .design-kanban-card:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
   border-color: var(--border-strong);
 }
@@ -1145,7 +1145,7 @@
   padding: 2px 8px;
   border-radius: var(--radius-pill);
   background: var(--accent);
-  color: white;
+  color: var(--accent-contrast);
   flex-shrink: 0;
 }
 
@@ -1173,7 +1173,7 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
 }
 .ds-card:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 .ds-card.active {
@@ -1429,6 +1429,17 @@
      never compressed by long/numerous file tabs. */
   margin-inline-start: auto;
 }
+.ws-development-bar {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-width: 0;
+  min-height: 38px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-panel) 92%, var(--bg-subtle));
+  z-index: 3;
+}
 .ws-tabs-file-actions,
 .ws-tabs-project-actions {
   display: inline-flex;
@@ -1524,7 +1535,7 @@
   color: var(--text);
 }
 .ws-tab:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 .ws-tab.active {
@@ -1625,7 +1636,7 @@
   padding: 0 2px;
   font-size: 14px;
   line-height: 1;
-  color: var(--text-faint);
+  color: var(--text-muted);
   border-radius: var(--radius-xs);
   margin-left: 2px;
   width: 16px;
@@ -1695,7 +1706,7 @@
   color: var(--text);
 }
 .ws-tab-add:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -1728,7 +1739,7 @@
   border-color: var(--border-strong);
 }
 .ws-focus-toggle:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 .ws-tab-action {

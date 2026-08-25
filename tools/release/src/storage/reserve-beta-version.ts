@@ -1,17 +1,18 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { required, storageConfigFromEnv } from "./common.ts";
+import { releaseChannelDescriptor } from "@open-design/release";
+import { required, requiredPublicOrigin, storageConfigFromEnv } from "./common.ts";
 import { reserveVersion, writeGithubOutputs } from "./beta-version-reservation.ts";
 
 const releaseChannel = required("RELEASE_CHANNEL");
 if (releaseChannel === "stable") throw new Error("reserve-version only supports counted channels");
 
+const publicOrigin = requiredPublicOrigin();
 const metadataDir = required("RELEASE_METADATA_DIR");
 mkdirSync(metadataDir, { recursive: true });
 
 const candidateVersion = required("RELEASE_VERSION_CANDIDATE");
 const baseVersion = required("BASE_VERSION");
-const publicOrigin = required("RELEASE_PUBLIC_ORIGIN").replace(/\/+$/, "");
 const lane = required("RELEASE_LANE");
 const manualOverride = process.env.RELEASE_VERSION_MANUAL_OVERRIDE === "true";
 const maxAttempts = Number(process.env.RELEASE_VERSION_RESERVATION_MAX_ATTEMPTS ?? "200");
@@ -33,7 +34,7 @@ const { objectKey, reservation, url } = await reserveVersion({
 
 writeGithubOutputs({
   ...(releaseChannel === "beta" ? { beta_number: String(reservation.releaseNumber), beta_version: reservation.releaseVersion } : {}),
-  release_name: `Open Design ${releaseChannel === "betas" ? "Betas" : releaseChannel[0]?.toUpperCase() ?? ""}${releaseChannel === "betas" ? "" : releaseChannel.slice(1)} ${reservation.releaseVersion}`,
+  release_name: `${releaseChannelDescriptor(releaseChannel).productName} ${reservation.releaseVersion}`,
   release_number: String(reservation.releaseNumber),
   release_version: reservation.releaseVersion,
   state_source: `reserved ${objectKey}`,

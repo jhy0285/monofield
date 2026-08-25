@@ -1218,7 +1218,7 @@ export function attachAcpSession({
     clearStageTimer();
     stdin.end();
     // Some ACP agents keep the child process alive after stdin closes,
-    // waiting for another prompt. Each Open Docs run owns one process per
+    // waiting for another prompt. Each MonoField run owns one process per
     // turn, so close it once this prompt is cleanly complete.
     const cleanExitTimer = setTimeout(() => {
       if (!child.killed) child.kill('SIGTERM');
