@@ -81,7 +81,7 @@ Ask for explanation, analysis, or review.
   or OpenAI-compatible endpoint.
 - **Visible control** — diffs, build results, browser approvals, database
   policies, token measurements, and deliverables remain reviewable.
-- **One work surface** — development, design, and documents are capabilities of
+- **One workspace** — development, design, and documents are capabilities of
   one project rather than isolated products.
 - **Reusable by teams** — workflows, brand systems, dictionaries, references,
   and project presets can be distributed through an organization-run library.
