@@ -49,5 +49,24 @@
     });
   });
 
+  const projectModeTabs = Array.from(document.querySelectorAll('[data-project-mode]'));
+  const projectModePanels = Array.from(document.querySelectorAll('[data-project-mode-panel]'));
+
+  projectModeTabs.forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const target = tab.getAttribute('data-project-mode');
+      projectModeTabs.forEach((candidate) => {
+        const active = candidate === tab;
+        candidate.classList.toggle('is-active', active);
+        candidate.setAttribute('aria-selected', String(active));
+      });
+      projectModePanels.forEach((panel) => {
+        const active = panel.getAttribute('data-project-mode-panel') === target;
+        panel.classList.toggle('is-active', active);
+        panel.hidden = !active;
+      });
+    });
+  });
+
   applyLanguage();
 })();

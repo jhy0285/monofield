@@ -61,26 +61,86 @@
 
       <section class="app-showcase" id="product" aria-labelledby="app-showcase-title">
         <div class="showcase-intro">
-          <p class="section-index">01 / ACTUAL WORKSPACE</p>
-          <h2 id="app-showcase-title" data-en="This is the actual MonoField workspace." data-ko="MonoField의 실제 화면.">This is the actual MonoField workspace.</h2>
-          <p data-en="The desktop starts with a way of working, a project folder, and a request. Development and document production use the same project history and controls." data-ko="데스크톱에서 작업 방식과 프로젝트 폴더를 고른 뒤 요청을 시작합니다. 개발과 문서 제작은 같은 프로젝트 기록과 제어 기능을 사용합니다.">The desktop starts with a way of working, a project folder, and a request. Development and document production use the same project history and controls.</p>
+          <p class="section-index">01 / PROJECT MODES</p>
+          <h2 id="app-showcase-title"><span data-en="Two ways to work." data-ko="두 가지 방식,">Two ways to work.</span><span data-en="One project." data-ko="하나의 프로젝트.">One project.</span></h2>
+          <p data-en="Start with software development or document &amp; design. Both modes keep the project folder, history, browser, data connections, and deliverables together." data-ko="소프트웨어 개발 또는 문서·디자인 제작으로 시작합니다. 어느 쪽이든 프로젝트 폴더, 기록, 브라우저, 데이터 연결, 산출물이 함께 유지됩니다.">Start with software development or document &amp; design. Both modes keep the project folder, history, browser, data connections, and deliverables together.</p>
         </div>
 
-        <figure class="app-stage" aria-label="Actual MonoField desktop interface shown with demo data">
-          <div class="actual-product-bar">
-            <span><i></i><b data-en="ACTUAL PRODUCT" data-ko="실제 제품 화면">ACTUAL PRODUCT</b></span>
-            <small data-en="Desktop · software development mode · demo data" data-ko="Desktop · 소프트웨어 개발 모드 · 데모 데이터">Desktop · software development mode · demo data</small>
+        <div class="mode-showcase">
+          <div class="mode-switcher" role="tablist" aria-label="Project mode preview">
+            <button class="project-mode-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="mode-development" data-project-mode="development">
+              <span data-en="Software development" data-ko="소프트웨어 개발">Software development</span>
+              <small data-en="CODE · BUILD · VERIFY" data-ko="코드 · 빌드 · 검증">CODE · BUILD · VERIFY</small>
+            </button>
+            <button class="project-mode-tab" type="button" role="tab" aria-selected="false" aria-controls="mode-creative" data-project-mode="creative">
+              <span data-en="Document &amp; design" data-ko="문서·디자인 제작">Document &amp; design</span>
+              <small data-en="COMPOSE · REVIEW · EXPORT" data-ko="제작 · 검토 · 내보내기">COMPOSE · REVIEW · EXPORT</small>
+            </button>
           </div>
-          <div class="actual-product-viewport">
-            <img src="/monofield-workspace.png" alt="MonoField desktop home with software development mode selected" width="1899" height="1295" loading="eager" />
+
+          <div class="project-mode-panel is-active" id="mode-development" role="tabpanel" data-project-mode-panel="development">
+            <div class="mode-window">
+              <div class="mode-titlebar">
+                <strong><i aria-hidden="true"></i> monofield</strong>
+                <button type="button"><span class="status-dot"></span> commerce-platform <small>C:\work\commerce</small>⌄</button>
+                <div><span>Ask</span><b>Docs</b><em>•••</em></div>
+              </div>
+              <div class="mode-layout">
+                <aside class="mode-nav" aria-label="Development workspace navigation">
+                  <button class="is-active" type="button">⌂ <span data-en="Work" data-ko="작업">Work</span></button>
+                  <button type="button">⌕ <span data-en="Changes" data-ko="변경사항">Changes</span><b>2</b></button>
+                  <button type="button">▣ <span data-en="Browser" data-ko="브라우저">Browser</span><i></i></button>
+                  <button type="button">⌗ <span data-en="Database" data-ko="데이터베이스">Database</span></button>
+                  <button type="button">□ <span data-en="Documents" data-ko="문서">Documents</span><b>3</b></button>
+                </aside>
+                <section class="mode-workbench">
+                  <header><div><small>SOFTWARE DEVELOPMENT</small><h3 data-en="Verify the order flow" data-ko="주문 흐름 검증">Verify the order flow</h3></div><button type="button" data-en="Open changes" data-ko="변경사항 열기">Open changes</button></header>
+                  <div class="mode-request" data-en="Update the order creation flow, run the project, and verify the actual screen. Consult the connected development database only when needed." data-ko="주문 생성 흐름을 수정하고 프로젝트를 실행한 뒤 실제 화면까지 검증해줘. 필요한 경우에만 연결된 개발 DB를 참고해.">Update the order creation flow, run the project, and verify the actual screen. Consult the connected development database only when needed.</div>
+                  <div class="mode-run"><div><span>✓</span><p><b data-en="Implementation updated" data-ko="구현 수정">Implementation updated</b><small>OrderService.ts · order.routes.ts</small></p><em>1.8s</em></div><div><span>✓</span><p><b data-en="Build and tests" data-ko="빌드 및 테스트">Build and tests</b><small>12 tests · build passed</small></p><em>14.2s</em></div><div class="is-running"><span></span><p><b data-en="Browser verification" data-ko="브라우저 검증">Browser verification</b><small>localhost:3000/orders</small></p><em data-en="live" data-ko="진행 중">live</em></div></div>
+                  <div class="mode-terminal">$ pnpm test --filter order <b>PASS</b></div>
+                </section>
+                <aside class="mode-context" aria-label="Development project context">
+                  <h4 data-en="Project context" data-ko="프로젝트 맥락">Project context</h4>
+                  <section><header><b>Browser</b><span>approved</span></header><div class="mini-browser"><small>localhost:3000/orders</small><h5>Create order</h5><button type="button">Submit</button><i>1</i></div><p data-en="Checking the marked component and interaction." data-ko="표시한 컴포넌트와 동작을 검증합니다.">Checking the marked component and interaction.</p></section>
+                  <section><header><b>Git changes</b><span>2 files</span></header><p><em>M</em> OrderService.ts <small>+18 −4</small></p><p><em>A</em> order.test.ts <small>+42</small></p></section>
+                  <section><header><b>Database</b><span>read</span></header><p><i></i> commerce-dev</p><small data-en="Credentials stay in the desktop vault" data-ko="자격 증명은 데스크톱 보관소에 유지">Credentials stay in the desktop vault</small></section>
+                </aside>
+              </div>
+            </div>
+            <footer class="mode-summary"><span data-en="For implementation work" data-ko="구현 작업에 맞춘 작업면">For implementation work</span><b data-en="folder → diff → build → browser → data" data-ko="폴더 → 변경사항 → 빌드 → 브라우저 → 데이터">folder → diff → build → browser → data</b></footer>
           </div>
-          <figcaption>
-            <span><b>01</b><i data-en="Choose how to work" data-ko="작업 방식 선택">Choose how to work</i></span>
-            <span><b>02</b><i data-en="Select the real project folder" data-ko="실제 프로젝트 폴더 선택">Select the real project folder</i></span>
-            <span><b>03</b><i data-en="Switch between Ask and Docs" data-ko="질문과 문서 모드 전환">Switch between Ask and Docs</i></span>
-          </figcaption>
-        </figure>
-        <p class="showcase-caption"><span data-en="Current desktop interface, captured from the running product." data-ko="현재 실행 중인 데스크톱 제품에서 직접 캡처한 화면입니다.">Current desktop interface, captured from the running product.</span><b>MONOFIELD · BUILD 46BC2A8C</b></p>
+
+          <div class="project-mode-panel" id="mode-creative" role="tabpanel" data-project-mode-panel="creative" hidden>
+            <div class="mode-window">
+              <div class="mode-titlebar">
+                <strong><i aria-hidden="true"></i> monofield</strong>
+                <button type="button"><span class="status-dot"></span> order-specification <small>C:\work\specs</small>⌄</button>
+                <div><span>Ask</span><b>Docs</b><em>•••</em></div>
+              </div>
+              <div class="mode-layout mode-layout-creative">
+                <aside class="mode-nav" aria-label="Document workspace navigation">
+                  <button class="is-active" type="button">⌂ <span data-en="Work" data-ko="작업">Work</span></button>
+                  <button type="button">＋ <span data-en="Sources" data-ko="자료">Sources</span><b>6</b></button>
+                  <button type="button">◇ <span data-en="Workflows" data-ko="워크플로우">Workflows</span></button>
+                  <button type="button">◫ <span data-en="Preview" data-ko="미리보기">Preview</span><i></i></button>
+                  <button type="button">◌ <span data-en="Comments" data-ko="댓글">Comments</span><b>2</b></button>
+                </aside>
+                <section class="mode-workbench creative-workbench">
+                  <header><div><small>DOCUMENT &amp; DESIGN</small><h3 data-en="Order interface specification" data-ko="주문 인터페이스 명세서">Order interface specification</h3></div><button type="button" data-en="Export XLSX" data-ko="XLSX 내보내기">Export XLSX</button></header>
+                  <div class="artifact-toolbar"><span class="is-active" data-en="Interface spec" data-ko="인터페이스 명세">Interface spec</span><span data-en="Screen spec" data-ko="화면 명세">Screen spec</span><span data-en="Deck" data-ko="슬라이드">Deck</span><span data-en="Prototype" data-ko="프로토타입">Prototype</span></div>
+                  <div class="artifact-sheet"><header><div><small>IF-ORD-001</small><h4 data-en="Create order" data-ko="주문 생성">Create order</h4></div><b>POST</b></header><div><strong>Endpoint</strong><span>/api/orders</span><strong>Auth</strong><span>Bearer</span><strong>Request</strong><span>customerId, items[]</span><strong>Response</strong><span>orderId, status</span></div><footer><span>✓</span><p><b data-en="Validated" data-ko="검증 완료">Validated</b><small data-en="Code + browser + approved schema" data-ko="코드 + 브라우저 + 승인된 스키마">Code + browser + approved schema</small></p></footer></div>
+                </section>
+                <aside class="mode-context creative-context" aria-label="Document project context">
+                  <h4 data-en="Production context" data-ko="제작 맥락">Production context</h4>
+                  <section><header><b data-en="Sources" data-ko="참고 자료">Sources</b><span>6</span></header><p>API guideline.pdf <small>ready</small></p><p>terms.xlsx <small>ready</small></p><p>brand-system.fig <small>linked</small></p></section>
+                  <section><header><b data-en="Checks" data-ko="검증">Checks</b><span>3 / 3</span></header><p><em>✓</em> <span data-en="Required fields" data-ko="필수 항목">Required fields</span></p><p><em>✓</em> <span data-en="Terminology" data-ko="용어 일치">Terminology</span></p><p><em>✓</em> <span data-en="Template rules" data-ko="템플릿 규칙">Template rules</span></p></section>
+                  <section><header><b data-en="Outputs" data-ko="산출물">Outputs</b><span>3</span></header><p>interface-spec.xlsx <small>ready</small></p><p>preview.pdf <small>ready</small></p></section>
+                </aside>
+              </div>
+            </div>
+            <footer class="mode-summary"><span data-en="For production work" data-ko="문서·디자인 제작에 맞춘 작업면">For production work</span><b data-en="sources → compose → preview → review → export" data-ko="자료 → 제작 → 미리보기 → 검토 → 내보내기">sources → compose → preview → review → export</b></footer>
+          </div>
+        </div>
       </section>
 
       <section class="why-section" aria-labelledby="why-title">
