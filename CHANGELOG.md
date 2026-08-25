@@ -4,6 +4,17 @@ MonoField uses semantic versions for source and Desktop releases. Historical
 upstream development remains available in Git history; this file records the
 independent MonoField product line.
 
+## 0.11.3 — 2026-08-26
+
+- Added reviewed GPT-5.6 Sol, Terra, and Luna recommendations without allowing
+  an older installed Codex catalog to hide them.
+- Kept live CLI discovery authoritative for future, previously unknown models;
+  newly discovered entries appear before the reviewed fallback list.
+- Added efficient automatic model-catalog refresh at app startup and every six
+  hours while the app remains open, plus clearer manual rescan copy.
+- Verified current Codex CLI, Claude Code, Gemini CLI, and OpenCode adapters on
+  Windows.
+
 ## 0.11.2 — 2026-08-25
 
 - Completed the public product boundary: MonoField app name, executable,

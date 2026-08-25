@@ -351,7 +351,7 @@ describe('App AMR polling', () => {
       fireEvent(window, new Event('focus'));
       expect(mockedFetchAgentsStream).toHaveBeenCalledTimes(1);
 
-      nowSpy.mockReturnValue(10_001);
+      nowSpy.mockReturnValue(6 * 60 * 60 * 1_000 + 1);
       fireEvent(window, new Event('focus'));
 
       await waitFor(() => {

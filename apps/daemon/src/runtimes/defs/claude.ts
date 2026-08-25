@@ -30,6 +30,7 @@ export const claudeAgentDef = {
     // — issue #235) get auto-detected without writing wrapper scripts.
     fallbackBins: ['openclaude'],
     versionArgs: ['--version'],
+    versionProbeTimeoutMs: 20_000,
     authProbe: {
       args: ['auth', 'status'],
       timeoutMs: 5000,

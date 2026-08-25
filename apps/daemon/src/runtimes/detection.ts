@@ -31,6 +31,49 @@ type FetchedRuntimeModels = {
   source: RuntimeModelSource;
 };
 
+export function mergeLiveModelsWithFallbacks(
+  liveModels: RuntimeModelOption[],
+  fallbackModels: RuntimeModelOption[],
+): RuntimeModelOption[] {
+  const byId = new Map<string, RuntimeModelOption>();
+  const defaultModel =
+    liveModels.find((model) => model.id === DEFAULT_MODEL_OPTION.id)
+    ?? fallbackModels.find((model) => model.id === DEFAULT_MODEL_OPTION.id)
+    ?? DEFAULT_MODEL_OPTION;
+  byId.set(defaultModel.id, defaultModel);
+
+  // Live-only entries are future discoveries, so place them before the
+  // reviewed recommendations without requiring a MonoField release.
+  const fallbackIds = new Set(fallbackModels.map((model) => model.id));
+  for (const model of liveModels) {
+    if (model.id !== DEFAULT_MODEL_OPTION.id && !fallbackIds.has(model.id)) {
+      byId.set(model.id, model);
+    }
+  }
+  // Reviewed entries retain their intended quality/latency order and prevent
+  // an older CLI catalog from hiding a newly supported model.
+  for (const model of fallbackModels) {
+    if (model.id !== DEFAULT_MODEL_OPTION.id && !byId.has(model.id)) {
+      byId.set(model.id, model);
+    }
+  }
+  for (const model of liveModels) {
+    if (model.id !== DEFAULT_MODEL_OPTION.id && !byId.has(model.id)) {
+      byId.set(model.id, model);
+    }
+  }
+  return [...byId.values()];
+}
+
+function surfaceFetchedModels(
+  def: RuntimeAgentDef,
+  models: RuntimeModelOption[],
+): RuntimeModelOption[] {
+  return def.augmentLiveModelsWithFallbacks
+    ? mergeLiveModelsWithFallbacks(models, def.fallbackModels)
+    : models;
+}
+
 function amrModelScopeFromEnv(env: NodeJS.ProcessEnv): string {
   return resolveAmrProfile(env);
 }
@@ -57,7 +100,7 @@ async function fetchModels(
       if (!parsed || parsed.length === 0) {
         return { models: def.fallbackModels, source: 'fallback' };
       }
-      return { models: parsed, source: 'live' };
+      return { models: surfaceFetchedModels(def, parsed), source: 'live' };
     } catch {
       return { models: def.fallbackModels, source: 'fallback' };
     }
@@ -81,7 +124,7 @@ async function fetchModels(
     if (!parsed || parsed.length === 0) {
       return { models: def.fallbackModels, source: 'fallback' };
     }
-    return { models: parsed, source: 'live' };
+    return { models: surfaceFetchedModels(def, parsed), source: 'live' };
   } catch {
     return { models: def.fallbackModels, source: 'fallback' };
   }
@@ -120,11 +163,15 @@ async function probeVersionAtPath(
   env: NodeJS.ProcessEnv,
 ): Promise<VersionProbeOutcome> {
   try {
-    const { stdout } = await execAgentFile(resolved, def.versionArgs, {
+    const { stdout, stderr } = await execAgentFile(resolved, def.versionArgs, {
       env,
       timeout: def.versionProbeTimeoutMs ?? 3000,
     });
-    const version = String(stdout).trim().split('\n')[0] ?? null;
+    // A few Windows wrappers/native CLIs print their version to stderr while
+    // still exiting successfully. Treat that as normal version output so the
+    // Settings catalog does not show an installed agent with a blank version.
+    const output = String(stdout).trim() || String(stderr).trim();
+    const version = output ? (output.split(/\r?\n/)[0] ?? null) : null;
     return { kind: 'spawned', version };
   } catch (err) {
     const code = (err as NodeJS.ErrnoException)?.code;
@@ -272,6 +319,7 @@ function stripFns(
     buildArgs,
     listModels,
     fetchModels,
+    augmentLiveModelsWithFallbacks,
     fallbackModels,
     helpArgs,
     capabilityFlags,

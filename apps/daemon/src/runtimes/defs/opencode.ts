@@ -7,6 +7,7 @@ export const opencodeAgentDef = {
     bin: 'opencode-cli',
     fallbackBins: ['opencode'],
     versionArgs: ['--version'],
+    versionProbeTimeoutMs: 10_000,
     // `opencode models` prints `provider/model` per line. Real-world
     // `opencode models` calls can take >8s (network round-trip to the
     // provider registry), so the previous 8s budget timed out and fell back

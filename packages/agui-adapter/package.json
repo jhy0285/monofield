@@ -1,6 +1,6 @@
 {
   "name": "@open-design/agui-adapter",
-  "version": "0.11.2",
+  "version": "0.11.3",
   "private": true,
   "type": "module",
   "description": "Pure-TS bidirectional adapter between MonoField's PersistedAgentEvent / GenUIEvent / PluginPipelineStageEvent union and the AG-UI canonical event protocol (see https://github.com/CopilotKit/CopilotKit). No node:fs imports — daemon emits, web/CopilotKit consumes.",

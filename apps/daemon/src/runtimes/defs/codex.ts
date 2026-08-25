@@ -61,13 +61,25 @@ export const codexAgentDef = {
     name: 'Codex CLI',
     bin: 'codex',
     versionArgs: ['--version'],
+    // The native Windows binary can take several seconds to cold-start while
+    // security software inspects a newly installed release. Keep the version
+    // visible instead of reporting an empty value after the generic 3s budget.
+    versionProbeTimeoutMs: 10_000,
     // Codex exposes its installed model catalog through `debug models` on
     // recent CLIs. Older builds fall back to these static hints.
     listModels: {
       args: ['debug', 'models'],
       parse: parseCodexDebugModels,
-      timeoutMs: 5000,
+      // Recent catalogs include full per-model instruction templates and can
+      // be several hundred KB. A cold refresh can exceed 10s when all agents
+      // are scanned concurrently, so give this background/manual metadata
+      // probe enough time to return future models rather than falling back.
+      timeoutMs: 30_000,
     },
+    // Older installed Codex builds can return only the previous generation.
+    // Keep the reviewed official recommendations below while also surfacing
+    // future models discovered by `debug models` automatically.
+    augmentLiveModelsWithFallbacks: true,
     authProbe: {
       args: ['login', 'status'],
       timeoutMs: 5000,

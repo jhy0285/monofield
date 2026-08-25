@@ -3,6 +3,7 @@ import {
   AGENT_DEFS, amp, assert, chmodSync, claude, codex, cursorAgent, detectAgents, grokBuild, join, mkdtempSync, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
 import { codexNeedsDangerFullAccessSandbox } from '../../src/runtimes/defs/codex.js';
+import { mergeLiveModelsWithFallbacks } from '../../src/runtimes/detection.js';
 import { readLocalAgentProfileDefs } from '../../src/runtimes/registry.js';
 
 test('AGENT_DEFS ids are unique', () => {
@@ -529,42 +530,34 @@ test('codex parses live model catalog from debug models JSON', () => {
   ]);
 });
 
-test('codex detection surfaces live debug models separately from fallback models', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-live-models-'));
-  try {
-    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CODEX_BIN'], async () => {
-      const codexBin = join(dir, 'codex');
-      writeFileSync(
-        codexBin,
-        `#!/bin/sh
-if [ "$1" = "--version" ]; then echo "codex-cli 9.9.9"; exit 0; fi
-if [ "$1" = "debug" ] && [ "$2" = "models" ]; then
-  printf '%s\\n' '{"models":[{"slug":"gpt-6-codex","display_name":"GPT-6 Codex","visibility":"list"}]}'
-  exit 0
-fi
-if [ "$1" = "login" ] && [ "$2" = "status" ]; then echo "Logged in using ChatGPT"; exit 0; fi
-exit 2
-`,
-      );
-      chmodSync(codexBin, 0o755);
-      process.env.OD_AGENT_HOME = dir;
-      process.env.PATH = dir;
-      delete process.env.CODEX_BIN;
-
-      const agents = await detectAgents();
-      const detected = agents.find((agent) => agent.id === 'codex');
-
-      assert.ok(detected);
-      assert.equal(detected.available, true);
-      assert.equal(detected.modelsSource, 'live');
-      assert.deepEqual(detected.models.map((m: { id: string }) => m.id), [
-        'default',
-        'gpt-6-codex',
-      ]);
-    });
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+test('codex combines future live models with reviewed recommendations', () => {
+  const live = codex.listModels?.parse(JSON.stringify({
+    models: [
+      { slug: 'gpt-6-codex', display_name: 'GPT-6 Codex', visibility: 'list' },
+      { slug: 'gpt-5.5', display_name: 'GPT-5.5', visibility: 'list' },
+    ],
+  }));
+  assert.ok(live);
+  assert.deepEqual(
+    mergeLiveModelsWithFallbacks(live, codex.fallbackModels).map((model) => model.id),
+    [
+      'default',
+      'gpt-6-codex',
+      'gpt-5.6-sol',
+      'gpt-5.6-terra',
+      'gpt-5.6-luna',
+      'gpt-5.5',
+      'gpt-5.4',
+      'gpt-5.4-mini',
+      'gpt-5.3-codex',
+      'gpt-5.1',
+      'gpt-5.1-codex-mini',
+      'gpt-5-codex',
+      'gpt-5',
+      'o3',
+      'o4-mini',
+    ],
+  );
 });
 
 test('codex picker includes gpt-5.1 model family', () => {

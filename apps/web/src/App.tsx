@@ -120,7 +120,10 @@ import type {
 const APP_CONFIG_CHANGED_EVENT = 'open-design:app-config-changed';
 const AMR_AGENT_ID = 'amr';
 const AMR_PROFILE_ENV_KEY = 'OPEN_DESIGN_AMR_PROFILE';
-const AGENT_FOCUS_REFRESH_THROTTLE_MS = 10_000;
+// Model discovery can spawn multiple vendor CLIs and some catalog commands
+// perform a network request. Refresh at launch, on an explicit Settings scan,
+// and at most once per six hours while the app remains open.
+const AGENT_CATALOG_AUTO_REFRESH_MS = 6 * 60 * 60 * 1_000;
 const ENABLE_AMR_RUNTIME = false;
 
 export function shouldSyncMediaProvidersOnSave(
@@ -1309,7 +1312,7 @@ function AppInner() {
     const refreshIfDue = () => {
       if (document.visibilityState === 'hidden') return;
       const now = Date.now();
-      if (now - agentFocusRefreshLastRunRef.current < AGENT_FOCUS_REFRESH_THROTTLE_MS) return;
+      if (now - agentFocusRefreshLastRunRef.current < AGENT_CATALOG_AUTO_REFRESH_MS) return;
       agentFocusRefreshLastRunRef.current = now;
       void refreshAgents();
     };
@@ -1320,9 +1323,11 @@ function AppInner() {
 
     window.addEventListener('focus', refreshIfDue);
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    const intervalId = window.setInterval(refreshIfDue, AGENT_CATALOG_AUTO_REFRESH_MS);
     return () => {
       window.removeEventListener('focus', refreshIfDue);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.clearInterval(intervalId);
     };
   }, [agentsLoading, daemonLive, refreshAgents]);
 

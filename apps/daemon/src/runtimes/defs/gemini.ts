@@ -6,6 +6,7 @@ export const geminiAgentDef = {
     name: 'Gemini CLI',
     bin: 'gemini',
     versionArgs: ['--version'],
+    versionProbeTimeoutMs: 20_000,
     fallbackModels: [
       DEFAULT_MODEL_OPTION,
       // Gemini 3 (May 2026): top-tier reasoning + fast frontier-class.

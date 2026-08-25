@@ -124,6 +124,12 @@ export type RuntimeAgentDef = {
   eventParser?: string;
   env?: Record<string, string>;
   listModels?: RuntimeListModels;
+  /**
+   * Keep MonoField's reviewed model recommendations alongside a CLI's live
+   * catalog. This covers CLIs whose bundled catalog can lag a newly released
+   * model until the binary is upgraded. Live-only models still appear first.
+   */
+  augmentLiveModelsWithFallbacks?: boolean;
   fetchModels?: (
     resolvedBin: string,
     env: RuntimeEnv,
@@ -222,6 +228,7 @@ export type DetectedAgent = Omit<
   | 'buildArgs'
   | 'listModels'
   | 'fetchModels'
+  | 'augmentLiveModelsWithFallbacks'
   | 'fallbackModels'
   | 'helpArgs'
   | 'capabilityFlags'
