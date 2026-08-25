@@ -11,7 +11,7 @@ import type { ToolPackConfig } from "../config.js";
 import { hashPackageSourcePath } from "../package-source-hash.js";
 import { electronBuilderVersionForAppVersion } from "../versions.js";
 import {
-  WIN_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER,
+  WIN_PREBUNDLE_ESM_REQUIRE_BANNER,
   WIN_PREBUNDLE_ESBUILD_TARGET,
   WIN_PREBUNDLE_ENTRYPOINTS_DIR_NAME,
   WIN_PREBUNDLE_META_DIR_NAME,
@@ -316,6 +316,7 @@ async function buildPrebundledStandaloneRuntime(
     "--platform=node",
     "--format=esm",
     `--target=${WIN_PREBUNDLE_ESBUILD_TARGET}`,
+    `--banner:js=${WIN_PREBUNDLE_ESM_REQUIRE_BANNER}`,
     ...WIN_PREBUNDLE_POLICIES.packagedMain.externals.map((dependency) => `--external:${dependency}`),
     `--outfile=${paths.packagedMainPrebundlePath}`,
     `--metafile=${paths.packagedMainPrebundleMetaPath}`,
@@ -376,7 +377,7 @@ async function buildPrebundledStandaloneRuntime(
     "--platform=node",
     "--format=esm",
     `--target=${WIN_PREBUNDLE_ESBUILD_TARGET}`,
-    `--banner:js=${WIN_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER}`,
+    `--banner:js=${WIN_PREBUNDLE_ESM_REQUIRE_BANNER}`,
     ...WIN_PREBUNDLE_POLICIES.daemonSidecar.externals.map((dependency) => `--external:${dependency}`),
     `--outdir=${paths.daemonPrebundleRoot}`,
     "--entry-names=[name]",
@@ -407,7 +408,7 @@ export async function createWinPackagedAppCacheKey(
     packedTarballs,
     platform: "win32",
     prebundle: shouldUseWinStandalonePrebundle(config.webOutputMode),
-    schemaVersion: 2,
+    schemaVersion: 3,
     tarballsKey,
     webOutputMode: config.webOutputMode,
   });

@@ -5,7 +5,7 @@ import { rebuild, type RebuildOptions } from "@electron/rebuild";
 
 import type { ToolPackConfig } from "../config.js";
 import {
-  MAC_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER,
+  MAC_PREBUNDLE_ESM_REQUIRE_BANNER,
   MAC_PREBUNDLE_ESBUILD_TARGET,
   MAC_PREBUNDLE_POLICIES,
   MAC_PREBUNDLE_RUNTIME_DEPENDENCIES,
@@ -52,6 +52,7 @@ async function buildPrebundledStandaloneRuntime(
     "--platform=node",
     "--format=esm",
     `--target=${MAC_PREBUNDLE_ESBUILD_TARGET}`,
+    `--banner:js=${MAC_PREBUNDLE_ESM_REQUIRE_BANNER}`,
     ...MAC_PREBUNDLE_POLICIES.packagedMain.externals.map((dependency) => `--external:${dependency}`),
     `--outfile=${paths.packagedMainPrebundlePath}`,
     `--metafile=${paths.packagedMainPrebundleMetaPath}`,
@@ -112,7 +113,7 @@ async function buildPrebundledStandaloneRuntime(
     "--platform=node",
     "--format=esm",
     `--target=${MAC_PREBUNDLE_ESBUILD_TARGET}`,
-    `--banner:js=${MAC_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER}`,
+    `--banner:js=${MAC_PREBUNDLE_ESM_REQUIRE_BANNER}`,
     ...MAC_PREBUNDLE_POLICIES.daemonSidecar.externals.map((dependency) => `--external:${dependency}`),
     `--outdir=${paths.daemonPrebundleRoot}`,
     "--entry-names=[name]",

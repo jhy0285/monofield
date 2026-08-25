@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   MAC_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER,
+  MAC_PREBUNDLE_ESM_REQUIRE_BANNER,
   MAC_PREBUNDLE_ESBUILD_TARGET,
   MAC_PREBUNDLE_POLICIES,
   MAC_PREBUNDLE_RUNTIME_DEPENDENCIES,
@@ -77,6 +78,8 @@ describe("mac standalone prebundle policy", () => {
     expect(MAC_PREBUNDLE_POLICIES.daemonSidecar.externals).toEqual(["better-sqlite3", "blake3-wasm"]);
     expect(MAC_PREBUNDLE_POLICIES.webSidecar.externals).toEqual([]);
     expect(MAC_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER).toContain("createRequire");
+    expect(MAC_PREBUNDLE_ESM_REQUIRE_BANNER).toContain("createRequire");
+    expect(MAC_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER).toBe(MAC_PREBUNDLE_ESM_REQUIRE_BANNER);
     expect(MAC_PREBUNDLE_RUNTIME_DEPENDENCIES).toEqual({
       "better-sqlite3": "12.9.0",
       "blake3-wasm": "2.1.5",

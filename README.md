@@ -13,7 +13,7 @@
 
 <p align="center">
   <a href="https://monofield.vercel.app">Website</a> ·
-  <a href="https://github.com/jhy0285/monofield/releases">Download</a> ·
+  <a href="https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-setup.exe">Download for Windows</a> ·
   <a href="docs/brand.md">Brand</a> ·
   <a href="docs/open-source-compliance.md">Open-source compliance</a>
 </p>
@@ -87,6 +87,12 @@ Ask for explanation, analysis, or review.
   and project presets can be distributed through an organization-run library.
 
 ## Quick start
+
+### Install the Desktop app
+
+- [Windows installer](https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-setup.exe)
+- [Portable package](https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-portable.zip)
+- [Release notes and checksums](https://github.com/jhy0285/monofield/releases/latest)
 
 ### Requirements
 

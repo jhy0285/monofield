@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   WIN_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER,
+  WIN_PREBUNDLE_ESM_REQUIRE_BANNER,
   WIN_PREBUNDLE_ESBUILD_TARGET,
   WIN_PREBUNDLE_POLICIES,
   WIN_PREBUNDLE_RUNTIME_DEPENDENCIES,
@@ -77,6 +78,8 @@ describe("win standalone prebundle policy", () => {
     expect(WIN_PREBUNDLE_POLICIES.daemonSidecar.externals).toEqual(["better-sqlite3", "blake3-wasm"]);
     expect(WIN_PREBUNDLE_POLICIES.webSidecar.externals).toEqual([]);
     expect(WIN_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER).toContain("createRequire");
+    expect(WIN_PREBUNDLE_ESM_REQUIRE_BANNER).toContain("createRequire");
+    expect(WIN_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER).toBe(WIN_PREBUNDLE_ESM_REQUIRE_BANNER);
     expect(WIN_PREBUNDLE_RUNTIME_DEPENDENCIES).toEqual({
       "better-sqlite3": "12.9.0",
       "blake3-wasm": "2.1.5",
