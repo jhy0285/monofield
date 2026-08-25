@@ -4,7 +4,7 @@
   <rect x="88" y="76" width="42" height="42" fill="none" stroke="#f7f7f4" stroke-width="3"/>
   <rect x="101" y="89" width="16" height="16" fill="none" stroke="#8da4ff" stroke-width="3"/>
   <text x="148" y="110" fill="#f7f7f4" font-family="Arial, sans-serif" font-size="34" font-weight="700">monofield</text>
-  <text x="88" y="308" fill="#f7f7f4" font-family="Arial, sans-serif" font-size="90" font-weight="500" letter-spacing="-5">One field.</text>
-  <text x="88" y="402" fill="#777d83" font-family="Arial, sans-serif" font-size="90" font-weight="500" letter-spacing="-5">Every kind of work.</text>
-  <text x="90" y="522" fill="#8da4ff" font-family="Consolas, monospace" font-size="22" letter-spacing="4">CODE · DESIGN · DOCUMENTS</text>
+  <text x="88" y="308" fill="#f7f7f4" font-family="Arial, sans-serif" font-size="90" font-weight="500" letter-spacing="-5">One workspace</text>
+  <text x="88" y="402" fill="#777d83" font-family="Arial, sans-serif" font-size="90" font-weight="500" letter-spacing="-5">Every kind of work</text>
+  <text x="90" y="522" fill="#8da4ff" font-family="Consolas, monospace" font-size="22" letter-spacing="4">CODE / DESIGN / DOCUMENTS</text>
 </svg>

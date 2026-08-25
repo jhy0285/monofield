@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#08090a" />
     <meta name="description" content="MonoField is a local-first workspace for code, design, and documents. Open a folder, review changes, run the project, verify the screen, and deliver from one workspace." />
-    <meta property="og:title" content="MonoField — code · design · documents" />
+    <meta property="og:title" content="MonoField — code / design / documents" />
     <meta property="og:description" content="One field. Every kind of work." />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="/social-card.svg" />
@@ -13,13 +13,13 @@
     <link rel="icon" href="/mark.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/styles.css" />
     <script src="/script.js" defer></script>
-    <title>MonoField — code · design · documents</title>
+    <title>MonoField — code / design / documents</title>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
     <header class="site-header">
       <a class="brand" href="#top" aria-label="MonoField home">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5z"/><path d="M9 9h6v6H9z"/></svg>
+        <img src="/mark.svg" width="24" height="24" alt="" aria-hidden="true" />
         <span>monofield</span>
       </a>
       <nav aria-label="Primary navigation">
@@ -38,10 +38,10 @@
     <main id="main">
       <section class="hero" id="top">
         <div class="hero-grid" aria-hidden="true"></div>
-        <p class="eyebrow">code · design · documents</p>
+        <p class="eyebrow" data-en="code / design / documents" data-ko="코드 / 디자인 / 문서">code / design / documents</p>
         <h1>
-          <span data-en="One field." data-ko="하나의 작업면.">One field.</span>
-          <span class="hero-muted" data-en="Every kind of work." data-ko="모든 종류의 결과물.">Every kind of work.</span>
+          <span data-en="One workspace" data-ko="하나의 공간에서">One workspace</span>
+          <span class="hero-muted" data-en="Every kind of work" data-ko="모든 작업을">Every kind of work</span>
         </h1>
         <p class="hero-copy" data-en="Open a working folder. Review the diff, run the project, check the live screen, and deliver the code or document from the same workspace." data-ko="작업 폴더를 엽니다. 변경사항을 검토하고, 프로젝트를 실행하고, 실제 화면을 확인한 뒤 코드나 문서를 같은 작업 공간에서 완성합니다.">
           Open a working folder. Review the diff, run the project, check the live screen, and deliver the code or document from the same workspace.
@@ -51,8 +51,9 @@
             <span data-en="Download for Windows" data-ko="Windows용 다운로드">Download for Windows</span>
             <span aria-hidden="true">↘</span>
           </a>
-          <a class="button button-quiet" href="https://github.com/jhy0285/monofield">
-            <span data-en="View source" data-ko="소스 보기">View source</span>
+          <a class="button button-quiet button-github" href="https://github.com/jhy0285/monofield" aria-label="GitHub — MonoField">
+            <span>GITHUB</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .7a11.5 11.5 0 0 0-3.64 22.41c.58.11.79-.25.79-.56v-2.23c-3.23.7-3.91-1.37-3.91-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.74-1.55-2.58-.29-5.29-1.29-5.29-5.69 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.47.11-3.05 0 0 .97-.31 3.16 1.18a10.95 10.95 0 0 1 5.76 0c2.2-1.49 3.16-1.18 3.16-1.18.63 1.58.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.42-2.72 5.4-5.3 5.69.42.36.79 1.07.79 2.16v3.2c0 .31.21.68.8.56A11.5 11.5 0 0 0 12 .7Z"/></svg>
             <span aria-hidden="true">↗</span>
           </a>
         </div>
@@ -63,7 +64,7 @@
         <div class="showcase-intro">
           <p class="section-index">01 / PROJECT MODES</p>
           <h2 id="app-showcase-title"><span data-en="Two ways to work." data-ko="두 가지 방식,">Two ways to work.</span><span data-en="One project." data-ko="하나의 프로젝트.">One project.</span></h2>
-          <p data-en="Start with software development or document &amp; design. Both modes keep the project folder, history, browser, data connections, and deliverables together." data-ko="소프트웨어 개발 또는 문서·디자인 제작으로 시작합니다. 어느 쪽이든 프로젝트 폴더, 기록, 브라우저, 데이터 연결, 산출물이 함께 유지됩니다.">Start with software development or document &amp; design. Both modes keep the project folder, history, browser, data connections, and deliverables together.</p>
+          <p data-en="Start with software development or documents / design. Both modes keep the project folder, history, browser, data connections, and deliverables together." data-ko="소프트웨어 개발 또는 문서/디자인 제작으로 시작합니다. 어느 쪽이든 프로젝트 폴더, 기록, 브라우저, 데이터 연결, 산출물이 함께 유지됩니다.">Start with software development or documents / design. Both modes keep the project folder, history, browser, data connections, and deliverables together.</p>
         </div>
 
         <div class="mode-showcase">
@@ -73,72 +74,29 @@
               <small data-en="CODE · BUILD · VERIFY" data-ko="코드 · 빌드 · 검증">CODE · BUILD · VERIFY</small>
             </button>
             <button class="project-mode-tab" type="button" role="tab" aria-selected="false" aria-controls="mode-creative" data-project-mode="creative">
-              <span data-en="Document &amp; design" data-ko="문서·디자인 제작">Document &amp; design</span>
+              <span data-en="Documents / design" data-ko="문서/디자인 제작">Documents / design</span>
               <small data-en="COMPOSE · REVIEW · EXPORT" data-ko="제작 · 검토 · 내보내기">COMPOSE · REVIEW · EXPORT</small>
             </button>
           </div>
 
           <div class="project-mode-panel is-active" id="mode-development" role="tabpanel" data-project-mode-panel="development">
-            <div class="mode-window">
-              <div class="mode-titlebar">
-                <strong><i aria-hidden="true"></i> monofield</strong>
-                <button type="button"><span class="status-dot"></span> commerce-platform <small>C:\work\commerce</small>⌄</button>
-                <div><span>Ask</span><b>Docs</b><em>•••</em></div>
+            <figure class="real-mode-frame">
+              <div class="real-mode-meta"><span data-en="Software development" data-ko="소프트웨어 개발">Software development</span><small data-en="Select a working folder and start with code, builds, browser checks, and approved data." data-ko="작업 폴더를 선택하고 코드, 빌드, 브라우저 검증, 승인된 데이터와 함께 시작합니다.">Select a working folder and start with code, builds, browser checks, and approved data.</small></div>
+              <div class="real-mode-viewport">
+                <img src="/monofield-development.png" width="1899" height="1295" alt="MonoField software development mode" decoding="async" fetchpriority="high">
               </div>
-              <div class="mode-layout">
-                <aside class="mode-nav" aria-label="Development workspace navigation">
-                  <button class="is-active" type="button">⌂ <span data-en="Work" data-ko="작업">Work</span></button>
-                  <button type="button">⌕ <span data-en="Changes" data-ko="변경사항">Changes</span><b>2</b></button>
-                  <button type="button">▣ <span data-en="Browser" data-ko="브라우저">Browser</span><i></i></button>
-                  <button type="button">⌗ <span data-en="Database" data-ko="데이터베이스">Database</span></button>
-                  <button type="button">□ <span data-en="Documents" data-ko="문서">Documents</span><b>3</b></button>
-                </aside>
-                <section class="mode-workbench">
-                  <header><div><small>SOFTWARE DEVELOPMENT</small><h3 data-en="Verify the order flow" data-ko="주문 흐름 검증">Verify the order flow</h3></div><button type="button" data-en="Open changes" data-ko="변경사항 열기">Open changes</button></header>
-                  <div class="mode-request" data-en="Update the order creation flow, run the project, and verify the actual screen. Consult the connected development database only when needed." data-ko="주문 생성 흐름을 수정하고 프로젝트를 실행한 뒤 실제 화면까지 검증해줘. 필요한 경우에만 연결된 개발 DB를 참고해.">Update the order creation flow, run the project, and verify the actual screen. Consult the connected development database only when needed.</div>
-                  <div class="mode-run"><div><span>✓</span><p><b data-en="Implementation updated" data-ko="구현 수정">Implementation updated</b><small>OrderService.ts · order.routes.ts</small></p><em>1.8s</em></div><div><span>✓</span><p><b data-en="Build and tests" data-ko="빌드 및 테스트">Build and tests</b><small>12 tests · build passed</small></p><em>14.2s</em></div><div class="is-running"><span></span><p><b data-en="Browser verification" data-ko="브라우저 검증">Browser verification</b><small>localhost:3000/orders</small></p><em data-en="live" data-ko="진행 중">live</em></div></div>
-                  <div class="mode-terminal">$ pnpm test --filter order <b>PASS</b></div>
-                </section>
-                <aside class="mode-context" aria-label="Development project context">
-                  <h4 data-en="Project context" data-ko="프로젝트 맥락">Project context</h4>
-                  <section><header><b>Browser</b><span>approved</span></header><div class="mini-browser"><small>localhost:3000/orders</small><h5>Create order</h5><button type="button">Submit</button><i>1</i></div><p data-en="Checking the marked component and interaction." data-ko="표시한 컴포넌트와 동작을 검증합니다.">Checking the marked component and interaction.</p></section>
-                  <section><header><b>Git changes</b><span>2 files</span></header><p><em>M</em> OrderService.ts <small>+18 −4</small></p><p><em>A</em> order.test.ts <small>+42</small></p></section>
-                  <section><header><b>Database</b><span>read</span></header><p><i></i> commerce-dev</p><small data-en="Credentials stay in the desktop vault" data-ko="자격 증명은 데스크톱 보관소에 유지">Credentials stay in the desktop vault</small></section>
-                </aside>
-              </div>
-            </div>
-            <footer class="mode-summary"><span data-en="For implementation work" data-ko="구현 작업에 맞춘 작업면">For implementation work</span><b data-en="folder → diff → build → browser → data" data-ko="폴더 → 변경사항 → 빌드 → 브라우저 → 데이터">folder → diff → build → browser → data</b></footer>
+              <figcaption><span data-en="Development starts from the project folder." data-ko="개발은 프로젝트 폴더에서 시작합니다.">Development starts from the project folder.</span><b data-en="folder → diff → build → browser → data" data-ko="폴더 → 변경사항 → 빌드 → 브라우저 → 데이터">folder → diff → build → browser → data</b></figcaption>
+            </figure>
           </div>
 
           <div class="project-mode-panel" id="mode-creative" role="tabpanel" data-project-mode-panel="creative" hidden>
-            <div class="mode-window">
-              <div class="mode-titlebar">
-                <strong><i aria-hidden="true"></i> monofield</strong>
-                <button type="button"><span class="status-dot"></span> order-specification <small>C:\work\specs</small>⌄</button>
-                <div><span>Ask</span><b>Docs</b><em>•••</em></div>
+            <figure class="real-mode-frame">
+              <div class="real-mode-meta"><span data-en="Documents / design" data-ko="문서/디자인 제작">Documents / design</span><small data-en="Choose the result format, connect references, and move from a structured draft to review and export." data-ko="결과 형식을 고르고 참고 자료를 연결해 구조화된 초안부터 검토와 내보내기까지 진행합니다.">Choose the result format, connect references, and move from a structured draft to review and export.</small></div>
+              <div class="real-mode-viewport">
+                <img src="/monofield-documents-design.png" width="1899" height="1295" alt="MonoField documents and design mode" loading="lazy" decoding="async">
               </div>
-              <div class="mode-layout mode-layout-creative">
-                <aside class="mode-nav" aria-label="Document workspace navigation">
-                  <button class="is-active" type="button">⌂ <span data-en="Work" data-ko="작업">Work</span></button>
-                  <button type="button">＋ <span data-en="Sources" data-ko="자료">Sources</span><b>6</b></button>
-                  <button type="button">◇ <span data-en="Workflows" data-ko="워크플로우">Workflows</span></button>
-                  <button type="button">◫ <span data-en="Preview" data-ko="미리보기">Preview</span><i></i></button>
-                  <button type="button">◌ <span data-en="Comments" data-ko="댓글">Comments</span><b>2</b></button>
-                </aside>
-                <section class="mode-workbench creative-workbench">
-                  <header><div><small>DOCUMENT &amp; DESIGN</small><h3 data-en="Order interface specification" data-ko="주문 인터페이스 명세서">Order interface specification</h3></div><button type="button" data-en="Export XLSX" data-ko="XLSX 내보내기">Export XLSX</button></header>
-                  <div class="artifact-toolbar"><span class="is-active" data-en="Interface spec" data-ko="인터페이스 명세">Interface spec</span><span data-en="Screen spec" data-ko="화면 명세">Screen spec</span><span data-en="Deck" data-ko="슬라이드">Deck</span><span data-en="Prototype" data-ko="프로토타입">Prototype</span></div>
-                  <div class="artifact-sheet"><header><div><small>IF-ORD-001</small><h4 data-en="Create order" data-ko="주문 생성">Create order</h4></div><b>POST</b></header><div><strong>Endpoint</strong><span>/api/orders</span><strong>Auth</strong><span>Bearer</span><strong>Request</strong><span>customerId, items[]</span><strong>Response</strong><span>orderId, status</span></div><footer><span>✓</span><p><b data-en="Validated" data-ko="검증 완료">Validated</b><small data-en="Code + browser + approved schema" data-ko="코드 + 브라우저 + 승인된 스키마">Code + browser + approved schema</small></p></footer></div>
-                </section>
-                <aside class="mode-context creative-context" aria-label="Document project context">
-                  <h4 data-en="Production context" data-ko="제작 맥락">Production context</h4>
-                  <section><header><b data-en="Sources" data-ko="참고 자료">Sources</b><span>6</span></header><p>API guideline.pdf <small>ready</small></p><p>terms.xlsx <small>ready</small></p><p>brand-system.fig <small>linked</small></p></section>
-                  <section><header><b data-en="Checks" data-ko="검증">Checks</b><span>3 / 3</span></header><p><em>✓</em> <span data-en="Required fields" data-ko="필수 항목">Required fields</span></p><p><em>✓</em> <span data-en="Terminology" data-ko="용어 일치">Terminology</span></p><p><em>✓</em> <span data-en="Template rules" data-ko="템플릿 규칙">Template rules</span></p></section>
-                  <section><header><b data-en="Outputs" data-ko="산출물">Outputs</b><span>3</span></header><p>interface-spec.xlsx <small>ready</small></p><p>preview.pdf <small>ready</small></p></section>
-                </aside>
-              </div>
-            </div>
-            <footer class="mode-summary"><span data-en="For production work" data-ko="문서·디자인 제작에 맞춘 작업면">For production work</span><b data-en="sources → compose → preview → review → export" data-ko="자료 → 제작 → 미리보기 → 검토 → 내보내기">sources → compose → preview → review → export</b></footer>
+              <figcaption><span data-en="Production starts by choosing the deliverable." data-ko="제작은 만들 결과물을 고르는 것부터 시작합니다.">Production starts by choosing the deliverable.</span><b data-en="sources → compose → preview → review → export" data-ko="자료 → 제작 → 미리보기 → 검토 → 내보내기">sources → compose → preview → review → export</b></figcaption>
+            </figure>
           </div>
         </div>
       </section>
@@ -249,7 +207,7 @@
       <section class="workflow-section" id="work" aria-labelledby="work-title">
         <div class="section-heading split-heading">
           <div><p class="section-index">04 / WAYS OF WORKING</p><h2 id="work-title" data-en="Start with the work, not the tool." data-ko="도구가 아니라, 할 일에서 시작하세요.">Start with the work, not the tool.</h2></div>
-          <p data-en="Choose software development or document & design production when you create a project. Ask and Docs modes remain available inside either project whenever the task changes." data-ko="프로젝트를 만들 때 소프트웨어 개발 또는 문서·디자인 제작을 선택합니다. 작업이 바뀌면 어느 프로젝트에서든 질문 모드와 문서 모드를 전환할 수 있습니다.">Choose software development or document & design production when you create a project. Ask and Docs modes remain available inside either project whenever the task changes.</p>
+          <p data-en="Choose software development or documents / design when you create a project. Ask and Docs modes remain available inside either project whenever the task changes." data-ko="프로젝트를 만들 때 소프트웨어 개발 또는 문서/디자인 제작을 선택합니다. 작업이 바뀌면 어느 프로젝트에서든 질문 모드와 문서 모드를 전환할 수 있습니다.">Choose software development or documents / design when you create a project. Ask and Docs modes remain available inside either project whenever the task changes.</p>
         </div>
 
         <div class="workflow-lines">
@@ -302,7 +260,7 @@
 
       <section class="closing-section">
         <p class="eyebrow">monofield</p>
-        <h2 data-en="Bring the whole project into one field." data-ko="프로젝트 전체를 하나의 작업면으로.">Bring the whole project into one field.</h2>
+        <h2 data-en="Bring the whole project into one workspace" data-ko="프로젝트 전체를 하나의 공간으로">Bring the whole project into one workspace</h2>
         <div class="hero-actions">
           <a class="button button-primary" href="https://github.com/jhy0285/monofield/releases"><span data-en="Get MonoField" data-ko="MonoField 받기">Get MonoField</span><span aria-hidden="true">↘</span></a>
           <a class="button button-quiet" href="https://github.com/jhy0285/monofield"><span>GitHub</span><span aria-hidden="true">↗</span></a>
@@ -311,7 +269,7 @@
     </main>
 
     <footer>
-      <div><a class="brand footer-brand" href="#top"><span>monofield</span></a><p>code · design · documents</p></div>
+      <div><a class="brand footer-brand" href="#top"><img src="/mark.svg" width="24" height="24" alt="" aria-hidden="true" /><span>monofield</span></a><p data-en="code / design / documents" data-ko="코드 / 디자인 / 문서">code / design / documents</p></div>
       <div class="footer-links"><a href="https://github.com/jhy0285/monofield">GitHub</a><a href="https://github.com/jhy0285/monofield/releases">Releases</a><a href="/open-source.html" data-en="Open source notices" data-ko="오픈소스 고지">Open source notices</a></div>
       <p>Apache-2.0 · © 2026 MonoField contributors</p>
     </footer>

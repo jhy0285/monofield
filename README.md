@@ -7,8 +7,8 @@
 <h1 align="center">MonoField</h1>
 
 <p align="center">
-  <strong>code · design · documents</strong><br />
-  One field. Every kind of work.
+  <strong>code / design / documents</strong><br />
+  One workspace, every kind of work
 </p>
 
 <p align="center">
@@ -27,7 +27,7 @@
 
 <p align="center">
   <a href="https://monofield.vercel.app">
-    <img src="apps/monofield-site/social-card.svg" width="860" alt="MonoField — code, design, documents" />
+    <img src="apps/monofield-site/social-card.svg" width="860" alt="MonoField — code / design / documents" />
   </a>
 </p>
 
@@ -66,7 +66,7 @@ This makes two ways of working available without splitting the product:
   run configurations, keep development servers alive, review Git changes,
   validate the actual UI in the built-in browser, and use permissioned database
   operations when the task needs them.
-- **Document & design production** — create interface and screen
+- **Documents / design production** — create interface and screen
   specifications, responsive pages, prototypes, wireframes, slide decks,
   spreadsheets, PDFs, reports, and reusable structured deliverables.
 
@@ -171,4 +171,4 @@ identity rules, see [docs/brand.md](docs/brand.md).
 
 ---
 
-<p align="center"><strong>One field. Every kind of work.</strong></p>
+<p align="center"><strong>One workspace, every kind of work</strong></p>

@@ -414,6 +414,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   // Media/live-artifact templates carry no scenarios, so the pool is empty and
   // the editor falls back to its own placeholder there.
   const carouselActive =
+    workMode === 'creation' &&
     active &&
     !submitting &&
     !submitDisabled &&

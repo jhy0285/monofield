@@ -169,6 +169,12 @@ Active design system exception: the active design system is the visual direction
 - When a downstream framework mentions "active direction" or "theme tokens", bind those fields from the active design system instead of the built-in direction library.
 `;
 
+const STRUCTURED_SPEC_WORKFLOW_OVERRIDE = `# Structured specification workflow
+
+This project creates a deterministic interface or screen specification. The active specification skill and project metadata below are the workflow authority. Follow their collection forms, source model, validation, preview, and export steps exactly.
+
+Generic creative discovery, visual-direction catalogues, and HTML design charters do not apply to this run. Do not ask unrelated brand, palette, layout, or marketing questions unless the user explicitly requests visual customization.`;
+
 export interface ComposeInput {
   skillBody?: string | undefined;
   skillName?: string | undefined;
@@ -273,6 +279,10 @@ export function composeSystemPrompt({
   const parts: string[] = [];
   const activeDesignSystemBody = designSystemBody?.trim();
   const isLeanChatMode = sessionMode === 'chat';
+  const isStructuredSpecificationWorkflow =
+    metadata?.kind === 'interface-spec'
+    || metadata?.kind === 'screen-spec'
+    || /(?:interface|screen)[\s-]*spec/i.test(skillName ?? '');
   const hasConnectedProjectDatabase =
     typeof metadata?.databaseContext?.connectionId === 'string'
     && metadata.databaseContext.connectionId.trim().length > 0;
@@ -307,6 +317,11 @@ export function composeSystemPrompt({
     parts.push('\n\n---\n\n');
   }
 
+  if (isStructuredSpecificationWorkflow) {
+    parts.push(STRUCTURED_SPEC_WORKFLOW_OVERRIDE);
+    parts.push('\n\n---\n\n');
+  }
+
   // Plain API/BYOK runs do not have filesystem or OD CLI tools. Local CLI
   // runs do, so make Desktop's encrypted database broker a normal (but
   // relevance-gated) part of development context there.
@@ -329,11 +344,11 @@ export function composeSystemPrompt({
     parts.push('\n\n---\n\n');
   }
 
-  if (!isMediaSurfaceEarly && !isLeanChatMode) {
+  if (!isMediaSurfaceEarly && !isLeanChatMode && !isStructuredSpecificationWorkflow) {
     parts.push(DISCOVERY_AND_PHILOSOPHY, '\n\n---\n\n');
   }
 
-  if (!isLeanChatMode) {
+  if (!isLeanChatMode && !isStructuredSpecificationWorkflow) {
     parts.push('# Identity and workflow charter (background)\n\n', BASE_SYSTEM_PROMPT);
   }
 

@@ -4,9 +4,9 @@
 
 - Product name: **MonoField**
 - Wordmark: **monofield**
-- Descriptor: **code · design · documents**
-- Primary slogan: **One field. Every kind of work.**
-- Korean slogan: **하나의 공간에서, 모든 작업을.**
+- Descriptor: **code / design / documents**
+- Primary slogan: **One workspace, every kind of work**
+- Korean slogan: **하나의 공간에서, 모든 작업을**
 - Audience line: **For everyone turning ideas into outcomes.**
 - Korean audience line: **아이디어를 결과로 만드는 모든 사람을 위해.**
 - Category: **Local-first, open-source AI product workbench**
@@ -26,7 +26,7 @@ ask an agent to create or modify work; verify the result through diffs, builds,
 browser behavior, and document review; then export or deploy it.
 
 Do not describe the product as three separate tools. Software development and
-document/design production are starting modes inside the same project. Ask and
+documents/design production are starting modes inside the same project. Ask and
 Docs are conversation modes that can be changed whenever the task changes.
 
 ## Visual system
@@ -35,7 +35,7 @@ Docs are conversation modes that can be changed whenever the task changes.
 - One user-selected accent may identify focus, primary actions, and selected
   state. Generated work keeps its own visual system.
 - Prefer open surfaces, separators, and compact controls over decorative cards.
-- The MonoField mark is a continuous white `M` inside a black rounded field.
+- The MonoField mark is a nested white and blue field inside a black rounded square.
 - Product screenshots should show real diff, browser validation, and document
   review states instead of decorative gradients or abstract AI imagery.
 
