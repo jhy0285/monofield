@@ -1,0 +1,12 @@
+{
+  "name": "@open-design/monofield-site",
+  "version": "0.11.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "node --check script.js"
+  },
+  "engines": {
+    "node": "~24"
+  }
+}

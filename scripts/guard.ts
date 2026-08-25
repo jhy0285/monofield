@@ -87,6 +87,10 @@ const residualAllowedExactPaths = new Set([
   // compiled). It must ship as a browser-loadable `.js` asset, same as the
   // web notifications service worker above.
   "apps/landing-page/public/community/_site-nav.js",
+  // MonoField's standalone Vercel marketing site is deliberately buildless.
+  // Its language and preview-tab controller must remain a browser-loadable
+  // JavaScript asset because Vercel serves this directory without a compile step.
+  "apps/monofield-site/script.js",
   // PostCSS loads Tailwind through a web-local .mjs compatibility config entry.
   "apps/web/postcss.config.mjs",
   "scripts/bake-html-ppt-examples.mjs",
