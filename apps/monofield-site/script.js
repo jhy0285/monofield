@@ -9,6 +9,9 @@
 
   function applyLanguage() {
     document.documentElement.lang = language;
+    document.title = language === 'ko'
+      ? 'MonoField — 코드 / 디자인 / 문서'
+      : 'MonoField — code / design / documents';
     translatable.forEach((element) => {
       element.textContent = element.getAttribute(`data-${language}`) || element.textContent;
     });
