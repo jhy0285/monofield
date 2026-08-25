@@ -1,8 +1,8 @@
 # Azure Container Instances
 
-This guide deploys the Docker image to Azure Container Instances (ACI) with persistent Open Design data. Before choosing or documenting any daemon data mount, read root `AGENTS.md` → **Daemon data directory contract**. That section is mandatory and must not be restated here.
+This guide deploys the Docker image to Azure Container Instances (ACI) with persistent MonoField data. Before choosing or documenting any daemon data mount, read root `AGENTS.md` → **Daemon data directory contract**. That section is mandatory and must not be restated here.
 
-ACI is the daemon upstream in this topology. The browser-facing app URL must be served by an authenticated TLS reverse proxy that forwards traffic to ACI, injects the daemon bearer token on `/api/*` requests, and sends a browser origin listed in `OD_ALLOWED_ORIGINS`.
+ACI is the daemon upstream in this topology. The browser-facing app URL must be served by an authenticated TLS reverse proxy that forwards traffic to ACI, injects the daemon bearer token on `/api/*` requests, and sends a browser origin listed in `MONOFIELD_ALLOWED_ORIGINS`.
 
 ## Before You Start
 
@@ -13,12 +13,12 @@ ACI is the daemon upstream in this topology. The browser-facing app URL must be 
 ## Step 1: Choose Names
 
 ```bash
-export RESOURCE_GROUP=open-design-aci
+export RESOURCE_GROUP=monofield-aci
 export LOCATION=eastus
-export DEPLOYMENT_NAME=open-design-aci
-export DNS_LABEL=open-design-$RANDOM
-export BROWSER_ORIGIN=https://od.example.com
-export OD_API_TOKEN="$(openssl rand -hex 32)"
+export DEPLOYMENT_NAME=monofield-aci
+export DNS_LABEL=monofield-$RANDOM
+export BROWSER_ORIGIN=https://monofield.example.com
+export MONOFIELD_API_TOKEN="$(openssl rand -hex 32)"
 ```
 
 The DNS label must be unique in the Azure region. `BROWSER_ORIGIN` is the HTTPS origin users will open after a trusted proxy is in front of the daemon. The API token is required because the daemon binds to `0.0.0.0` inside the container; keep this token in your proxy or deployment secrets and do not expose it to browser code.
@@ -44,7 +44,7 @@ az deployment group create \
     location="$LOCATION" \
     dnsNameLabel="$DNS_LABEL" \
     allowedOrigins="$BROWSER_ORIGIN" \
-    odApiToken="$OD_API_TOKEN"
+    monofieldApiToken="$MONOFIELD_API_TOKEN"
 ```
 
 The template creates:
@@ -68,25 +68,25 @@ export ACI_FQDN="$(az deployment group show \
 export ACI_UPSTREAM_URL="http://${ACI_FQDN}:7456"
 ```
 
-Do not open this URL directly in a browser. The daemon requires `Authorization: Bearer <OD_API_TOKEN>` on non-loopback `/api/*` requests, and the web UI does not put that secret in browser requests.
+Do not open this URL directly in a browser. The daemon requires `Authorization: Bearer <MONOFIELD_API_TOKEN>` on non-loopback `/api/*` requests, and the web UI does not put that secret in browser requests.
 
 ## Step 5: Put A Trusted Proxy In Front
 
 Serve `BROWSER_ORIGIN` from a TLS reverse proxy that authenticates users before forwarding traffic to the ACI upstream. The proxy must add the daemon token to API requests:
 
 ```nginx
-upstream open_design_aci {
+upstream monofield_aci {
   server <aci-fqdn>:7456;
 }
 
 server {
   listen 443 ssl;
-  server_name od.example.com;
+  server_name monofield.example.com;
 
   # Add your organization's authentication layer here before proxying.
 
   location /api/ {
-    proxy_set_header Authorization "Bearer <OD_API_TOKEN>";
+    proxy_set_header Authorization "Bearer <MONOFIELD_API_TOKEN>";
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_http_version 1.1;
@@ -96,18 +96,18 @@ server {
     proxy_read_timeout 1h;
     proxy_send_timeout 1h;
     gzip off;
-    proxy_pass http://open_design_aci;
+    proxy_pass http://monofield_aci;
   }
 
   location / {
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_pass http://open_design_aci;
+    proxy_pass http://monofield_aci;
   }
 }
 ```
 
-Replace `<aci-fqdn>` with `ACI_FQDN`, replace `<OD_API_TOKEN>` with the same secret passed to the Bicep deployment, and keep `BROWSER_ORIGIN` equal to the origin served by the proxy. Keep the `/api/` buffering, gzip, HTTP/1.1, and timeout directives in place so streamed generation responses are not cut off by nginx. After the proxy is configured, open `BROWSER_ORIGIN` in your browser.
+Replace `<aci-fqdn>` with `ACI_FQDN`, replace `<MONOFIELD_API_TOKEN>` with the same secret passed to the Bicep deployment, and keep `BROWSER_ORIGIN` equal to the origin served by the proxy. Keep the `/api/` buffering, gzip, HTTP/1.1, and timeout directives in place so streamed generation responses are not cut off by nginx. After the proxy is configured, open `BROWSER_ORIGIN` in your browser.
 
 ## Optional Parameters
 
@@ -117,10 +117,10 @@ az deployment group create \
   --resource-group "$RESOURCE_GROUP" \
   --template-file deploy/azure/container-instance.bicep \
   --parameters \
-    odApiToken="$OD_API_TOKEN" \
+    monofieldApiToken="$MONOFIELD_API_TOKEN" \
     dnsNameLabel="$DNS_LABEL" \
     allowedOrigins="$BROWSER_ORIGIN" \
-    image="ghcr.io/nexu-io/od:latest" \
+    image="ghcr.io/jhy0285/monofield:latest" \
     cpuCores=1 \
     memoryInGB=1 \
     fileShareQuotaGB=10
@@ -135,7 +135,7 @@ Use `deploy/azure/azure-pipelines.yml` as a starting point.
 Before running it:
 
 - Create an Azure Resource Manager service connection.
-- Set `OD_API_TOKEN` as a secret pipeline variable.
+- Set `MONOFIELD_API_TOKEN` as a secret pipeline variable.
 - Update `resourceGroupName`, `location`, `openDesignImage`, and `browserOrigin`.
 - Replace `<your-azure-service-connection>` with your service connection name.
 
@@ -146,7 +146,7 @@ View logs:
 ```bash
 az container logs \
   --resource-group "$RESOURCE_GROUP" \
-  --name open-design
+  --name monofield
 ```
 
 Restart the container group:
@@ -154,7 +154,7 @@ Restart the container group:
 ```bash
 az container restart \
   --resource-group "$RESOURCE_GROUP" \
-  --name open-design
+  --name monofield
 ```
 
 Delete all Azure resources created by this guide:
@@ -167,6 +167,6 @@ az group delete \
 ## Security Notes
 
 - Do not expose the raw ACI endpoint as the browser-facing app URL. Use it as the upstream for a trusted proxy or for token-authenticated operational checks.
-- Keep `OD_API_TOKEN` secret. The proxy may use it upstream, but browser clients must not receive it. Rotate it by redeploying with a new value.
+- Keep `MONOFIELD_API_TOKEN` secret. The proxy may use it upstream, but browser clients must not receive it. Rotate it by redeploying with a new value.
 - Keep `allowedOrigins` aligned with the browser-visible proxy origin; otherwise the daemon origin guard will reject browser API requests.
 - The Azure Files share persists project data after container restarts and image updates.

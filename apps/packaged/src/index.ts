@@ -32,7 +32,7 @@ import {
   type PackagedDesktopLogger,
 } from "./logging.js";
 import { resolvePackagedNamespacePaths } from "./paths.js";
-import { packagedEntryUrl, registerOdProtocol } from "./protocol.js";
+import { packagedEntryUrl, registerMonoFieldProtocol } from "./protocol.js";
 import { startPackagedSidecars } from "./sidecars.js";
 import { reportStartupFailure, resolveStartupDistinctId } from "./startup-telemetry.js";
 import { resolvePackagedWindowTitle } from "./window-title.js";
@@ -81,7 +81,9 @@ function applyLaunchEnv(base: string, stamp: SidecarStamp): void {
 
 function applyPackagedUpdaterEnv(updateMetadataUrl: string | null): void {
   if (updateMetadataUrl == null) return;
-  if (process.env.OD_UPDATE_METADATA_URL != null && process.env.OD_UPDATE_METADATA_URL.length > 0) return;
+  if (process.env.MONOFIELD_UPDATE_METADATA_URL != null && process.env.MONOFIELD_UPDATE_METADATA_URL.length > 0) return;
+  process.env.MONOFIELD_UPDATE_METADATA_URL = updateMetadataUrl;
+  // Compatibility for the updater internals used by older packaged payloads.
   process.env.OD_UPDATE_METADATA_URL = updateMetadataUrl;
 }
 
@@ -119,7 +121,7 @@ async function main(): Promise<void> {
     appVersion: activeConfig.appVersion,
     namespace,
     source: SIDECAR_SOURCES.PACKAGED,
-    // Pass installationRoot explicitly: OD_INSTALLATION_DIR is only set in the
+    // Pass installationRoot explicitly: the installation directory is only set in the
     // daemon child env, not this parent process (see startup-telemetry.ts).
     installationRoot: paths.installationRoot,
   };
@@ -193,7 +195,7 @@ async function main(): Promise<void> {
   // mounting the web bundle (the runtime re-asserts this stage at its reveal
   // gate, which is a no-op when the label is already current).
   setSplashStage(splash.window, "workspace");
-  registerOdProtocol(sidecars.web.url ?? "http://127.0.0.1:0");
+  registerMonoFieldProtocol(sidecars.web.url ?? "http://127.0.0.1:0");
 
   const { runDesktopMain } = await import("@open-design/desktop/main");
   await runDesktopMain(runtime, {
@@ -211,7 +213,7 @@ async function main(): Promise<void> {
     },
     // Round-7 (lefarcen P2 @ runtime.ts:336): packaged main-process
     // fetch targets the daemon sidecar's real http URL — never the
-    // od://app/ renderer URL, which Node/undici cannot resolve through
+    // monofield://app/ renderer URL, which Node/undici cannot resolve through
     // Electron's protocol handler.
     async discoverDaemonUrl() {
       return sidecars.daemon.url;

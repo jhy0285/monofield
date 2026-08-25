@@ -65,7 +65,7 @@ Phased plan from "spec-only today" to "usable MVP" to "published v1." All estima
 - PDF / PPTX export
 - Topology B (Vercel + tunneled local daemon)
 - Docker compose file
-- Skill tests (`od skill test`)
+- Skill tests (`monofield skill test`)
 - Auth / multi-user
 
 ### Week-by-week breakdown
@@ -79,7 +79,7 @@ Phased plan from "spec-only today" to "usable MVP" to "published v1." All estima
 | 5 | Web UI — chat + file workspace | React state + daemon-backed project store; SSE client; chat pane; file workspace reflects project files; skill picker |
 | 6 | Web UI — preview + export | sandboxed iframe with hot reload; JSX → vendored React/Babel runtime; export ZIP; export self-contained HTML (inline CSS) |
 | 7 | Default skills | port `guizang-ppt-skill` (no modifications; add `od:` extension block); write `saas-landing` skill; write 1–2 DESIGN.md examples; docs for skill authors |
-| 8 | Polish + dogfood | end-to-end dogfooding; performance pass (daemon <500ms cold start, first generation overhead <50ms); bug-fixing; first publishable alpha |
+| 8 | Polish + dogfomonofield | end-to-end dogfooding; performance pass (daemon <500ms cold start, first generation overhead <50ms); bug-fixing; first publishable alpha |
 
 ### MVP exit criteria
 
@@ -87,7 +87,7 @@ Phased plan from "spec-only today" to "usable MVP" to "published v1." All estima
 2. With Claude Code installed: prototype + deck generation works end-to-end.
 3. Without Claude Code installed: API-fallback produces prototypes (not decks — guizang-ppt-skill needs native skill loading).
 4. A user can drop a DESIGN.md into the project root and subsequent generations respect it.
-5. A third party can publish a skill repo; `od skill add <url>` installs it and it works.
+5. A third party can publish a skill repo; `monofield skill add <url>` installs it and it works.
 6. Artifacts are plain files. This roadmap MUST NOT define daemon data paths; read the root `AGENTS.md` section **Daemon data directory contract** before changing or documenting artifact storage.
 7. No Electron, no Tauri, no desktop packaging anywhere in the repo.
 
@@ -129,18 +129,18 @@ Phased plan from "spec-only today" to "usable MVP" to "published v1." All estima
 **Deployment:**
 - Docker compose file
 - Topology B: Vercel web + tunneled local daemon
-  - Ship a helper subcommand: `od daemon --expose` using `cloudflared` (opt-in, documented)
+  - Ship a helper subcommand: `monofield daemon --expose` using `cloudflared` (opt-in, documented)
 
 **Dev experience:**
-- `od skill test` with cheap-model runs
-- Skill author starter template: `od skill scaffold`
+- `monofield skill test` with cheap-model runs
+- Skill author starter template: `monofield skill scaffold`
 
 ### v1 exit criteria
 
 1. All four modes fully functional.
 2. Three adapters working (Claude Code, Codex, Cursor Agent); fallback chain shipping.
 3. PDF + PPTX export working for at least the `magazine-web-ppt` + `pitch-deck` skills.
-4. Deployed example at `demo.open-design.dev` (Topology C).
+4. Deployed example at `demo.monofield.dev` (Topology C).
 5. Skill author docs published; at least one third-party skill submitted.
 6. Documentation site rebuilt from these spec docs.
 
@@ -177,23 +177,23 @@ Milestones:
 |---|---|
 | SE0 | Contracts for source packets, automation templates, evolution proposals, memory tree nodes, and compression reports. |
 | SE1 | Editable memory tree that agents actually consume through the daemon and BYOK/API-mode prompt resolver. |
-| SE2 | Automation template registry exposed in both web UI and `od automation`. |
+| SE2 | Automation template registry exposed in both web UI and `monofield automation`. |
 | SE3 | Design-system extraction and skill crystallization proposals with review gates. |
 | SE4 | Connector-driven ingestion into memory/design-system/skill proposals with provenance. |
 | SE5 | Optional token compression with before/after token reports and rollback-safe stored originals. |
 
 SE1 starts from the existing Markdown memory store: `/api/memory/tree` and
-`od memory tree list/view/edit/move` expose a derived editable tree while the
+`monofield memory tree list/view/edit/move` expose a derived editable tree while the
 same selected entries continue feeding daemon and BYOK/API-mode prompts.
 
 SE2 also includes the first review gate: `/api/automation-proposals` plus
-`od automation proposal list/get/apply/reject` can review memory-node, skill,
+`monofield automation proposal list/get/apply/reject` can review memory-node, skill,
 and design-system proposals. Accepted memory proposals write into the memory
 tree; accepted skill and design-system proposals write reviewed drafts under
 the user-owned runtime roots.
 
 SE3/SE4 start closing the source loop through `/api/automation-ingestions`,
-`/api/automation-source-packets`, and `od automation source ingest/list/get`.
+`/api/automation-source-packets`, and `monofield automation source ingest/list/get`.
 The Automations page now has a source-ingestion panel that can turn pasted
 connector/repo/artifact/chat context into stored source packets plus reviewable
 memory, skill, and design-system proposals. Each ingestion can choose
@@ -217,7 +217,7 @@ and are consumed by a later agent run without extra prompting.
 | `guizang-ppt-skill` or similar upstream skill changes format | default deck skill breaks | pin git SHA in our default install; monitor upstream |
 | DESIGN.md format evolves in awesome-claude-design | incompatibility | track upstream; adopt changes; our resolver is tolerant of missing sections |
 | Anthropic ships an open-source Claude Design | differentiation collapses | our moat is the "uses user's existing agent" angle; Anthropic is unlikely to ship that |
-| Skill security (malicious skill via `od skill add`) | user machine compromise | install-time warning; rely on agent's own permission model; document best practices |
+| Skill security (malicious skill via `monofield skill add`) | user machine compromise | install-time warning; rely on agent's own permission model; document best practices |
 
 ---
 

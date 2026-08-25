@@ -1284,7 +1284,7 @@ export function LibrarySection({ active, onOpenProject }: Props) {
           <p>No assets yet.</p>
           <p className={styles.emptyHint}>
             Clip from any page with the MonoField Web Clipper, run{' '}
-            <code>od library import &lt;file&gt;</code>, or upload inside a project — everything
+            <code>monofield library import &lt;file&gt;</code>, or upload inside a project — everything
             lands here.
           </p>
         </div>

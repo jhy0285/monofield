@@ -258,7 +258,7 @@ async function writeAssembledAppEntrypoints(
         dependencies: options.dependencies ?? createAssembledAppDependencies(config, paths, packedTarballs),
         description: "MonoField packaged runtime",
         main: "./main.cjs",
-        name: "open-design-packaged-app",
+        name: "monofield-packaged-app",
         private: true,
         productName: PRODUCT_NAME,
         version: packageVersion,

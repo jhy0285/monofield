@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { OpenDocsGithubLatestReleaseResponse } from '@open-design/contracts';
+import type { MonoFieldGithubLatestReleaseResponse } from '@open-design/contracts';
 
 import { fetchLatestGithubReleaseInfo } from '../../src/providers/registry';
 
@@ -15,20 +15,20 @@ describe('fetchLatestGithubReleaseInfo', () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        repo: 'nexu-io/open-design',
-        tag_name: 'v0.8.0-prerelease.3',
-        html_url: 'https://github.com/nexu-io/open-design/releases/tag/v0.8.0-prerelease.3',
+        repo: 'jhy0285/monofield',
+        tag_name: 'v0.11.1',
+        html_url: 'https://github.com/jhy0285/monofield/releases/tag/v0.11.1',
         fetchedAt: Date.parse('2026-05-22T00:00:00.000Z'),
         stale: false,
-      } satisfies OpenDocsGithubLatestReleaseResponse),
+      } satisfies MonoFieldGithubLatestReleaseResponse),
     } satisfies Partial<Response>) as typeof fetch;
 
     const result = await fetchLatestGithubReleaseInfo();
 
-    expect(globalThis.fetch).toHaveBeenCalledWith('/api/github/open-docs/releases/latest');
+    expect(globalThis.fetch).toHaveBeenCalledWith('/api/github/monofield/releases/latest');
     expect(result).toEqual({
-      tagName: 'v0.8.0-prerelease.3',
-      htmlUrl: 'https://github.com/nexu-io/open-design/releases/tag/v0.8.0-prerelease.3',
+      tagName: 'v0.11.1',
+      htmlUrl: 'https://github.com/jhy0285/monofield/releases/tag/v0.11.1',
       stale: false,
     });
   });

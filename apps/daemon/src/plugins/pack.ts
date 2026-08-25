@@ -1,14 +1,14 @@
-// Phase 4 / spec §14 / plan §3.X1 — `od plugin pack <folder>`.
+// Phase 4 / spec §14 / plan §3.X1 — `monofield plugin pack <folder>`.
 //
 // Produces a gzip-compressed tar archive of a plugin folder so the
 // author can hand it to a peer or upload it to a marketplace
 // without going through GitHub. The installer's HTTPS-tarball
 // path (§3.A6) consumes the same .tgz shape, so a packed archive
-// is byte-equal to what `od plugin install --source <https://...>`
+// is byte-equal to what `monofield plugin install --source <https://...>`
 // would download.
 //
 // What we put in the archive:
-//   - open-design.json (required; this is what the installer
+//   - monofield.json (required for new packages; legacy names remain readable)
 //     resolves first)
 //   - SKILL.md / .claude-plugin/plugin.json when present
 //   - Any other plain files under the folder
@@ -28,9 +28,10 @@
 import path from 'node:path';
 import { promises as fsp } from 'node:fs';
 import { c as tarCreate } from 'tar';
+import { MONOFIELD_PLUGIN_MANIFEST, resolveExistingPluginManifest } from './manifest-file.js';
 
 export interface PackPluginInput {
-  // Path to the plugin folder. Must contain open-design.json.
+  // Path to the plugin folder. Must contain monofield.json or its legacy alias.
   folder: string;
   // Absolute path of the output archive. Default:
   // `<folder>/../<folder-basename>-<version>.tgz` when the manifest
@@ -67,15 +68,16 @@ export class PackPluginError extends Error {
 export async function packPlugin(input: PackPluginInput): Promise<PackPluginResult> {
   const folder = path.resolve(input.folder);
 
-  // Confirm the folder shape — open-design.json must exist + parse.
+  // Confirm the folder shape — the canonical manifest must exist + parse.
   let manifestRaw: string;
+  const manifestPath = resolveExistingPluginManifest(folder);
+  if (!manifestPath) {
+    throw new PackPluginError(`folder ${folder} does not contain ${MONOFIELD_PLUGIN_MANIFEST}`);
+  }
   try {
-    manifestRaw = await fsp.readFile(path.join(folder, 'open-design.json'), 'utf8');
+    manifestRaw = await fsp.readFile(manifestPath, 'utf8');
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new PackPluginError(`folder ${folder} does not contain open-design.json`);
-    }
-    throw new PackPluginError(`failed to read open-design.json: ${(err as Error).message}`);
+    throw new PackPluginError(`failed to read ${path.basename(manifestPath)}: ${(err as Error).message}`);
   }
   let pluginId: string | undefined;
   let pluginVersion: string | undefined;
@@ -84,7 +86,7 @@ export async function packPlugin(input: PackPluginInput): Promise<PackPluginResu
     if (typeof parsed.name === 'string'    && parsed.name.length    > 0) pluginId      = parsed.name;
     if (typeof parsed.version === 'string' && parsed.version.length > 0) pluginVersion = parsed.version;
   } catch (err) {
-    throw new PackPluginError(`open-design.json failed to parse as JSON: ${(err as Error).message}`);
+    throw new PackPluginError(`${path.basename(manifestPath)} failed to parse as JSON: ${(err as Error).message}`);
   }
 
   const folderBase = path.basename(folder);

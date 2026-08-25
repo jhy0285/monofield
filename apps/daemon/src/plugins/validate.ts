@@ -2,10 +2,10 @@
 //
 // Pre-install lint pass: takes a path to a plugin folder on disk
 // (typically the author's local working dir) and returns the same
-// DoctorReport shape the post-install `od plugin doctor <id>`
+// DoctorReport shape the post-install `monofield plugin doctor <id>`
 // command emits.
 //
-// The lift from `od plugin doctor`:
+// The lift from `monofield plugin doctor`:
 //   - reads the folder via the same resolvePluginFolder() the
 //     installer uses, so manifest parsing is byte-equal,
 //   - calls doctorPlugin() with the supplied registry view (which
@@ -14,9 +14,8 @@
 //   - skips the `snapshot-stale` cross-check (no SQLite involved
 //     because nothing is installed yet).
 //
-// Rationale: spec §16 Phase 4 ships `od plugin scaffold`, `od
-// plugin export`, `od plugin publish` for the author tooling slice.
-// `od plugin validate` closes the loop: the author can run lint
+// Rationale: the author tooling ships scaffold, export, and publish commands.
+// `monofield plugin validate` closes the loop: the author can run lint
 // before pushing to a marketplace catalog, without installing into
 // their own daemon (which would dirty the registry table).
 
@@ -28,7 +27,7 @@ import type { ConnectorProbe } from './connector-gate.js';
 
 export interface ValidatePluginFolderInput {
   // Path to the plugin folder. Must contain at least one of
-  // `open-design.json` / `SKILL.md` / `.claude-plugin/plugin.json`
+  // `monofield.json` / `SKILL.md` / `.claude-plugin/plugin.json`
   // for resolvePluginFolder() to succeed.
   folder: string;
   // Optional pre-fetched registry. Tests pass a stub; CLI fetches

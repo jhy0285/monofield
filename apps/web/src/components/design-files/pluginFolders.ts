@@ -23,7 +23,11 @@ export function getPluginFolderCandidates(files: ProjectFile[]): PluginFolderCan
   const candidates: PluginFolderCandidate[] = [];
   for (const [folder, rows] of byFolder) {
     const names = new Set(rows.map((row) => row.name));
-    const manifestPath = `${folder}/open-design.json`;
+    const canonicalManifestPath = `${folder}/monofield.json`;
+    const legacyManifestPath = `${folder}/open-design.json`;
+    const manifestPath = names.has(canonicalManifestPath)
+      ? canonicalManifestPath
+      : legacyManifestPath;
     const hasManifest = names.has(manifestPath);
     const hasSkill = names.has(`${folder}/SKILL.md`);
     if (!hasManifest || !hasSkill) continue;

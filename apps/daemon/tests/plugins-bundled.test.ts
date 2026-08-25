@@ -110,6 +110,16 @@ describe('registerBundledPlugins', () => {
     expect(result.registered.map((r) => r.id)).toEqual(['sample-plugin']);
   });
 
+  it('prefers the canonical monofield.json manifest for new bundles', async () => {
+    const folder = path.join(tmpRoot, 'canonical-plugin');
+    await mkdir(folder, { recursive: true });
+    await writeFile(path.join(folder, 'monofield.json'), SAMPLE_MANIFEST('canonical-plugin'));
+    await writeFile(path.join(folder, 'SKILL.md'), SAMPLE_SKILL('canonical-plugin'));
+
+    const result = await registerBundledPlugins({ db, bundledRoot: tmpRoot });
+    expect(result.registered.map((row) => row.id)).toEqual(['canonical-plugin']);
+  });
+
   it('registers and retains only administrator-allowlisted bundled plugins', async () => {
     for (const id of ['approved', 'legacy-brand-template']) {
       const folder = path.join(tmpRoot, 'design-systems', id);

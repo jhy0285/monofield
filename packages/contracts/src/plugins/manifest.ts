@@ -1,13 +1,14 @@
 import { z } from 'zod';
 
-// `open-design.json` schema (v1). Mirrors docs/schemas/open-design.plugin.v1.json
-// with one addition: this Zod schema is permissive on the top level so adapter
-// outputs (synthesized PluginManifest from SKILL.md frontmatter or claude
-// plugin.json) parse cleanly without losing forward-compatible fields.
+// `monofield.json` schema (v1). Legacy manifests are normalized at the parser
+// boundary so the mature runtime can keep one internal representation while
+// new public files use the MonoField namespace.
 
-export const OPEN_DESIGN_PLUGIN_SPEC_VERSION = '1.0.0';
+export const MONOFIELD_PLUGIN_SPEC_VERSION = '1.0.0';
+/** @deprecated Use MONOFIELD_PLUGIN_SPEC_VERSION. */
+export const OPEN_DESIGN_PLUGIN_SPEC_VERSION = MONOFIELD_PLUGIN_SPEC_VERSION;
 
-export const OpenDocsSpecVersionSchema = z.string().min(1);
+export const MonoFieldSpecVersionSchema = z.string().min(1);
 
 export const ReferenceSchema = z.object({
   ref:  z.string().optional(),
@@ -136,34 +137,14 @@ export const PluginConnectorRefSchema = z.object({
 
 export type PluginConnectorRef = z.infer<typeof PluginConnectorRefSchema>;
 
-export const PluginManifestSchema = z.object({
-  $schema:     z.string().optional(),
-  specVersion: OpenDocsSpecVersionSchema.optional(),
-  name:        z.string().min(1).regex(/^[a-z0-9][a-z0-9._-]*$/),
-  title:       z.string().optional(),
-  title_i18n:  LocalizedTextSchema.optional(),
-  version:     z.string().min(1),
-  description: z.string().optional(),
-  description_i18n: LocalizedTextSchema.optional(),
-  author:   z.object({
-    name: z.string().optional(),
-    url:  z.string().optional(),
-  }).passthrough().optional(),
-  license:  z.string().optional(),
-  homepage: z.string().optional(),
-  icon:     z.string().optional(),
-  tags:     z.array(z.string()).optional(),
-  compat: z.object({
-    agentSkills:   z.array(RefPathSchema).optional(),
-    claudePlugins: z.array(RefPathSchema).optional(),
-  }).passthrough().optional(),
-  od: z.object({
+const PluginExtensionSchema = z.object({
     kind:     z.enum(['skill', 'scenario', 'atom', 'bundle']).optional(),
     taskKind: z.enum(['new-generation', 'code-migration', 'figma-migration', 'tune-collab']).optional(),
     mode:     z.string().optional(),
     platform: z.string().optional(),
     scenario: z.string().optional(),
     engineRequirements: z.object({
+      monofield: z.string().optional(),
       od: z.string().optional(),
     }).passthrough().optional(),
     preview: z.object({
@@ -206,7 +187,37 @@ export const PluginManifestSchema = z.object({
     }).passthrough().optional(),
     inputs: z.array(InputFieldSchema).optional(),
     capabilities: z.array(z.string()).optional(),
+  }).passthrough();
+
+const PluginManifestObjectSchema = z.object({
+  $schema:     z.string().optional(),
+  specVersion: MonoFieldSpecVersionSchema.optional(),
+  name:        z.string().min(1).regex(/^[a-z0-9][a-z0-9._-]*$/),
+  title:       z.string().optional(),
+  title_i18n:  LocalizedTextSchema.optional(),
+  version:     z.string().min(1),
+  description: z.string().optional(),
+  description_i18n: LocalizedTextSchema.optional(),
+  author:   z.object({
+    name: z.string().optional(),
+    url:  z.string().optional(),
   }).passthrough().optional(),
+  license:  z.string().optional(),
+  homepage: z.string().optional(),
+  icon:     z.string().optional(),
+  tags:     z.array(z.string()).optional(),
+  compat: z.object({
+    agentSkills:   z.array(RefPathSchema).optional(),
+    claudePlugins: z.array(RefPathSchema).optional(),
+  }).passthrough().optional(),
+  od: PluginExtensionSchema.optional(),
 }).passthrough();
+
+export const PluginManifestSchema = z.preprocess((value) => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return value;
+  const record = value as Record<string, unknown>;
+  if (record.od !== undefined || record.monofield === undefined) return value;
+  return { ...record, od: record.monofield };
+}, PluginManifestObjectSchema);
 
 export type PluginManifest = z.infer<typeof PluginManifestSchema>;

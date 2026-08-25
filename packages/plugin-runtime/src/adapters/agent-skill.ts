@@ -1,5 +1,5 @@
 import {
-  OPEN_DESIGN_PLUGIN_SPEC_VERSION,
+  MONOFIELD_PLUGIN_SPEC_VERSION,
   type InputField,
   type PluginManifest,
 } from '@open-design/contracts';
@@ -8,7 +8,7 @@ import { parseFrontmatter, type FrontmatterObject, type FrontmatterValue } from 
 // Adapter from a portable SKILL.md (with optional `od:` frontmatter, see
 // docs/skills-protocol.md) to a synthesized PluginManifest. Spec invariant
 // I1 demands this synthesizer always produce a schema-valid manifest for
-// any SKILL.md that already carries the `od:` frontmatter we use today.
+// any SKILL.md carrying canonical `monofield:` or legacy frontmatter.
 //
 // Inputs:
 //   - rawSkillMd: full SKILL.md file body (frontmatter + markdown).
@@ -18,7 +18,7 @@ import { parseFrontmatter, type FrontmatterObject, type FrontmatterValue } from 
 //     alone. Defaults to "./SKILL.md".
 //
 // Output: { manifest, warnings } — warnings carry unmappable frontmatter
-// fields (e.g. od.parameters live sliders that v1 manifest does not surface).
+// fields (e.g. live slider parameters that v1 does not surface).
 
 export interface AgentSkillAdapterOptions {
   folderId: string;
@@ -31,14 +31,16 @@ export interface AgentSkillAdapterResult {
   bodyMarkdown: string;
 }
 
-const ROLE_PARAMETER_KEYS = ['od.parameters'];
+const ROLE_PARAMETER_KEYS = ['monofield.parameters'];
 
 export function adaptAgentSkill(
   rawSkillMd: string,
   opts: AgentSkillAdapterOptions,
 ): AgentSkillAdapterResult {
   const { data: frontmatter, body } = parseFrontmatter(rawSkillMd);
-  const od = isObject(frontmatter['od']) ? frontmatter['od'] : {};
+  const extension = isObject(frontmatter['monofield'])
+    ? frontmatter['monofield']
+    : isObject(frontmatter['od']) ? frontmatter['od'] : {};
   const warnings: string[] = [];
 
   const name = stringOr(frontmatter['name'], opts.folderId).trim() || opts.folderId;
@@ -47,7 +49,7 @@ export function adaptAgentSkill(
   const version = stringOr(frontmatter['version'], '0.0.0');
   const compatPath = opts.compatPath ?? './SKILL.md';
 
-  const designSystemFm = isObject(od['design_system']) ? od['design_system'] : null;
+  const designSystemFm = isObject(extension['design_system']) ? extension['design_system'] : null;
   const designSystem = designSystemFm
     ? {
         ref: stringOr(designSystemFm['ref'], '') || undefined,
@@ -55,23 +57,23 @@ export function adaptAgentSkill(
       }
     : undefined;
 
-  const craftFm = isObject(od['craft']) ? od['craft'] : null;
+  const craftFm = isObject(extension['craft']) ? extension['craft'] : null;
   const craftRequires = craftFm && Array.isArray(craftFm['requires'])
     ? (craftFm['requires'] as FrontmatterValue[]).filter((v): v is string => typeof v === 'string')
     : undefined;
 
-  const inputs: InputField[] | undefined = mapInputs(od['inputs'], warnings);
+  const inputs: InputField[] | undefined = mapInputs(extension['inputs'], warnings);
 
   // od.parameters are deferred to Phase 4 per spec §5.4; record a warning so
   // doctor surfaces them instead of silently dropping.
   for (const key of ROLE_PARAMETER_KEYS) {
     const [namespace, sub] = key.split('.');
-    if (namespace === 'od' && sub && Array.isArray(od[sub])) {
+    if (namespace === 'monofield' && sub && Array.isArray(extension[sub])) {
       warnings.push(`SKILL.md ${key} is preserved as adapter metadata; v1 manifest does not expose live sliders`);
     }
   }
 
-  const previewFm = isObject(od['preview']) ? od['preview'] : null;
+  const previewFm = isObject(extension['preview']) ? extension['preview'] : null;
   const preview = previewFm
     ? {
         type: stringOr(previewFm['type'], '') || undefined,
@@ -80,7 +82,7 @@ export function adaptAgentSkill(
     : undefined;
 
   const manifest: PluginManifest = {
-    specVersion: OPEN_DESIGN_PLUGIN_SPEC_VERSION,
+    specVersion: MONOFIELD_PLUGIN_SPEC_VERSION,
     name,
     title,
     version,
@@ -88,10 +90,10 @@ export function adaptAgentSkill(
     compat: { agentSkills: [{ path: compatPath }] },
     od: {
       kind: 'skill',
-      taskKind: stringOr(od['taskKind'], 'new-generation') as PluginManifest['od'] extends infer T ? T extends { taskKind?: infer K } ? K : never : never,
-      mode: stringOr(od['mode'], '') || undefined,
-      platform: stringOr(od['platform'], '') || undefined,
-      scenario: stringOr(od['scenario'], '') || undefined,
+      taskKind: stringOr(extension['taskKind'], 'new-generation') as PluginManifest['od'] extends infer T ? T extends { taskKind?: infer K } ? K : never : never,
+      mode: stringOr(extension['mode'], '') || undefined,
+      platform: stringOr(extension['platform'], '') || undefined,
+      scenario: stringOr(extension['scenario'], '') || undefined,
       preview,
       useCase: { query: examplePromptFromFrontmatter(frontmatter, body) },
       context: {
@@ -159,8 +161,8 @@ function mapInputs(value: FrontmatterValue | undefined, warnings: string[]): Inp
 }
 
 function examplePromptFromFrontmatter(fm: FrontmatterObject, body: string): string {
-  const od = isObject(fm['od']) ? fm['od'] : {};
-  const direct = stringOr(od['example_prompt'], '').trim();
+  const extension = isObject(fm['monofield']) ? fm['monofield'] : isObject(fm['od']) ? fm['od'] : {};
+  const direct = stringOr(extension['example_prompt'], '').trim();
   if (direct) return direct;
   const desc = stringOr(fm['description'], '').trim();
   if (desc) {

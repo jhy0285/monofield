@@ -21,13 +21,13 @@ export interface ResolveDaemonUrlOptions {
 }
 
 /**
- * Resolve the daemon HTTP base URL for `od` client commands.
+ * Resolve the daemon HTTP base URL for `monofield` client commands.
  *
- * Spawn order: explicit `--daemon-url` flag, `OD_DAEMON_URL` env, then
+ * Spawn order: explicit `--daemon-url` flag, `MONOFIELD_DAEMON_URL` env, then
  * a STATUS roundtrip to the concrete sidecar IPC endpoint supplied by
- * the lifecycle owner in `OD_SIDECAR_IPC_PATH`, then the default
+ * the lifecycle owner in `MONOFIELD_SIDECAR_IPC_PATH`, then the default
  * `tools-dev status --json` runtime. Falls back to the legacy default
- * for direct `od` launches that do not run as a sidecar.
+ * for direct `monofield` launches that do not run as a sidecar.
  */
 export async function resolveDaemonUrl(
   options: ResolveDaemonUrlOptions = {},
@@ -35,7 +35,7 @@ export async function resolveDaemonUrl(
   const env = options.env ?? process.env;
   const flagUrl = options.flagUrl ?? null;
   if (flagUrl != null && flagUrl.length > 0) return flagUrl;
-  const envUrl = env.OD_DAEMON_URL;
+  const envUrl = env.MONOFIELD_DAEMON_URL ?? env.OD_DAEMON_URL;
   if (envUrl != null && envUrl.length > 0) return envUrl;
   const discovered = await discoverDaemonUrlFromIpc(env, options.timeoutMs ?? 800);
   if (discovered != null) return discovered;
@@ -48,7 +48,7 @@ async function discoverDaemonUrlFromIpc(
   env: NodeJS.ProcessEnv,
   timeoutMs: number,
 ): Promise<string | null> {
-  const socketPath = env[SIDECAR_ENV.IPC_PATH];
+  const socketPath = env.MONOFIELD_SIDECAR_IPC_PATH ?? env[SIDECAR_ENV.IPC_PATH];
   if (socketPath == null || socketPath.length === 0) return null;
   try {
     const status = await requestJsonIpc<DaemonStatusSnapshot>(

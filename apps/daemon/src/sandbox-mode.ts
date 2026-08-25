@@ -134,7 +134,7 @@ export function resolveSandboxRuntimeConfigFromEnv(
   if (!isSandboxModeEnabled(env)) return null;
   const rawDataDir = env.OD_DATA_DIR?.trim();
   if (!rawDataDir) {
-    throw new Error('OD_DATA_DIR is required when OD_SANDBOX_MODE is enabled');
+    throw new Error('MONOFIELD_DATA_DIR is required when MONOFIELD_SANDBOX_MODE is enabled');
   }
   return resolveSandboxRuntimeConfig(
     true,

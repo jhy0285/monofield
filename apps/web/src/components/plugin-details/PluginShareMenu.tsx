@@ -4,7 +4,7 @@
 // identify, audit, or embed a plugin:
 //
 //   - Copy plugin id          (raw `<id>` for paste-into-yaml)
-//   - Copy install command    (`od plugin install <ref>`)
+//   - Copy install command    (`monofield plugin install <ref>`)
 //   - Copy README badge       (MonoField powered, includes link)
 //   - Open source on GitHub   (when the source is a github repo)
 //   - Open homepage           (when manifest.homepage is set)
@@ -68,12 +68,12 @@ function buildInstallCommand(record: InstalledPluginRecord): string {
   // provenance preserved it; sourceMarketplaceId names the catalog,
   // not the plugin package.
   if (typeof record.sourceMarketplaceEntryName === 'string') {
-    return `od plugin install ${record.sourceMarketplaceEntryName}`;
+    return `monofield plugin install ${record.sourceMarketplaceEntryName}`;
   }
   if (record.sourceKind === 'marketplace' && typeof record.sourceMarketplaceId === 'string') {
-    return `od plugin install ${record.sourceMarketplaceId}`;
+    return `monofield plugin install ${record.sourceMarketplaceId}`;
   }
-  return `od plugin install ${record.source}`;
+  return `monofield plugin install ${record.source}`;
 }
 
 export function buildPluginShareUrl(record: InstalledPluginRecord): string | null {

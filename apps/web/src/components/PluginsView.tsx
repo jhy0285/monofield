@@ -793,7 +793,7 @@ function pluginShareSlug(name: string): string {
     name
       .toLowerCase()
       .replace(/[^a-z0-9._-]+/g, '-')
-      .replace(/(^[-._]+|[-._]+$)/g, '') || 'open-design-plugin'
+      .replace(/(^[-._]+|[-._]+$)/g, '') || 'monofield-plugin'
   );
 }
 
@@ -1465,7 +1465,7 @@ function SourcesPanel({
               onSourceUrlInput?.();
             }}
             onChange={(event) => setUrl(event.target.value)}
-            placeholder="https://example.com/open-docs-marketplace.json"
+            placeholder="https://example.com/monofield-marketplace.json"
             disabled={pendingAction === 'add'}
           />
           <select
@@ -1700,7 +1700,7 @@ function PluginImportModal({
           {kind === 'zip' ? (
             <FileImportPanel
               title="Upload zip"
-              body="Choose a .zip archive containing open-design.json, SKILL.md, or .claude-plugin/plugin.json."
+              body="Choose a .zip archive containing monofield.json, SKILL.md, or .claude-plugin/plugin.json. Legacy manifests are still accepted."
               accept=".zip,application/zip"
               working={working}
               fileLabel={zipFile?.name ?? 'No zip selected'}
@@ -1981,7 +1981,7 @@ function buildAvailableInstallCommand(
   version: string,
 ): string {
   const suffix = version && version !== 'latest' ? `@${version}` : '';
-  return `od plugin install ${entry.name}${suffix}`;
+  return `monofield plugin install ${entry.name}${suffix}`;
 }
 
 function buildAvailablePluginProvenance({
@@ -2115,7 +2115,7 @@ function TeamPanel({
 }) {
   const copy = enterpriseMarketplaceCopy(locale);
   const [url, setUrl] = useState('');
-  const [authEnv, setAuthEnv] = useState('OD_MARKETPLACE_TOKEN');
+  const [authEnv, setAuthEnv] = useState('MONOFIELD_MARKETPLACE_TOKEN');
   const [allowedLicenses, setAllowedLicenses] = useState(
     'Apache-2.0, MIT, BSD-2-Clause, BSD-3-Clause, ISC, CC-BY-4.0',
   );
@@ -2173,7 +2173,7 @@ function TeamPanel({
           id="enterprise-marketplace-url"
           value={url}
           onChange={(event) => setUrl(event.target.value)}
-          placeholder="https://marketplace.company.example/open-docs-marketplace.json"
+          placeholder="https://marketplace.company.example/monofield-marketplace.json"
           disabled={pendingAction === 'add-enterprise'}
         />
         <label htmlFor="enterprise-marketplace-auth-env">{copy.credentialEnv}</label>
@@ -2181,7 +2181,7 @@ function TeamPanel({
           id="enterprise-marketplace-auth-env"
           value={authEnv}
           onChange={(event) => setAuthEnv(event.target.value.toUpperCase())}
-          placeholder="OD_MARKETPLACE_TOKEN"
+          placeholder="MONOFIELD_MARKETPLACE_TOKEN"
           disabled={pendingAction === 'add-enterprise'}
         />
         <p className="plugins-view__source-help">{copy.credentialHint}</p>

@@ -77,16 +77,11 @@ const residualAllowedExactPaths = new Set([
   // executed directly by Node and are not loaded by the app runtime.
   "scripts/import-prompt-templates.mjs",
   "scripts/postinstall.mjs",
-  // Checked-in bin shim so pnpm can link `od` before daemon dist output exists.
-  "apps/daemon/bin/od.mjs",
+  // Checked-in bin shim so pnpm can link `monofield` before daemon dist output exists.
+  "apps/daemon/bin/monofield.mjs",
   "apps/packaged/esbuild.config.mjs",
   // Browser service workers must be served as JavaScript files.
   "apps/web/public/od-notifications-sw.js",
-  // Shared nav enhancer for the landing-page static `/community/` pages,
-  // which are verbatim HTML served straight from `public/` (not Astro-
-  // compiled). It must ship as a browser-loadable `.js` asset, same as the
-  // web notifications service worker above.
-  "apps/landing-page/public/community/_site-nav.js",
   // MonoField's standalone Vercel marketing site is deliberately buildless.
   // Its language and preview-tab controller must remain a browser-loadable
   // JavaScript asset because Vercel serves this directory without a compile step.

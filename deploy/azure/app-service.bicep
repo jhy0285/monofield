@@ -1,22 +1,22 @@
-// Open Design on Azure App Service for Containers (evaluation deployment).
+// MonoField on Azure App Service for Containers (evaluation deployment).
 //
 // Single-instance Linux web app behind Azure's managed HTTPS. State lives on
 // the container's local disk, which is EPHEMERAL — it is reset on restart,
 // redeploy, or scale. This lane is for evaluation and demos, not durable data.
 //
-// Why no persistent volume: Open Design stores SQLite under OD_DATA_DIR, and
+// Why no persistent volume: MonoField stores SQLite under MONOFIELD_DATA_DIR, and
 // SQLite needs real file locking. App Service's persistent storage is backed
 // by Azure Files (SMB), where SQLite WAL/locking is unsupported and corrupts.
 // So we deliberately keep the data dir on the container's local filesystem.
 
 @description('Base name for the deployment. A globally-unique suffix is appended to the web app.')
-param name string = 'open-design'
+param name string = 'monofield'
 
 @description('Azure region. Defaults to the resource group location.')
 param location string = resourceGroup().location
 
 @description('Container image to run. Pin to a digest (image@sha256:...) for production.')
-param image string = 'docker.io/vanjayak/open-design:latest'
+param image string = 'ghcr.io/jhy0285/monofield:latest'
 
 @description('App Service plan SKU. B1 is the smallest tier that supports Always On and health checks.')
 param appServicePlanSku string = 'B1'
@@ -34,7 +34,7 @@ param extraAllowedOrigins string = ''
 
 // Runtime invariants of the image, not user-facing knobs.
 var containerPort = 7456
-var dataDir = '/app/.od'
+var dataDir = '/app/.monofield'
 
 // Default App Service hostname is deterministic, so we derive the public URL up
 // front and avoid a circular reference on the site's own appSettings.
@@ -86,31 +86,31 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
           value: '230'
         }
         {
-          name: 'OD_BIND_HOST'
+          name: 'MONOFIELD_BIND_HOST'
           value: '0.0.0.0'
         }
         {
-          name: 'OD_PORT'
+          name: 'MONOFIELD_PORT'
           value: '${containerPort}'
         }
         {
-          name: 'OD_WEB_PORT'
+          name: 'MONOFIELD_WEB_PORT'
           value: '${containerPort}'
         }
         {
-          name: 'OD_DATA_DIR'
+          name: 'MONOFIELD_DATA_DIR'
           value: dataDir
         }
         {
-          name: 'OD_PUBLIC_BASE_URL'
+          name: 'MONOFIELD_PUBLIC_BASE_URL'
           value: publicBaseUrl
         }
         {
-          name: 'OD_ALLOWED_ORIGINS'
+          name: 'MONOFIELD_ALLOWED_ORIGINS'
           value: allowedOrigins
         }
         {
-          name: 'OD_API_TOKEN'
+          name: 'MONOFIELD_API_TOKEN'
           value: apiToken
         }
         {

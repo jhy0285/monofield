@@ -296,7 +296,7 @@ export async function observePendingInstallerApplyAttempts(
           insertId,
         });
       } catch (error) {
-        options.logger?.warn?.('[open-design updater] failed to submit update apply observation', error);
+        options.logger?.warn?.('[monofield updater] failed to submit update apply observation', error);
         next.delivery = { eventName: 'update_apply_observed', status: 'failed', updatedAt: observedAt };
       }
     }

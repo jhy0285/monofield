@@ -209,7 +209,7 @@ export function validateCodexGeneratedImagesDir(
     statSync,
   });
   const warnSkipped = (reason: string) =>
-    warn(`[od] codex generated_images allowlist skipped: ${reason}`);
+    warn(`[monofield] codex generated_images allowlist skipped: ${reason}`);
 
   const protectedRoot = findContainingProtectedRoot(resolved, protectedRoots);
   if (protectedRoot) {
@@ -285,7 +285,7 @@ export function validateCodexGeneratedImagesDir(
   } catch (err) {
     const message =
       err instanceof Error ? err.message : String(err ?? 'unknown error');
-    warn(`[od] codex generated_images allowlist mkdir failed: ${message}`);
+    warn(`[monofield] codex generated_images allowlist mkdir failed: ${message}`);
     return null;
   }
 }

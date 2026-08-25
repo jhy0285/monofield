@@ -83,7 +83,7 @@ describe("materializeCachedUnpackedForInstaller", () => {
       await mkdir(join(cachedUnpackedRoot, "resources", "app"), { recursive: true });
       await writeFile(
         join(cachedUnpackedRoot, "resources", "app", "package.json"),
-        `${JSON.stringify({ name: "open-design-packaged-app", version: "0.5.0-beta.1" })}\n`,
+        `${JSON.stringify({ name: "monofield-packaged-app", version: "0.5.0-beta.1" })}\n`,
         "utf8",
       );
       await mkdir(join(paths.packagedConfigPath, ".."), { recursive: true });

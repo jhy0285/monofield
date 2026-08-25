@@ -440,7 +440,7 @@ consent and bypasses broker prompts for that exact read-only flow. The
 `readApproval: "always"` setting controls direct database reads outside the
 form. Both paths return only connection identity, columns, and redacted sample
 rows. Store that
-approved payload in the project-local `.open-docs/database-context/approved-db-context.json` file;
+approved payload in the project-local `.monofield/database-context/approved-db-context.json` file;
 the chat answer carries only its path and selected table names. Stop if
 approval is declined.
 

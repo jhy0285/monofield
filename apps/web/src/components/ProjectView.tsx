@@ -7284,8 +7284,8 @@ function pluginWorkflowTitle(action: PluginFolderAgentAction): string {
 
 function pluginWorkflowCliCommand(action: PluginFolderAgentAction, relativePath: string): string {
   return action === 'publish'
-    ? `od plugin publish-repo ${relativePath}`
-    : `od plugin open-design-pr ${relativePath}`;
+    ? `monofield plugin publish-repo ${relativePath}`
+    : `monofield plugin monofield-pr ${relativePath}`;
 }
 
 function pluginWorkflowPlannedSteps(action: PluginFolderAgentAction): string[] {

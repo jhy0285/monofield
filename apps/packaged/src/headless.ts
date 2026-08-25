@@ -24,16 +24,16 @@ import { startPackagedSidecars } from "./sidecars.js";
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
 function resolveHeadlessNamespaceBaseRoot(): string {
-  const odDataDir = process.env.OD_DATA_DIR;
-  if (odDataDir != null && odDataDir.length > 0) {
-    return join(resolve(odDataDir.replace(/^~/, homedir())), "namespaces");
+  const dataDir = process.env.MONOFIELD_DATA_DIR ?? process.env.OD_DATA_DIR;
+  if (dataDir != null && dataDir.length > 0) {
+    return join(resolve(dataDir.replace(/^~/, homedir())), "namespaces");
   }
   const xdgDataHome = process.env.XDG_DATA_HOME;
   const dataBase =
     xdgDataHome != null && xdgDataHome.length > 0
       ? xdgDataHome
       : join(homedir(), ".local", "share");
-  return join(dataBase, "open-design", "namespaces");
+  return join(dataBase, "monofield", "namespaces");
 }
 
 function resolveHeadlessAmrProfile(): PackagedConfig["amrProfile"] {
@@ -46,15 +46,18 @@ function resolveHeadlessAmrProfile(): PackagedConfig["amrProfile"] {
 function resolveHeadlessConfig(): PackagedConfig {
   const namespace =
     OPEN_DESIGN_SIDECAR_CONTRACT.normalizeNamespace(
-      process.env[PACKAGED_NAMESPACE_ENV] ?? SIDECAR_DEFAULTS.namespace,
+      process.env[PACKAGED_NAMESPACE_ENV]
+        ?? process.env.OD_PACKAGED_NAMESPACE
+        ?? SIDECAR_DEFAULTS.namespace,
     );
 
   const namespaceBaseRoot = resolveHeadlessNamespaceBaseRoot();
 
-  // OD_RESOURCE_ROOT may be set by a launcher script; otherwise default to a
+  // MONOFIELD_RESOURCE_ROOT may be set by a launcher script; otherwise default to a
   // sibling open-design/ directory relative to the node_modules that contain
   // this file — the layout written by tools-pack linux headless-install.
   const resourceRoot =
+    process.env.MONOFIELD_RESOURCE_ROOT ??
     process.env.OD_RESOURCE_ROOT ??
     join(__dirname, "..", "..", "..", "open-design");
 
@@ -67,7 +70,10 @@ function resolveHeadlessConfig(): PackagedConfig {
     namespaceBaseRoot,
     nodeCommand: null,
     resourceRoot,
-    updateMetadataUrl: process.env.OD_UPDATE_METADATA_URL?.trim() || null,
+    updateMetadataUrl: (
+      process.env.MONOFIELD_UPDATE_METADATA_URL
+        ?? process.env.OD_UPDATE_METADATA_URL
+    )?.trim() || null,
     webSidecarEntry: null,
     webStandaloneRoot: null,
     webOutputMode: "server",
@@ -190,7 +196,7 @@ async function main(): Promise<void> {
 
 void main().catch((error: unknown) => {
   process.stderr.write(
-    `open-docs headless failed: ${error instanceof Error ? error.message : String(error)}\n`,
+    `monofield headless failed: ${error instanceof Error ? error.message : String(error)}\n`,
   );
   process.exit(1);
 });

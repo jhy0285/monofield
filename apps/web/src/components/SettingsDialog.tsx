@@ -6766,7 +6766,7 @@ function buildCodexEnvToml(info: McpInstallInfo): string {
   if (entries.length === 0) return '';
   return `
 
-[mcp_servers.open-docs.env]
+[mcp_servers.monofield.env]
 ${entries.map(([key, value]) => `${key} = ${JSON.stringify(value)}`).join('\n')}`;
 }
 
@@ -6778,13 +6778,13 @@ function buildSharedMcpJson(info: McpInstallInfo): string {
     .join('\n');
   return `{
   "mcpServers": {
-    "open-docs": ${innerJson}
+    "monofield": ${innerJson}
   }
 }`;
 }
 
 // One-click install toggle for Codex: queries the daemon for whether
-// `codex mcp get open-docs` succeeds, and POSTs/DELETEs the install
+// `codex mcp get monofield` succeeds, and POSTs/DELETEs the install
 // endpoint to call `codex mcp add/remove` on the user's behalf. The
 // copy-snippet path still works for users who prefer to paste manually
 // or whose Codex CLI is not on PATH (button shows a disabled hint in
@@ -6906,7 +6906,7 @@ function IntegrationsSection() {
       buildInstruction: () => t('settings.mcpInstructionCli'),
       buildSnippet: (info) => {
         const inner = JSON.stringify(buildMcpStdioServerConfig(info));
-        return `claude mcp add-json --scope user open-docs '${inner}'`;
+        return `claude mcp add-json --scope user monofield '${inner}'`;
       },
       buildSnippetLang: () => 'bash',
     },
@@ -6922,7 +6922,7 @@ function IntegrationsSection() {
         );
         return t('settings.mcpInstructionCodex', { path });
       },
-      buildSnippet: (info) => `[mcp_servers.open-docs]\ncommand = ${JSON.stringify(info.command)}\nargs = ${JSON.stringify(info.args)}${buildCodexEnvToml(info)}`,
+      buildSnippet: (info) => `[mcp_servers.monofield]\ncommand = ${JSON.stringify(info.command)}\nargs = ${JSON.stringify(info.args)}${buildCodexEnvToml(info)}`,
       buildSnippetLang: () => 'toml',
     },
     {
@@ -6938,7 +6938,7 @@ function IntegrationsSection() {
       buildDeeplink: (info) => {
         const inner = buildMcpStdioServerConfig(info);
         const encoded = utf8Btoa(JSON.stringify(inner));
-        return `cursor://anysphere.cursor-deeplink/mcp/install?name=open-docs&config=${encoded}`;
+        return `cursor://anysphere.cursor-deeplink/mcp/install?name=monofield&config=${encoded}`;
       },
       deeplinkLabel: () => t('settings.mcpDeeplinkInstallCursor'),
     },
@@ -6950,7 +6950,7 @@ function IntegrationsSection() {
         t('settings.mcpInstructionCopilot', {
           shortcut: commandPaletteShortcut(info.platform),
         }),
-      buildSnippet: (info) => `{\n  "servers": {\n    "open-docs": {\n      "type": "stdio",\n      "command": ${JSON.stringify(info.command)},\n      "args": ${JSON.stringify(info.args)}${info.env && Object.keys(info.env).length > 0 ? `,\n      "env": ${JSON.stringify(info.env)}` : ''}\n    }\n  }\n}`,
+      buildSnippet: (info) => `{\n  "servers": {\n    "monofield": {\n      "type": "stdio",\n      "command": ${JSON.stringify(info.command)},\n      "args": ${JSON.stringify(info.args)}${info.env && Object.keys(info.env).length > 0 ? `,\n      "env": ${JSON.stringify(info.env)}` : ''}\n    }\n  }\n}`,
       buildSnippetLang: () => 'json',
     },
     {
@@ -6969,7 +6969,7 @@ function IntegrationsSection() {
         t('settings.mcpInstructionZed', {
           shortcut: settingsShortcut(info.platform),
         }),
-      buildSnippet: (info) => `{\n  "context_servers": {\n    "open-docs": {\n      "source": "custom",\n      "command": ${JSON.stringify(info.command)},\n      "args": ${JSON.stringify(info.args)}${info.env && Object.keys(info.env).length > 0 ? `,\n      "env": ${JSON.stringify(info.env)}` : ''}\n    }\n  }\n}`,
+      buildSnippet: (info) => `{\n  "context_servers": {\n    "monofield": {\n      "source": "custom",\n      "command": ${JSON.stringify(info.command)},\n      "args": ${JSON.stringify(info.args)}${info.env && Object.keys(info.env).length > 0 ? `,\n      "env": ${JSON.stringify(info.env)}` : ''}\n    }\n  }\n}`,
       buildSnippetLang: () => 'json',
     },
     {

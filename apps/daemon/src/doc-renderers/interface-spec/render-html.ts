@@ -200,7 +200,7 @@ export function renderInterfaceSpecHtml(doc: InterfaceSpecDocument): string {
   pre { background: #f4f5f7; border: 1px solid #e1e5eb; border-radius: 4px; padding: 8px; font-size: 11px; overflow: auto; margin: 0; }
   .detail { border-top: 1px dashed #c9d0da; padding-top: 8px; }
   a { color: #2348b8; }
-</style></head><body data-open-docs-kind="interface-spec">
+</style></head><body data-monofield-kind="interface-spec">
 ${banner}
 <div class="cover">
   <div class="doc-type">${esc(COVER_SHEET_LAYOUT.docTypeText)}</div>

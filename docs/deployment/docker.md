@@ -10,8 +10,8 @@ This is the easiest self-hosting path for beginners.
 ## Step 1: Open the Deploy Folder
 
 ```bash
-git clone https://github.com/nexu-io/open-design.git
-cd open-design/deploy
+git clone https://github.com/jhy0285/monofield.git
+cd monofield/deploy
 ```
 
 What this does:
@@ -34,16 +34,16 @@ openssl rand -hex 32
 
 Then edit `.env` and configure one of these before first start:
 
-- recommended default: paste the generated token into `OD_API_TOKEN=`
-- trusted authenticated reverse proxy only: leave `OD_API_TOKEN=` empty and set `OPEN_DESIGN_DISABLE_API_AUTH=1`
+- recommended default: paste the generated token into `MONOFIELD_API_TOKEN=`
+- trusted authenticated reverse proxy only: leave `MONOFIELD_API_TOKEN=` empty and set `MONOFIELD_DISABLE_API_AUTH=1`
 
-If you expose Open Design through a reverse proxy, also set:
+If you expose MonoField through a reverse proxy, also set:
 
 ```bash
-OPEN_DESIGN_ALLOWED_ORIGINS=https://yourdomain.com
+MONOFIELD_ALLOWED_ORIGINS=https://yourdomain.com
 ```
 
-## Step 3: Start Open Design
+## Step 3: Start MonoField
 
 ```bash
 docker-compose up -d
@@ -60,7 +60,7 @@ docker-compose ps
 ```
 
 Success looks like:
-- `open-design` container is listed
+- `monofield` container is listed
 - `STATUS` shows `Up` and eventually `healthy`
 - Port mapping includes `127.0.0.1:7456->7456/tcp`
 
@@ -78,20 +78,20 @@ Success looks like:
 
 ![curl HTTP 200 output (sanitized)](../screenshots/deployment/docker/05-curl-http-200-proof.png)
 
-## Step 6: Open Open Design in Your Browser
+## Step 6: Open MonoField in Your Browser
 
 Open:
 - `http://localhost:7456/`
 
-You should see the Open Design interface.
+You should see the MonoField interface.
 
-![Open Design home (desktop)](../screenshots/deployment/docker/01-open-design-home.png)
-![Open Design home (mobile)](../screenshots/deployment/docker/03-open-design-mobile.png)
+![MonoField home (desktop)](../screenshots/deployment/docker/01-monofield-home.png)
+![MonoField home (mobile)](../screenshots/deployment/docker/03-monofield-mobile.png)
 
 ## Common Issues
 
 - `failed to connect to the docker API`: Docker Desktop is not running yet
 - `address already in use`: Port `7456` is occupied by another process
 - `curl: (7) Failed to connect`: container is still starting; wait 10-20 seconds and retry
-- reverse proxy + `OD_API_TOKEN`: either inject `Authorization: Bearer <OD_API_TOKEN>` at the proxy, or set `OPEN_DESIGN_DISABLE_API_AUTH=1` only when that proxy already authenticates every request and the daemon is not directly exposed.
-- `Authorization: Bearer <OD_API_TOKEN> required` on macOS: Docker Desktop bridge networking makes the daemon see requests as non-loopback. See [Docker Desktop on macOS](../../deploy/README.md#docker-desktop-on-macos) for the host networking workaround.
+- reverse proxy + `MONOFIELD_API_TOKEN`: either inject `Authorization: Bearer <MONOFIELD_API_TOKEN>` at the proxy, or set `MONOFIELD_DISABLE_API_AUTH=1` only when that proxy already authenticates every request and the daemon is not directly exposed.
+- `Authorization: Bearer <MONOFIELD_API_TOKEN> required` on macOS: Docker Desktop bridge networking makes the daemon see requests as non-loopback. See [Docker Desktop on macOS](../../deploy/README.md#docker-desktop-on-macos) for the host networking workaround.

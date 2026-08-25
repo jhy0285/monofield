@@ -1,8 +1,5 @@
-export interface OpenDocsDiscordPresenceResponse {
-  inviteCode: string;
-  inviteUrl: string;
-  onlineCount: number;
-  memberCount: number;
+/** Reserved for future MonoField-owned community services. */
+export interface MonoFieldCommunityStatusResponse {
+  available: boolean;
   fetchedAt: number;
-  stale: boolean;
 }

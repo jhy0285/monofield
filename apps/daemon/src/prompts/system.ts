@@ -284,8 +284,8 @@ If the user asks you to generate an image, video, or audio file — regardless o
 
 The daemon injects these env vars into your shell (**POSIX bash — not PowerShell**):
 
-- \`OD_NODE_BIN\`   — absolute path to the Node runtime
-- \`OD_BIN\`        — absolute path to the OD CLI script
+- \`MONOFIELD_NODE_BIN\`   — absolute path to the Node runtime
+- \`MONOFIELD_BIN\`        — absolute path to the MonoField CLI script
 - \`OD_PROJECT_ID\` — the active project id
 
 **Always use the generate→wait loop below.** \`media generate\` always exits 0 — either with \`{"file":{...}}\` if done within ~25s, or with \`{"taskId":"..."}\` as a handoff for slow models (flux-pro-ultra ~60–180s, veo-3-fal longer). Whenever the output contains a \`taskId\`, keep polling with \`media wait\` until exit 0 (done) or exit 5 (failed).
@@ -294,7 +294,7 @@ Use **POSIX \`$VAR\` syntax** — do NOT translate to PowerShell (\`$env:VAR\`, 
 
 \`\`\`bash
 # POSIX bash — do NOT convert to PowerShell
-out=\$("$OD_NODE_BIN" "$OD_BIN" media generate \\
+out=\$("$MONOFIELD_NODE_BIN" "$MONOFIELD_BIN" media generate \\
   --project "$OD_PROJECT_ID" \\
   --surface image \\
   --model flux-pro-ultra \\
@@ -307,7 +307,7 @@ task_id=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sy
 since=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('nextSince',0))" 2>/dev/null)
 since="\${since:-0}"
 while [ -n "\$task_id" ]; do
-  out=\$("$OD_NODE_BIN" "$OD_BIN" media wait "\$task_id" --since "\$since")
+  out=\$("$MONOFIELD_NODE_BIN" "$MONOFIELD_BIN" media wait "\$task_id" --since "\$since")
   ec=\$?
   last=\$(printf '%s\\n' "\$out" | tail -1)
   since=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('nextSince',\$since))" 2>/dev/null)
@@ -800,7 +800,7 @@ export function composeSystemPrompt({
 
   if (designSystemPullIndex && designSystemPullIndex.trim().length > 0) {
     parts.push(
-      `\n\n## Pull-layer files available on demand${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nThis design-system package declares richer files for inspection, source evidence, or human preview. Keep the push prompt light: use the index below to decide what to read later. When the runtime tool environment is available, read a listed path with \`\"$OD_NODE_BIN\" \"$OD_BIN\" tools design-systems read --path <path>\`; the daemon will reject paths outside this manifest allowlist.\n\n\`\`\`text\n${designSystemPullIndex.trim()}\n\`\`\``,
+      `\n\n## Pull-layer files available on demand${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nThis design-system package declares richer files for inspection, source evidence, or human preview. Keep the push prompt light: use the index below to decide what to read later. When the runtime tool environment is available, read a listed path with \`\"$MONOFIELD_NODE_BIN\" \"$MONOFIELD_BIN\" tools design-systems read --path <path>\`; the daemon will reject paths outside this manifest allowlist.\n\n\`\`\`text\n${designSystemPullIndex.trim()}\n\`\`\``,
     );
   }
 
@@ -1134,7 +1134,7 @@ export function renderCodexImagegenOverride(
 
 The active agent is Codex and this image project selected \`${imageModel}\`.
 For this specific case, use Codex's built-in image generation capability
-instead of \`"$OD_NODE_BIN" "$OD_BIN" media generate\` for the first generation
+instead of \`"$MONOFIELD_NODE_BIN" "$MONOFIELD_BIN" media generate\` for the first generation
 attempt. This is an intentional exception to the media generation contract and
 the active image skill's dispatcher wording.
 
@@ -1171,7 +1171,7 @@ block for media.
 If Codex built-in imagegen is unavailable or generation fails before producing
 an image, surface the actual failure message and ask the user for one-time
 confirmation before falling back to the existing OpenAI/Azure API-key provider
-path via \`"$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model ${imageModel}\`.
+path via \`"$MONOFIELD_NODE_BIN" "$MONOFIELD_BIN" media generate --surface image --model ${imageModel}\`.
 Do not silently fall back.`;
 }
 
@@ -1314,7 +1314,7 @@ function renderMetadataBlock(
     lines.push('');
     lines.push(renderMediaMetadataAction(
       'image',
-      '`"$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model <imageModel>`',
+      '`"$MONOFIELD_NODE_BIN" "$MONOFIELD_BIN" media generate --surface image --model <imageModel>`',
       mediaExecution,
     ));
   }
@@ -1338,12 +1338,12 @@ function renderMetadataBlock(
     lines.push('');
     lines.push(renderMediaMetadataAction(
       'video',
-      '`"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model <videoModel> --length <seconds> --aspect <ratio>`',
+      '`"$MONOFIELD_NODE_BIN" "$MONOFIELD_BIN" media generate --surface video --model <videoModel> --length <seconds> --aspect <ratio>`',
       mediaExecution,
     ));
     if (metadata.videoModel === 'hyperframes-html') {
       lines.push(
-        'Special case: `hyperframes-html` is a local HTML-to-MP4 renderer, not a photoreal text-to-video model. Treat it like a motion design renderer, ask at most one clarifying question, then create a HyperFrames composition with `npx hyperframes init` under `.hyperframes-cache/`, edit `index.html`, and dispatch via `"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model hyperframes-html --composition-dir <rel>`. Do not run `npx hyperframes render` yourself.',
+        'Special case: `hyperframes-html` is a local HTML-to-MP4 renderer, not a photoreal text-to-video model. Treat it like a motion design renderer, ask at most one clarifying question, then create a HyperFrames composition with `npx hyperframes init` under `.hyperframes-cache/`, edit `index.html`, and dispatch via `"$MONOFIELD_NODE_BIN" "$MONOFIELD_BIN" media generate --surface video --model hyperframes-html --composition-dir <rel>`. Do not run `npx hyperframes render` yourself.',
       );
     }
   }
@@ -1392,7 +1392,7 @@ function renderMetadataBlock(
     lines.push('');
     lines.push(renderMediaMetadataAction(
       'audio',
-      '`"$OD_NODE_BIN" "$OD_BIN" media generate --surface audio --audio-kind <kind> --model <audioModel> --duration <seconds>` and add `--voice <voice-id>` for speech when you have a provider-specific voice id',
+      '`"$MONOFIELD_NODE_BIN" "$MONOFIELD_BIN" media generate --surface audio --audio-kind <kind> --model <audioModel> --duration <seconds>` and add `--voice <voice-id>` for speech when you have a provider-specific voice id',
       mediaExecution,
     ));
   }
@@ -1445,7 +1445,7 @@ function renderMetadataBlock(
     lines.push('');
     lines.push('### @ connector context');
     lines.push(
-      'The user selected these connectors as context. Use daemon connector tools through the OD CLI wrapper when data from these sources is needed; do not ask the user to identify a source that is already selected.',
+      'The user selected these connectors as context. Use daemon connector tools through the MonoField CLI wrapper when data from these sources is needed; do not ask the user to identify a source that is already selected.',
     );
     for (const connector of metadata.contextConnectors) {
       const id = typeof connector.id === 'string' ? connector.id : '';
@@ -1545,7 +1545,7 @@ function renderMediaMetadataAction(
   const article = surface === 'audio' ? 'an' : 'a';
   const mode = mediaExecution?.mode ?? 'enabled';
   if (mode === 'disabled') {
-    return `This is ${article} **${surface}** project, but MonoField-owned media execution is disabled for this run. Plan the creative brief only unless an external MCP media tool is explicitly configured. Do NOT call OD media generation tools and do NOT emit \`<artifact>\` HTML for media surfaces.`;
+    return `This is ${article} **${surface}** project, but MonoField-owned media execution is disabled for this run. Plan the creative brief only unless an external MCP media tool is explicitly configured. Do NOT call MonoField media generation tools and do NOT emit \`<artifact>\` HTML for media surfaces.`;
   }
   return `This is ${article} **${surface}** project. Plan the creative brief carefully, then dispatch via the **media generation contract** using ${command}. Do NOT emit \`<artifact>\` HTML for media surfaces.`;
 }

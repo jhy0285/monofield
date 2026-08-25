@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  OPEN_DESIGN_PLUGIN_SPEC_VERSION,
+  MONOFIELD_PLUGIN_SPEC_VERSION,
   MarketplacePluginEntrySchema,
   PluginManifestSchema,
   resolveLocalizedText,
@@ -8,7 +8,7 @@ import {
 
 describe('plugin manifest localized text', () => {
   it('exports the current plugin spec version for manifests and registries', () => {
-    expect(OPEN_DESIGN_PLUGIN_SPEC_VERSION).toBe('1.0.0');
+    expect(MONOFIELD_PLUGIN_SPEC_VERSION).toBe('1.0.0');
   });
 
   it('accepts legacy string use-case queries', () => {
@@ -23,6 +23,16 @@ describe('plugin manifest localized text', () => {
     });
 
     expect(manifest.od?.useCase?.query).toBe('Make a {{topic}} brief.');
+  });
+
+  it('normalizes the canonical monofield namespace for the runtime', () => {
+    const manifest = PluginManifestSchema.parse({
+      name: 'sample-plugin',
+      version: '1.0.0',
+      monofield: { mode: 'prototype' },
+    });
+
+    expect(manifest.od?.mode).toBe('prototype');
   });
 
   it('accepts locale-map use-case queries', () => {

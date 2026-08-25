@@ -2,7 +2,7 @@
 // prompt when a brand-extraction project finishes.
 //
 // Brand extraction runs as an agent inside a backing `brand-extraction` project
-// (see apps/daemon/src/brands/index.ts). When the agent calls `od brand
+// (see apps/daemon/src/brands/index.ts). When the agent calls `monofield brand
 // finalize`, the brand's `meta.status` flips to `ready` and a `user:<id>` design
 // system is registered — but that happens out of band and there is no SSE
 // channel for brand status. Without a nudge the user is left in the project view

@@ -122,18 +122,18 @@ test("workspace bin entries use checked-in targets so pnpm can link them before 
   assert.deepEqual(unlinkableBins, []);
 });
 
-test("root workspace depends on the daemon package so pnpm exec resolves the od bin", () => {
+test("root workspace depends on the daemon package so pnpm exec resolves the monofield bin", () => {
   const rootManifest = readPackageJson("package.json");
   const daemonManifest = readPackageJson("apps/daemon/package.json");
 
   assert.equal(dependencySpecifier(rootManifest, "@open-design/daemon"), "workspace:*");
   assert.deepEqual((rootManifest as { bin?: unknown }).bin, {
-    od: "./apps/daemon/bin/od.mjs",
+    monofield: "./apps/daemon/bin/monofield.mjs",
   });
   assert.deepEqual((daemonManifest as { bin?: unknown }).bin, {
-    od: "./bin/od.mjs",
+    monofield: "./bin/monofield.mjs",
   });
-  assert.equal(existsSync(join(repoRoot, "apps/daemon/bin/od.mjs")), true);
+  assert.equal(existsSync(join(repoRoot, "apps/daemon/bin/monofield.mjs")), true);
 });
 
 test("postinstall builds workspace packages whose linkable bins delegate to dist", () => {

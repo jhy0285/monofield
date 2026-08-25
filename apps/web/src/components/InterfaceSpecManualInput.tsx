@@ -186,7 +186,7 @@ export function InterfaceSpecManualInput({
     setUploading(true);
     setUploadError(null);
     try {
-      const result = await uploadProjectFiles(projectId, files, '_open-docs/interface-spec-inputs');
+      const result = await uploadProjectFiles(projectId, files, '_monofield/interface-spec-inputs');
       if (result.uploaded.length === 0) {
         throw new Error(result.error ?? result.failed[0]?.error ?? '참고자료를 업로드하지 못했습니다.');
       }

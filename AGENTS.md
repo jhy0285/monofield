@@ -16,11 +16,11 @@ This file is the single source of truth for agents entering this repository. Rea
 - Workspace packages come from `pnpm-workspace.yaml`: `apps/*`, `packages/*`, `tools/*`, and `e2e`.
 - Top-level content directories: `skills/` (functional skills the agent invokes mid-task — utilities, briefs, packagers; see `skills/AGENTS.md`), `design-templates/` (rendering catalogue: decks, prototypes, image/video/audio templates; see `design-templates/AGENTS.md` and `specs/current/skills-and-design-templates.md`), `design-systems/` (brand `DESIGN.md` files), `craft/` (universal brand-agnostic craft rules a skill can opt into via `od.craft.requires`), `mocks/` (replay-based mock CLIs for `opencode`/`claude`/`codex`/`gemini`/`cursor-agent`/`deepseek`/`qwen`/`grok`, the ACP family `devin`/`hermes`/`kilo`/`kimi`/`kiro`/`vibe`, and the AMR `vela` CLI (login + models + ACP), built from anonymized Langfuse traces — PATH-overlay drop-in for tests and self-validation; see `mocks/README.md`).
 - `apps/web` is the Next.js 16 App Router + React 18 web runtime; do not restore `apps/nextjs`.
-- `apps/daemon` is the local privileged daemon and `od` bin. It owns `/api/*`, agent spawning, skills, design systems, artifacts, and static serving.
+- `apps/daemon` is the local privileged daemon and `monofield` bin. It owns `/api/*`, agent spawning, skills, design systems, artifacts, and static serving.
 - `apps/desktop` is the Electron shell; it discovers the web URL through sidecar IPC.
 - `apps/packaged` is the thin packaged Electron runtime entry; it starts packaged sidecars and owns the `od://` entry glue only.
 - `packages/contracts` is the pure TypeScript web/daemon app contract layer.
-- `packages/sidecar-proto` owns the Open Design sidecar business protocol; `packages/sidecar` owns the generic sidecar runtime; `packages/platform` owns generic OS process primitives.
+- `packages/sidecar-proto` owns the MonoField sidecar business protocol; `packages/sidecar` owns the generic sidecar runtime; `packages/platform` owns generic OS process primitives.
 - `tools/dev` is the local development lifecycle control plane.
 - `tools/pack` is the local packaged build/start/stop/logs control plane, packaged updater harness, installer identity/registry validation surface, and mac beta release artifact preparation surface.
 - `tools/serve` is the local fixture-service control plane; first service is `tools-serve start updater` for deterministic updater metadata and artifacts.
@@ -111,7 +111,7 @@ Sanctioned exceptions:
 - `OD_LEGACY_DATA_DIR` is a migration source for legacy data import only. It is
   not an active daemon data root.
 - External tool homes such as `CODEX_HOME` are integration inputs, not daemon
-  data roots. The daemon must not describe them as Open Design runtime data.
+  data roots. The daemon must not describe them as MonoField runtime data.
 - Agent/project-cwd skill staging aliases are not daemon data roots.
 - Manifest metadata keys and CSS identifiers are semantic namespaces, not
   filesystem path conventions.
@@ -153,8 +153,8 @@ Do not add a new business-named follow-on workflow such as `foo.comment.atom.yml
 - `prerelease` is the internal validation channel for stable delivery. Stable releases remain gated by validated prerelease artifacts.
 - `preview` is an independent early-access channel with stable-like release rigor. It should use preview versions such as `X.Y.Z-preview.N`, publish to the `preview` R2 channel, publish updater feeds under `preview/latest`, and follow stable's platform policy including the existing optional Linux enablement.
 - `stable` is the formal delivery channel. Do not make stable promotion depend on preview; stable continues to depend on prerelease only.
-- Public packaged app identity must stay channel-distinct: stable uses `Open Design`, beta uses `Open Design Beta`, prerelease uses `Open Design Prerelease`, and preview uses `Open Design Preview`. Do not ship beta, prerelease, or preview mac DMGs whose drag-install app bundle is `Open Design.app`.
-- Windows beta updater validation must use the real beta namespace `release-beta-win`; otherwise a local beta-like namespace can create a separate uninstall registry key while looking like the same `Open Design Beta` app. See `tools/pack/AGENTS.md` for the architecture map and high-confidence acceptance harness.
+- Public packaged app identity must stay channel-distinct: stable uses `MonoField`, beta uses `MonoField Beta`, prerelease uses `MonoField Prerelease`, and preview uses `MonoField Preview`. Do not ship beta, prerelease, or preview mac DMGs whose drag-install app bundle is `MonoField.app`.
+- Windows beta updater validation must use the real beta namespace `release-beta-win`; otherwise a local beta-like namespace can create a separate uninstall registry key while looking like the same `MonoField Beta` app. See `tools/pack/AGENTS.md` for the architecture map and high-confidence acceptance harness.
 
 ## Boundary constraints
 
@@ -174,14 +174,14 @@ Do not add a new business-named follow-on workflow such as `foo.comment.atom.yml
 
 ## Capability exposure (UI/CLI dual-track)
 
-Every user-facing capability must be reachable through both the web UI **and** the `od` CLI (`apps/daemon/src/cli.ts`). Shipping a feature with only one of the two surfaces is a regression.
+Every user-facing capability must be reachable through both the web UI **and** the `monofield` CLI (`apps/daemon/src/cli.ts`). Shipping a feature with only one of the two surfaces is a regression.
 
-- The CLI is the embeddability contract. External agents (hermes-agent, openclaw, custom Slack/Discord bots, packaged runtimes invoked from another shell) drive Open Design through `od` subcommands — they do not render the web UI. If a capability is UI-only, it cannot be composed into those external agents.
+- The CLI is the embeddability contract. External agents drive MonoField through `monofield` subcommands — they do not render the web UI. If a capability is UI-only, it cannot be composed into those external agents.
 - Both surfaces must call the same `/api/*` endpoints; do not let the CLI talk to one shape and the UI to another. The daemon HTTP layer is the single source of truth, with `packages/contracts` carrying the shared DTOs.
 - The CLI form must support `--json` for machine-readable output and accept long-form prompts via `--prompt-file <path|->`, so jobs that pipe through `xargs`, `jq`, and `<heredoc` stay clean.
-- Adding a new capability is a three-step closure: HTTP endpoint in `apps/daemon/src/*-routes.ts` (with a contract type in `packages/contracts/src/api/`), UI surface in `apps/web/src/`, and `od <capability>` subcommand in `apps/daemon/src/cli.ts` registered through `SUBCOMMAND_MAP`. Land all three in the same PR; do not stage them across PRs.
+- Adding a new capability is a three-step closure: HTTP endpoint in `apps/daemon/src/*-routes.ts` (with a contract type in `packages/contracts/src/api/`), UI surface in `apps/web/src/`, and `monofield <capability>` subcommand in `apps/daemon/src/cli.ts` registered through `SUBCOMMAND_MAP`. Land all three in the same PR; do not stage them across PRs.
 - The PR template's Surface area checklist must reflect *both* surfaces. If you ticked UI, tick CLI too — and vice-versa — or explain in the PR body why the missing surface is genuinely not applicable (e.g. an internal-only daemon health probe). "I'll do the CLI later" is not a valid reason.
-- Existing reference points: `od automation …` mirrors the Automations tab against `/api/routines`; `od plugin …`, `od ui …`, `od project …`, `od media …`, `od mcp …`, `od research …` follow the same shape. Copy that pattern for new capabilities.
+- Existing reference points: `monofield automation …` mirrors the Automations tab against `/api/routines`; `monofield plugin …`, `monofield ui …`, `monofield project …`, `monofield media …`, `monofield mcp …`, `monofield research …` follow the same shape. Copy that pattern for new capabilities.
 
 ## Git commit policy
 
@@ -303,7 +303,7 @@ pnpm tools-dev run web --daemon-port 17456 --web-port 17573
 pnpm tools-dev status --json
 pnpm tools-dev logs --json
 pnpm tools-dev inspect desktop status --json
-pnpm tools-dev inspect desktop screenshot --path /tmp/open-design.png
+pnpm tools-dev inspect desktop screenshot --path /tmp/monofield.png
 pnpm tools-dev stop
 pnpm tools-dev check
 ```
@@ -353,7 +353,7 @@ Desktop queries runtime status through sidecar IPC. The web URL comes from `tool
 
 ## How are sidecar-proto, sidecar, and platform split?
 
-`@open-design/sidecar-proto` owns Open Design app/mode/source constants, namespace validation, stamp fields/flags, IPC message schema, status shapes, and error semantics. `@open-design/sidecar` provides only generic bootstrap, IPC transport, path/runtime resolution, launch env, and JSON runtime files. `@open-design/platform` provides only generic OS process stamp serialization, command parsing, and process matching/search primitives, consuming the proto descriptor.
+`@open-design/sidecar-proto` owns MonoField app/mode/source constants, namespace validation, stamp fields/flags, IPC message schema, status shapes, and error semantics. `@open-design/sidecar` provides only generic bootstrap, IPC transport, path/runtime resolution, launch env, and JSON runtime files. `@open-design/platform` provides only generic OS process stamp serialization, command parsing, and process matching/search primitives, consuming the proto descriptor.
 
 ## When is `pnpm install` required?
 

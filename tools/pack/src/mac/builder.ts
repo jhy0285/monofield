@@ -108,7 +108,7 @@ export async function runElectronBuilder(
     executableName: identity.executableName,
     extraMetadata: {
       main: "./main.cjs",
-      name: "open-design-packaged-app",
+      name: "monofield-packaged-app",
       productName: identity.productName,
       version: packageVersion,
     },
@@ -136,7 +136,7 @@ export async function runElectronBuilder(
     publish: [
       {
         provider: "generic",
-        url: "https://updates.invalid/open-design",
+        url: "https://updates.invalid/monofield",
       },
     ],
   };

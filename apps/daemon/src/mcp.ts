@@ -1,4 +1,4 @@
-// `od mcp` - stdio MCP server that proxies project tool calls to the
+// `monofield mcp` - stdio MCP server that proxies project tool calls to the
 // running daemon's HTTP API. Lets a coding agent in a *different* repo
 // (Claude Code, Cursor, Zed) pull files from a local MonoField
 // project and create project-scoped artifacts without the
@@ -1490,7 +1490,7 @@ async function getFile(baseUrl: string, project: string, relPath: string, active
   const mime = ((resp.headers.get('content-type') || 'application/octet-stream').split(';')[0] ?? 'application/octet-stream').trim();
   if (!isTextualMime(mime)) {
     return errorResult(
-      `file at "${relPath}" has mime "${mime}"; binary content is not yet supported by od mcp. Use list_files to inspect its metadata.`,
+      `file at "${relPath}" has mime "${mime}"; binary content is not yet supported by monofield mcp. Use list_files to inspect its metadata.`,
     );
   }
   const text = await resp.text();

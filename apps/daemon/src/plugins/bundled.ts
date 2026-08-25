@@ -2,7 +2,7 @@
 //
 // On daemon startup, scan `<repo-root>/plugins/_official/**` for
 // folders that look like installable plugin manifests (a SKILL.md
-// + open-design.json pair) and register every match into the
+// + monofield.json pair) and register every match into the
 // `installed_plugins` table under `source_kind='bundled'` /
 // `trust='bundled'`. Bundled plugins are the preinstalled cache of the
 // official registry source: they can carry marketplace provenance while
@@ -11,7 +11,7 @@
 // inside the repo so a daemon upgrade rotates them in lockstep with the
 // daemon code.
 //
-// `od plugin uninstall` of a bundled plugin is rejected by the
+// `monofield plugin uninstall` of a bundled plugin is rejected by the
 // installer (a future patch); for now, removing the row leaves the
 // next boot to re-register, so it's safe.
 //
@@ -30,6 +30,7 @@ import {
   type RegistryRoots,
 } from './registry.js';
 import type { InstalledPluginRecord, MarketplaceTrust } from '@open-design/contracts';
+import { resolveExistingPluginManifest } from './manifest-file.js';
 
 type SqliteDb = Database.Database;
 
@@ -103,9 +104,9 @@ export async function registerBundledPlugins(
     // We try the direct shape first, then recurse one level if the
     // tier directory itself isn't a manifest folder.
     const tierAbs = path.join(input.bundledRoot, tier.name);
-    const tierManifest = path.join(tierAbs, 'open-design.json');
-    if (await pathExists(tierManifest)) {
-      // Direct: <bundledRoot>/<plugin-id>/open-design.json
+    const tierManifest = resolveExistingPluginManifest(tierAbs);
+    if (tierManifest && await pathExists(tierManifest)) {
+      // Direct: <bundledRoot>/<plugin-id>/monofield.json (or legacy manifest)
       if (!isBundledPluginAllowed(tier.name, input.allowedPluginIds)) continue;
       await registerOne({ folder: tierAbs, folderId: tier.name, out, warnings, seenFolderIds, input });
       continue;
@@ -120,8 +121,8 @@ export async function registerBundledPlugins(
       if (!entry.isDirectory()) continue;
       if (!isBundledPluginAllowed(entry.name, input.allowedPluginIds)) continue;
       const folder = path.join(tierAbs, entry.name);
-      const manifest = path.join(folder, 'open-design.json');
-      if (!(await pathExists(manifest))) continue;
+      const manifest = resolveExistingPluginManifest(folder);
+      if (!manifest || !(await pathExists(manifest))) continue;
       await registerOne({ folder, folderId: entry.name, out, warnings, seenFolderIds, input });
     }
   }

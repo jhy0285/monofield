@@ -1,4 +1,4 @@
-// Phase 4 / spec §14 — `od plugin export <projectId> --as <target>`.
+// Phase 4 / spec §14 — `monofield plugin export <projectId> --as <target>`.
 //
 // Materialises a publish-ready folder from the AppliedPluginSnapshot
 // the project was created against. The exporter does NOT modify the
@@ -7,15 +7,15 @@
 // can re-publish to anthropics/skills, awesome-agent-skills, clawhub,
 // or skills.sh. Three targets:
 //
-//   - `od`            → SKILL.md + open-design.json (canonical OD shape).
+//   - `monofield`     → SKILL.md + monofield.json (canonical shape).
 //   - `claude-plugin` → SKILL.md + .claude-plugin/plugin.json (Claude
 //                       Code listing format).
 //   - `agent-skill`   → SKILL.md only (every catalog accepts this).
 //
 // The export is best-effort: it pulls SKILL.md straight off the
-// installed plugin's fs_path, and reconstructs open-design.json from
+// installed plugin's fs_path, and reconstructs monofield.json from
 // the cached `manifest_json` so a publishable snapshot is reproducible
-// even after an `od plugin update` rotates the live source.
+// even after a `monofield plugin update` rotates the live source.
 
 import path from 'node:path';
 import { promises as fsp } from 'node:fs';
@@ -87,7 +87,7 @@ export async function exportPlugin(input: ExportInput): Promise<ExportResult> {
 
   if (input.target === 'od') {
     const manifest = buildPortableManifest(snapshot, plugin?.manifest.license);
-    const manifestPath = path.join(folder, 'open-design.json');
+    const manifestPath = path.join(folder, 'monofield.json');
     await fsp.writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
     written.push(manifestPath);
   }
@@ -121,7 +121,7 @@ export async function exportPlugin(input: ExportInput): Promise<ExportResult> {
     `- Manifest digest: \`${snapshot.manifestSourceDigest}\``,
     `- Task kind: \`${snapshot.taskKind}\``,
     '',
-    'This folder was produced by `od plugin export`.',
+    'This folder was produced by `monofield plugin export`.',
     '',
   ].join('\n');
   const readmePath = path.join(folder, 'README.md');
@@ -160,7 +160,7 @@ async function readSkillBody(
     '---',
     `name: ${snapshot.pluginId}`,
     `description: ${snapshot.pluginDescription ?? snapshot.pluginTitle ?? snapshot.pluginId}`,
-    `od:`,
+    `monofield:`,
     `  scenario: general`,
     '---',
     '',
@@ -177,14 +177,14 @@ async function readSkillBody(
 function buildPortableManifest(snapshot: AppliedPluginSnapshot, sourceLicense?: string): Record<string, unknown> {
   const license = typeof sourceLicense === 'string' && sourceLicense.trim() ? sourceLicense.trim() : null;
   return {
-    $schema:     'https://open-design.ai/schemas/plugin.v1.json',
+    $schema:     'https://raw.githubusercontent.com/jhy0285/monofield/main/docs/schemas/monofield.plugin.v1.json',
     specVersion: snapshot.pluginSpecVersion ?? '1.0.0',
     name:        snapshot.pluginId,
     title:       snapshot.pluginTitle ?? snapshot.pluginId,
     version:     snapshot.pluginVersion,
     description: snapshot.pluginDescription ?? '',
     ...(license ? { license } : {}),
-    od: {
+    monofield: {
       kind:     'skill',
       taskKind: snapshot.taskKind,
       ...(snapshot.query ? { useCase: { query: snapshot.query } } : {}),

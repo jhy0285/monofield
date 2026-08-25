@@ -92,6 +92,7 @@ export * from './installer.js';
 export * from './lockfile.js';
 export * from './persistence.js';
 export * from './marketplaces.js';
+export * from './manifest-file.js';
 export * from './pipeline.js';
 export * from './pipeline-runner.js';
 export * from './publish.js';

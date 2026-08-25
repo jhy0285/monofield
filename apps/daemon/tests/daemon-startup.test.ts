@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseDaemonCliStartupArgs } from '../src/daemon-startup.js';
+import {
+  applyMonoFieldEnvironmentAliases,
+  parseDaemonCliStartupArgs,
+} from '../src/daemon-startup.js';
 
 describe('daemon startup CLI parsing', () => {
   it('parses the documented daemon startup flags', () => {
@@ -23,6 +26,33 @@ describe('daemon startup CLI parsing', () => {
         port: 7345,
       },
     });
+  });
+
+  it('prefers canonical MonoField environment defaults', () => {
+    expect(parseDaemonCliStartupArgs([], {
+      MONOFIELD_BIND_HOST: '127.0.0.3',
+      MONOFIELD_PORT: '8345',
+      OD_BIND_HOST: '127.0.0.2',
+      OD_PORT: '7345',
+    })).toEqual({
+      ok: true,
+      config: {
+        host: '127.0.0.3',
+        open: true,
+        port: 8345,
+      },
+    });
+  });
+
+  it('mirrors every canonical feature variable to the internal compatibility prefix', () => {
+    const env = {
+      MONOFIELD_CRITIQUE_ENABLED: '1',
+      MONOFIELD_MEDIA_CONFIG_DIR: 'C:/mono/media',
+      OD_MEDIA_CONFIG_DIR: 'C:/legacy/media',
+    } as NodeJS.ProcessEnv;
+    applyMonoFieldEnvironmentAliases(env);
+    expect(env.OD_CRITIQUE_ENABLED).toBe('1');
+    expect(env.OD_MEDIA_CONFIG_DIR).toBe('C:/legacy/media');
   });
 
   it('falls back to loopback when bind host input is blank', () => {
@@ -48,7 +78,7 @@ describe('daemon startup CLI parsing', () => {
     expect(parseDaemonCliStartupArgs(['browser', 'snapshot', '--url', 'https://example.test/'], {})).toEqual({
       ok: false,
       kind: 'error',
-      message: 'unknown command: od browser',
+      message: 'unknown command: monofield browser',
     });
   });
 

@@ -15,8 +15,8 @@ export interface AgentGuideOptions {
   /** Live daemon URL detected at modal-open time. Defaults to the documented port. */
   daemonUrl?: string;
   /**
-   * Optional `od` binary path / hint. When provided we mention it in the
-   * setup checklist so the agent knows whether to run `od …` directly or
+   * Optional `monofield` binary path / hint. When provided we mention it in the
+   * setup checklist so the agent knows whether to run `monofield …` directly or
    * spawn the packaged binary.
    */
   cliHint?: string;
@@ -35,7 +35,7 @@ export function buildAgentGuideMarkdown(options: AgentGuideOptions = {}): string
   lines.push(
     'You are a coding agent (Claude Code, Codex, Cursor, openclaw, hermes, or similar). ' +
       'The user wants MonoField wired into your workflow. MonoField is a local ' +
-      'privileged daemon (`od`) plus a Skills + Design-Systems registry that exposes ' +
+      'privileged daemon (`monofield`) plus a Skills + Design-Systems registry that exposes ' +
       'four interchangeable surfaces: CLI, HTTP API, MCP, and Skills.',
   );
   lines.push('');
@@ -56,15 +56,15 @@ export function buildAgentGuideMarkdown(options: AgentGuideOptions = {}): string
   lines.push('');
   lines.push('   If it 404s or times out, ask the user to run `pnpm tools-dev` (dev) or open the MonoField app (packaged).');
   lines.push('');
-  lines.push('2. Detect available agent CLIs and confirm `od` is on PATH:');
+  lines.push('2. Detect available agent CLIs and confirm `monofield` is on PATH:');
   lines.push('');
   lines.push('   ```bash');
-  lines.push('   od doctor');
-  lines.push('   od status --json');
+  lines.push('   monofield doctor');
+  lines.push('   monofield status --json');
   lines.push('   ```');
   if (options.cliHint) {
     lines.push('');
-    lines.push(`   The user reported \`od\` at: \`${options.cliHint}\``);
+    lines.push(`   The user reported \`monofield\` at: \`${options.cliHint}\``);
   }
   lines.push('');
   lines.push('3. Pull the MCP install snippet (use it instead of hand-writing `mcpServers` config):');
@@ -83,7 +83,7 @@ export function buildAgentGuideMarkdown(options: AgentGuideOptions = {}): string
   lines.push('');
   lines.push('   ```bash');
   lines.push(`   curl -s ${daemonUrl}/api/skills | jq '.skills | length'`);
-  lines.push('   od skills list --json');
+  lines.push('   monofield skills list --json');
   lines.push('   ```');
   lines.push('');
 

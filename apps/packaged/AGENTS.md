@@ -7,7 +7,7 @@ Follow the root `AGENTS.md` and `apps/AGENTS.md` first. This app owns only the p
 - Packaged Electron entry glue.
 - Packaged config loading.
 - Runtime startup of daemon/web sidecars before desktop main.
-- `od://` packaged entry routing to the internal web runtime.
+- `monofield://` packaged entry routing to the internal web runtime.
 
 ## Does not own
 

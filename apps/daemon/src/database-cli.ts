@@ -8,19 +8,19 @@ export async function runDatabaseCli(args: string[], helpers: {
   const subcommand = args[0];
   if (!subcommand || subcommand === "help" || args.includes("--help") || args.includes("-h")) {
     console.log(`Usage:
-  od database list [--json] [--daemon-url <url>]
-  od database schemas [connection-id] [--json] [--daemon-url <url>]
-  od database describe [connection-id] <schema> <table> [--json] [--daemon-url <url>]
-  od database sample [connection-id] <schema> <table> [--limit <1-20>] [--json] [--daemon-url <url>]
-  od database inspect [connection-id] --tables-file <path> [--limit <1-20>] [--concurrency <8|16|32>] [--json] [--daemon-url <url>]
-  od database mutate [connection-id] --request-file <path> [--json] [--daemon-url <url>]
-  od database candidates <project-id> [--schema <schema>] [--json] [--daemon-url <url>]
+  monofield database list [--json] [--daemon-url <url>]
+  monofield database schemas [connection-id] [--json] [--daemon-url <url>]
+  monofield database describe [connection-id] <schema> <table> [--json] [--daemon-url <url>]
+  monofield database sample [connection-id] <schema> <table> [--limit <1-20>] [--json] [--daemon-url <url>]
+  monofield database inspect [connection-id] --tables-file <path> [--limit <1-20>] [--concurrency <8|16|32>] [--json] [--daemon-url <url>]
+  monofield database mutate [connection-id] --request-file <path> [--json] [--daemon-url <url>]
+  monofield database candidates <project-id> [--schema <schema>] [--json] [--daemon-url <url>]
 
 Agent runtime form:
-  "$OD_NODE_BIN" "$OD_BIN" database <command> ...
+  "$MONOFIELD_NODE_BIN" "$MONOFIELD_BIN" database <command> ...
 
 Connection credentials are configured only in the MonoField desktop app.
-When OD_PROJECT_DATABASE_ID is present, the connection id may be omitted.
+When MONOFIELD_PROJECT_DATABASE_ID is present, the connection id may be omitted.
 Reads follow the saved read policy. Structured INSERT, UPDATE, and DELETE
 follow the selected access policy: read only, approve each write, or always
 allow structured writes. UPDATE/DELETE require equality filters and are capped
@@ -33,7 +33,10 @@ at 100 rows. DDL and arbitrary SQL are never accepted.`);
   const base = (await helpers.baseUrl(flags)).replace(/\/$/, "");
   let path: string;
   let init: RequestInit | undefined;
-  const defaultConnectionId = process.env.OD_PROJECT_DATABASE_ID?.trim() ?? "";
+  const defaultConnectionId = (
+    process.env.MONOFIELD_PROJECT_DATABASE_ID
+      ?? process.env.OD_PROJECT_DATABASE_ID
+  )?.trim() ?? "";
   const usesDefault = Boolean(defaultConnectionId) && (
     (subcommand === 'schemas' && values.length === 0)
     || ((subcommand === 'describe' || subcommand === 'sample') && values.length === 2)
@@ -83,7 +86,7 @@ at 100 rows. DDL and arbitrary SQL are never accepted.`);
     catch { throw new Error('mutation request file must contain valid JSON'); }
     if (request == null || typeof request !== 'object' || Array.isArray(request)) throw new Error('mutation request must be a JSON object');
     path = `/api/database/connections/${encodeURIComponent(connectionId)}/mutations`;
-    const token = process.env.OD_TOOL_TOKEN?.trim();
+    const token = (process.env.MONOFIELD_TOOL_TOKEN ?? process.env.OD_TOOL_TOKEN)?.trim();
     if (!token) throw new Error('mutate is available only inside an active MonoField project run');
     init = {
       method: 'POST',
@@ -91,10 +94,10 @@ at 100 rows. DDL and arbitrary SQL are never accepted.`);
       body: JSON.stringify(request),
     };
   } else {
-    throw new Error(`invalid database command; run \`od database help\``);
+    throw new Error(`invalid database command; run \`monofield database help\``);
   }
   if (subcommand !== 'candidates') {
-    const token = process.env.OD_TOOL_TOKEN?.trim();
+    const token = (process.env.MONOFIELD_TOOL_TOKEN ?? process.env.OD_TOOL_TOKEN)?.trim();
     if (!token) throw new Error('database access is available only inside an active MonoField project run');
     init = {
       ...init,

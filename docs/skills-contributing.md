@@ -4,11 +4,11 @@
 
 > Want to read the protocol spec instead? See [`skills-protocol.md`](skills-protocol.md). This file is the **how-to** for shipping a skill upstream — what to write, how to run it locally, what we'll send back at review.
 
-A skill is the most leverage you can ship into Open Design without writing framework code. One folder, one Markdown file with frontmatter, a hand-built example, and the picker shows it. This guide walks you through the path from `git clone` to merged PR, plus the bar we hold skill PRs to and the patterns that get bounced.
+A skill is the most leverage you can ship into MonoField without writing framework code. One folder, one Markdown file with frontmatter, a hand-built example, and the picker shows it. This guide walks you through the path from `git clone` to merged PR, plus the bar we hold skill PRs to and the patterns that get bounced.
 
 If you only have ten seconds, the picture is:
 
-> **Drop a folder under `skills/`, restart the daemon, your skill shows up in the picker. The whole rest of this doc is about making that folder good enough to merge.**
+> **Drop a folder under `skills/`, restart the daemon, your skill shows up in the picker. The whole rest of this doc is about making that folder gomonofield enough to merge.**
 
 ---
 
@@ -16,8 +16,8 @@ If you only have ten seconds, the picture is:
 
 ```bash
 # 1. Fork & clone
-git clone git@github.com:<your-username>/open-design.git
-cd open-design
+git clone git@github.com:<your-username>/monofield.git
+cd monofield
 git checkout -b skill/<your-skill-name>
 
 # 2. Bootstrap (Node 24, pnpm 10.33.x)
@@ -58,7 +58,7 @@ A skill is a **recipe for producing one kind of artifact**. Not a feature, not a
 - "A `DESIGN.md` for the Linear brand sampled from their site" → design-system-skill
 - "A 9:16 short-form video reel from a script + b-roll prompts" → video-skill
 - "A square poster from a one-line brief" → image-skill
-- "A 30-second jingle from a mood description" → audio-skill
+- "A 30-second jingle from a momonofield description" → audio-skill
 
 **No:**
 - A wrapper around a third-party API (Stripe, Alipay, Slack API, GitHub API). That's a feature; submit it via the agent / daemon path, not as a skill.
@@ -67,9 +67,9 @@ A skill is a **recipe for producing one kind of artifact**. Not a feature, not a
 - A duplicate of an existing skill with marginal differentiation. Before opening, search `skills/` and read the descriptions of the closest 2–3 — if you can't articulate the differentiator in one sentence, fold your work into the existing skill instead.
 - A skill whose only output is a screenshot or a video. The artifact has to be something the agent generates from a prompt, not a static asset shipped in `assets/`.
 
-**Third option: ship as an external skill bundle.** If your workflow is genuinely a recipe (not a daemon feature) but is too vendor-specific or audience-narrow to land in-tree, the skills protocol supports user-global skills via `~/.claude/skills/` (see [`skills-protocol.md` §3](skills-protocol.md#3-skill-discovery--precedence)). Publishing your bundle as a standalone repo lets users `git clone` or `od skill add` it without us taking on the maintenance surface. This is the right path for payment-provider workflows, regional marketplace integrations, in-house design systems, and similar — not a rejection, just a different distribution channel.
+**Third option: ship as an external skill bundle.** If your workflow is genuinely a recipe (not a daemon feature) but is too vendor-specific or audience-narrow to land in-tree, the skills protocol supports user-global skills via `~/.claude/skills/` (see [`skills-protocol.md` §3](skills-protocol.md#3-skill-discovery--precedence)). Publishing your bundle as a standalone repo lets users `git clone` or `monofield skill add` it without us taking on the maintenance surface. This is the right path for payment-provider workflows, regional marketplace integrations, in-house design systems, and similar — not a rejection, just a different distribution channel.
 
-If you're not sure your idea fits, **open a discussion first** ([github.com/nexu-io/open-design/discussions](https://github.com/nexu-io/open-design/discussions)) — we'd rather spend 5 minutes redirecting than have you build the wrong thing for a week.
+If you're not sure your idea fits, **open a discussion first** ([github.com/jhy0285/monofield/discussions](https://github.com/jhy0285/monofield/discussions)) — we'd rather spend 5 minutes redirecting than have you build the wrong thing for a week.
 
 ---
 
@@ -195,7 +195,7 @@ For a non-featured skill, the cheap path is to keep the source metadata complete
 
 - [ ] **Ensure `SKILL.md` has complete English display copy**: title/name, description, example prompt, and any picker metadata required by the skill schema. The localized runtime uses these fields as the fallback display path.
 - [ ] **Use optional localized display fields when useful**: `en_name` / `zh_name`, `en_description` / `zh_description`, and `od.example_prompt_i18n.<locale>`. Keep `description` and `od.example_prompt` in English because those are the fallback fields for every locale without localized copy.
-- [ ] **Run `pnpm --filter @open-design/web test` and `pnpm --filter @open-design/e2e test tests/localized-content.test.ts`** locally before pushing. These suites catch undisplayable discovered resources and verify localized fallback behavior.
+- [ ] **Run `pnpm --dir apps/web test` and `pnpm --dir e2e test tests/localized-content.test.ts`** locally before pushing. These suites catch undisplayable discovered resources and verify localized fallback behavior.
 
 ### Featured skills (optional path)
 
@@ -238,7 +238,7 @@ they don't cover this case. If you can't, fold into the existing skill instead.
 - [ ] Verified export works (PPTX / PDF / etc.) if the mode supports it
 - [ ] Ran `pnpm typecheck`
 - [ ] Verified `SKILL.md` has complete English display copy for localized fallback — **required for every skill**
-- [ ] Ran `pnpm --filter @open-design/web test` and `pnpm --filter @open-design/e2e test tests/localized-content.test.ts`; localized-content coverage is green
+- [ ] Ran `pnpm --dir apps/web test` and `pnpm --dir e2e test tests/localized-content.test.ts`; localized-content coverage is green
 
 ## Screenshot
 (Required if `od.featured` is set. Otherwise nice-to-have.)

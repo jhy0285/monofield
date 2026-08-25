@@ -99,7 +99,7 @@ export interface InstallOptions {
   marketplacePolicy?: MarketplaceSecurityPolicy;
   marketplaceEvidence?: MarketplacePackageEvidence;
   // Optional runtime-data lockfile path. Daemon routes pass
-  // `<OD_DATA_DIR>/od-plugin-lock.json`; tests can point at temp dirs.
+  // `<MONOFIELD_DATA_DIR>/monofield-plugin-lock.json`; tests can point at temp dirs.
   lockfilePath?: string;
 }
 
@@ -667,7 +667,7 @@ function marketplacePolicyFailure(opts: InstallOptions, computedIntegrity: strin
     digest: digestVerified
       ? {
           state: 'satisfied',
-          checkedBy: 'open-docs:sha256-installer',
+          checkedBy: 'monofield:sha256-installer',
           checkedAt: new Date().toISOString(),
           value: computedIntegrity,
           subjectDigest: computedIntegrity,

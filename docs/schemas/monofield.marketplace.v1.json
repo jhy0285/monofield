@@ -1,0 +1,352 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/jhy0285/monofield/main/docs/schemas/monofield.marketplace.v1.json",
+  "$comment": "Canonical MonoField marketplace schema. Legacy catalog filenames remain readable for compatibility.",
+  "title": "MonoField package marketplace index (v1)",
+  "description": "Schema for monofield-marketplace.json federated catalog files. Entries may distribute plugins, skills, workflows, or MCP servers.",
+  "type": "object",
+  "required": [
+    "specVersion",
+    "name",
+    "version",
+    "plugins"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "format": "uri"
+    },
+    "specVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "owner": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        }
+      },
+      "additionalProperties": true
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "plugins": {
+      "type": "array",
+      "description": "Marketplace package entries. The `plugins` property name is retained for v1 compatibility.",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "source",
+          "version"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "packageKind": {
+            "$ref": "#/$defs/PackageKind"
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ref": {
+            "type": "string"
+          },
+          "dist": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "archive": {
+                "type": "string"
+              },
+              "integrity": {
+                "type": "string"
+              },
+              "manifestDigest": {
+                "type": "string"
+              },
+              "oci": {
+                "$ref": "#/$defs/OciDistribution"
+              }
+            },
+            "additionalProperties": true
+          },
+          "supplyChain": {
+            "$ref": "#/$defs/SupplyChainReferences"
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "version"
+              ],
+              "properties": {
+                "version": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "packageKind": {
+                  "$ref": "#/$defs/PackageKind"
+                },
+                "source": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "ref": {
+                  "type": "string"
+                },
+                "dist": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "archive": {
+                      "type": "string"
+                    },
+                    "integrity": {
+                      "type": "string"
+                    },
+                    "manifestDigest": {
+                      "type": "string"
+                    },
+                    "oci": {
+                      "$ref": "#/$defs/OciDistribution"
+                    }
+                  },
+                  "additionalProperties": true
+                },
+                "supplyChain": {
+                  "$ref": "#/$defs/SupplyChainReferences"
+                },
+                "integrity": {
+                  "type": "string"
+                },
+                "manifestDigest": {
+                  "type": "string"
+                },
+                "deprecated": {
+                  "oneOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "yanked": {
+                  "type": "boolean"
+                },
+                "yankedAt": {
+                  "type": "string"
+                },
+                "yankReason": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "distTags": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "integrity": {
+            "type": "string"
+          },
+          "manifestDigest": {
+            "type": "string"
+          },
+          "publisher": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "github": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          },
+          "homepage": {
+            "type": "string"
+          },
+          "license": {
+            "type": "string"
+          },
+          "capabilitiesSummary": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "deprecated": {
+            "oneOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "yanked": {
+            "type": "boolean"
+          },
+          "yankedAt": {
+            "type": "string"
+          },
+          "yankReason": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "title": {
+            "type": "string"
+          },
+          "title_i18n": {
+            "$ref": "#/$defs/LocalizedText"
+          },
+          "description": {
+            "type": "string"
+          },
+          "description_i18n": {
+            "$ref": "#/$defs/LocalizedText"
+          },
+          "icon": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "$defs": {
+    "PackageKind": {
+      "type": "string",
+      "description": "The installable MonoField package type. Omitted entries retain legacy `plugin` behavior.",
+      "enum": [
+        "plugin",
+        "skill",
+        "template",
+        "mcp-server"
+      ]
+    },
+    "OciDistribution": {
+      "type": "object",
+      "description": "A content-addressed OCI distribution target. The installer must pull and verify the declared digest rather than trusting a mutable tag.",
+      "required": [
+        "reference",
+        "digest"
+      ],
+      "properties": {
+        "reference": {
+          "type": "string",
+          "minLength": 1
+        },
+        "digest": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mediaType": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": true
+    },
+    "SupplyChainReference": {
+      "type": "object",
+      "description": "A publisher-provided evidence location. Presence is not proof of verification; the installer or registry adapter must verify it locally.",
+      "required": [
+        "ref"
+      ],
+      "properties": {
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "digest": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mediaType": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": true
+    },
+    "SupplyChainReferences": {
+      "type": "object",
+      "description": "References to signature, provenance, SBOM, and organization approval evidence. These references do not grant trust by themselves.",
+      "properties": {
+        "signature": {
+          "$ref": "#/$defs/SupplyChainReference"
+        },
+        "provenance": {
+          "$ref": "#/$defs/SupplyChainReference"
+        },
+        "sbom": {
+          "$ref": "#/$defs/SupplyChainReference"
+        },
+        "approval": {
+          "$ref": "#/$defs/SupplyChainReference"
+        }
+      },
+      "additionalProperties": true
+    },
+    "LocalizedText": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  }
+}

@@ -6,7 +6,7 @@ const SAMPLE_SKILL = `---
 name: blog-post
 description: |
   A long-form article. Use when the brief asks for "blog".
-od:
+monofield:
   mode: prototype
   platform: desktop
   scenario: marketing
@@ -28,7 +28,7 @@ Produce one long-form article page.
 `;
 
 describe('adaptAgentSkill', () => {
-  it('synthesizes a v1-valid manifest from od: frontmatter', () => {
+  it('synthesizes a v1-valid manifest from monofield: frontmatter', () => {
     const result = adaptAgentSkill(SAMPLE_SKILL, { folderId: 'blog-post' });
     expect(result.manifest.name).toBe('blog-post');
     expect(result.manifest.title).toBe('Blog Post');
@@ -41,6 +41,11 @@ describe('adaptAgentSkill', () => {
     // Spec invariant I1: synthesized output must validate against the v1 schema.
     const reparsed = parseManifestObject(result.manifest);
     expect(reparsed.ok).toBe(true);
+  });
+
+  it('continues to accept legacy frontmatter as a read-only compatibility path', () => {
+    const result = adaptAgentSkill(SAMPLE_SKILL.replace('monofield:', 'od:'), { folderId: 'blog-post' });
+    expect(result.manifest.od?.mode).toBe('prototype');
   });
 
   it('falls back to folderId when frontmatter has no name', () => {

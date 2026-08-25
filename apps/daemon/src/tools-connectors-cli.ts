@@ -36,20 +36,20 @@ interface ParsedOptions {
 }
 
 const CONNECTORS_USAGE = `Usage:
-  od tools connectors list [--use-case personal_daily_digest] [--format compact]
-  od tools connectors execute --connector <id> --tool <name> --input input.json
-  od tools connectors github-design-context --repo owner/repo [--ref main] [--output context/github/owner-repo.md] [--max-files 48] [--require-connector]
-  od tools connectors local-design-context --path /path/to/project [--output context/local-code/project.md] [--max-files 48]
-  od tools connectors design-system-package-audit --path /path/to/project [--reference-package] [--fail-on-warnings]
+  monofield tools connectors list [--use-case personal_daily_digest] [--format compact]
+  monofield tools connectors execute --connector <id> --tool <name> --input input.json
+  monofield tools connectors github-design-context --repo owner/repo [--ref main] [--output context/github/owner-repo.md] [--max-files 48] [--require-connector]
+  monofield tools connectors local-design-context --path /path/to/project [--output context/local-code/project.md] [--max-files 48]
+  monofield tools connectors design-system-package-audit --path /path/to/project [--reference-package] [--fail-on-warnings]
 
 Environment:
-  OD_NODE_BIN     Node-compatible runtime for agent wrapper invocations
-  OD_BIN          MonoField CLI script for agent wrapper invocations
-  OD_DAEMON_URL   Daemon base URL injected into agent runs
-  OD_TOOL_TOKEN   Bearer token injected into agent runs
+  MONOFIELD_NODE_BIN     Node-compatible runtime for agent wrapper invocations
+  MONOFIELD_BIN          MonoField CLI script for agent wrapper invocations
+  MONOFIELD_DAEMON_URL   Daemon base URL injected into agent runs
+  MONOFIELD_TOOL_TOKEN   Bearer token injected into agent runs
 
 Agent runtime invocation:
-  "$OD_NODE_BIN" "$OD_BIN" tools connectors list --use-case personal_daily_digest --format compact
+  "$MONOFIELD_NODE_BIN" "$MONOFIELD_BIN" tools connectors list --use-case personal_daily_digest --format compact
 `;
 
 const GITHUB_CONNECTOR_ID = 'github';
@@ -248,8 +248,8 @@ function parseOptions(args: string[]): ParsedOptions | { error: string } {
 }
 
 function daemonUrl(): URL | { error: string } {
-  const rawUrl = process.env.OD_DAEMON_URL;
-  if (!rawUrl) return { error: 'OD_DAEMON_URL is required' };
+  const rawUrl = process.env.MONOFIELD_DAEMON_URL ?? process.env.OD_DAEMON_URL;
+  if (!rawUrl) return { error: 'MONOFIELD_DAEMON_URL is required' };
   try {
     const url = new URL(rawUrl);
     url.pathname = url.pathname.replace(/\/+$/u, '');
@@ -257,12 +257,12 @@ function daemonUrl(): URL | { error: string } {
     url.hash = '';
     return url;
   } catch {
-    return { error: 'OD_DAEMON_URL must be a valid URL' };
+    return { error: 'MONOFIELD_DAEMON_URL must be a valid URL' };
   }
 }
 function toolToken(): string | { error: string } {
-  const token = process.env.OD_TOOL_TOKEN;
-  if (!token) return { error: 'OD_TOOL_TOKEN is required' };
+  const token = process.env.MONOFIELD_TOOL_TOKEN ?? process.env.OD_TOOL_TOKEN;
+  if (!token) return { error: 'MONOFIELD_TOOL_TOKEN is required' };
   return token;
 }
 
@@ -1392,7 +1392,7 @@ function renderGithubDesignEvidenceMarkdown(evidence: GithubDesignEvidence): str
     '## Intake Status',
     '',
     evidence.method === 'connector'
-      ? '- Connector platform fallback was used through `od tools connectors`.'
+      ? '- Connector platform fallback was used through `monofield tools connectors`.'
       : '- This-device intake was used through local git or GitHub CLI.',
   ];
   if (evidence.warnings.length > 0) {
@@ -1470,7 +1470,7 @@ function renderLocalDesignEvidenceMarkdown(evidence: LocalDesignEvidence): strin
     '',
     '## Intake Status',
     '',
-    '- Local source folder was read through bounded `od tools connectors local-design-context` intake.',
+    '- Local source folder was read through bounded `monofield tools connectors local-design-context` intake.',
   ];
   if (evidence.warnings.length > 0) {
     lines.push('', '## Warnings', '', ...evidence.warnings.map((warning) => `- ${warning}`));
@@ -1663,7 +1663,7 @@ async function runGithubDesignContext(options: ParsedOptions): Promise<ToolCliRe
       const connectorReason = 'error' in baseUrl
         ? baseUrl.error
         : typeof token === 'string'
-          ? 'OD_TOOL_TOKEN is not available'
+          ? 'MONOFIELD_TOOL_TOKEN is not available'
           : token.error;
       if (options.requireConnector) {
         return fail('Required GitHub repository intake could not read the repository through git, GitHub CLI, or connector', {

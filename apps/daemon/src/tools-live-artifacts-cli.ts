@@ -24,19 +24,19 @@ interface ParsedOptions {
 }
 
 const LIVE_ARTIFACTS_USAGE = `Usage:
-  od tools live-artifacts create --input artifact.json
-  od tools live-artifacts list [--format compact]
-  od tools live-artifacts refresh --artifact-id <id>
-  od tools live-artifacts update --artifact-id <id> --input artifact.json
+  monofield tools live-artifacts create --input artifact.json
+  monofield tools live-artifacts list [--format compact]
+  monofield tools live-artifacts refresh --artifact-id <id>
+  monofield tools live-artifacts update --artifact-id <id> --input artifact.json
 
 Environment:
-  OD_NODE_BIN     Node-compatible runtime for agent wrapper invocations
-  OD_BIN          MonoField CLI script for agent wrapper invocations
-  OD_DAEMON_URL   Daemon base URL injected into agent runs
-  OD_TOOL_TOKEN   Bearer token injected into agent runs
+  MONOFIELD_NODE_BIN     Node-compatible runtime for agent wrapper invocations
+  MONOFIELD_BIN          MonoField CLI script for agent wrapper invocations
+  MONOFIELD_DAEMON_URL   Daemon base URL injected into agent runs
+  MONOFIELD_TOOL_TOKEN   Bearer token injected into agent runs
 
 Agent runtime invocation:
-  "$OD_NODE_BIN" "$OD_BIN" tools live-artifacts list --format compact
+  "$MONOFIELD_NODE_BIN" "$MONOFIELD_BIN" tools live-artifacts list --format compact
 `;
 
 function writeJson(value: unknown, stream: NodeJS.WriteStream = process.stdout): void {
@@ -81,8 +81,8 @@ function parseOptions(args: string[]): ParsedOptions | { error: string } {
 }
 
 function daemonUrl(): URL | { error: string } {
-  const rawUrl = process.env.OD_DAEMON_URL;
-  if (!rawUrl) return { error: 'OD_DAEMON_URL is required' };
+  const rawUrl = process.env.MONOFIELD_DAEMON_URL ?? process.env.OD_DAEMON_URL;
+  if (!rawUrl) return { error: 'MONOFIELD_DAEMON_URL is required' };
   try {
     const url = new URL(rawUrl);
     url.pathname = url.pathname.replace(/\/+$/u, '');
@@ -90,13 +90,13 @@ function daemonUrl(): URL | { error: string } {
     url.hash = '';
     return url;
   } catch {
-    return { error: 'OD_DAEMON_URL must be a valid URL' };
+    return { error: 'MONOFIELD_DAEMON_URL must be a valid URL' };
   }
 }
 
 function toolToken(): string | { error: string } {
-  const token = process.env.OD_TOOL_TOKEN;
-  if (!token) return { error: 'OD_TOOL_TOKEN is required' };
+  const token = process.env.MONOFIELD_TOOL_TOKEN ?? process.env.OD_TOOL_TOKEN;
+  if (!token) return { error: 'MONOFIELD_TOOL_TOKEN is required' };
   return token;
 }
 

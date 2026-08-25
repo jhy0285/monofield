@@ -12,7 +12,7 @@ import type {
   ImportGitHubDesignSystemResponse,
   ImportShadcnDesignSystemRequest,
   ImportShadcnDesignSystemResponse,
-  OpenDocsGithubLatestReleaseResponse,
+  MonoFieldGithubLatestReleaseResponse,
   ImportLocalDesignSystemRequest,
   ImportLocalDesignSystemResponse,
   ReplaceProjectWorkingDirResponse,
@@ -1221,9 +1221,9 @@ export type LatestGithubReleaseInfo = {
 
 export async function fetchLatestGithubReleaseInfo(): Promise<LatestGithubReleaseInfo | null> {
   try {
-    const resp = await fetch('/api/github/open-docs/releases/latest');
+    const resp = await fetch('/api/github/monofield/releases/latest');
     if (!resp.ok) return null;
-    const json = (await resp.json()) as Partial<OpenDocsGithubLatestReleaseResponse>;
+    const json = (await resp.json()) as Partial<MonoFieldGithubLatestReleaseResponse>;
     if (typeof json.tag_name !== 'string' || typeof json.html_url !== 'string') return null;
     return {
       tagName: json.tag_name,

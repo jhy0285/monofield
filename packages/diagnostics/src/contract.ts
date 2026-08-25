@@ -9,6 +9,6 @@
  */
 export const DIAGNOSTICS_EXPORT_PATH = "/api/diagnostics/export";
 
-export const DIAGNOSTICS_FILENAME_PREFIX = "open-design-diagnostics";
+export const DIAGNOSTICS_FILENAME_PREFIX = "monofield-diagnostics";
 
 export const DIAGNOSTICS_CONTENT_TYPE = "application/zip";

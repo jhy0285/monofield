@@ -488,7 +488,7 @@ async function writeAssembledApp(
   const version = await readPackagedVersion(config);
   const packageVersion = electronBuilderVersionForAppVersion(version);
   const packageJson = {
-    name: "open-design-packaged",
+    name: "monofield-packaged",
     version: packageVersion,
     private: true,
     main: "main.cjs",
@@ -497,7 +497,7 @@ async function writeAssembledApp(
     author: "MonoField contributors",
     repository: {
       type: "git",
-      url: "https://github.com/nexu-io/open-design.git"
+      url: "https://github.com/jhy0285/monofield.git"
     }
   };
   await writeFile(paths.assembledPackageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
@@ -550,7 +550,7 @@ async function writeLinuxBuilderConfig(config: ToolPackConfig, paths: LinuxPaths
     executableName: PRODUCT_NAME,
     extraMetadata: {
       main: "./main.cjs",
-      name: "open-design-packaged-app",
+      name: "monofield-packaged-app",
       productName: PRODUCT_NAME,
       version: packageVersion,
       ...(config.portable ? {} : { odToolsPackRuntimeRoot: config.roots.runtime.namespaceBaseRoot }),

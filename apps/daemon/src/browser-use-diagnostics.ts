@@ -137,7 +137,7 @@ export function renderBrowserUseUnavailablePrompt(state: BrowserUseRunState | nu
       `The user approved the current in-app browser tab for this run. Session: \`${session}\`.`,
       'Use the MonoField CLI through the provided runtime wrapper. Do not launch another browser and do not use arbitrary JavaScript.',
       'The host resolves returned DOM selectors to safe coordinates and drives a visible native pointer for click, hover, focus, and drag when possible. It automatically falls back to the bounded DOM executor when native hit testing is unavailable; do not ask the user to choose a low-level mode.',
-      'Wrapper prefix — PowerShell: `& $env:OD_NODE_BIN $env:OD_BIN`; POSIX: `"$OD_NODE_BIN" "$OD_BIN"`.',
+      'Wrapper prefix — PowerShell: `& $env:MONOFIELD_NODE_BIN $env:MONOFIELD_BIN`; POSIX: `"$MONOFIELD_NODE_BIN" "$MONOFIELD_BIN"`.',
       '',
       'Append one of these command arguments to that prefix:',
       `- \`browser status --session ${session}\``,

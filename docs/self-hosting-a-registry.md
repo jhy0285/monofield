@@ -1,6 +1,6 @@
-# Self-hosting An Open Design Registry
+# Self-hosting An MonoField Registry
 
-An Open Design registry is a source of `open-design-marketplace.json` plus the
+An MonoField registry is a source of `monofield-marketplace.json` plus the
 review process that produces it. In v1 this can be a static GitHub repository,
 GitHub Enterprise, S3/R2, or any HTTPS host.
 
@@ -8,19 +8,19 @@ GitHub Enterprise, S3/R2, or any HTTPS host.
 
 ```text
 plugins/registry/
-  official/open-design-marketplace.json
-  community/open-design-marketplace.json
+  official/monofield-marketplace.json
+  community/monofield-marketplace.json
 plugins/community/<vendor>/<plugin-name>/
   SKILL.md
-  open-design.json
+  monofield.json
 ```
 
 The machine-readable URL is the raw JSON file:
 
 ```bash
-od marketplace add https://example.com/open-design-marketplace.json --trust restricted
-od marketplace refresh <id>
-od marketplace search "deck" --json
+monofield marketplace add https://example.com/monofield-marketplace.json --trust restricted
+monofield marketplace refresh <id>
+monofield marketplace search "deck" --json
 ```
 
 Do not add a GitHub tree page. The daemon validates the response as JSON and
@@ -29,8 +29,8 @@ rejects HTML.
 ## Private GitHub Or GitHub Enterprise
 
 ```bash
-od marketplace login https://github.example.com/org/plugin-registry
-od marketplace add https://raw.github.example.com/org/plugin-registry/main/open-design-marketplace.json --trust trusted
+monofield marketplace login https://github.example.com/org/plugin-registry
+monofield marketplace add https://raw.github.example.com/org/plugin-registry/main/monofield-marketplace.json --trust trusted
 ```
 
 Authentication is delegated to `gh auth login --hostname <host>`. Tokens stay
@@ -39,7 +39,7 @@ inside GitHub CLI.
 ## Doctor
 
 ```bash
-od marketplace doctor <id> --strict --json
+monofield marketplace doctor <id> --strict --json
 ```
 
 Doctor checks stable `vendor/plugin-name` IDs, source/archive presence,
@@ -60,5 +60,5 @@ database for:
 - audit logs
 - entitlements and paid distribution
 
-The CLI vocabulary stays the same: `od marketplace add/search/doctor`,
-`od plugin install/upgrade/publish/yank`.
+The CLI vocabulary stays the same: `monofield marketplace add/search/doctor`,
+`monofield plugin install/upgrade/publish/yank`.

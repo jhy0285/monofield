@@ -65,7 +65,9 @@ export function resolveStartupDistinctId(
   namespace: string,
   installationRoot?: string | null,
 ): string {
-  const dir = installationRoot?.trim() || process.env.OD_INSTALLATION_DIR?.trim();
+  const dir = installationRoot?.trim()
+    || process.env.MONOFIELD_INSTALLATION_DIR?.trim()
+    || process.env.OD_INSTALLATION_DIR?.trim();
   try {
     if (dir) {
       const raw = readFileSync(join(dir, "installation.json"), "utf8");

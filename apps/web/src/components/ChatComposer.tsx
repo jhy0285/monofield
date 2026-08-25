@@ -855,9 +855,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           `Search for: ${query}`,
           '',
           'Before answering, your first tool action must be the OD research command for your shell.',
-          'POSIX: "$OD_NODE_BIN" "$OD_BIN" research search --query "<search query>" --max-sources 5',
-          'PowerShell: & $env:OD_NODE_BIN $env:OD_BIN research search --query "<search query>" --max-sources 5',
-          'cmd.exe: "%OD_NODE_BIN%" "%OD_BIN%" research search --query "<search query>" --max-sources 5',
+          'POSIX: "$MONOFIELD_NODE_BIN" "$MONOFIELD_BIN" research search --query "<search query>" --max-sources 5',
+          'PowerShell: & $env:MONOFIELD_NODE_BIN $env:MONOFIELD_BIN research search --query "<search query>" --max-sources 5',
+          'cmd.exe: "%MONOFIELD_NODE_BIN%" "%MONOFIELD_BIN%" research search --query "<search query>" --max-sources 5',
           'Use the canonical query below as the exact search query, with safe quoting for your shell.',
           '',
           'Canonical query:',
@@ -3588,7 +3588,7 @@ function ToolsPluginsPanel({
           {plugins.length === 0 ? (
             <>
               No plugins installed yet. Browse Official or add your own with{' '}
-              <code>od plugin install &lt;source&gt;</code>.
+              <code>monofield plugin install &lt;source&gt;</code>.
             </>
           ) : query ? (
             <>No {source === 'community' ? 'Official' : 'My plugins'} results for “{query}”.</>

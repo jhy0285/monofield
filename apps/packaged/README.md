@@ -2,6 +2,7 @@
 
 Thin packaged Electron runtime entry for MonoField.
 
-This package starts the packaged daemon and web sidecars, registers the `od://`
-entry protocol, and then delegates to `@open-design/desktop/main` for the host
-window. Product logic stays in `apps/daemon`, `apps/web`, and `apps/desktop`.
+This package starts the packaged daemon and web sidecars, registers the
+`monofield://` entry protocol, and delegates to the private Desktop workspace
+package for the host window. Product logic stays in `apps/daemon`, `apps/web`,
+and `apps/desktop`.

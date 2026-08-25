@@ -200,7 +200,7 @@ export interface BrandExtractStartResponse {
 
 /**
  * POST /api/brands/:id/finalize request. The extraction agent calls this (or
- * `od brand finalize`) once it has written `brand.json` (+ `BRAND.md`, logos,
+ * `monofield brand finalize`) once it has written `brand.json` (+ `BRAND.md`, logos,
  * fonts) into the backing project: the daemon validates the kit, derives the
  * design tokens + brand-system artifacts, and registers the `user:<id>` design
  * system so the brand becomes selectable everywhere.

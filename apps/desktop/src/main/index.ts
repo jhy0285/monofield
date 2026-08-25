@@ -90,8 +90,8 @@ const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
 // driver dependency is unavailable). Keep the fallback explicitly opt-in so
 // normal packaged and development launches retain hardware acceleration.
 // This must run while Electron is still starting, before `app.whenReady()`.
-const DISABLE_HARDWARE_ACCELERATION_ENV = "OD_DESKTOP_DISABLE_HARDWARE_ACCELERATION";
-if (process.env[DISABLE_HARDWARE_ACCELERATION_ENV] === "1") {
+const DISABLE_HARDWARE_ACCELERATION_ENV = "MONOFIELD_DESKTOP_DISABLE_HARDWARE_ACCELERATION";
+if ((process.env[DISABLE_HARDWARE_ACCELERATION_ENV] ?? process.env.OD_DESKTOP_DISABLE_HARDWARE_ACCELERATION) === "1") {
   app.disableHardwareAcceleration();
 }
 
@@ -147,7 +147,7 @@ export type DesktopMainOptions = {
   discoverWebUrl?: () => Promise<string | null>;
   /**
    * Round-7 (lefarcen P2 @ runtime.ts:336): packaged builds report the
-   * renderer URL (`od://app/`) over `discoverWebUrl`, but Node-side
+   * renderer URL (`monofield://app/`) over `discoverWebUrl`, but Node-side
    * fetch can't resolve a custom Electron protocol. Optional. When
    * provided, runtime API calls (`/api/import/folder`,
    * `/api/projects/:id`) target this URL instead. tools-dev callers
@@ -529,7 +529,7 @@ function installDesktopMenu(
       });
   });
   if (!registered) {
-    console.warn("[open-design desktop] develop menu shortcut unavailable", { accelerator });
+    console.warn("[monofield desktop] develop menu shortcut unavailable", { accelerator });
   }
   return () => {
     globalShortcut.unregister(accelerator);
@@ -651,7 +651,7 @@ export async function runDesktopMain(
   const registered = await registerDesktopAuthWithDaemon(runtime, desktopAuthSecret);
   if (!registered) {
     console.warn(
-      "[open-design desktop] initial import-token handshake with daemon did not complete; " +
+      "[monofield desktop] initial import-token handshake with daemon did not complete; " +
         "first folder-import attempt will lazily retry registration before failing",
     );
   }
@@ -759,14 +759,14 @@ export async function runDesktopMain(
     void shutdown().finally(() => process.exit(0));
   }
 
-  console.info("[open-design desktop] starting desktop IPC server", { ipc: runtime.ipc });
+  console.info("[monofield desktop] starting desktop IPC server", { ipc: runtime.ipc });
   ipcServer = await createJsonIpcServer({
     socketPath: runtime.ipc,
     handler: async (message: unknown) => {
       const request = normalizeDesktopSidecarMessage(message);
       const startedAt = Date.now();
       const input = "input" in request ? summarizeDesktopIpcInput(request.input) : null;
-      console.info("[open-design desktop] desktop IPC request start", { input, type: request.type });
+      console.info("[monofield desktop] desktop IPC request start", { input, type: request.type });
       try {
         const activeDesktop = desktop;
         switch (request.type) {
@@ -807,23 +807,23 @@ export async function runDesktopMain(
             return await developmentProcessBroker.execute(request.input as DesktopDevelopmentProcessInput);
         }
       } catch (error) {
-        console.error("[open-design desktop] desktop IPC request failed", {
+        console.error("[monofield desktop] desktop IPC request failed", {
           durationMs: Date.now() - startedAt,
           error: error instanceof Error ? error.message : String(error),
           type: request.type,
         });
         throw error;
       } finally {
-        console.info("[open-design desktop] desktop IPC request end", {
+        console.info("[monofield desktop] desktop IPC request end", {
           durationMs: Date.now() - startedAt,
           type: request.type,
         });
       }
     },
   });
-  console.info("[open-design desktop] desktop IPC server listening", { ipc: runtime.ipc });
+  console.info("[monofield desktop] desktop IPC server listening", { ipc: runtime.ipc });
 
-  console.info("[open-design desktop] creating desktop runtime");
+  console.info("[monofield desktop] creating desktop runtime");
   desktop = await createDesktopRuntime({
     desktopAuthSecret,
     databaseBroker,
@@ -844,7 +844,7 @@ export async function runDesktopMain(
     updater,
     windowTitle: options.windowTitle,
   });
-  console.info("[open-design desktop] desktop runtime created");
+  console.info("[monofield desktop] desktop runtime created");
   options.onDesktopReady?.({ show: () => desktop?.show() });
   disposeMenu = installDesktopMenu(runtime, options);
   removeDiagnosticsIpc = registerDesktopDiagnosticsIpc({

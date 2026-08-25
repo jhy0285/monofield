@@ -72,7 +72,7 @@ function makeInstallInfoApp({ cliPath, port, env = {}, dataDir }: InstallInfoOpt
     const isSidecarMode = sidecarIpcPath != null && sidecarIpcPath.length > 0;
     const sidecarEnv: Record<string, string> = {};
     if (isSidecarMode) {
-      sidecarEnv[SIDECAR_ENV.IPC_PATH] = sidecarIpcPath;
+      sidecarEnv.MONOFIELD_SIDECAR_IPC_PATH = sidecarIpcPath;
     }
     const payload = buildMcpInstallPayload({
       cliPath,
@@ -175,13 +175,13 @@ describe('GET /api/mcp/install-info', () => {
     expect(res.status).toBe(200);
     const body = await readInstallInfo(res);
     expect(body.command).toBe(process.execPath);
-    // Direct `od` launches have no IPC socket; the snippet bakes the
-    // URL so the spawned `od mcp` reaches the right port without any
+    // Direct `monofield` launches have no IPC socket; the snippet bakes the
+    // URL so the spawned MCP process reaches the right port without any
     // discovery.
     expect(body.args).toEqual([cliPath, 'mcp', '--daemon-url', `http://127.0.0.1:${port}`]);
-    // env always carries OD_DATA_DIR (issue #848); no sidecar keys in
+    // env always carries MONOFIELD_DATA_DIR (issue #848); no sidecar keys in
     // a non-sidecar launch.
-    expect(body.env).toEqual({ OD_DATA_DIR: dataDir });
+    expect(body.env).toEqual({ MONOFIELD_DATA_DIR: dataDir });
     expect(body.daemonUrl).toBe(`http://127.0.0.1:${port}`);
     expect(body.platform).toBe(process.platform);
     expect(body.cliExists).toBe(true);
@@ -189,12 +189,12 @@ describe('GET /api/mcp/install-info', () => {
     expect(body.buildHint).toBeNull();
   });
 
-  it('pins OD_DATA_DIR in the env so IDE-spawned MCP processes write to the daemon data dir (issue #848)', async () => {
+  it('pins MONOFIELD_DATA_DIR in the env so IDE-spawned MCP processes write to the daemon data dir (issue #848)', async () => {
     const { port } = nonSidecar;
     const res = await fetch(`http://127.0.0.1:${port}/api/mcp/install-info`);
     const body = await readInstallInfo(res);
     expect(body.env).toBeDefined();
-    expect(body.env.OD_DATA_DIR).toBe(dataDir);
+    expect(body.env.MONOFIELD_DATA_DIR).toBe(dataDir);
   });
 
   it('rejects cross-origin requests with 403', async () => {
@@ -242,7 +242,7 @@ describe('GET /api/mcp/install-info', () => {
     expect(after - before).toBeLessThanOrEqual(1);
   });
 
-  it('sidecar launch omits --daemon-url and emits the concrete IPC path with OD_DATA_DIR', async () => {
+  it('sidecar launch omits --daemon-url and emits the concrete IPC path with MONOFIELD_DATA_DIR', async () => {
     const { port, server } = await startHarness(
       cliPath,
       {
@@ -255,8 +255,8 @@ describe('GET /api/mcp/install-info', () => {
       const body = await readInstallInfo(res);
       expect(body.args).toEqual([cliPath, 'mcp']);
       expect(body.env).toEqual({
-        OD_DATA_DIR: dataDir,
-        [SIDECAR_ENV.IPC_PATH]: '/tmp/open-design/ipc/default/daemon.sock',
+        MONOFIELD_DATA_DIR: dataDir,
+        MONOFIELD_SIDECAR_IPC_PATH: '/tmp/open-design/ipc/default/daemon.sock',
       });
     } finally {
       await new Promise<void>((done) => server?.close(() => done()));
@@ -276,8 +276,8 @@ describe('GET /api/mcp/install-info', () => {
       const body = await readInstallInfo(res);
       expect(body.args).toEqual([cliPath, 'mcp']);
       expect(body.env).toEqual({
-        OD_DATA_DIR: dataDir,
-        [SIDECAR_ENV.IPC_PATH]: '/tmp/open-design/ipc/foo/daemon.sock',
+        MONOFIELD_DATA_DIR: dataDir,
+        MONOFIELD_SIDECAR_IPC_PATH: '/tmp/open-design/ipc/foo/daemon.sock',
       });
     } finally {
       await new Promise<void>((done) => server?.close(() => done()));
@@ -298,8 +298,8 @@ describe('GET /api/mcp/install-info', () => {
       const res = await fetch(`http://127.0.0.1:${port}/api/mcp/install-info`);
       const body = await readInstallInfo(res);
       expect(body.env).toEqual({
-        OD_DATA_DIR: dataDir,
-        [SIDECAR_ENV.IPC_PATH]: '/var/run/open-design/foo/daemon.sock',
+        MONOFIELD_DATA_DIR: dataDir,
+        MONOFIELD_SIDECAR_IPC_PATH: '/var/run/open-design/foo/daemon.sock',
       });
     } finally {
       await new Promise<void>((done) => server?.close(() => done()));

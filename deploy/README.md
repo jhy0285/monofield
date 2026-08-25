@@ -1,6 +1,6 @@
 # Docker deployment
 
-This deployment ships Open Design as a single Alpine-based runtime image. The
+This deployment ships MonoField as a single Alpine-based runtime image. The
 daemon serves both the API and the built Next.js static export, so there is no
 separate nginx container.
 
@@ -14,34 +14,34 @@ Before starting:
    cp .env.example .env
    ```
 
-2. Generate a secure token (recommended unless your reverse proxy will both authenticate every request and set `OPEN_DESIGN_DISABLE_API_AUTH=1`):
+2. Generate a secure token (recommended unless your reverse proxy will both authenticate every request and set `MONOFIELD_DISABLE_API_AUTH=1`):
 
    ```bash
    openssl rand -hex 32
    ```
 
 3. Open `.env` in your editor and choose one auth mode:
-   - default: paste the token into `OD_API_TOKEN=`
-   - trusted reverse proxy that already authenticates every request: leave `OD_API_TOKEN=` empty and set `OPEN_DESIGN_DISABLE_API_AUTH=1`
+   - default: paste the token into `MONOFIELD_API_TOKEN=`
+   - trusted reverse proxy that already authenticates every request: leave `MONOFIELD_API_TOKEN=` empty and set `MONOFIELD_DISABLE_API_AUTH=1`
 
 Then pull and start the service:
 
 ```bash
-OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od:latest docker compose pull
-OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od:latest docker compose up -d --no-build
+MONOFIELD_IMAGE=ghcr.io/jhy0285/monofield:latest docker compose pull
+MONOFIELD_IMAGE=ghcr.io/jhy0285/monofield:latest docker compose up -d --no-build
 ```
 
-Use `ghcr.io/nexu-io/od:latest` for the latest stable image, or
-`ghcr.io/nexu-io/od:<version>` to pin a supported release.
+Use `ghcr.io/jhy0285/monofield:latest` for the latest stable image, or
+`ghcr.io/jhy0285/monofield:<version>` to pin a supported release.
 
 Defaults:
 
-- Host port: `127.0.0.1:7456` (`OPEN_DESIGN_PORT=8080` to publish on `127.0.0.1:8080`)
+- Host port: `127.0.0.1:7456` (`MONOFIELD_PORT=8080` to publish on `127.0.0.1:8080`)
 - Runtime data: before documenting, changing, or choosing persistent daemon
   storage, you MUST read root [`AGENTS.md`](../AGENTS.md) → **Daemon data
   directory contract**. This README MUST NOT restate it.
 - Node heap cap: `--max-old-space-size=192`
-- Compose memory cap: `384m` (`OPEN_DESIGN_MEM_LIMIT=256m` to override)
+- Compose memory cap: `384m` (`MONOFIELD_MEM_LIMIT=256m` to override)
 
 Do not publish the daemon directly on a public or shared LAN interface. The API is
 unauthenticated for non-browser clients, so remote deployments should keep Compose
@@ -49,29 +49,29 @@ bound to localhost and put an authenticated reverse proxy, SSH tunnel, or VPN in
 front of it.
 
 When exposing the service through an authenticated public IP, domain, or reverse
-proxy, set `OPEN_DESIGN_ALLOWED_ORIGINS` to the exact browser origins that should
+proxy, set `MONOFIELD_ALLOWED_ORIGINS` to the exact browser origins that should
 be allowed to call `/api`:
 
 ```bash
-OPEN_DESIGN_ALLOWED_ORIGINS=https://od.example.com,http://203.0.113.10:7456 docker compose up -d --no-build
+MONOFIELD_ALLOWED_ORIGINS=https://monofield.example.com,http://203.0.113.10:7456 docker compose up -d --no-build
 ```
 
 If the reverse proxy already authenticates every request and you do not want it
-to inject `Authorization: Bearer <OD_API_TOKEN>` upstream, set:
+to inject `Authorization: Bearer <MONOFIELD_API_TOKEN>` upstream, set:
 
 ```bash
-OPEN_DESIGN_DISABLE_API_AUTH=1
+MONOFIELD_DISABLE_API_AUTH=1
 ```
 
 Use this only for trusted deployments where the daemon is reachable strictly
 through that authenticated proxy. It disables daemon-side bearer enforcement for
 all `/api/*` requests, so direct access to the daemon must remain blocked. The
-Compose variable maps to daemon env `OD_DISABLE_API_AUTH`.
+Compose variable maps to daemon env `MONOFIELD_DISABLE_API_AUTH`.
 
 Pin a specific published image with a digest instead of the mutable `latest` tag:
 
 ```bash
-OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od@sha256:<digest> docker compose up -d --no-build
+MONOFIELD_IMAGE=ghcr.io/jhy0285/monofield@sha256:<digest> docker compose up -d --no-build
 ```
 The image intentionally does not bundle Claude/Codex/Gemini CLI binaries. Keep
 those outside the image, or build a separate private runtime layer if a server
@@ -82,7 +82,7 @@ creating its `workspace-write` sandbox, opt into Codex's full-access mode for
 all Codex runs in that deployment:
 
 ```bash
-OD_CODEX_SANDBOX=danger-full-access docker compose up -d --no-build
+MONOFIELD_CODEX_SANDBOX=danger-full-access docker compose up -d --no-build
 ```
 
 Only the exact value `danger-full-access` is supported; unknown values are
@@ -101,12 +101,12 @@ Useful overrides:
 
 ```bash
 IMAGE_NAMESPACE=your-ghcr-org deploy/scripts/publish-images.sh --arch arm64
-deploy/scripts/publish-images.sh --image ghcr.io/your-org/od:0.1.0
+deploy/scripts/publish-images.sh --image ghcr.io/your-org/monofield:0.1.0
 ```
 
 The script defaults to:
 
-- `ghcr.io/nexu-io/od:<tag>`
+- `ghcr.io/jhy0285/monofield:<tag>`
 - `linux/amd64,linux/arm64`
 - `skopeo` push strategy with registry credentials read from `~/.docker/config.json`
 - preloading base images through `skopeo` to reduce Docker Hub pull flakiness
@@ -162,9 +162,9 @@ custom `COLIMA_BUILD_SWAPFILE`, cleanup refuses to remove it unless
 
 ### Docker Desktop on macOS
 
-When running Docker Compose on macOS with `OD_API_TOKEN` enabled, Docker Desktop bridge networking may cause the daemon to see API requests as non-loopback peers. In that case, the web UI can fail with:
+When running Docker Compose on macOS with `MONOFIELD_API_TOKEN` enabled, Docker Desktop bridge networking may cause the daemon to see API requests as non-loopback peers. In that case, the web UI can fail with:
 
-`Authorization: Bearer <OD_API_TOKEN> required`
+`Authorization: Bearer <MONOFIELD_API_TOKEN> required`
 
 Workaround:
 
@@ -175,7 +175,7 @@ Workaround:
 
    ```yaml
    services:
-     open-design:
+     monofield:
        network_mode: host
        ports: []
    ```
@@ -190,6 +190,6 @@ Workaround:
 4. Verify:
 
    ```bash
-   docker inspect open-design --format '{{.HostConfig.NetworkMode}}'
+   docker inspect monofield --format '{{.HostConfig.NetworkMode}}'
    # host
    ```

@@ -22,7 +22,7 @@ import {
 import {
   MarketplaceSecurityPolicySchema,
   MarketplaceVisibilitySchema,
-  OPEN_DESIGN_PLUGIN_SPEC_VERSION,
+  MONOFIELD_PLUGIN_SPEC_VERSION,
   STRICT_ENTERPRISE_MARKETPLACE_POLICY,
   evaluateMarketplacePackagePolicy,
   type MarketplacePackageEvidence,
@@ -105,7 +105,7 @@ export interface SyncManagedMarketplaceCatalogsResult {
 }
 
 const HTTPS_RE = /^https:\/\//i;
-const MARKETPLACE_AUTH_ENV_RE = /^(?:OD|OPEN_DOCS)_MARKETPLACE_TOKEN(?:_[A-Z0-9_]+)?$/;
+const MARKETPLACE_AUTH_ENV_RE = /^(?:MONOFIELD|OD|OPEN_DOCS)_MARKETPLACE_TOKEN(?:_[A-Z0-9_]+)?$/;
 const LEGACY_PUBLIC_MARKETPLACE_POLICY: MarketplaceSecurityPolicy =
   MarketplaceSecurityPolicySchema.parse({
     allowedVisibilities: ['public', 'enterprise', 'private'],
@@ -125,7 +125,8 @@ const DEFAULT_MARKETPLACE_REGISTRY_PATH = 'plugins/registry';
 const LEGACY_OPEN_DESIGN_MARKETPLACE_REPO = 'nexu-io/open-design';
 const MARKETPLACE_CATALOG_MAX_BYTES = 2 * 1024 * 1024;
 const MARKETPLACE_FETCH_TIMEOUT_MS = 15_000;
-export const OPEN_DOCS_MARKETPLACE_MANIFEST_FILENAME = 'open-docs-marketplace.json';
+export const MONOFIELD_MARKETPLACE_MANIFEST_FILENAME = 'monofield-marketplace.json';
+export const LEGACY_OPEN_DOCS_MARKETPLACE_MANIFEST_FILENAME = 'open-docs-marketplace.json';
 export const LEGACY_OPEN_DESIGN_MARKETPLACE_MANIFEST_FILENAME = 'open-design-marketplace.json';
 const PUBLIC_MARKETPLACE_BASE_URL = 'https://open-design.ai/marketplace';
 const PUBLIC_PLUGINS_BASE_URL = 'https://open-design.ai/plugins';
@@ -472,17 +473,19 @@ export function marketplaceRegistryBaseUrl(): string {
 
 export function marketplaceManifestUrlForRegistry(id: string): string {
   const registryId = id.trim().replace(/^\/+|\/+$/g, '');
-  return `${marketplaceRegistryBaseUrl()}/${registryId}/${OPEN_DOCS_MARKETPLACE_MANIFEST_FILENAME}`;
+  return `${marketplaceRegistryBaseUrl()}/${registryId}/${MONOFIELD_MARKETPLACE_MANIFEST_FILENAME}`;
 }
 
 function isMarketplaceManifestFilename(filename: string | undefined): boolean {
-  return filename === OPEN_DOCS_MARKETPLACE_MANIFEST_FILENAME
+  return filename === MONOFIELD_MARKETPLACE_MANIFEST_FILENAME
+    || filename === LEGACY_OPEN_DOCS_MARKETPLACE_MANIFEST_FILENAME
     || filename === LEGACY_OPEN_DESIGN_MARKETPLACE_MANIFEST_FILENAME;
 }
 
 function stripMarketplaceManifestFilename(value: string): string {
   return value
-    .replace(new RegExp(`/${OPEN_DOCS_MARKETPLACE_MANIFEST_FILENAME.replace(/\./g, '\\.')}$`), '')
+    .replace(new RegExp(`/${MONOFIELD_MARKETPLACE_MANIFEST_FILENAME.replace(/\./g, '\\.')}$`), '')
+    .replace(new RegExp(`/${LEGACY_OPEN_DOCS_MARKETPLACE_MANIFEST_FILENAME.replace(/\./g, '\\.')}$`), '')
     .replace(new RegExp(`/${LEGACY_OPEN_DESIGN_MARKETPLACE_MANIFEST_FILENAME.replace(/\./g, '\\.')}$`), '');
 }
 
@@ -490,7 +493,8 @@ function registryIdFromBaseUrl(url: string, baseUrl: string): string | null {
   const base = baseUrl.replace(/\/+$/, '');
   if (
     !url.startsWith(`${base}/`) ||
-    (!url.endsWith(`/${OPEN_DOCS_MARKETPLACE_MANIFEST_FILENAME}`) &&
+    (!url.endsWith(`/${MONOFIELD_MARKETPLACE_MANIFEST_FILENAME}`) &&
+      !url.endsWith(`/${LEGACY_OPEN_DOCS_MARKETPLACE_MANIFEST_FILENAME}`) &&
       !url.endsWith(`/${LEGACY_OPEN_DESIGN_MARKETPLACE_MANIFEST_FILENAME}`))
   ) {
     return null;
@@ -509,12 +513,14 @@ export function marketplaceRegistryIdFromUrl(url: string): string | null {
   const publicBases = [PUBLIC_MARKETPLACE_BASE_URL, PUBLIC_PLUGINS_BASE_URL];
   for (const base of publicBases) {
     if (
-      trimmed === `${base}/${OPEN_DOCS_MARKETPLACE_MANIFEST_FILENAME}` ||
+      trimmed === `${base}/${MONOFIELD_MARKETPLACE_MANIFEST_FILENAME}` ||
+      trimmed === `${base}/${LEGACY_OPEN_DOCS_MARKETPLACE_MANIFEST_FILENAME}` ||
       trimmed === `${base}/${LEGACY_OPEN_DESIGN_MARKETPLACE_MANIFEST_FILENAME}`
     ) return 'official';
     if (
       trimmed.startsWith(`${base}/`) &&
-      (trimmed.endsWith(`/${OPEN_DOCS_MARKETPLACE_MANIFEST_FILENAME}`) ||
+      (trimmed.endsWith(`/${MONOFIELD_MARKETPLACE_MANIFEST_FILENAME}`) ||
+        trimmed.endsWith(`/${LEGACY_OPEN_DOCS_MARKETPLACE_MANIFEST_FILENAME}`) ||
         trimmed.endsWith(`/${LEGACY_OPEN_DESIGN_MARKETPLACE_MANIFEST_FILENAME}`))
     ) {
       const id = stripMarketplaceManifestFilename(trimmed.slice(base.length + 1));
@@ -576,7 +582,7 @@ function normalizeMarketplaceAuthEnv(value: unknown): string | null {
   if (typeof value !== 'string' || value.trim().length === 0) return null;
   const normalized = value.trim().toUpperCase();
   if (!MARKETPLACE_AUTH_ENV_RE.test(normalized)) {
-    throw new Error('marketplace credential environment variable must start with OD_MARKETPLACE_TOKEN or OPEN_DOCS_MARKETPLACE_TOKEN');
+    throw new Error('marketplace credential environment variable must start with MONOFIELD_MARKETPLACE_TOKEN');
   }
   return normalized;
 }
@@ -1100,7 +1106,7 @@ function safeParseManifest(raw: string): MarketplaceManifest {
       ...legacy,
       specVersion: typeof legacy['specVersion'] === 'string'
         ? legacy['specVersion'] as string
-        : OPEN_DESIGN_PLUGIN_SPEC_VERSION,
+        : MONOFIELD_PLUGIN_SPEC_VERSION,
       name: typeof legacy['name'] === 'string' ? legacy['name'] as string : 'unknown',
       version: typeof legacy['version'] === 'string' && (legacy['version'] as string).length > 0
         ? legacy['version'] as string
@@ -1115,7 +1121,7 @@ function safeParseManifest(raw: string): MarketplaceManifest {
   // Last-resort fallback: return a minimal shape so the caller doesn't
   // explode if a database row was stored before a schema patch.
   return {
-    specVersion: OPEN_DESIGN_PLUGIN_SPEC_VERSION,
+    specVersion: MONOFIELD_PLUGIN_SPEC_VERSION,
     name: 'unknown',
     version: '0.0.0',
     plugins: [],

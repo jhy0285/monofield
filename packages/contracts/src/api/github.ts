@@ -1,11 +1,11 @@
-export interface OpenDocsGithubRepoResponse {
+export interface MonoFieldGithubRepoResponse {
   repo: string;
   stargazers_count: number;
   fetchedAt: number;
   stale: boolean;
 }
 
-export interface OpenDocsGithubLatestReleaseResponse {
+export interface MonoFieldGithubLatestReleaseResponse {
   repo: string;
   tag_name: string;
   html_url: string;

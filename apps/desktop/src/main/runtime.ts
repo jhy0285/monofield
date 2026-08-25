@@ -357,7 +357,7 @@ export type DesktopRuntimeOptions = {
   discoverUrl(): Promise<string | null>;
   /**
    * Round-7 (lefarcen P2 @ runtime.ts:336): packaged desktop loads the
-   * renderer from `od://app/`, which only resolves through Electron's
+   * renderer from `monofield://app/`, which only resolves through Electron's
    * registered protocol handler in the renderer context. Main-process
    * `globalThis.fetch` (Node/undici) ignores that handler, so any
    * `fetch(webUrl + '/api/...')` from main fails in packaged builds.
@@ -451,7 +451,7 @@ export type PickAndImportFolderDeps = {
   /**
    * Round-7 (lefarcen P2 @ runtime.ts:336): the helper now POSTs to the
    * sidecar daemon's real `http://127.0.0.1:<port>` URL rather than the
-   * renderer-only `od://app/` webUrl. Renamed from `webUrl` to make the
+   * renderer-only `monofield://app/` webUrl. Renamed from `webUrl` to make the
    * boundary explicit — main-process Node fetch must hit a real http
    * URL, never a custom Electron protocol scheme. tools-dev callers
    * pass the same value they used to pass for `webUrl` (its web URL is
@@ -1201,14 +1201,14 @@ export function isAllowedChildWindowUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     // `blob:` covers in-renderer generated downloads / object URLs.
-    // `od:` is the packaged Electron entry's privileged scheme
+    // `monofield:` is the packaged Electron entry's privileged scheme
     // registered by `apps/packaged/src/protocol.ts` and proxied to the
     // local web sidecar. Without this branch, any in-app
-    // `<a target="_blank" href="/api/...">` resolves to `od://app/...`
+    // `<a target="_blank" href="/api/...">` resolves to `monofield://app/...`
     // in packaged builds, falls through `setWindowOpenHandler` to
     // `{ action: "deny" }`, and the click is silently dropped — that
     // was the Orbit "Open artifact" no-op reported in #911. Allowing
-    // `od:` here lets Electron open the link in a child BrowserWindow
+    // `monofield:` here lets Electron open the link in a child BrowserWindow
     // that inherits the same protocol registration + preload, so the
     // live artifact preview renders normally. Dev mode is unaffected:
     // its links resolve to `http://127.0.0.1:.../...`, which is gated
@@ -1220,7 +1220,7 @@ export function isAllowedChildWindowUrl(url: string): boolean {
     // and the user sees a "Popup blocked" alert.
     return (
       parsed.protocol === "blob:" ||
-      parsed.protocol === "od:" ||
+      parsed.protocol === "monofield:" ||
       (parsed.protocol === "about:" && parsed.pathname === "blank")
     );
   } catch {
@@ -1535,7 +1535,7 @@ async function reportRendererCrash(
     // discoverDaemonUrl returns the real http://127.0.0.1:<port> URL the
     // sidecar daemon listens on. In tools-dev callers omit it and fall back
     // to discoverUrl (which is also http in dev). In packaged builds it's
-    // mandatory because the renderer-only `od://app/` scheme isn't
+    // mandatory because the renderer-only `monofield://app/` scheme isn't
     // reachable from main-process Node fetch.
     const baseUrl = (await (options.discoverDaemonUrl?.() ?? options.discoverUrl())) ?? null;
     if (!baseUrl) return;
@@ -1740,7 +1740,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         return { ok: false, reason: "desktop auth secret not registered" };
       }
       // Round-7 (lefarcen P2): packaged builds report the renderer URL
-      // (`od://app/`) over `discoverUrl`, but Node-side fetch can't
+      // (`monofield://app/`) over `discoverUrl`, but Node-side fetch can't
       // resolve a custom Electron protocol scheme. Prefer the daemon
       // sidecar's real http URL when packaged exposes it; tools-dev
       // omits `discoverDaemonUrl` and we fall back to the web URL
@@ -1858,7 +1858,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // openPath(projectId) for projects whose resolvedDir came from that
   // trusted flow."
   ipcMain.handle("shell:open-path", async (_event, projectId: string) => {
-    // Round-7 (lefarcen P2): same packaged od:// → daemon URL pivot as
+    // Round-7 (lefarcen P2): same packaged monofield:// → daemon URL pivot as
     // the dialog:pick-and-import handler above.
     const apiBaseUrl =
       (options.discoverDaemonUrl ? await options.discoverDaemonUrl() : null) ??
@@ -1937,25 +1937,25 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     window.setTitle(windowTitle);
   });
   window.webContents.on("did-start-loading", () => {
-    console.info("[open-design desktop] main window did-start-loading", {
+    console.info("[monofield desktop] main window did-start-loading", {
       pendingUrl,
       url: window.webContents.getURL(),
     });
   });
   window.webContents.on("dom-ready", () => {
-    console.info("[open-design desktop] main window dom-ready", {
+    console.info("[monofield desktop] main window dom-ready", {
       title: window.getTitle(),
       url: window.webContents.getURL(),
     });
   });
   window.webContents.on("did-finish-load", () => {
-    console.info("[open-design desktop] main window did-finish-load", {
+    console.info("[monofield desktop] main window did-finish-load", {
       title: window.getTitle(),
       url: window.webContents.getURL(),
     });
   });
   window.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
-    console.error("[open-design desktop] main window did-fail-load", {
+    console.error("[monofield desktop] main window did-fail-load", {
       errorCode,
       errorDescription,
       isMainFrame,
@@ -1965,13 +1965,13 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     });
   });
   window.on("unresponsive", () => {
-    console.error("[open-design desktop] main window unresponsive", {
+    console.error("[monofield desktop] main window unresponsive", {
       pendingUrl,
       url: window.webContents.getURL(),
     });
   });
   window.on("responsive", () => {
-    console.info("[open-design desktop] main window responsive", {
+    console.info("[monofield desktop] main window responsive", {
       pendingUrl,
       url: window.webContents.getURL(),
     });
@@ -1985,7 +1985,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // PostHog with `device_id = installationId`. Best-effort: a failure to
   // reach the daemon must not block the crash recovery flow.
   window.webContents.on("render-process-gone", (_event, details) => {
-    console.error("[open-design desktop] main window render-process-gone", {
+    console.error("[monofield desktop] main window render-process-gone", {
       exitCode: details.exitCode,
       reason: details.reason,
       url: window.webContents.getURL(),
@@ -2511,9 +2511,9 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         pendingUrl = url;
         // Load the web app into the still-hidden main window as soon as it is
         // discovered; it mounts behind the splash so the swap is instant.
-        console.info("[open-design desktop] main window loadURL start", { currentUrl, url });
+        console.info("[monofield desktop] main window loadURL start", { currentUrl, url });
         await window.loadURL(url);
-        console.info("[open-design desktop] main window loadURL success", { url });
+        console.info("[monofield desktop] main window loadURL success", { url });
         currentUrl = url;
         rendererFailed = false;
         pendingUrl = null;
@@ -2529,7 +2529,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
               currentPetUrl = nextPetUrl;
             })
             .catch((error: unknown) => {
-              console.warn("[open-docs desktop] optional desktop pet failed to load", error);
+              console.warn("[monofield desktop] optional desktop pet failed to load", error);
             });
         }
         if (!revealed) {
@@ -2603,14 +2603,14 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     async eval(input) {
       if (window.isDestroyed()) return { error: "desktop window is destroyed", ok: false };
       const startedAt = Date.now();
-      console.info("[open-design desktop] eval executeJavaScript start", {
+      console.info("[monofield desktop] eval executeJavaScript start", {
         ...summarizeExpression(input.expression),
         statusUrl: resolveDesktopStatusUrl(currentUrl, pendingUrl),
         webContentsUrl: window.webContents.getURL(),
       });
       try {
         const value = await window.webContents.executeJavaScript(input.expression, true);
-        console.info("[open-design desktop] eval executeJavaScript success", {
+        console.info("[monofield desktop] eval executeJavaScript success", {
           durationMs: Date.now() - startedAt,
           statusUrl: resolveDesktopStatusUrl(currentUrl, pendingUrl),
           valueType: typeof value,
@@ -2618,7 +2618,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         });
         return { ok: true, value };
       } catch (error) {
-        console.error("[open-design desktop] eval executeJavaScript failed", {
+        console.error("[monofield desktop] eval executeJavaScript failed", {
           durationMs: Date.now() - startedAt,
           error: error instanceof Error ? error.message : String(error),
           statusUrl: resolveDesktopStatusUrl(currentUrl, pendingUrl),

@@ -24,7 +24,7 @@ export function loadCritiqueConfigFromEnv(env: NodeJS.ProcessEnv = process.env):
   // Cross-field validation: threshold cannot exceed scale.
   if (scoreThreshold > scoreScale + 1e-9) {
     throw new RangeError(
-      `OD_CRITIQUE_SCORE_THRESHOLD (${scoreThreshold}) must be <= OD_CRITIQUE_SCORE_SCALE (${scoreScale})`,
+      `MONOFIELD_CRITIQUE_SCORE_THRESHOLD (${scoreThreshold}) must be <= MONOFIELD_CRITIQUE_SCORE_SCALE (${scoreScale})`,
     );
   }
 
@@ -83,6 +83,6 @@ function parseFallbackPolicy(
     return trimmed as CritiqueConfig['fallbackPolicy'];
   }
   throw new RangeError(
-    `OD_CRITIQUE_FALLBACK_POLICY must be one of ${FALLBACK_POLICIES.join(', ')}, got "${raw}"`,
+    `MONOFIELD_CRITIQUE_FALLBACK_POLICY must be one of ${FALLBACK_POLICIES.join(', ')}, got "${raw}"`,
   );
 }

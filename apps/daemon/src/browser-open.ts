@@ -66,13 +66,13 @@ export function openBrowser(url: string, deps: OpenBrowserDeps = {}): ChildProce
     // after the server has already started and printed its URL.
     child.on('error', (error) => {
       const detail = error instanceof Error ? error.message : String(error);
-      warn(`[od] failed to open browser: ${detail}`);
+      warn(`[monofield] failed to open browser: ${detail}`);
     });
     child.unref();
     return child;
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    warn(`[od] failed to open browser: ${detail}`);
+    warn(`[monofield] failed to open browser: ${detail}`);
     return null;
   }
 }

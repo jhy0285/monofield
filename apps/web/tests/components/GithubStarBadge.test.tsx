@@ -2,10 +2,10 @@
 
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { OpenDocsGithubRepoResponse } from '@open-design/contracts';
+import type { MonoFieldGithubRepoResponse } from '@open-design/contracts';
 
 const originalFetch = globalThis.fetch;
-const FAILURE_LS_KEY = 'open-docs:gh-stars:last-failure:v2';
+const FAILURE_LS_KEY = 'monofield:gh-stars:last-failure:v2';
 const IMPORT_TEST_TIMEOUT_MS = 10_000;
 
 describe('GithubStarBadge', () => {
@@ -31,7 +31,7 @@ describe('GithubStarBadge', () => {
     expect(screen.getByText('-')).toBeTruthy();
     await waitFor(() =>
       expect(globalThis.fetch).toHaveBeenCalledWith(
-        '/api/github/open-docs',
+        '/api/github/monofield',
         expect.objectContaining({ signal: expect.any(AbortSignal) }),
       ),
     );
@@ -108,11 +108,11 @@ describe('GithubStarBadge', () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        repo: 'nexu-io/open-design',
+        repo: 'jhy0285/monofield',
         stargazers_count: 42137,
         fetchedAt: Date.parse('2026-05-22T00:00:00.000Z'),
         stale: false,
-      } satisfies OpenDocsGithubRepoResponse),
+      } satisfies MonoFieldGithubRepoResponse),
     } satisfies Partial<Response>) as typeof fetch;
     const { GithubStarBadge } = await import('../../src/components/GithubStarBadge');
 

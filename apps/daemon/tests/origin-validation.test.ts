@@ -774,3 +774,16 @@ describe('isLocalSameOrigin: Sec-Fetch-Site fallback for no-Origin same-origin G
     expect(isLocalSameOrigin(req, 7456, env)).toBe(false);
   });
 });
+
+describe('MonoField public environment names', () => {
+  it('prefers MONOFIELD_ALLOWED_ORIGINS over the legacy alias', () => {
+    expect(configuredAllowedOrigins({
+      MONOFIELD_ALLOWED_ORIGINS: 'https://monofield.example.com',
+      OD_ALLOWED_ORIGINS: 'https://legacy.example.com',
+    })).toEqual(['https://monofield.example.com']);
+  });
+
+  it('accepts MONOFIELD_WEB_PORT as the browser proxy port', () => {
+    expect(allowedBrowserPorts(7456, { MONOFIELD_WEB_PORT: '7457' })).toEqual([7456, 7457]);
+  });
+});

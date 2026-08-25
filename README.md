@@ -106,8 +106,8 @@ Ask for explanation, analysis, or review.
 ```powershell
 corepack enable
 pnpm install
-pnpm --filter @open-design/web build
-pnpm tools-dev start desktop --daemon-port 7456 --prod
+pnpm build:web
+pnpm dev:desktop
 pnpm tools-dev status --json
 ```
 
@@ -117,16 +117,14 @@ working folder inside MonoField to make it the CLI agent's project root.
 Useful focused checks:
 
 ```powershell
-pnpm --filter @open-design/contracts typecheck
-pnpm --filter @open-design/web exec tsc -b --noEmit --force
-pnpm --filter @open-design/web build
-pnpm --filter @open-design/daemon exec tsc -p tsconfig.json --noEmit
+pnpm check:contracts
+pnpm check:web
+pnpm build:web
+pnpm check:daemon
 ```
 
-The preferred product name and executable command are `MonoField` and
-`monofield`. Historic `open-design`, `open-docs`, `od`, and `template`
-identifiers remain only where compatibility with existing data, packages, or
-integrations requires them.
+The product and Desktop app are **MonoField**. The command-line entry point is
+`monofield`.
 
 ## Security and data boundary
 

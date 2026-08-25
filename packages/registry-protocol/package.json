@@ -1,9 +1,9 @@
 {
   "name": "@open-design/registry-protocol",
-  "version": "0.5.0",
+  "version": "0.11.2",
   "private": true,
   "type": "module",
-  "description": "Pure TypeScript registry backend protocol for Open Design plugin sources.",
+  "description": "Pure TypeScript registry backend protocol for MonoField plugin sources.",
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "files": [

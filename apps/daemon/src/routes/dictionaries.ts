@@ -276,7 +276,7 @@ export function registerDictionaryRoutes(app: Express, ctx: RegisterDictionaryRo
       const bytes = await readFile(version.filePath);
       const extension = path.extname(version.fileName) || `.${version.format}`;
       const snapshotName = `${sanitizeName(dictionary.name)}-v${version.version}-${version.id.slice(0, 8)}${extension}`;
-      const projectPath = `_open-docs/dictionaries/${snapshotName}`;
+      const projectPath = `_monofield/dictionaries/${snapshotName}`;
       await writeProjectFile(PROJECTS_DIR, project.id, projectPath, bytes, { overwrite: false }, project.metadata);
       const snapshot = insertDictionaryProjectSnapshot(db, {
         projectId: project.id,

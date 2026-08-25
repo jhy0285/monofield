@@ -68,15 +68,15 @@ function pluginShareActionToCli(action: PluginShareAction) {
     return {
       argv: ['plugin', 'publish-repo'],
       title: 'Publish repo',
-      command: 'od plugin publish-repo',
+      command: 'monofield plugin publish-repo',
       successMessage: 'Published plugin to GitHub.',
       failureCode: 'publish-repo-failed',
     };
   }
   return {
-    argv: ['plugin', 'open-design-pr'],
+    argv: ['plugin', 'monofield-pr'],
     title: 'MonoField PR',
-    command: 'od plugin open-design-pr',
+    command: 'monofield plugin monofield-pr',
     successMessage: 'Opened MonoField PR flow.',
     failureCode: 'open-design-pr-failed',
   };

@@ -170,28 +170,28 @@ describe("resolvePackagedNamespacePaths", () => {
     }
   });
 
-  it("rejects relative OD_DATA_DIR values instead of resolving them against cwd", () => {
+  it("rejects relative MONOFIELD_DATA_DIR values instead of resolving them against cwd", () => {
     const config = fakeConfig();
 
     expect(
-      () => resolvePackagedNamespacePaths(config, config.namespace, { OD_DATA_DIR: "project/.od" }),
-    ).toThrow(/OD_DATA_DIR.*absolute path/);
+      () => resolvePackagedNamespacePaths(config, config.namespace, { MONOFIELD_DATA_DIR: "project/.monofield" }),
+    ).toThrow(/MONOFIELD_DATA_DIR.*absolute path/);
   });
 
-  it("surfaces the relative-OD_DATA_DIR rejection as PackagedPathAccessError so packaged main() can show a dialog", () => {
+  it("surfaces the relative MONOFIELD_DATA_DIR rejection as PackagedPathAccessError so packaged main() can show a dialog", () => {
     const config = fakeConfig();
 
     let captured: unknown;
     try {
-      resolvePackagedNamespacePaths(config, config.namespace, { OD_DATA_DIR: "project/.od" });
+      resolvePackagedNamespacePaths(config, config.namespace, { MONOFIELD_DATA_DIR: "project/.monofield" });
     } catch (error) {
       captured = error;
     }
 
     expect(captured).toBeInstanceOf(PackagedPathAccessError);
     const err = captured as PackagedPathAccessError;
-    expect(err.title).toMatch(/OD_DATA_DIR/);
-    expect(err.message).toContain("project/.od");
+    expect(err.title).toMatch(/data directory/);
+    expect(err.message).toContain("project/.monofield");
     expect(err.message).toMatch(/absolute path/);
   });
 

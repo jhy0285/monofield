@@ -85,7 +85,7 @@ export function doctorPlugin(
           severity: 'error',
           code: 'atom.unknown',
           message: `Pipeline stage '${stage.id}' references unknown atom '${atomId}'.`,
-          field: `od.pipeline.stages.${stage.id}`,
+          field: `monofield.pipeline.stages.${stage.id}`,
         });
       }
     }
@@ -94,7 +94,7 @@ export function doctorPlugin(
         severity: 'error',
         code: 'pipeline.until-missing',
         message: `Pipeline stage '${stage.id}' sets repeat:true but no until expression.`,
-        field: `od.pipeline.stages.${stage.id}`,
+        field: `monofield.pipeline.stages.${stage.id}`,
       });
     }
     if (stage.until && !isParseableUntil(stage.until)) {
@@ -102,7 +102,7 @@ export function doctorPlugin(
         severity: 'error',
         code: 'pipeline.until-invalid',
         message: `Pipeline stage '${stage.id}' has an unparseable until expression: '${stage.until}'.`,
-        field: `od.pipeline.stages.${stage.id}`,
+        field: `monofield.pipeline.stages.${stage.id}`,
       });
     }
   }

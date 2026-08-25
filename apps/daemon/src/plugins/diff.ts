@@ -85,10 +85,10 @@ function diffManifest(out: PluginDiffEntry[], a: PluginManifest, b: PluginManife
   diffScalar(out, 'manifest.description', a.description,  b.description);
   diffScalar(out, 'manifest.license',     a.license,      b.license);
   diffArray (out, 'manifest.tags',        a.tags ?? [],    b.tags ?? []);
-  diffScalar(out, 'od.kind',              a.od?.kind,      b.od?.kind);
-  diffScalar(out, 'od.taskKind',          a.od?.taskKind,  b.od?.taskKind);
-  diffScalar(out, 'od.mode',              a.od?.mode,      b.od?.mode);
-  diffArray (out, 'od.capabilities',      a.od?.capabilities ?? [], b.od?.capabilities ?? []);
+  diffScalar(out, 'monofield.kind',              a.od?.kind,      b.od?.kind);
+  diffScalar(out, 'monofield.taskKind',          a.od?.taskKind,  b.od?.taskKind);
+  diffScalar(out, 'monofield.mode',              a.od?.mode,      b.od?.mode);
+  diffArray (out, 'monofield.capabilities',      a.od?.capabilities ?? [], b.od?.capabilities ?? []);
   diffArray (out, 'od.inputs[]',
     (a.od?.inputs ?? []).map((i) => i?.name).filter(Boolean) as string[],
     (b.od?.inputs ?? []).map((i) => i?.name).filter(Boolean) as string[]);
@@ -117,16 +117,16 @@ function diffPipeline(
 ): void {
   if (!a && !b) return;
   if (!a && b) {
-    out.push({ field: 'od.pipeline', kind: 'added',
+    out.push({ field: 'monofield.pipeline', kind: 'added',
       after: stagesSummary(b!.stages) });
     return;
   }
   if (a && !b) {
-    out.push({ field: 'od.pipeline', kind: 'removed',
+    out.push({ field: 'monofield.pipeline', kind: 'removed',
       before: stagesSummary(a.stages) });
     return;
   }
-  diffArray(out, 'od.pipeline.stages',
+  diffArray(out, 'monofield.pipeline.stages',
     (a!.stages ?? []).map((s) => s.id),
     (b!.stages ?? []).map((s) => s.id));
   // Per-stage atoms diff. Key by stage id; stages added or removed
@@ -137,10 +137,10 @@ function diffPipeline(
     const sa = aById.get(id);
     const sb = bById.get(id);
     if (!sa || !sb) continue; // covered by stages-array diff above
-    diffArray(out, `od.pipeline.stages[${id}].atoms`,
+    diffArray(out, `monofield.pipeline.stages[${id}].atoms`,
       sa.atoms ?? [], sb.atoms ?? []);
-    diffScalar(out, `od.pipeline.stages[${id}].until`, sa.until, sb.until);
-    diffScalar(out, `od.pipeline.stages[${id}].repeat`,
+    diffScalar(out, `monofield.pipeline.stages[${id}].until`, sa.until, sb.until);
+    diffScalar(out, `monofield.pipeline.stages[${id}].repeat`,
       sa.repeat === undefined ? undefined : String(sa.repeat),
       sb.repeat === undefined ? undefined : String(sb.repeat));
   }

@@ -337,6 +337,10 @@ describe('buildPackagedDaemonSpawnEnv', () => {
       requireDesktopAuth: true,
     });
     expect(env.OD_REQUIRE_DESKTOP_AUTH).toBe('1');
+    expect(env.MONOFIELD_REQUIRE_DESKTOP_AUTH).toBe('1');
+    expect(env.MONOFIELD_DATA_DIR).toBe('/tmp/od-pkg/data');
+    expect(env.MONOFIELD_RESOURCE_ROOT).toBe('/tmp/od-pkg/resources');
+    expect(env.MONOFIELD_APP_VERSION).toBe('1.2.3');
     expect(env.OD_DATA_DIR).toBe('/tmp/od-pkg/data');
     expect(env.OD_RESOURCE_ROOT).toBe('/tmp/od-pkg/resources');
     expect(env.OD_APP_VERSION).toBe('1.2.3');
@@ -356,6 +360,8 @@ describe('buildPackagedDaemonSpawnEnv', () => {
     // future code change to truthy-check the variable would silently
     // re-arm the gate. Omitted is the intent.
     expect('OD_REQUIRE_DESKTOP_AUTH' in env).toBe(false);
+    expect('MONOFIELD_REQUIRE_DESKTOP_AUTH' in env).toBe(false);
+    expect(env.MONOFIELD_DATA_DIR).toBe('/tmp/od-pkg/data');
     expect(env.OD_DATA_DIR).toBe('/tmp/od-pkg/data');
     expect(env.OD_APP_VERSION).toBeUndefined();
   });
@@ -368,6 +374,7 @@ describe('buildPackagedDaemonSpawnEnv', () => {
       requireDesktopAuth: false,
     });
     expect(withLegacy.OD_LEGACY_DATA_DIR).toBe('/old/.od');
+    expect(withLegacy.MONOFIELD_LEGACY_DATA_DIR).toBe('/old/.od');
 
     const withEmptyLegacy = buildPackagedDaemonSpawnEnv(fakePaths(), {
       appVersion: null,

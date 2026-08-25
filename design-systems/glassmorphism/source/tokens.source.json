@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceScope": "open-design-bundled-fixture",
+  "sourceScope": "monofield-bundled-fixture",
   "brandId": "glassmorphism",
   "files": [
     "DESIGN.md",

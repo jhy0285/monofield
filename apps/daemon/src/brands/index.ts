@@ -282,7 +282,7 @@ export async function startBrandExtraction(
   // Seed the design-system page immediately so the user sees a real, on-brand
   // scaffold the moment the project opens — not just a scrolling chat. It
   // starts as skeletons + "Extracting…" and is replaced by the programmatic
-  // first paint (below) or filled in by the agent's `od brand preview` passes.
+  // first paint (below) or filled in by the agent's `monofield brand preview` passes.
   //
   // When programmatic-first extraction is going to run (the common path —
   // `userDesignSystemsRoot` is wired by the route), skip the legacy seed
@@ -1187,7 +1187,7 @@ export interface RenderBrandPreviewResult {
  * `brand.json` so far. Lenient by design — partial / in-progress brand data
  * renders with skeletons for the missing modules, which is exactly the live
  * "filling in" experience. Called after each measurement pass via
- * `POST /api/brands/:id/preview` (`od brand preview`).
+ * `POST /api/brands/:id/preview` (`monofield brand preview`).
  */
 export async function renderBrandPreviewIntoProject(
   opts: RenderBrandPreviewOptions,
@@ -1273,7 +1273,7 @@ function brandExtractionPrompt(input: {
       '',
       'A usable design system has ALREADY been parsed from `context/input-DESIGN.md`, finalized programmatically, and registered. The design-system page (`brand.html`) is open as the active tab, already in the `ready` state and applyable everywhere RIGHT NOW. Your job is to ENRICH that provisional system in place: inspect `context/input-DESIGN.md`, `DESIGN.md`, `brand.json`, `system/variables.css`, `system/theme.json`, and the component kit pages; then replace weak guesses with clearer token roles, component guidance, voice, and implementation notes.',
       '',
-      'Do not create a duplicate design system. Keep the same registered user design-system id. Update `brand.json` and `BRAND.md` incrementally, run `od brand preview ' + input.brandId + '` after field groups, then run `od brand finalize ' + input.brandId + '` when ready.',
+      'Do not create a duplicate design system. Keep the same registered user design-system id. Update `brand.json` and `BRAND.md` incrementally, run `monofield brand preview ' + input.brandId + '` after field groups, then run `monofield brand finalize ' + input.brandId + '` when ready.',
       '',
       'Focus areas:',
       '- Normalize color roles from the pasted DESIGN.md into background, surface, foreground, muted, border, accent, and accent-secondary.',
@@ -1302,10 +1302,10 @@ function brandExtractionPrompt(input: {
     '   - IMAGERY (save 6–8 of the site’s LARGE / COVER / HERO images): this is the Images module. Harvest the site’s actual big representative pictures — the `og:image`/`twitter:image` social card, the hero/banner art, the largest `<img>` (use the highest-res `srcset`/`<picture>` source), CSS `background-image` hero blocks, product/app screenshots, and illustration/photography samples. Filter by RENDERED size: keep only big images (roughly ≥320px on the long edge) and DROP icons, sprites, logos, avatars, and tracking pixels. Save each as a file under `imagery/` and list them in `brand.json` as `imagery.samples: [{ "file": "imagery/<file>", "kind": "cover|hero|product|illustration|photo", "caption": "short label" }]`. The kit page renders these as a clean labeled Images gallery (a thumbnail grid). Fetch the asset URLs directly; pick 6–8 varied, on-brand images — never UI chrome or icons. (The daemon also runs a deterministic cover/hero-image fallback at finalize so the gallery is rarely empty, but that safety net is no substitute for picking the real hero images yourself.)',
     '   - ANTI-BOT WALL: if the page is a Cloudflare / DataDome / "Just a moment…" / "Verify you are human" interstitial instead of the real site, STOP and emit a `<question-form>` asking the user to complete the verification in the browser, then Continue. Do NOT try to bypass it yourself. When the user submits the form, re-snapshot and resume.',
     '',
-    '2. SYNTHESIZE INCREMENTALLY — write `brand.json` AS SOON AS you have the name, a couple of colors, and a logo candidate (do not wait for everything), then run `od brand preview ' + input.brandId + '` and tell the user it is filling in. It must parse as JSON and use exactly the seven color roles (background, surface, foreground, muted, border, accent, accent-secondary), each with `hex` (#rrggbb), `oklch`, `name`, `usage`; plus `name`, `tagline`, `description`, `sourceUrl`, `logo` ({ primary, alternates, notes } with `logos/<file>` paths), `typography` ({ display, body, mono? } each { family, fallbacks[], weights[], googleFontsUrl? }), `voice`, `imagery` (incl. `samples` — the `imagery/<file>` images you saved), and `layout`. Never invent colors from memory — pick them from what you measured.',
-    '   - PREVIEW AFTER EACH FIELD GROUP, do not batch to the end. The kit fills in live, so after you measure and add each group — (a) colors, (b) typography/fonts, (c) logo candidates, (d) cover/hero imagery samples, (e) voice & tone, (f) imagery/layout posture — update `brand.json` and re-run `od brand preview ' + input.brandId + '`. Partial data renders the filled modules and keeps skeletons for the rest, which is exactly the progressive "filling in" the user should watch. Also write `BRAND.md`, a prose brand guide an autonomous design agent can follow.',
+    '2. SYNTHESIZE INCREMENTALLY — write `brand.json` AS SOON AS you have the name, a couple of colors, and a logo candidate (do not wait for everything), then run `monofield brand preview ' + input.brandId + '` and tell the user it is filling in. It must parse as JSON and use exactly the seven color roles (background, surface, foreground, muted, border, accent, accent-secondary), each with `hex` (#rrggbb), `oklch`, `name`, `usage`; plus `name`, `tagline`, `description`, `sourceUrl`, `logo` ({ primary, alternates, notes } with `logos/<file>` paths), `typography` ({ display, body, mono? } each { family, fallbacks[], weights[], googleFontsUrl? }), `voice`, `imagery` (incl. `samples` — the `imagery/<file>` images you saved), and `layout`. Never invent colors from memory — pick them from what you measured.',
+    '   - PREVIEW AFTER EACH FIELD GROUP, do not batch to the end. The kit fills in live, so after you measure and add each group — (a) colors, (b) typography/fonts, (c) logo candidates, (d) cover/hero imagery samples, (e) voice & tone, (f) imagery/layout posture — update `brand.json` and re-run `monofield brand preview ' + input.brandId + '`. Partial data renders the filled modules and keeps skeletons for the rest, which is exactly the progressive "filling in" the user should watch. Also write `BRAND.md`, a prose brand guide an autonomous design agent can follow.',
     '',
-    '3. REBUILD & RE-REGISTER — when `brand.json` is enriched, run `od brand finalize ' + input.brandId + '` (add `--json` for machine output). That re-validates it, re-derives the light/dark/compact design tokens and the six design-system artifacts (landing, deck, poster, email, newsletter, form), and UPDATES the already-registered design system in place (same id — never a duplicate), so every template that already uses it picks up the sharper result. Fix `brand.json` and re-run if it reports a validation error.',
+    '3. REBUILD & RE-REGISTER — when `brand.json` is enriched, run `monofield brand finalize ' + input.brandId + '` (add `--json` for machine output). That re-validates it, re-derives the light/dark/compact design tokens and the six design-system artifacts (landing, deck, poster, email, newsletter, form), and UPDATES the already-registered design system in place (same id — never a duplicate), so every template that already uses it picks up the sharper result. Fix `brand.json` and re-run if it reports a validation error.',
     '',
     'Finish by pointing the user at the enriched brand.html (logo, palette, typography, voice) and the design-system assets they can now preview, and confirm the design system was updated.',
   ].join('\n');
@@ -1329,7 +1329,7 @@ function brandExtractionFallbackPrompt(input: {
       '',
       'The daemon created a live design-system scaffold and saved the pasted source at `context/input-DESIGN.md`. A ready design system may already be registered from the programmatic parser; if not, use the pasted file as the canonical source and complete it.',
       '',
-      'Read `context/input-DESIGN.md`, then update `brand.json`, `BRAND.md`, and `DESIGN.md` progressively. Run `od brand preview ' + input.brandId + '` after meaningful field groups, then `od brand finalize ' + input.brandId + '` to register or update the same design system in place.',
+      'Read `context/input-DESIGN.md`, then update `brand.json`, `BRAND.md`, and `DESIGN.md` progressively. Run `monofield brand preview ' + input.brandId + '` after meaningful field groups, then `monofield brand finalize ' + input.brandId + '` to register or update the same design system in place.',
       '',
       'Finish by pointing the user at the completed brand.html and reusable design-system assets.',
     ].join('\n');
@@ -1347,9 +1347,9 @@ function brandExtractionFallbackPrompt(input: {
     '',
     'This task already contains the full brand-extract workflow inline — follow it directly. Do NOT try to load or invoke a `brand-extract` skill, `Skill`, or any slash command: none is registered here and the call will fail. Drive and observe the target site with the `agent-browser` tool. Measure before you synthesize: capture the real colors, fonts, logo candidates, representative imagery, voice, and layout posture. If the page is an anti-bot verification interstitial, emit a `<question-form>` asking the user to complete verification in the browser, then continue after they respond.',
     '',
-    'Write `brand.json` as soon as you have the name, a couple of measured colors, and a logo candidate, then run `od brand preview ' + input.brandId + '` so the scaffold fills in progressively. Keep updating `brand.json`, `BRAND.md`, saved `logos/`, fonts, and `imagery/` samples as you measure each field group.',
+    'Write `brand.json` as soon as you have the name, a couple of measured colors, and a logo candidate, then run `monofield brand preview ' + input.brandId + '` so the scaffold fills in progressively. Keep updating `brand.json`, `BRAND.md`, saved `logos/`, fonts, and `imagery/` samples as you measure each field group.',
     '',
-    'When the kit is complete and validates, run `od brand finalize ' + input.brandId + '` (add `--json` for machine output). Fix validation errors and re-run finalize until the brand is registered and the design-system assets are ready.',
+    'When the kit is complete and validates, run `monofield brand finalize ' + input.brandId + '` (add `--json` for machine output). Fix validation errors and re-run finalize until the brand is registered and the design-system assets are ready.',
     '',
     'Finish by pointing the user at the completed brand.html and the reusable design-system assets.',
   ].join('\n');
@@ -1380,7 +1380,7 @@ function brandProjectId(brandId: string): string {
  *
  * Invariant: a brand owns exactly ONE user design system for its whole
  * lifetime. Finalize is not a one-shot — the live extraction agent re-runs
- * `od brand finalize` after fixing a validation error or enriching the kit, and
+ * `monofield brand finalize` after fixing a validation error or enriching the kit, and
  * `createUserDesignSystem` allocates a fresh unique slug on every call. Without
  * this reuse, each re-finalize left an orphaned duplicate behind (the brand
  * only tracks its latest design system id, so the older one was never cleaned

@@ -1,10 +1,11 @@
 // Plugin registry. Phase 1 scope:
 //
-// - Scans `<daemonDataDir>/plugins/<id>/` (the OD-canonical install root) for
+// - Scans `<daemonDataDir>/plugins/<id>/` (the MonoField install root) for
 //   manifest folders.
-// - Resolves a plugin folder into either an `open-design.json`-anchored
+// - Resolves a plugin folder into either a `monofield.json`-anchored
 //   manifest or a synthesized one derived from `SKILL.md` /
-//   `.claude-plugin/plugin.json` (per spec §3 compatibility matrix).
+//   `.claude-plugin/plugin.json`. Legacy `open-design.json` manifests remain
+//   readable so existing installs do not break.
 // - Persists discovered records into the `installed_plugins` SQLite row so
 //   subsequent CLI / HTTP calls can read without rescanning the FS.
 //
@@ -32,6 +33,7 @@ import type {
   TrustTier,
 } from '@open-design/contracts';
 import { defaultTrustForRecord, resolveCapabilitiesGranted } from './trust.js';
+import { MONOFIELD_PLUGIN_MANIFEST, resolveExistingPluginManifest } from './manifest-file.js';
 import type Database from 'better-sqlite3';
 
 type SqliteDb = Database.Database;
@@ -50,7 +52,11 @@ export function registryRootsForDataDir(dataDir: string): RegistryRoots {
 }
 
 export function defaultRegistryRoots(): RegistryRoots {
-  return registryRootsForDataDir(path.resolve(process.env.OD_DATA_DIR ?? path.join(process.cwd(), '.od')));
+  return registryRootsForDataDir(path.resolve(
+    process.env.MONOFIELD_DATA_DIR
+      ?? process.env.OD_DATA_DIR
+      ?? path.join(process.cwd(), '.monofield'),
+  ));
 }
 
 export interface ScannedPlugin {
@@ -109,16 +115,16 @@ export async function resolvePluginFolder(opts: ResolveOptions): Promise<Resolve
     return { ok: false, errors: [`Plugin path is not a directory: ${folder}`], warnings };
   }
 
-  const sidecarPath = path.join(folder, 'open-design.json');
+  const sidecarPath = resolveExistingPluginManifest(folder);
   const skillPath = path.join(folder, 'SKILL.md');
   const claudePath = path.join(folder, '.claude-plugin', 'plugin.json');
 
   let sidecar: PluginManifest | undefined;
-  if (fs.existsSync(sidecarPath)) {
+  if (sidecarPath) {
     const rawSidecar = await fsp.readFile(sidecarPath, 'utf8');
     const parsed: ManifestParseResult = parseManifest(rawSidecar);
     if (!parsed.ok) {
-      errors.push(...parsed.errors.map((e) => `open-design.json: ${e}`));
+      errors.push(...parsed.errors.map((e) => `${path.basename(sidecarPath)}: ${e}`));
     } else {
       sidecar = parsed.manifest;
       warnings.push(...parsed.warnings);
@@ -142,7 +148,7 @@ export async function resolvePluginFolder(opts: ResolveOptions): Promise<Resolve
   if (!sidecar && adapters.length === 0) {
     return {
       ok: false,
-      errors: [...errors, `Plugin folder contains no SKILL.md, no .claude-plugin/plugin.json, and no open-design.json: ${folder}`],
+      errors: [...errors, `Plugin folder contains no SKILL.md, no .claude-plugin/plugin.json, and no ${MONOFIELD_PLUGIN_MANIFEST}: ${folder}`],
       warnings,
     };
   }
@@ -166,7 +172,7 @@ export async function resolvePluginFolder(opts: ResolveOptions): Promise<Resolve
   const sourceKind = opts.sourceKind ?? 'local';
   // Spec §5.3 / trust.ts: a `local` install is implicitly trusted (the user
   // copied the folder here themselves), everything else starts restricted
-  // until an explicit `od plugin trust` flip. Fall back to that source-kind
+  // until an explicit `monofield plugin trust` flip. Fall back to that source-kind
   // policy when the caller did not pin a trust tier — previously this was
   // hard-coded to 'restricted', which left local scenario plugins unable to
   // obtain the `pipeline:*` capability they need to run their own pipeline.

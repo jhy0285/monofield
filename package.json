@@ -1,17 +1,22 @@
 {
   "name": "monofield",
-  "version": "0.11.1",
+  "version": "0.11.2",
   "private": true,
   "packageManager": "pnpm@10.33.2",
   "type": "module",
   "description": "MonoField is a local-first, model-independent AI workbench for code, design, and documents.",
   "license": "Apache-2.0",
   "bin": {
-    "monofield": "./apps/daemon/bin/od.mjs",
-    "od": "./apps/daemon/bin/od.mjs"
+    "monofield": "./apps/daemon/bin/monofield.mjs"
   },
   "scripts": {
     "postinstall": "node ./scripts/postinstall.mjs",
+    "build:web": "pnpm --dir apps/web build",
+    "build:daemon": "pnpm --dir apps/daemon build",
+    "check:contracts": "pnpm --dir packages/contracts typecheck",
+    "check:web": "pnpm --dir apps/web exec tsc -b --noEmit --force",
+    "check:daemon": "pnpm --dir apps/daemon exec tsc -p tsconfig.json --noEmit",
+    "dev:desktop": "pnpm tools-dev start desktop --daemon-port 7456 --prod",
     "tools-dev": "pnpm exec tools-dev",
     "tools-pack": "pnpm exec tools-pack",
     "tools-release": "pnpm exec tools-release",

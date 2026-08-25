@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import {
   LocalizedTextSchema,
-  OPEN_DESIGN_PLUGIN_SPEC_VERSION,
-  OpenDocsSpecVersionSchema,
+  MONOFIELD_PLUGIN_SPEC_VERSION,
+  MonoFieldSpecVersionSchema,
 } from './manifest.js';
 import { MarketplacePackageKindSchema } from './marketplace-policy.js';
 
@@ -101,7 +101,7 @@ export type MarketplacePluginEntry = z.infer<typeof MarketplacePluginEntrySchema
 
 export const MarketplaceManifestSchema = z.object({
   $schema:     z.string().optional(),
-  specVersion: OpenDocsSpecVersionSchema.default(OPEN_DESIGN_PLUGIN_SPEC_VERSION),
+  specVersion: MonoFieldSpecVersionSchema.default(MONOFIELD_PLUGIN_SPEC_VERSION),
   name:        z.string().min(1),
   version:     z.string().min(1),
   owner: z.object({

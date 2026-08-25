@@ -1,26 +1,26 @@
-// Open Design on Azure Container Instances (ACI) — evaluation deployment.
+// MonoField on Azure Container Instances (ACI) — evaluation deployment.
 //
 // Single serverless container group with a public FQDN. State lives on the
 // container's local disk, which is EPHEMERAL — it is reset whenever the group
 // is restarted or recreated. This lane is for evaluation and demos.
 //
-// Why no persistent volume: Open Design stores SQLite under OD_DATA_DIR, and
+// Why no persistent volume: MonoField stores SQLite under MONOFIELD_DATA_DIR, and
 // SQLite needs real file locking. ACI's only persistent volume type is Azure
 // Files (SMB), where SQLite WAL/locking is unsupported and corrupts. So we
 // keep the data dir on the container's local filesystem.
 //
 // SECURITY: ACI exposes the port over plain HTTP (no managed TLS). Access is
-// gated by OD_API_TOKEN and browser traffic by OD_ALLOWED_ORIGINS. For
+// gated by MONOFIELD_API_TOKEN and browser traffic by MONOFIELD_ALLOWED_ORIGINS. For
 // internet-facing HTTPS use app-service.bicep.
 
 @description('Base name for the deployment. A globally-unique suffix is appended to the DNS label.')
-param name string = 'open-design'
+param name string = 'monofield'
 
 @description('Azure region. Defaults to the resource group location.')
 param location string = resourceGroup().location
 
 @description('Container image to run. Pin to a digest (image@sha256:...) for production.')
-param image string = 'docker.io/vanjayak/open-design:latest'
+param image string = 'ghcr.io/jhy0285/monofield:latest'
 
 @secure()
 @minLength(32)
@@ -41,7 +41,7 @@ param extraAllowedOrigins string = ''
 
 // Runtime invariants of the image, not user-facing knobs.
 var containerPort = 7456
-var dataDir = '/app/.od'
+var dataDir = '/app/.monofield'
 
 // ACI exposes the port verbatim (no 80 -> 7456 mapping), so the base URL
 // carries the container port.
@@ -68,7 +68,7 @@ resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2023-05-01'
     }
     containers: [
       {
-        name: 'open-design'
+        name: 'monofield'
         properties: {
           image: image
           ports: [
@@ -85,27 +85,27 @@ resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2023-05-01'
           }
           environmentVariables: [
             {
-              name: 'OD_BIND_HOST'
+              name: 'MONOFIELD_BIND_HOST'
               value: '0.0.0.0'
             }
             {
-              name: 'OD_PORT'
+              name: 'MONOFIELD_PORT'
               value: '${containerPort}'
             }
             {
-              name: 'OD_WEB_PORT'
+              name: 'MONOFIELD_WEB_PORT'
               value: '${containerPort}'
             }
             {
-              name: 'OD_DATA_DIR'
+              name: 'MONOFIELD_DATA_DIR'
               value: dataDir
             }
             {
-              name: 'OD_PUBLIC_BASE_URL'
+              name: 'MONOFIELD_PUBLIC_BASE_URL'
               value: publicBaseUrl
             }
             {
-              name: 'OD_ALLOWED_ORIGINS'
+              name: 'MONOFIELD_ALLOWED_ORIGINS'
               value: allowedOrigins
             }
             {
@@ -117,7 +117,7 @@ resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2023-05-01'
               value: nodeOptions
             }
             {
-              name: 'OD_API_TOKEN'
+              name: 'MONOFIELD_API_TOKEN'
               secureValue: apiToken
             }
           ]

@@ -113,7 +113,7 @@ export function resolveAppVersionInfo({
   arch = process.arch,
 }: ResolveAppVersionInfoOptions = {}): AppVersionInfo {
   const packaged = isPackagedRuntime({ resourcesPath, execPath, platform });
-  const version = cleanString(env.OD_APP_VERSION)
+  const version = cleanString(env.MONOFIELD_APP_VERSION ?? env.OD_APP_VERSION)
     ?? cleanString(packageMetadata?.version)
     ?? APP_VERSION_FALLBACK;
   const inferredChannel = inferReleaseChannelFromVersion(version);

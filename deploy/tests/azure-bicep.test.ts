@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-// Guards the Azure Bicep templates against drifting from the Open Design
+// Guards the Azure Bicep templates against drifting from the MonoField
 // runtime contract. Source-level checks run without the Azure CLI; the extra
 // `bicep build` pass runs only when the bicep binary is on PATH.
 
@@ -13,20 +13,20 @@ const azureDir = join(repoRoot, 'deploy/azure');
 const appServicePath = join(azureDir, 'app-service.bicep');
 const aciPath = join(azureDir, 'aci.bicep');
 
-// Must match deploy/docker-compose.yml and charts/open-design.
+// Must match deploy/docker-compose.yml and charts/monofield.
 const CONTAINER_PORT = '7456';
-const DATA_DIR = '/app/.od';
+const DATA_DIR = '/app/.monofield';
 const HEALTH_PATH = '/api/health';
 
 // Env vars the daemon reads (apps/daemon/src).
 const REQUIRED_ENV = [
-  'OD_BIND_HOST',
-  'OD_PORT',
-  'OD_WEB_PORT',
-  'OD_DATA_DIR',
-  'OD_PUBLIC_BASE_URL',
-  'OD_ALLOWED_ORIGINS',
-  'OD_API_TOKEN',
+  'MONOFIELD_BIND_HOST',
+  'MONOFIELD_PORT',
+  'MONOFIELD_WEB_PORT',
+  'MONOFIELD_DATA_DIR',
+  'MONOFIELD_PUBLIC_BASE_URL',
+  'MONOFIELD_ALLOWED_ORIGINS',
+  'MONOFIELD_API_TOKEN',
   'NODE_ENV',
   'NODE_OPTIONS',
 ];
@@ -42,7 +42,7 @@ for (const [label, path] of [
   test(`${label}: pins the runtime port and data dir`, async () => {
     const src = await read(path);
     assert.match(src, new RegExp(`var containerPort = ${CONTAINER_PORT}\\b`), 'container port must be 7456');
-    assert.match(src, new RegExp(`var dataDir = '${DATA_DIR}'`), 'data dir must be /app/.od');
+    assert.match(src, new RegExp(`var dataDir = '${DATA_DIR}'`), 'data dir must be /app/.monofield');
   });
 
   test(`${label}: requires a secure API token of at least 32 chars`, async () => {
@@ -88,7 +88,7 @@ test('app-service.bicep: enforces HTTPS and a single SQLite writer', async () =>
 
 test('aci.bicep: passes the API token as a secure value and always restarts', async () => {
   const src = await read(aciPath);
-  assert.match(src, /name:\s*'OD_API_TOKEN'\s*\n\s*secureValue:\s*apiToken/, 'ACI must pass OD_API_TOKEN as a secureValue');
+  assert.match(src, /name:\s*'MONOFIELD_API_TOKEN'\s*\n\s*secureValue:\s*apiToken/, 'ACI must pass MONOFIELD_API_TOKEN as a secureValue');
   assert.match(src, /restartPolicy:\s*'Always'/, 'ACI container should restart on failure');
 });
 

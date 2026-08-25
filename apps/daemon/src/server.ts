@@ -263,6 +263,7 @@ import {
   listSkillPluginCandidates,
   listInstalledPlugins,
   listIterationsForRun,
+  MONOFIELD_PLUGIN_MANIFEST,
   MissingInputError,
   pluginPromptBlock,
   pruneExpiredSnapshots,
@@ -272,6 +273,7 @@ import {
   registerBundledPlugins,
   registryRootsForDataDir,
   restoreProjectSnapshotLink,
+  resolveExistingPluginManifest,
   resolvePluginSnapshot,
   runPipelineForRun,
   runStageWithRegistry,
@@ -280,7 +282,8 @@ import {
 } from './plugins/index.js';
 import {
   LEGACY_OPEN_DESIGN_MARKETPLACE_MANIFEST_FILENAME,
-  OPEN_DOCS_MARKETPLACE_MANIFEST_FILENAME,
+  MONOFIELD_MARKETPLACE_MANIFEST_FILENAME,
+  LEGACY_OPEN_DOCS_MARKETPLACE_MANIFEST_FILENAME,
   isManagedMarketplaceCatalogUrlAllowed,
   marketplaceManifestUrlForRegistry,
   marketplaceRegistryIdFromUrl,
@@ -574,7 +577,7 @@ import { registerRunRoutes } from './routes/runs.js';
 import { registerTerminalRoutes } from './routes/terminal.js';
 import { createTerminalService } from './terminals.js';
 import { registerSocialShareRoutes } from './routes/social-share.js';
-import { registerOpenDocsPublicMetadataRoutes } from './routes/open-design-public-metadata.js';
+import { registerMonoFieldPublicMetadataRoutes } from './routes/monofield-public-metadata.js';
 import { registerMemoryRoutes } from './routes/memory.js';
 import { registerDatabaseRoutes } from './routes/database.js';
 import { registerDevelopmentRoutes } from './routes/development.js';
@@ -631,7 +634,7 @@ import {
 } from './library-tokens.js';
 import { listLibraryTokenOrigins } from './library-store.js';
 import { apiTokenFromEnv, isApiAuthDisabled, isApiTokenMiddlewareEnabled } from './api-token-auth.js';
-import { createOpenDocsPublicMetadataService } from './services/open-design-public-metadata.js';
+import { createMonoFieldPublicMetadataService } from './services/monofield-public-metadata.js';
 
 /** @typedef {import('@open-design/contracts').ApiErrorCode} ApiErrorCode */
 /** @typedef {import('@open-design/contracts').ApiError} ApiError */
@@ -645,8 +648,6 @@ import { createOpenDocsPublicMetadataService } from './services/open-design-publ
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = resolveProjectRoot(__dirname);
-const RESOURCE_ROOT_ENV = 'OD_RESOURCE_ROOT';
-
 function renderPluginBriefTemplate(template, inputs = {}) {
   if (typeof template !== 'string' || template.length === 0) return '';
   return template.replace(/\{\{\s*([a-zA-Z_][\w-]*)\s*\}\}/g, (full, key) => {
@@ -661,7 +662,7 @@ const DAEMON_RESOURCE_ROOT = resolveDaemonResourceRoot({
   safeBases: [
     PROJECT_ROOT,
     resolveProcessResourcesPath(),
-    process.env.OD_INSTALLATION_DIR,
+    process.env.MONOFIELD_INSTALLATION_DIR ?? process.env.OD_INSTALLATION_DIR,
   ],
 });
 // Built web app lives in `out/` — that's where Next.js writes the static
@@ -789,11 +790,11 @@ function mergeMarketplaceEntries(manifestText, entries) {
 }
 
 async function marketplaceSeedManifestText(id, bundledMarketplaceEntries) {
-  const preferredManifestPath = path.join(PLUGIN_REGISTRY_DIR, id, OPEN_DOCS_MARKETPLACE_MANIFEST_FILENAME);
-  const legacyManifestPath = path.join(PLUGIN_REGISTRY_DIR, id, LEGACY_OPEN_DESIGN_MARKETPLACE_MANIFEST_FILENAME);
-  const manifestPath = fs.existsSync(preferredManifestPath)
-    ? preferredManifestPath
-    : legacyManifestPath;
+  const preferredManifestPath = path.join(PLUGIN_REGISTRY_DIR, id, MONOFIELD_MARKETPLACE_MANIFEST_FILENAME);
+  const legacyDocsManifestPath = path.join(PLUGIN_REGISTRY_DIR, id, LEGACY_OPEN_DOCS_MARKETPLACE_MANIFEST_FILENAME);
+  const legacyDesignManifestPath = path.join(PLUGIN_REGISTRY_DIR, id, LEGACY_OPEN_DESIGN_MARKETPLACE_MANIFEST_FILENAME);
+  const manifestPath = [preferredManifestPath, legacyDocsManifestPath, legacyDesignManifestPath]
+    .find((candidate) => fs.existsSync(candidate)) ?? preferredManifestPath;
   if (!fs.existsSync(manifestPath)) return null;
   let manifestText = await fs.promises.readFile(manifestPath, 'utf8');
   if (id === OFFICIAL_MARKETPLACE_ID && bundledMarketplaceEntries.length > 0) {
@@ -892,28 +893,32 @@ function createMarketplaceFetcher(
 }
 
 const SANDBOX_MODE_ENABLED = isSandboxModeEnabled(process.env);
-const MANAGED_PLUGIN_INSTALL_ONLY = process.env.OD_PLUGIN_INSTALL_MODE?.trim().toLowerCase() === 'managed';
+const MANAGED_PLUGIN_INSTALL_ONLY = (process.env.MONOFIELD_PLUGIN_INSTALL_MODE ?? process.env.OD_PLUGIN_INSTALL_MODE)?.trim().toLowerCase() === 'managed';
 const MANAGED_BUNDLED_PLUGIN_ALLOWLIST = parseBundledPluginAllowlist(
-  process.env.OD_BUNDLED_PLUGIN_ALLOWLIST,
+  process.env.MONOFIELD_BUNDLED_PLUGIN_ALLOWLIST ?? process.env.OD_BUNDLED_PLUGIN_ALLOWLIST,
 );
 const MANAGED_MARKETPLACE_ALLOWED_CATALOG_URLS = parseManagedMarketplaceAllowedCatalogUrls(
-  process.env.OD_MARKETPLACE_ALLOWED_CATALOG_URLS,
+  process.env.MONOFIELD_MARKETPLACE_ALLOWED_CATALOG_URLS ?? process.env.OD_MARKETPLACE_ALLOWED_CATALOG_URLS,
 );
 const MANAGED_MARKETPLACE_ALLOWED_HOSTS = parseManagedMarketplaceAllowedHosts(
-  process.env.OD_MARKETPLACE_ALLOWED_HOSTS,
+  process.env.MONOFIELD_MARKETPLACE_ALLOWED_HOSTS ?? process.env.OD_MARKETPLACE_ALLOWED_HOSTS,
 );
 const MANAGED_MARKETPLACE_ALLOWED_LICENSES = parseManagedMarketplaceAllowedLicenses(
-  process.env.OD_MARKETPLACE_ALLOWED_LICENSES,
+  process.env.MONOFIELD_MARKETPLACE_ALLOWED_LICENSES ?? process.env.OD_MARKETPLACE_ALLOWED_LICENSES,
 );
 const MANAGED_MARKETPLACE_AUTH_ENV = parseManagedMarketplaceAuthEnv(
-  process.env.OD_MARKETPLACE_AUTH_ENV,
+  process.env.MONOFIELD_MARKETPLACE_AUTH_ENV ?? process.env.OD_MARKETPLACE_AUTH_ENV,
 );
-const RUNTIME_DATA_DIR = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT, {
+const RUNTIME_DATA_DIR = resolveDataDir(process.env.MONOFIELD_DATA_DIR ?? process.env.OD_DATA_DIR, PROJECT_ROOT, {
   requireExplicit: SANDBOX_MODE_ENABLED,
 });
 const SANDBOX_RUNTIME = resolveSandboxRuntimeConfig(SANDBOX_MODE_ENABLED, RUNTIME_DATA_DIR);
 ensureSandboxRuntimeDirs(SANDBOX_RUNTIME);
-const PLUGIN_LOCKFILE_PATH = path.join(RUNTIME_DATA_DIR, 'od-plugin-lock.json');
+const PLUGIN_LOCKFILE_PATH = path.join(RUNTIME_DATA_DIR, 'monofield-plugin-lock.json');
+const LEGACY_PLUGIN_LOCKFILE_PATH = path.join(RUNTIME_DATA_DIR, 'od-plugin-lock.json');
+if (!fs.existsSync(PLUGIN_LOCKFILE_PATH) && fs.existsSync(LEGACY_PLUGIN_LOCKFILE_PATH)) {
+  fs.copyFileSync(LEGACY_PLUGIN_LOCKFILE_PATH, PLUGIN_LOCKFILE_PATH);
+}
 // Canonical (realpath-resolved) form of RUNTIME_DATA_DIR for the few callers
 // that compare it against a user-supplied realpath() result. On macOS, /var
 // is a symlink to /private/var, so an import realpath lands in /private/var
@@ -927,13 +932,17 @@ const RUNTIME_DATA_DIR_CANONICAL = (() => {
     return RUNTIME_DATA_DIR;
   }
 })();
-// One-shot legacy data migration. When OD_LEGACY_DATA_DIR is set and the
+// One-shot legacy data migration. When MONOFIELD_LEGACY_DATA_DIR is set and the
 // new data root is fresh (no app.sqlite), copy the 0.3.x .od/ payload
 // across before SQLite opens. Synchronous on purpose: openDatabase below
 // would race an async copy. See apps/daemon/src/legacy-data-migrator.ts
 // and https://github.com/jhy0285/monofield/issues/710.
 migrateLegacyDataDirSync({
-  legacyDir: process.env.OD_LEGACY_DATA_DIR,
+  legacyDir: process.env.MONOFIELD_LEGACY_DATA_DIR
+    ?? process.env.OD_LEGACY_DATA_DIR
+    ?? (process.env.MONOFIELD_DATA_DIR || process.env.OD_DATA_DIR
+      ? undefined
+      : path.join(PROJECT_ROOT, '.od')),
   dataDir: RUNTIME_DATA_DIR,
 });
 const ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'artifacts');
@@ -1008,13 +1017,13 @@ const mcpPendingAuth = new PendingAuthCache();
  * will reject `redirect_uri` mismatches.
  */
 function getPublicBaseUrl(req) {
-  const env = process.env.OD_PUBLIC_BASE_URL;
+  const env = process.env.MONOFIELD_PUBLIC_BASE_URL ?? process.env.OD_PUBLIC_BASE_URL;
   if (env && /^https?:\/\//i.test(env)) {
     return env.replace(/\/+$/u, '');
   }
   const proto = req.protocol || 'http';
   const host = req.get('host');
-  if (!host) return `http://localhost:${process.env.OD_PORT ?? '7456'}`;
+  if (!host) return `http://localhost:${process.env.MONOFIELD_PORT ?? process.env.OD_PORT ?? '7456'}`;
   return `${proto}://${host}`;
 }
 
@@ -1194,8 +1203,13 @@ export function createAgentRuntimeEnv(
   const env: NodeJS.ProcessEnv = applySandboxRuntimeEnv(
     {
       ...baseEnv,
+      MONOFIELD_BIN: OD_BIN,
+      MONOFIELD_DATA_DIR: RUNTIME_DATA_DIR,
+      MONOFIELD_DAEMON_URL: daemonUrl,
+      MONOFIELD_NODE_BIN: nodeBin,
       OD_DATA_DIR: RUNTIME_DATA_DIR,
       OD_DAEMON_URL: daemonUrl,
+      OD_BIN,
       OD_NODE_BIN: nodeBin,
     },
     SANDBOX_RUNTIME,
@@ -1241,8 +1255,10 @@ export function createAgentRuntimeEnv(
   }
 
   if (toolTokenGrant?.token) {
+    env.MONOFIELD_TOOL_TOKEN = toolTokenGrant.token;
     env.OD_TOOL_TOKEN = toolTokenGrant.token;
   } else {
+    delete env.MONOFIELD_TOOL_TOKEN;
     delete env.OD_TOOL_TOKEN;
   }
 
@@ -1254,18 +1270,18 @@ export function createAgentRuntimeToolPrompt(
   toolTokenGrant: { token?: string } | null = null,
 ): string {
   const tokenLine = toolTokenGrant?.token
-    ? '- `OD_TOOL_TOKEN` is available in your environment for this run. Use it only through project wrapper commands; do not print, persist, or override it.'
-    : '- `OD_TOOL_TOKEN` is not available for this run, so `/api/tools/*` wrapper commands may be unavailable.';
+    ? '- `MONOFIELD_TOOL_TOKEN` is available in your environment for this run. Use it only through project wrapper commands; do not print, persist, or override it.'
+    : '- `MONOFIELD_TOOL_TOKEN` is not available for this run, so `/api/tools/*` wrapper commands may be unavailable.';
 
   return [
     '## Runtime tool environment',
     '',
-    `- Daemon URL: \`${daemonUrl}\` (also available as \`OD_DAEMON_URL\`).`,
-    '- `OD_NODE_BIN` is the absolute path to the Node-compatible runtime that started the daemon; packaged desktop installs provide this even when the user has no system `node` on PATH.',
-    '- `OD_BIN` is the absolute path to the MonoField CLI script. On POSIX shells run wrappers with `"$OD_NODE_BIN" "$OD_BIN" tools ...`; do not call bare `od`, which may resolve to the system octal-dump command on Unix-like systems.',
-    '- On PowerShell use `& $env:OD_NODE_BIN $env:OD_BIN tools ...`; on cmd.exe use `"%OD_NODE_BIN%" "%OD_BIN%" tools ...`.',
+    `- Daemon URL: \`${daemonUrl}\` (also available as \`MONOFIELD_DAEMON_URL\`).`,
+    '- `MONOFIELD_NODE_BIN` is the absolute path to the Node-compatible runtime that started the daemon; packaged desktop installs provide this even when the user has no system `node` on PATH.',
+    '- `MONOFIELD_BIN` is the absolute path to the MonoField CLI script. On POSIX shells run wrappers with `"$MONOFIELD_NODE_BIN" "$MONOFIELD_BIN" tools ...`.',
+    '- On PowerShell use `& $env:MONOFIELD_NODE_BIN $env:MONOFIELD_BIN tools ...`; on cmd.exe use `"%MONOFIELD_NODE_BIN%" "%MONOFIELD_BIN%" tools ...`.',
     tokenLine,
-    '- Prefer project wrapper commands through `OD_NODE_BIN` + `OD_BIN` over raw HTTP. The wrappers read these environment values automatically.',
+    '- Prefer project wrapper commands through `MONOFIELD_NODE_BIN` + `MONOFIELD_BIN` over raw HTTP. The wrappers read these environment values automatically.',
   ].join('\n');
 }
 
@@ -1482,7 +1498,7 @@ function renderRunContextPrompt(selection, metadata) {
   if (Array.isArray(context.connectorIds) && context.connectorIds.length > 0) {
     lines.push('### Selected connectors');
     lines.push(
-      'The user selected these connectors for this run. Discover available read-only connector tools first with `"$OD_NODE_BIN" "$OD_BIN" tools connectors list --format compact`, then execute relevant tools through `tools connectors execute`; do not ask for a data source that is already selected.',
+      'The user selected these connectors for this run. Discover available read-only connector tools first with `"$MONOFIELD_NODE_BIN" "$MONOFIELD_BIN" tools connectors list --format compact`, then execute relevant tools through `tools connectors execute`; do not ask for a data source that is already selected.',
     );
     lines.push(formatContextRefList(context.connectorIds, metadata?.contextConnectors ?? [], 'name'));
   }
@@ -1571,14 +1587,18 @@ function execCommandViaLoginShell(command, args, opts = {}) {
 }
 
 async function readProjectPluginManifest(folder) {
-  const raw = await fs.promises.readFile(path.join(folder, 'open-design.json'), 'utf8');
+  const manifestPath = resolveExistingPluginManifest(folder);
+  if (!manifestPath) {
+    throw new Error(`${MONOFIELD_PLUGIN_MANIFEST} was not found in ${folder}`);
+  }
+  const raw = await fs.promises.readFile(manifestPath, 'utf8');
   const manifest = JSON.parse(raw);
   const name = typeof manifest.name === 'string' && manifest.name.trim()
     ? manifest.name.trim()
     : path.basename(folder);
   if (/[/\\]/.test(name) || /^\.+$/.test(name)) {
     throw new Error(
-      `open-design.json in ${folder}: name "${name}" must not contain path separators or consist only of dots`,
+      `${path.basename(manifestPath)} in ${folder}: name "${name}" must not contain path separators or consist only of dots`,
     );
   }
   return {
@@ -1940,10 +1960,10 @@ function isPluginAuthoringRun(db, run) {
 
 async function hasGeneratedPluginArtifacts(projectRoot) {
   if (!projectRoot || typeof projectRoot !== 'string') return false;
-  const required = [
-    path.join(projectRoot, 'generated-plugin', 'open-design.json'),
-    path.join(projectRoot, 'generated-plugin', 'SKILL.md'),
-  ];
+  const generatedFolder = path.join(projectRoot, 'generated-plugin');
+  const manifestPath = resolveExistingPluginManifest(generatedFolder);
+  if (!manifestPath) return false;
+  const required = [manifestPath, path.join(generatedFolder, 'SKILL.md')];
   try {
     await Promise.all(required.map((file) => fs.promises.access(file, fs.constants.F_OK)));
     return true;
@@ -3502,7 +3522,7 @@ export interface StartServerResult {
 
 export async function startServer({
   port = 7456,
-  host = normalizeDaemonBindHost(process.env.OD_BIND_HOST),
+  host = normalizeDaemonBindHost(process.env.MONOFIELD_BIND_HOST ?? process.env.OD_BIND_HOST),
   returnServer = false,
   desktopPdfExporter = null,
   desktopArtifactExporter = null,
@@ -3532,10 +3552,10 @@ export async function startServer({
   const apiAuthDisabled = isApiAuthDisabled();
   if (!isLoopbackHostname(host) && apiToken.length === 0 && !apiAuthDisabled) {
     throw new Error(
-      `OD_BIND_HOST=${host} requires OD_API_TOKEN to be set. ` +
+      `MONOFIELD_BIND_HOST=${host} requires MONOFIELD_API_TOKEN to be set. ` +
       `Generate one with \`openssl rand -hex 32\` and re-launch. ` +
       `(Loopback hosts 127.0.0.1 / ::1 / localhost do not need a token.) ` +
-      `Set OD_DISABLE_API_AUTH=1 only when a trusted reverse proxy already authenticates every request.`,
+      `Set MONOFIELD_DISABLE_API_AUTH=1 only when a trusted reverse proxy already authenticates every request.`,
     );
   }
 
@@ -3599,7 +3619,7 @@ export async function startServer({
       const match = /^Bearer\s+(\S+)\s*$/i.exec(auth);
       if (!match || match[1] !== apiToken) {
         return res.status(401).json({
-          error: { code: 'API_TOKEN_REQUIRED', message: 'Authorization: Bearer <OD_API_TOKEN> required' },
+          error: { code: 'API_TOKEN_REQUIRED', message: 'Authorization: Bearer <MONOFIELD_API_TOKEN> required' },
         });
       }
       return next();
@@ -3794,7 +3814,7 @@ export async function startServer({
   }
 
   if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') {
-    console.log('[od] Codex plugins disabled via OD_CODEX_DISABLE_PLUGINS=1');
+    console.log('[monofield] Codex plugins disabled via OD_CODEX_DISABLE_PLUGINS=1');
   }
 
   let bundledMarketplaceEntries = [];
@@ -3959,7 +3979,7 @@ export async function startServer({
     .catch(() => {});
 
   await recoverStaleLiveArtifactRefreshes({ projectsRoot: PROJECTS_DIR }).catch((error) => {
-    console.warn('[od] Failed to recover stale live artifact refreshes:', error);
+    console.warn('[monofield] Failed to recover stale live artifact refreshes:', error);
   });
 
   if (fs.existsSync(STATIC_DIR)) {
@@ -4213,10 +4233,10 @@ export async function startServer({
     env: process.env,
   });
 
-  const openDocsPublicMetadata = createOpenDocsPublicMetadataService();
-  registerOpenDocsPublicMetadataRoutes(app, {
+  const monoFieldPublicMetadata = createMonoFieldPublicMetadataService();
+  registerMonoFieldPublicMetadataRoutes(app, {
     http: httpDeps,
-    openDocsPublicMetadata,
+    monoFieldPublicMetadata,
   });
 
   registerPluginEventRoutes(app, {
@@ -4766,7 +4786,7 @@ export async function startServer({
           );
           if (policy === 'latest' && marketplaceResolution) source = marketplaceResolution.source;
         }
-        if (!source) return res.status(409).json({ error: { code: 'missing-source', message: `Plugin "${id}" has no recorded install source — cannot upgrade. Reinstall via 'od plugin install --source <...>' to set one.`, data: { id } } });
+        if (!source) return res.status(409).json({ error: { code: 'missing-source', message: `Plugin "${id}" has no recorded install source — cannot upgrade. Reinstall via 'monofield plugin install --source <...>' to set one.`, data: { id } } });
       } else {
         source = typeof body.source === 'string' ? body.source : '';
         if (!source) return res.status(400).json({ error: 'source is required' });
@@ -4795,7 +4815,7 @@ export async function startServer({
             lookupName,
             MANAGED_PLUGIN_INSTALL_ONLY ? { allowedVisibilities: ['enterprise'] } : {},
           );
-          if (!resolved) return res.status(404).json({ error: { code: 'plugin-not-found', message: `No marketplace plugin named "${source}". Add a marketplace via 'od marketplace add <url>' or pass a github: / https:// / local source.`, data: { name: source } } });
+          if (!resolved) return res.status(404).json({ error: { code: 'plugin-not-found', message: `No marketplace plugin named "${source}". Add a marketplace via 'monofield marketplace add <url>' or pass a github: / https:// / local source.`, data: { name: source } } });
           marketplaceResolution = resolved;
           source = resolved.source;
         }
@@ -4955,7 +4975,7 @@ export async function startServer({
           },
         });
       }
-      try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const relativePath = normalizeProjectPluginFolderPath(body.path); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const folder = await resolveProjectChildDirectory(projectRoot, relativePath); const subcommand = action === 'publish-github' ? 'publish-repo' : 'open-design-pr'; const timeout = action === 'publish-github' ? 240_000 : 300_000; const result = await execCommandViaLoginShell(OD_NODE_BIN, [OD_BIN, 'plugin', subcommand, folder, '--json'], { timeout }); const payload = result.stdout ? JSON.parse(result.stdout) : null; if (!result.ok || !payload?.ok) return res.status(500).json({ ok: false, code: payload?.error?.label || (action === 'publish-github' ? 'publish-repo-failed' : 'open-design-pr-failed'), message: payload?.error?.stderr || payload?.error?.stdout || (action === 'publish-github' ? 'GitHub repo publish failed.' : 'MonoField PR creation failed.'), log: payload?.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [result.stderr || result.stdout || `${subcommand} failed`] }); res.json({ ok: true, message: action === 'publish-github' ? (payload.repoUrl ? `Published plugin to ${payload.repoUrl}.` : 'Published plugin to GitHub.') : (payload.prUrl ? `Opened MonoField PR flow at ${payload.prUrl}.` : 'Opened MonoField PR flow.'), ...(payload.repoUrl ? { url: payload.repoUrl } : {}), ...(payload.prUrl ? { url: payload.prUrl } : {}), log: payload.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [] }); } catch (err) { res.status(400).json({ ok: false, message: String(err?.message || err), log: [] }); }
+      try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const relativePath = normalizeProjectPluginFolderPath(body.path); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const folder = await resolveProjectChildDirectory(projectRoot, relativePath); const subcommand = action === 'publish-github' ? 'publish-repo' : 'monofield-pr'; const timeout = action === 'publish-github' ? 240_000 : 300_000; const result = await execCommandViaLoginShell(OD_NODE_BIN, [OD_BIN, 'plugin', subcommand, folder, '--json'], { timeout }); const payload = result.stdout ? JSON.parse(result.stdout) : null; if (!result.ok || !payload?.ok) return res.status(500).json({ ok: false, code: payload?.error?.label || (action === 'publish-github' ? 'publish-repo-failed' : 'monofield-pr-failed'), message: payload?.error?.stderr || payload?.error?.stdout || (action === 'publish-github' ? 'GitHub repo publish failed.' : 'MonoField PR creation failed.'), log: payload?.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [result.stderr || result.stdout || `${subcommand} failed`] }); res.json({ ok: true, message: action === 'publish-github' ? (payload.repoUrl ? `Published plugin to ${payload.repoUrl}.` : 'Published plugin to GitHub.') : (payload.prUrl ? `Opened MonoField PR flow at ${payload.prUrl}.` : 'Opened MonoField PR flow.'), ...(payload.repoUrl ? { url: payload.repoUrl } : {}), ...(payload.prUrl ? { url: payload.prUrl } : {}), log: payload.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [] }); } catch (err) { res.status(400).json({ ok: false, message: String(err?.message || err), log: [] }); }
     },
     handleCandidateDraft: async (req, res) => {
       if (!isLocalSameOrigin(req, resolvedPort)) return res.status(403).json({ error: 'cross-origin request rejected' });
@@ -6241,7 +6261,7 @@ export async function startServer({
         );
         if (!result.staged) {
           console.warn(
-            `[od] skill-stage skipped: ${result.reason ?? 'unknown reason'}; falling back to absolute paths`,
+            `[monofield] skill-stage skipped: ${result.reason ?? 'unknown reason'}; falling back to absolute paths`,
           );
         }
       }
@@ -6354,8 +6374,8 @@ export async function startServer({
           `The user enabled automatic verification for the bound page: ${normalizedBrowserVerification.url}`,
           'If this run changes code that can affect the interface or user-visible behavior, you must:',
           '1. Run the relevant build, typecheck, or focused tests.',
-          `2. Reload the bound page using \`od browser navigate --session ${normalizedBrowserVerification.sessionId} --url ${normalizedBrowserVerification.url}\`.`,
-          `3. Inspect both DOM state and a screenshot with \`od browser snapshot --session ${normalizedBrowserVerification.sessionId}\` and \`od browser screenshot --session ${normalizedBrowserVerification.sessionId} --out .open-agent/verification/latest.png\`.`,
+          `2. Reload the bound page using \`monofield browser navigate --session ${normalizedBrowserVerification.sessionId} --url ${normalizedBrowserVerification.url}\`.`,
+          `3. Inspect both DOM state and a screenshot with \`monofield browser snapshot --session ${normalizedBrowserVerification.sessionId}\` and \`monofield browser screenshot --session ${normalizedBrowserVerification.sessionId} --out .monofield/verification/latest.png\`.`,
           '4. Exercise the affected interaction when safe, and report exact evidence. Never claim browser verification if a command failed or the page was not reachable.',
         ].join('\n')
       : '';
@@ -7588,22 +7608,33 @@ export async function startServer({
       }
     }
     const odMediaEnv = {
+      MONOFIELD_BIN: OD_BIN,
+      MONOFIELD_NODE_BIN: OD_NODE_BIN,
+      MONOFIELD_DAEMON_URL: daemonUrl,
       OD_BIN,
       OD_NODE_BIN,
       OD_DAEMON_URL: daemonUrl,
       ...(typeof projectId === 'string' && projectId && cwd
         ? {
+            MONOFIELD_PROJECT_ID: projectId,
+            MONOFIELD_PROJECT_DIR: cwd,
             OD_PROJECT_ID: projectId,
             OD_PROJECT_DIR: cwd,
           }
         : {}),
       ...(projectRecord?.metadata?.workMode
-        ? { OD_PROJECT_WORK_MODE: projectRecord.metadata.workMode }
+        ? {
+            MONOFIELD_PROJECT_WORK_MODE: projectRecord.metadata.workMode,
+            OD_PROJECT_WORK_MODE: projectRecord.metadata.workMode,
+          }
         : {}),
       ...(projectRecord?.metadata?.databaseContext?.useForDevelopment === true
         && typeof projectRecord.metadata.databaseContext.connectionId === 'string'
         && projectRecord.metadata.databaseContext.connectionId.trim()
-        ? { OD_PROJECT_DATABASE_ID: projectRecord.metadata.databaseContext.connectionId.trim() }
+        ? {
+            MONOFIELD_PROJECT_DATABASE_ID: projectRecord.metadata.databaseContext.connectionId.trim(),
+            OD_PROJECT_DATABASE_ID: projectRecord.metadata.databaseContext.connectionId.trim(),
+          }
         : {}),
     };
     if (run.cancelRequested || design.runs.isTerminal(run.status)) {
@@ -9134,7 +9165,7 @@ export async function startServer({
       );
       if (!result.staged) {
         console.warn(
-          `[od] orbit template skill-stage skipped: ${result.reason ?? 'unknown reason'}; falling back to prompt-embedded instructions`,
+          `[monofield] orbit template skill-stage skipped: ${result.reason ?? 'unknown reason'}; falling back to prompt-embedded instructions`,
         );
       }
     }
@@ -9158,7 +9189,7 @@ export async function startServer({
         'You must discover connectors and connector tools yourself through the OD CLI; the daemon has not chosen tools for you.',
         'You must create and register a Live Artifact as the final deliverable. Do not merely describe what you would do.',
         'Do not ask follow-up questions, do not emit <question-form>, and do not wait for user input. This run is unattended; pick reasonable defaults and complete the artifact.',
-        'Keep connector credentials and OD_TOOL_TOKEN private; never print or persist secrets.',
+        'Keep connector credentials and MONOFIELD_TOOL_TOKEN private; never print or persist secrets.',
       ].join('\n'),
     }, run));
 
@@ -9628,7 +9659,7 @@ export async function startServer({
     },
     agents: agentDeps,
     critique: critiqueDeps,
-    openDocsPublicMetadata,
+    monoFieldPublicMetadata,
     lifecycle: { isDaemonShuttingDown: () => daemonShuttingDown },
   });
 
@@ -9722,7 +9753,7 @@ export async function startServer({
         if (!boundPort) {
           reject(
             new Error(
-              `[od] daemon failed to resolve listening port (address=${JSON.stringify(address)})`,
+              `[monofield] daemon failed to resolve listening port (address=${JSON.stringify(address)})`,
             ),
           );
           return;
@@ -9734,7 +9765,7 @@ export async function startServer({
         const reportHost = host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host;
         const url = `http://${reportHost}:${resolvedPort}`;
         if (!returnServer) {
-          console.log(`[od] daemon listening on ${url}`);
+          console.log(`[monofield] daemon listening on ${url}`);
         }
         daemonUrl = url;
         resolve(returnServer ? {

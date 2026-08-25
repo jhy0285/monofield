@@ -44,7 +44,7 @@ export async function waitForLauncherAfterQuit(
   }
   const message = `timed-out targetPid=${request.targetPid}`;
   await writeLauncherAfterQuitLog(paths, message);
-  logger.warn(`[open-design launcher] ${message}`);
+  logger.warn(`[monofield launcher] ${message}`);
 }
 
 export async function inspectExistingDesktopForLauncher(
@@ -74,7 +74,7 @@ export async function inspectExistingDesktopForLauncher(
   } catch (error) {
     const message = `inspect-unavailable namespace=${namespace} action=continue error=${error instanceof Error ? error.message : String(error)}`;
     await writeLauncherAfterQuitLog(options.paths, message);
-    logger.info?.(`[open-design launcher] ${message}`);
+    logger.info?.(`[monofield launcher] ${message}`);
     return { action: "continue", reason: "inspect-failed" };
   }
 
@@ -111,7 +111,7 @@ export async function inspectExistingDesktopForLauncher(
     } catch (error) {
       const message = `inspect-found-existing namespace=${namespace} shutdown=failed reason=stale-sidecar error=${error instanceof Error ? error.message : String(error)}`;
       await writeLauncherAfterQuitLog(options.paths, message);
-      logger.warn(`[open-design launcher] ${message}`);
+      logger.warn(`[monofield launcher] ${message}`);
       return { action: "exit", reason: "existing-focus-failed" };
     }
     if (pid != null) {
@@ -132,7 +132,7 @@ export async function inspectExistingDesktopForLauncher(
   } catch (error) {
     const message = `inspect-found-existing namespace=${namespace} focus=failed error=${error instanceof Error ? error.message : String(error)}`;
     await writeLauncherAfterQuitLog(options.paths, message);
-    logger.warn(`[open-design launcher] ${message}`);
+    logger.warn(`[monofield launcher] ${message}`);
     return { action: "exit", reason: "existing-focus-failed" };
   }
 }

@@ -1,4 +1,4 @@
-# Open Design — Product Spec
+# MonoField — Product Spec
 
 **Status:** Draft v0.1 · 2026-04-24
 **Scope:** Product definition, scenarios, non-goals, high-level modules, and positioning against both [Anthropic's Claude Design][cd] and the existing open-source alternative ([Open CoDesign][ocod]).
@@ -75,7 +75,7 @@ The fifth is the cross-product loop described in [`automation-self-evolution.md`
 └────────────┬─────────────────────────────────┬───────────────────┘
              │ HTTP + SSE (/api/chat)          │ HTTPS (BYOK direct)
 ┌────────────▼──────────────────┐     ┌────────▼─────────────────┐
-│   Local Daemon (od daemon)   │     │   Anthropic Messages API │
+│   Local Daemon (monofield daemon)   │     │   Anthropic Messages API │
 │   · agent detection           │     │   (fallback when no CLI) │
 │   · skill registry            │     └──────────────────────────┘
 │   · artifact store            │
@@ -96,8 +96,8 @@ Module responsibilities:
 - **Skill registry** — scans `~/.claude/skills/`, `./skills/`, and `./.claude/skills/`; merges and exposes a typed catalog.
 - **Artifact store** — daemon-managed storage for generated files, version snapshots, and per-artifact metadata. Current data-path rules are not specified in this draft; contributors must read root `AGENTS.md` → **Daemon data directory contract** before documenting or changing storage paths.
 - **Design-system resolver** — loads the active `DESIGN.md`, injects it as skill context.
-- **Automations** — templates that orchestrate schedules, connectors, ingestion, memory updates, skill crystallization, design-system extraction, token compression, and review gates; source packets enter through the Automations page, `/api/automation-ingestions`, and `od automation source`, while evolution proposals are reviewable through `/api/automation-proposals` and `od automation proposal`.
-- **Memory / evolution store** — editable Markdown-backed memory tree exposed through Settings, `/api/memory/tree`, and `od memory tree`; accepted tree nodes feed future daemon and BYOK/API-mode agent prompts, and accepted proposals can write reviewed memory, skill, and design-system drafts into user-owned runtime roots.
+- **Automations** — templates that orchestrate schedules, connectors, ingestion, memory updates, skill crystallization, design-system extraction, token compression, and review gates; source packets enter through the Automations page, `/api/automation-ingestions`, and `monofield automation source`, while evolution proposals are reviewable through `/api/automation-proposals` and `monofield automation proposal`.
+- **Memory / evolution store** — editable Markdown-backed memory tree exposed through Settings, `/api/memory/tree`, and `monofield memory tree`; accepted tree nodes feed future daemon and BYOK/API-mode agent prompts, and accepted proposals can write reviewed memory, skill, and design-system drafts into user-owned runtime roots.
 - **Preview renderer** — sandboxed iframe with vendored React + Babel for JSX artifacts; plain iframe for HTML; PDF via the daemon's headless Chrome.
 - **Export pipeline** — HTML (inlined), PDF, PPTX, ZIP, Markdown.
 
@@ -119,7 +119,7 @@ We seriously considered it. The concrete blockers:
 3. **Skill format is proprietary.** Its 12 skills are TypeScript modules compiled into the app. A user cannot drop [`guizang-ppt-skill`][guizang] in and have it work; there's no `SKILL.md` loader.
 4. **No design system abstraction.** Design tokens live in prompts, not in a versioned file that can be shared across projects.
 
-We keep the good parts: comment mode, slider-emitted parameters, multi-frame preview, single-file HTML export, sandboxed iframe rendering. These are all UI ideas that are orthogonal to the agent layer and we'll absolutely borrow them. See [`references.md`](references.md) for the explicit borrow list.
+We keep the gomonofield parts: comment mode, slider-emitted parameters, multi-frame preview, single-file HTML export, sandboxed iframe rendering. These are all UI ideas that are orthogonal to the agent layer and we'll absolutely borrow them. See [`references.md`](references.md) for the explicit borrow list.
 
 ## 8. Positioning against Anthropic's [Claude Design][cd]
 
@@ -135,7 +135,7 @@ In short: Claude Design is a product; OD is a **substrate**.
 ## 9. Success criteria for v1
 
 - One developer can `git clone && corepack enable && pnpm install && pnpm tools-dev run web`, point at their Claude Code install, and produce a prototype in under 5 minutes.
-- A third party can author a skill in a separate git repo, publish it, and have a user install it by running `od skill add <git-url>` without touching OD's source.
+- A third party can author a skill in a separate git repo, publish it, and have a user install it by running `monofield skill add <git-url>` without touching OD's source.
 - A design system author can write a `DESIGN.md`, point OD at it, and have the style propagate across prototype / deck / template outputs.
 - Deploying to Vercel with a local daemon works end-to-end (the daemon is reachable via localhost tunnel or a user-provided URL).
 - Swapping the underlying agent from Claude Code to Codex requires zero skill changes.

@@ -33,6 +33,7 @@ def load_sample_context(path: str | None, codebase_path: str | Path | None = Non
         roots.append(Path.cwd())
         for root in roots:
             candidates = (
+                root / ".monofield" / "database-context" / "approved-db-context.json",
                 root / ".open-docs" / "database-context" / "approved-db-context.json",
                 root / "approved-db-context.json",
             )

@@ -149,12 +149,12 @@ export async function stageActiveSkill(
     const aliasStat = await lstat(aliasRoot);
     if (aliasStat.isSymbolicLink()) {
       log(
-        `[od] skill-stage: replacing legacy symlink at ${aliasRoot} with a real directory`,
+        `[monofield] skill-stage: replacing legacy symlink at ${aliasRoot} with a real directory`,
       );
       await rm(aliasRoot, { recursive: true, force: true });
     } else if (!aliasStat.isDirectory()) {
       log(
-        `[od] skill-stage: ${aliasRoot} exists and is not a directory; refusing to stage`,
+        `[monofield] skill-stage: ${aliasRoot} exists and is not a directory; refusing to stage`,
       );
       return {
         staged: false,
@@ -185,14 +185,14 @@ export async function stageActiveSkill(
       const code = (err as NodeJS.ErrnoException).code ?? '';
       if (!RECOVERABLE_COPY_CODES.has(code)) throw err;
       log(
-        `[od] skill-stage: native copy failed (${code}); retrying with stream copy`,
+        `[monofield] skill-stage: native copy failed (${code}); retrying with stream copy`,
       );
       await rm(stagedPath, { recursive: true, force: true });
       await copyTreeDereferenced(sourceDir, stagedPath);
     }
     return { staged: true, stagedPath };
   } catch (err) {
-    log(`[od] skill-stage failed: ${(err as Error).message}`);
+    log(`[monofield] skill-stage failed: ${(err as Error).message}`);
     return { staged: false, reason: (err as Error).message };
   }
 }

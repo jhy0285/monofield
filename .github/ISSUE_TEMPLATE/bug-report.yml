@@ -1,5 +1,5 @@
 name: 🐛 Bug report
-description: Something isn't working as expected in Open Design.
+description: Something isn't working as expected in MonoField.
 title: "[Bug]: "
 labels: ["bug"]
 body:
@@ -9,7 +9,7 @@ body:
         Thanks for taking the time to report a bug! A clear, reproducible report helps us fix it faster.
 
         Before you submit:
-        - Check whether the issue is already reported in [open issues](https://github.com/nexu-io/open-design/issues?q=is%3Aissue).
+        - Check whether the issue is already reported in [open issues](https://github.com/jhy0285/monofield/issues?q=is%3Aissue).
         - Replace example text with your actual bug details. Placeholder reports like `testing` or `0.0.0` are not actionable.
 
   - type: checkboxes
@@ -19,7 +19,7 @@ body:
       options:
         - label: I searched existing issues and confirmed this is not a duplicate.
           required: true
-        - label: I replaced the example text with the real behavior, reproduction steps, expected result, and version from the app's About menu or `od --version`.
+        - label: I replaced the example text with the real behavior, reproduction steps, expected result, and version from the app's About menu or `monofield --version`.
           required: true
 
   - type: textarea
@@ -37,7 +37,7 @@ body:
       label: Steps to reproduce
       description: Minimal steps that reliably reproduce the problem.
       placeholder: |
-        1. Open Open Design
+        1. Open MonoField
         2. Click ...
         3. See error
     validations:
@@ -54,8 +54,8 @@ body:
   - type: input
     id: version
     attributes:
-      label: Open Design version
-      description: Find this in the app's About menu, or run `od --version`.
+      label: MonoField version
+      description: Find this in the app's About menu, or run `monofield --version`.
       placeholder: e.g. 0.8.0 or 0.8.0-preview.2
     validations:
       required: true

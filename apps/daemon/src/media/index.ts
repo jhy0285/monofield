@@ -1087,7 +1087,7 @@ async function renderCodexImage(ctx: MediaContext): Promise<RenderResult> {
 async function renderImageRouterImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no ImageRouter API key — configure it in Settings or set OD_IMAGEROUTER_API_KEY',
+      'no ImageRouter API key — configure it in Settings or set MONOFIELD_IMAGEROUTER_API_KEY',
     );
   }
   const baseUrl = (credentials.baseUrl || IMAGEROUTER_DEFAULT_BASE_URL).trim();
@@ -1122,7 +1122,7 @@ async function renderImageRouterImage(ctx: MediaContext, credentials: ProviderCo
 async function renderImageRouterVideo(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no ImageRouter API key — configure it in Settings or set OD_IMAGEROUTER_API_KEY',
+      'no ImageRouter API key — configure it in Settings or set MONOFIELD_IMAGEROUTER_API_KEY',
     );
   }
   const baseUrl = (credentials.baseUrl || IMAGEROUTER_DEFAULT_BASE_URL).trim();
@@ -1767,7 +1767,7 @@ async function renderGrokImage(ctx: MediaContext, credentials: ProviderConfig): 
 async function renderNanoBananaImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no Nano Banana API key — configure it in Settings or set OD_NANOBANANA_API_KEY',
+      'no Nano Banana API key — configure it in Settings or set MONOFIELD_NANOBANANA_API_KEY',
     );
   }
 
@@ -2205,7 +2205,7 @@ async function renderOpenRouterVideo(
     throw new Error(
       `openrouter video timed out after ${elapsedSec}s waiting for status=completed `
       + `(last status: ${lastStatus || 'pending'}, ceiling ${ceilingSec}s). `
-      + `If your jobs legitimately need longer, raise OD_OPENROUTER_VIDEO_MAX_POLL_MS.`,
+      + `If your jobs legitimately need longer, raise MONOFIELD_OPENROUTER_VIDEO_MAX_POLL_MS.`,
     );
   }
 
@@ -2488,7 +2488,7 @@ async function renderGrokVideo(ctx: MediaContext, credentials: ProviderConfig, o
       throw new Error(
         `grok video timed out after ${elapsedSec}s waiting for status=done `
         + `(last status: ${lastStatus || 'pending'}, ceiling ${ceilingSec}s). `
-        + `If your jobs legitimately need longer, raise OD_GROK_VIDEO_MAX_POLL_MS.`,
+        + `If your jobs legitimately need longer, raise MONOFIELD_GROK_VIDEO_MAX_POLL_MS.`,
       );
     }
   }
@@ -2651,7 +2651,7 @@ function assertElevenLabsSfxPromptLength(text: string) {
 async function renderElevenLabsTTS(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no ElevenLabs API key - configure it in Settings or set OD_ELEVENLABS_API_KEY',
+      'no ElevenLabs API key - configure it in Settings or set MONOFIELD_ELEVENLABS_API_KEY',
     );
   }
 
@@ -2704,7 +2704,7 @@ async function renderElevenLabsTTS(ctx: MediaContext, credentials: ProviderConfi
 async function renderElevenLabsSfx(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no ElevenLabs API key - configure it in Settings or set OD_ELEVENLABS_API_KEY',
+      'no ElevenLabs API key - configure it in Settings or set MONOFIELD_ELEVENLABS_API_KEY',
     );
   }
 
@@ -2777,7 +2777,7 @@ const MINIMAX_TTS_MODEL_MAP = {
 async function renderMinimaxTTS(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no MiniMax API key — configure it in Settings or set OD_MINIMAX_API_KEY',
+      'no MiniMax API key — configure it in Settings or set MONOFIELD_MINIMAX_API_KEY',
     );
   }
   const baseUrl = (credentials.baseUrl || MINIMAX_DEFAULT_BASE_URL).replace(
@@ -2894,7 +2894,7 @@ const SENSEAUDIO_TTS_MODEL_MAP = {
 async function renderSenseAudioTTS(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no SenseAudio API key — configure it in Settings or set OD_SENSEAUDIO_API_KEY',
+      'no SenseAudio API key — configure it in Settings or set MONOFIELD_SENSEAUDIO_API_KEY',
     );
   }
   const baseUrl = (credentials.baseUrl || SENSEAUDIO_DEFAULT_BASE_URL).replace(
@@ -3004,7 +3004,7 @@ function senseAudioImageSize(aspect?: string): string {
 async function renderSenseAudioImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no SenseAudio API key — configure it in Settings or set OD_SENSEAUDIO_API_KEY',
+      'no SenseAudio API key — configure it in Settings or set MONOFIELD_SENSEAUDIO_API_KEY',
     );
   }
   const baseUrl = (credentials.baseUrl || SENSEAUDIO_DEFAULT_BASE_URL).replace(
@@ -3100,7 +3100,7 @@ async function renderSenseAudioImage(ctx: MediaContext, credentials: ProviderCon
 
 async function renderAIHubMixImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
-    throw new Error('no AIHubMix API key — configure it in Settings or set OD_AIHUBMIX_API_KEY');
+    throw new Error('no AIHubMix API key — configure it in Settings or set MONOFIELD_AIHUBMIX_API_KEY');
   }
   const baseUrl = credentials.baseUrl || AIHUBMIX_DEFAULT_BASE_URL;
   const wireModel = aihubmixWireModel(credentials.model || ctx.wireModel);
@@ -3174,7 +3174,7 @@ async function renderAIHubMixGeminiImage(
   wireModel: string,
 ): Promise<RenderResult> {
   if (!credentials.apiKey) {
-    throw new Error('no AIHubMix API key — configure it in Settings or set OD_AIHUBMIX_API_KEY');
+    throw new Error('no AIHubMix API key — configure it in Settings or set MONOFIELD_AIHUBMIX_API_KEY');
   }
   const aspect = ctx.aspect || '1:1';
   const bytes = await aihubmixGeminiImageBytes(
@@ -3196,7 +3196,7 @@ async function renderAIHubMixGeminiImage(
 
 async function renderAIHubMixTTS(ctx: MediaContext, credentials: ProviderConfig, fileName: string): Promise<RenderResult> {
   if (!credentials.apiKey) {
-    throw new Error('no AIHubMix API key — configure it in Settings or set OD_AIHUBMIX_API_KEY');
+    throw new Error('no AIHubMix API key — configure it in Settings or set MONOFIELD_AIHUBMIX_API_KEY');
   }
   const baseUrl = credentials.baseUrl || AIHUBMIX_DEFAULT_BASE_URL;
   const wireModel = aihubmixWireModel(credentials.model || ctx.wireModel);
@@ -3252,7 +3252,7 @@ async function renderAIHubMixVideo(
   onProgress?: ProgressFn,
 ): Promise<RenderResult> {
   if (!credentials.apiKey) {
-    throw new Error('no AIHubMix API key — configure it in Settings or set OD_AIHUBMIX_API_KEY');
+    throw new Error('no AIHubMix API key — configure it in Settings or set MONOFIELD_AIHUBMIX_API_KEY');
   }
   const baseUrl = (credentials.baseUrl || AIHUBMIX_DEFAULT_BASE_URL).replace(/\/$/, '');
   const wireModel = aihubmixWireModel(credentials.model || ctx.wireModel);
@@ -3413,7 +3413,7 @@ const FISHAUDIO_TTS_MODEL_MAP = {
 async function renderFishAudioTTS(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no FishAudio API key — configure it in Settings or set OD_FISHAUDIO_API_KEY',
+      'no FishAudio API key — configure it in Settings or set MONOFIELD_FISHAUDIO_API_KEY',
     );
   }
   const baseUrl = (credentials.baseUrl || FISHAUDIO_DEFAULT_BASE_URL).replace(

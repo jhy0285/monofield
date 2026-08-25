@@ -1,22 +1,22 @@
 targetScope = 'resourceGroup'
 
-@description('Azure region for the Open Design container group and storage account.')
+@description('Azure region for the MonoField container group and storage account.')
 param location string = resourceGroup().location
 
 @description('Container group name.')
-param containerGroupName string = 'open-design'
+param containerGroupName string = 'monofield'
 
 @description('DNS label for the Azure Container Instances upstream endpoint. Must be unique in the selected region.')
-param dnsNameLabel string = toLower('open-design-${uniqueString(resourceGroup().id, location)}')
+param dnsNameLabel string = toLower('monofield-${uniqueString(resourceGroup().id, location)}')
 
-@description('Open Design container image.')
-param image string = 'ghcr.io/nexu-io/od:latest'
+@description('MonoField container image.')
+param image string = 'ghcr.io/jhy0285/monofield:latest'
 
 @secure()
-@description('Required Open Design API token. Generate with: openssl rand -hex 32')
-param odApiToken string
+@description('Required MonoField API token. Generate with: openssl rand -hex 32')
+param monofieldApiToken string
 
-@description('Comma-separated browser-visible origins allowed by the daemon. Set this to the authenticated reverse proxy origin, for example https://od.example.com.')
+@description('Comma-separated browser-visible origins allowed by the daemon. Set this to the authenticated reverse proxy origin, for example https://monofield.example.com.')
 param allowedOrigins string = ''
 
 @description('Node.js heap cap inside the container.')
@@ -30,12 +30,12 @@ param cpuCores int = 1
 @minValue(1)
 param memoryInGB int = 1
 
-@description('Azure Files share quota in GiB for persistent Open Design data.')
+@description('Azure Files share quota in GiB for persistent MonoField data.')
 @minValue(1)
 @maxValue(5120)
 param fileShareQuotaGB int = 10
 
-var storageAccountName = take(toLower('od${uniqueString(resourceGroup().id, location)}'), 24)
+var storageAccountName = take(toLower('monofield${uniqueString(resourceGroup().id, location)}'), 24)
 var fileShareName = 'opendesigndata'
 var appPort = 7456
 
@@ -86,7 +86,7 @@ resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2023-05-01'
     }
     containers: [
       {
-        name: 'open-design'
+        name: 'monofield'
         properties: {
           image: image
           ports: [
@@ -105,28 +105,28 @@ resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2023-05-01'
               value: nodeOptions
             }
             {
-              name: 'OD_BIND_HOST'
+              name: 'MONOFIELD_BIND_HOST'
               value: '0.0.0.0'
             }
             {
-              name: 'OD_PORT'
+              name: 'MONOFIELD_PORT'
               value: string(appPort)
             }
             {
-              name: 'OD_WEB_PORT'
+              name: 'MONOFIELD_WEB_PORT'
               value: string(appPort)
             }
             {
-              name: 'OD_DATA_DIR'
-              value: '/app/.od'
+              name: 'MONOFIELD_DATA_DIR'
+              value: '/app/.monofield'
             }
             {
-              name: 'OD_ALLOWED_ORIGINS'
+              name: 'MONOFIELD_ALLOWED_ORIGINS'
               value: allowedOrigins
             }
             {
-              name: 'OD_API_TOKEN'
-              secureValue: odApiToken
+              name: 'MONOFIELD_API_TOKEN'
+              secureValue: monofieldApiToken
             }
           ]
           resources: {
@@ -137,8 +137,8 @@ resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2023-05-01'
           }
           volumeMounts: [
             {
-              name: 'open-design-data'
-              mountPath: '/app/.od'
+              name: 'monofield-data'
+              mountPath: '/app/.monofield'
               readOnly: false
             }
           ]
@@ -158,7 +158,7 @@ resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2023-05-01'
     ]
     volumes: [
       {
-        name: 'open-design-data'
+        name: 'monofield-data'
         azureFile: {
           shareName: dataShare.name
           storageAccountName: storageAccount.name

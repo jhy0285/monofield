@@ -81,7 +81,7 @@ const SENSITIVE_TEXT_PATTERNS = [
 export interface BrowserEvidenceDocument {
   action: BrowserEvidenceActionId;
   capturedAt: string;
-  source: 'open-docs-in-app-webview';
+  source: 'monofield-in-app-webview';
   tab: {
     title: string;
     url: string;
@@ -337,7 +337,7 @@ export async function collectReadOnlyBrowserEvidence(
       document: compactDocument({
         action: actionId,
         capturedAt: new Date().toISOString(),
-        source: 'open-docs-in-app-webview',
+        source: 'monofield-in-app-webview',
         tab: {
           title: redactBrowserEvidenceText(String(target.getTitle?.() ?? '')),
           url: sanitizeBrowserEvidenceUrl(String(target.getURL() ?? '')),

@@ -84,6 +84,15 @@ export const DESKTOP_UPDATE_ENV = Object.freeze({
   PLATFORM: "OD_UPDATE_PLATFORM",
 } as const);
 
+function readDesktopUpdateEnv(env: NodeJS.ProcessEnv, legacyName: string): string | undefined {
+  const canonicalName = legacyName.replace(/^OD_/, "MONOFIELD_");
+  return env[canonicalName] ?? env[legacyName];
+}
+
+function publicDesktopUpdateEnvName(legacyName: string): string {
+  return legacyName.replace(/^OD_/, "MONOFIELD_");
+}
+
 const OWNERSHIP_SENTINEL = ".open-design-updater-root.json";
 const STORE_METADATA_FILE = "metadata.json";
 const RELEASES_DIR = "releases";
@@ -395,24 +404,24 @@ function defaultPollIntervalMs(channel: DesktopUpdateChannel): number {
 
 export function resolveDesktopUpdaterConfig(input: DesktopUpdaterConfigInput): DesktopUpdaterConfig {
   const env = input.env ?? process.env;
-  const mode = normalizeMode(env[DESKTOP_UPDATE_ENV.MODE], input.mode ?? DESKTOP_UPDATE_MODES.PACKAGE_LAUNCHER);
+  const mode = normalizeMode(readDesktopUpdateEnv(env, DESKTOP_UPDATE_ENV.MODE), input.mode ?? DESKTOP_UPDATE_MODES.PACKAGE_LAUNCHER);
   const defaultEnabled = input.source === SIDECAR_SOURCES.PACKAGED;
-  const metadataUrl = normalizeOptionalNonEmpty(env[DESKTOP_UPDATE_ENV.METADATA_URL]) ?? null;
+  const metadataUrl = normalizeOptionalNonEmpty(readDesktopUpdateEnv(env, DESKTOP_UPDATE_ENV.METADATA_URL)) ?? null;
   // Packaged builds must never infer a public update service. An updater is
   // available only when its metadata endpoint is explicitly provisioned.
-  const enabled = metadataUrl != null && (isTruthyEnv(env[DESKTOP_UPDATE_ENV.ENABLED]) ?? defaultEnabled);
+  const enabled = metadataUrl != null && (isTruthyEnv(readDesktopUpdateEnv(env, DESKTOP_UPDATE_ENV.ENABLED)) ?? defaultEnabled);
   const runtimeBase = input.runtimeBase == null ? process.cwd() : input.runtimeBase;
   const downloadRoot = normalizeDownloadRoot(
-    env[DESKTOP_UPDATE_ENV.DOWNLOAD_ROOT] ??
+    readDesktopUpdateEnv(env, DESKTOP_UPDATE_ENV.DOWNLOAD_ROOT) ??
       input.downloadRoot ??
       join(resolve(runtimeBase), "updates"),
   );
   const currentVersion =
-    env[DESKTOP_UPDATE_ENV.CURRENT_VERSION] ??
+    readDesktopUpdateEnv(env, DESKTOP_UPDATE_ENV.CURRENT_VERSION) ??
     input.currentVersion ??
     input.appVersion ??
     "0.0.0";
-  const channel = normalizeChannel(env[DESKTOP_UPDATE_ENV.CHANNEL], defaultChannelForVersion(currentVersion));
+  const channel = normalizeChannel(readDesktopUpdateEnv(env, DESKTOP_UPDATE_ENV.CHANNEL), defaultChannelForVersion(currentVersion));
   const installerObservationRoot = normalizeOptionalRoot(input.installerObservationRoot, "installer observation root");
   const launcherLaunchPath = normalizeOptionalNonEmpty(input.launcherLaunchPath);
   const launcherRoot = normalizeOptionalRoot(input.launcherRoot, "launcher root");
@@ -421,29 +430,29 @@ export function resolveDesktopUpdaterConfig(input: DesktopUpdaterConfigInput): D
   const namespace = normalizeOptionalNonEmpty(input.namespace);
 
   return {
-    arch: env[DESKTOP_UPDATE_ENV.ARCH] ?? input.arch ?? process.arch,
-    autoCheck: isTruthyEnv(env[DESKTOP_UPDATE_ENV.AUTO_CHECK]) ?? enabled,
-    autoDownload: isTruthyEnv(env[DESKTOP_UPDATE_ENV.AUTO_DOWNLOAD]) ?? true,
-    autoOpen: isTruthyEnv(env[DESKTOP_UPDATE_ENV.AUTO_OPEN]) ?? false,
+    arch: readDesktopUpdateEnv(env, DESKTOP_UPDATE_ENV.ARCH) ?? input.arch ?? process.arch,
+    autoCheck: isTruthyEnv(readDesktopUpdateEnv(env, DESKTOP_UPDATE_ENV.AUTO_CHECK)) ?? enabled,
+    autoDownload: isTruthyEnv(readDesktopUpdateEnv(env, DESKTOP_UPDATE_ENV.AUTO_DOWNLOAD)) ?? true,
+    autoOpen: isTruthyEnv(readDesktopUpdateEnv(env, DESKTOP_UPDATE_ENV.AUTO_OPEN)) ?? false,
     checkBackoffInitialMs: positiveDurationEnv(
-      env[DESKTOP_UPDATE_ENV.CHECK_BACKOFF_INITIAL_MS],
+      readDesktopUpdateEnv(env, DESKTOP_UPDATE_ENV.CHECK_BACKOFF_INITIAL_MS),
       DEFAULT_POLL_BACKOFF_INITIAL_MS,
-      DESKTOP_UPDATE_ENV.CHECK_BACKOFF_INITIAL_MS,
+      publicDesktopUpdateEnvName(DESKTOP_UPDATE_ENV.CHECK_BACKOFF_INITIAL_MS),
     ),
     checkBackoffMaxMs: positiveDurationEnv(
-      env[DESKTOP_UPDATE_ENV.CHECK_BACKOFF_MAX_MS],
+      readDesktopUpdateEnv(env, DESKTOP_UPDATE_ENV.CHECK_BACKOFF_MAX_MS),
       DEFAULT_POLL_BACKOFF_MAX_MS,
-      DESKTOP_UPDATE_ENV.CHECK_BACKOFF_MAX_MS,
+      publicDesktopUpdateEnvName(DESKTOP_UPDATE_ENV.CHECK_BACKOFF_MAX_MS),
     ),
     checkInitialDelayMs: durationEnv(
-      env[DESKTOP_UPDATE_ENV.CHECK_INITIAL_DELAY_MS],
+      readDesktopUpdateEnv(env, DESKTOP_UPDATE_ENV.CHECK_INITIAL_DELAY_MS),
       DEFAULT_POLL_INITIAL_DELAY_MS,
-      DESKTOP_UPDATE_ENV.CHECK_INITIAL_DELAY_MS,
+      publicDesktopUpdateEnvName(DESKTOP_UPDATE_ENV.CHECK_INITIAL_DELAY_MS),
     ),
     checkIntervalMs: positiveDurationEnv(
-      env[DESKTOP_UPDATE_ENV.CHECK_INTERVAL_MS],
+      readDesktopUpdateEnv(env, DESKTOP_UPDATE_ENV.CHECK_INTERVAL_MS),
       defaultPollIntervalMs(channel),
-      DESKTOP_UPDATE_ENV.CHECK_INTERVAL_MS,
+      publicDesktopUpdateEnvName(DESKTOP_UPDATE_ENV.CHECK_INTERVAL_MS),
     ),
     channel,
     currentVersion,
@@ -457,8 +466,8 @@ export function resolveDesktopUpdaterConfig(input: DesktopUpdaterConfigInput): D
     metadataUrl,
     mode,
     ...(namespace == null ? {} : { namespace }),
-    openDryRun: isTruthyEnv(env[DESKTOP_UPDATE_ENV.OPEN_DRY_RUN]) ?? false,
-    platform: env[DESKTOP_UPDATE_ENV.PLATFORM] ?? input.platform ?? process.platform,
+    openDryRun: isTruthyEnv(readDesktopUpdateEnv(env, DESKTOP_UPDATE_ENV.OPEN_DRY_RUN)) ?? false,
+    platform: readDesktopUpdateEnv(env, DESKTOP_UPDATE_ENV.PLATFORM) ?? input.platform ?? process.platform,
     source: input.source,
   };
 }
@@ -526,7 +535,7 @@ function extensionForArtifact(name: string | undefined, type: string): string {
 function artifactFileName(candidate: UpdateCandidate): string {
   const ext = extensionForArtifact(candidate.artifact.name, candidate.artifact.type ?? "artifact");
   return [
-    "open-docs",
+    "monofield",
     sanitizePathSegment(candidate.version),
     sanitizePathSegment(candidate.platformKey),
     sanitizePathSegment(candidate.arch),
@@ -631,7 +640,7 @@ function storeShapeError(root: string, message: string, details?: unknown): Desk
 }
 
 function logStoreError(logger: DesktopUpdaterLogger, error: DesktopUpdateErrorSnapshot): void {
-  logger.error("[open-design updater] invalid update store", error);
+  logger.error("[monofield updater] invalid update store", error);
 }
 
 function isAllowedRootEntry(layout: DesktopUpdaterStoreLayout, name: string): boolean {
@@ -1620,12 +1629,12 @@ async function cleanupBackDirectory(root: string, logger: DesktopUpdaterLogger):
   const entry = await lstat(backDir).catch(() => null);
   if (entry == null) return;
   if (!entry.isDirectory() || entry.isSymbolicLink()) {
-    logger.warn("[open-design updater] skipped invalid update backup directory", backDir);
+    logger.warn("[monofield updater] skipped invalid update backup directory", backDir);
     return;
   }
   const realBackDir = await realpath(backDir).catch(() => null);
   if (realBackDir == null || !containsPath(root, realBackDir)) {
-    logger.warn("[open-design updater] skipped escaped update backup directory", backDir);
+    logger.warn("[monofield updater] skipped escaped update backup directory", backDir);
     return;
   }
   const entries = await readdir(backDir);
@@ -1640,14 +1649,14 @@ async function cleanupBackDirectory(root: string, logger: DesktopUpdaterLogger):
       if (real == null || !containsPath(root, real)) return;
     }
     await rm(resolved, { force: true, recursive: true }).catch((error: unknown) => {
-      logger.warn("[open-design updater] failed to clean update backup entry", error);
+      logger.warn("[monofield updater] failed to clean update backup entry", error);
     });
   }));
 }
 
 function scheduleBackCleanup(root: string, logger: DesktopUpdaterLogger): void {
   void cleanupBackDirectory(root, logger).catch((error: unknown) => {
-    logger.warn("[open-design updater] failed to clean update backup directory", error);
+    logger.warn("[monofield updater] failed to clean update backup directory", error);
   });
 }
 
@@ -1766,7 +1775,7 @@ async function withUpdaterLifecycleLock<T>(
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code === "EEXIST") {
-      logger.warn("[open-design updater] skipped release lifecycle because updater lifecycle lock is held", {
+      logger.warn("[monofield updater] skipped release lifecycle because updater lifecycle lock is held", {
         lockRoot: layout.lockRoot,
       });
       return null;
@@ -1777,7 +1786,7 @@ async function withUpdaterLifecycleLock<T>(
     return await task();
   } finally {
     await rm(layout.lockRoot, { force: true, recursive: true }).catch((error: unknown) => {
-      logger.warn("[open-design updater] failed to release updater lifecycle lock", error);
+      logger.warn("[monofield updater] failed to release updater lifecycle lock", error);
     });
   }
 }
@@ -1953,7 +1962,7 @@ async function cleanupDeprecatedReleaseEntries(input: {
         updatedAt: nowIso,
       });
     } catch (error) {
-      logger.warn("[open-design updater] failed to clean deprecated release", {
+      logger.warn("[monofield updater] failed to clean deprecated release", {
         error: error instanceof Error ? error.message : String(error),
         key: entry.key,
         path: releaseDir,
@@ -2081,7 +2090,7 @@ async function runLauncherCleanupLifecycle(input: {
       { channel: config.channel, namespace: config.namespace },
     );
   } catch (error) {
-    logger.warn("[open-design updater] failed to read launcher cleanup lifecycle inputs", {
+    logger.warn("[monofield updater] failed to read launcher cleanup lifecycle inputs", {
       error: error instanceof Error ? error.message : String(error),
       cleanupPath: launcherPaths.cleanupPath,
       runtimePath: config.launcherRuntimePath,
@@ -2139,7 +2148,7 @@ async function runLauncherCleanupLifecycle(input: {
         updatedAt: nowIso,
       });
     } catch (error) {
-      logger.warn("[open-design updater] failed to clean deprecated launcher payload", {
+      logger.warn("[monofield updater] failed to clean deprecated launcher payload", {
         error: error instanceof Error ? error.message : String(error),
         path: versionPaths.versionRoot,
         version: entry.version,
@@ -2202,10 +2211,10 @@ async function clearInterruptedIncomingDownload(
   const stagingDir = resolve(stagingRoot, incoming.cycleId);
   if (containsPath(stagingRoot, stagingDir)) {
     await rm(stagingDir, { force: true, recursive: true }).catch((error: unknown) => {
-      logger.warn("[open-design updater] failed to clean interrupted update staging directory", error);
+      logger.warn("[monofield updater] failed to clean interrupted update staging directory", error);
     });
   } else {
-    logger.warn("[open-design updater] skipped escaped interrupted update staging directory", {
+    logger.warn("[monofield updater] skipped escaped interrupted update staging directory", {
       cycleId: incoming.cycleId,
       stagingDir,
     });
@@ -2215,7 +2224,7 @@ async function clearInterruptedIncomingDownload(
     incoming: undefined,
   };
   await writeStoreMetadata(root, next);
-  logger.warn("[open-design updater] cleared interrupted update download", {
+  logger.warn("[monofield updater] cleared interrupted update download", {
     cycleId: incoming.cycleId,
     version: incoming.version,
   });
@@ -2379,7 +2388,7 @@ export function createDesktopUpdater(
   const sessionId = `${now().toISOString()}-${processPid}`;
 
   function logUpdateEvent(event: string, fields: Record<string, unknown> = {}): void {
-    logger.info?.("[open-design updater] lifecycle", {
+    logger.info?.("[monofield updater] lifecycle", {
       currentVersion: config.currentVersion,
       event,
       mode: config.mode,
@@ -2558,7 +2567,7 @@ export function createDesktopUpdater(
       now,
       trigger: "cold-start",
     }).catch((lifecycleError: unknown) => {
-      logger.warn("[open-design updater] failed to run cold-start release lifecycle", lifecycleError);
+      logger.warn("[monofield updater] failed to run cold-start release lifecycle", lifecycleError);
       return null;
     });
     if (coldStartLifecycle != null) lifecycleSummary = coldStartLifecycle;
@@ -2575,7 +2584,7 @@ export function createDesktopUpdater(
       logger,
       now,
     }).catch((lifecycleError: unknown) => {
-      logger.warn("[open-design updater] failed to run launcher cleanup lifecycle", lifecycleError);
+      logger.warn("[monofield updater] failed to run launcher cleanup lifecycle", lifecycleError);
       return null;
     });
     if (launcherLifecycle != null) {
@@ -2852,7 +2861,7 @@ export function createDesktopUpdater(
         readyVersion: nextCandidate.version,
         trigger: "next-version-ready",
       }).catch((lifecycleError: unknown) => {
-        logger.warn("[open-design updater] failed to run next-version-ready release lifecycle", lifecycleError);
+        logger.warn("[monofield updater] failed to run next-version-ready release lifecycle", lifecycleError);
         return null;
       });
       if (readyLifecycle != null) lifecycleSummary = readyLifecycle;
@@ -2895,7 +2904,7 @@ export function createDesktopUpdater(
         toVersion: activeRelease.ref.version,
       });
     } catch (observationError) {
-      logger.warn("[open-design updater] failed to write installer observation", observationError);
+      logger.warn("[monofield updater] failed to write installer observation", observationError);
       return null;
     }
   }
@@ -2908,7 +2917,7 @@ export function createDesktopUpdater(
     try {
       await markInstallerObservationOpenFailed(observation, failedAt);
     } catch (observationError) {
-      logger.warn("[open-design updater] failed to update installer observation", observationError);
+      logger.warn("[monofield updater] failed to update installer observation", observationError);
     }
   }
 
@@ -3145,7 +3154,7 @@ export function createDesktopUpdaterScheduler(
     if (!warnedZeroDelay) {
       warnedZeroDelay = true;
       logger.warn(
-        `[open-design updater] refusing non-positive scheduled poll delay (${delayMs}ms); `
+        `[monofield updater] refusing non-positive scheduled poll delay (${delayMs}ms); `
           + `using ${MIN_SCHEDULED_POLL_DELAY_MS}ms floor`,
       );
     }
@@ -3183,7 +3192,7 @@ export function createDesktopUpdaterScheduler(
         return;
       }
     } catch (error) {
-      logger.warn("[open-design updater] scheduled update check failed", error);
+      logger.warn("[monofield updater] scheduled update check failed", error);
     } finally {
       tickRunning = false;
     }

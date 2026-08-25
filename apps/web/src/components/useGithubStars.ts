@@ -6,12 +6,12 @@
 // the renderer.
 
 import { useEffect, useState } from 'react';
-import type { OpenDocsGithubRepoResponse } from '@open-design/contracts';
+import type { MonoFieldGithubRepoResponse } from '@open-design/contracts';
 
-const API = '/api/github/open-docs';
+const API = '/api/github/monofield';
 const REPO = 'https://github.com/jhy0285/monofield';
-const LS_KEY = 'open-docs:gh-stars:v2';
-const FAILURE_LS_KEY = 'open-docs:gh-stars:last-failure:v2';
+const LS_KEY = 'monofield:gh-stars:v2';
+const FAILURE_LS_KEY = 'monofield:gh-stars:last-failure:v2';
 export const GITHUB_STARS_FALLBACK_LABEL = '-';
 
 // One-hour soft cache — long enough to dodge GitHub's 60/hr
@@ -133,7 +133,7 @@ export function useGithubStars(): number | null {
           rememberFetchFailure();
           return;
         }
-        const data = (await res.json()) as Partial<OpenDocsGithubRepoResponse>;
+        const data = (await res.json()) as Partial<MonoFieldGithubRepoResponse>;
         if (typeof data.stargazers_count !== 'number') {
           rememberFetchFailure();
           return;

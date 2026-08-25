@@ -1,8 +1,8 @@
 /**
- * Regression coverage for the `od://` protocol proxy in
+ * Regression coverage for the `monofield://` protocol proxy in
  * apps/packaged/src/protocol.ts.
  *
- * The packaged Electron entry registers `od://` as the loader for the
+ * The packaged Electron entry registers `monofield://` as the loader for the
  * web runtime and forwards every renderer request to the local web
  * sidecar through Node's global `fetch` (which is undici under the
  * hood). Without a try/catch in the handler, undici throwing
@@ -30,13 +30,13 @@ vi.mock('electron', () => ({
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { handleOdRequest } from '../src/protocol.js';
+import { handleMonoFieldRequest } from '../src/protocol.js';
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('od:// protocol proxy', () => {
+describe('monofield:// protocol proxy', () => {
   it('proxies the request through fetchImpl with the rewritten target URL', async () => {
     const captured: Request[] = [];
     const fetchImpl: typeof fetch = async (input) => {
@@ -44,8 +44,8 @@ describe('od:// protocol proxy', () => {
       return new Response('ok', { status: 200 });
     };
 
-    const request = new Request('od://app/api/codex-pets/sync', { method: 'POST' });
-    const response = await handleOdRequest(request, 'http://127.0.0.1:17579/', fetchImpl);
+    const request = new Request('monofield://app/api/codex-pets/sync', { method: 'POST' });
+    const response = await handleMonoFieldRequest(request, 'http://127.0.0.1:17579/', fetchImpl);
 
     expect(response.status).toBe(200);
     expect(captured).toHaveLength(1);
@@ -60,8 +60,8 @@ describe('od:// protocol proxy', () => {
       return new Response('', { status: 204 });
     };
 
-    const request = new Request('od://app/api/projects?limit=5#section', { method: 'GET' });
-    await handleOdRequest(request, 'http://127.0.0.1:42424/', fetchImpl);
+    const request = new Request('monofield://app/api/projects?limit=5#section', { method: 'GET' });
+    await handleMonoFieldRequest(request, 'http://127.0.0.1:42424/', fetchImpl);
 
     const target = new URL(captured[0]!.url);
     expect(target.host).toBe('127.0.0.1:42424');
@@ -87,8 +87,8 @@ describe('od:// protocol proxy', () => {
       throw error;
     };
 
-    const request = new Request('od://app/api/codex-pets/sync', { method: 'POST' });
-    const response = await handleOdRequest(request, 'http://127.0.0.1:17579/', fetchImpl);
+    const request = new Request('monofield://app/api/codex-pets/sync', { method: 'POST' });
+    const response = await handleMonoFieldRequest(request, 'http://127.0.0.1:17579/', fetchImpl);
 
     expect(response.status).toBe(502);
     const body = (await response.json()) as {
@@ -97,7 +97,7 @@ describe('od:// protocol proxy', () => {
       code?: string;
       target: string;
     };
-    expect(body.error).toBe('OD_PROTOCOL_PROXY_FAILED');
+    expect(body.error).toBe('MONOFIELD_PROTOCOL_PROXY_FAILED');
     expect(body.message).toContain('setTypeOfService');
     expect(body.code).toBe('EINVAL');
     expect(body.target).toBe('http://127.0.0.1:17579/api/codex-pets/sync');
@@ -110,7 +110,7 @@ describe('od:// protocol proxy', () => {
 
     // The promise must resolve with a Response, never reject.
     await expect(
-      handleOdRequest(new Request('od://app/'), 'http://127.0.0.1:1/', fetchImpl),
+      handleMonoFieldRequest(new Request('monofield://app/'), 'http://127.0.0.1:1/', fetchImpl),
     ).resolves.toBeInstanceOf(Response);
   });
 
@@ -120,8 +120,8 @@ describe('od:// protocol proxy', () => {
       throw 'sync timeout';
     };
 
-    const response = await handleOdRequest(
-      new Request('od://app/api/probe'),
+    const response = await handleMonoFieldRequest(
+      new Request('monofield://app/api/probe'),
       'http://127.0.0.1:1/',
       fetchImpl,
     );

@@ -46,7 +46,7 @@ export const FR_SKILL_COPY: Record<string, { description?: string; examplePrompt
     examplePrompt:
       'Créez le pitch deck MonoField dans le style Atelier Zero — cover avec hero plate, séparateurs de section en chiffres romains, slide stats (31 Skills · 72 systèmes · 12 CLIs), citation client, CTA et end-card mega italic-serif. Pagination horizontal-swipe comme un magazine imprimé.',
     description:
-      'Crée un slide deck single-file dans le style Atelier Zero (papier chaud, spans accent en serif italique, points finaux corail, plaques de collage surréalistes). Pagination magazine horizontale avec navigation par flèches et espace, HUD live avec compteur de slides et progress bar ; partage le stylesheet et la bibliothèque d’images à 16 slots avec le Skill frère `open-design-landing`.',
+      'Crée un slide deck single-file dans le style Atelier Zero (papier chaud, spans accent en serif italique, points finaux corail, plaques de collage surréalistes). Pagination magazine horizontale avec navigation par flèches et espace, HUD live avec compteur de slides et progress bar ; partage le stylesheet et la bibliothèque d’images à 16 slots avec le Skill de landing page associé.',
   },
   'email-marketing': {
     examplePrompt:

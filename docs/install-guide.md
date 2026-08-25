@@ -2,15 +2,15 @@
 
 **Parent:** [`spec.md`](spec.md) · **Siblings:** [`self-hosting.md`](self-hosting.md) · [`network-security.md`](network-security.md)
 
-Deploy Open Design on Linux or macOS with a single command. The installer wraps the existing Docker Compose stack — no build step required.
+Deploy MonoField on Linux or macOS with a single command. The installer wraps the existing Docker Compose stack — no build step required.
 
 ## Quick reference
 
 Clone the repository and run the installer:
 
 ```bash
-git clone https://github.com/nexu-io/open-design.git
-cd open-design
+git clone https://github.com/jhy0285/monofield.git
+cd monofield
 bash deploy/scripts/install.sh
 ```
 
@@ -38,26 +38,26 @@ Running the installer without flags launches an interactive wizard:
   ║          One-Click Installer         ║
   ╚══════════════════════════════════════╝
 
-[open-design] OS: Linux ubuntu 24.04 (x86_64)
-[open-design] Docker: Docker version 26.1.3, build b72abbb
-[open-design] Compose: Docker Compose version v2.27.1
+[monofield] OS: Linux ubuntu 24.04 (x86_64)
+[monofield] Docker: Docker version 26.1.3, build b72abbb
+[monofield] Compose: Docker Compose version v2.27.1
 
-Docker image [ghcr.io/nexu-io/od:latest]:
+Docker image [ghcr.io/jhy0285/monofield:latest]:
 Port [7456]:
 Allowed origins (CORS, comma-separated, or empty) []:
 Memory limit [384m]:
 
-[open-design] Pulling image: ghcr.io/nexu-io/od:latest
-[open-design] Starting Open Design...
-[open-design] Waiting for health check (up to 60s)...
-[open-design] Daemon is healthy (200 OK)
+[monofield] Pulling image: ghcr.io/jhy0285/monofield:latest
+[monofield] Starting MonoField...
+[monofield] Waiting for health check (up to 60s)...
+[monofield] Daemon is healthy (200 OK)
 ```
 
 ### What each prompt does
 
 | Prompt | Default | Notes |
 |--------|---------|-------|
-| **Docker image** | `ghcr.io/nexu-io/od:latest` | Use `:latest` for the newest stable image, `:<version>` for a pinned release, or `@sha256:<digest>` for reproducibility |
+| **Docker image** | `ghcr.io/jhy0285/monofield:latest` | Use `:latest` for the newest stable image, `:<version>` for a pinned release, or `@sha256:<digest>` for reproducibility |
 | **Port** | `7456` | The port the daemon listens on. Must not be in use. |
 | **Allowed origins** | _(empty)_ | CORS origins for reverse-proxy setups. See [`network-security.md`](network-security.md). Leave empty for localhost-only use. |
 | **Memory limit** | `384m` | Container memory cap. Raise for large concurrent agent runs. |
@@ -100,28 +100,28 @@ The installer creates a `systemd --user` unit that wraps Docker Compose. No `sud
 
 ```bash
 # Check status
-systemctl --user status open-design
+systemctl --user status monofield
 
 # Start / stop / restart
-systemctl --user start open-design
-systemctl --user stop open-design
-systemctl --user restart open-design
+systemctl --user start monofield
+systemctl --user stop monofield
+systemctl --user restart monofield
 
 # View logs
-journalctl --user -u open-design -f
+journalctl --user -u monofield -f
 
 # Disable auto-start
-systemctl --user disable open-design
+systemctl --user disable monofield
 
 # Re-enable auto-start
-systemctl --user enable open-design
+systemctl --user enable monofield
 ```
 
 To skip systemd unit creation, pass `--no-systemd` to the installer.
 
 ### macOS (Docker Desktop)
 
-Docker Desktop manages the container lifecycle. Use Docker Desktop's dashboard to start, stop, or restart the `open-design` container, or use the CLI:
+Docker Desktop manages the container lifecycle. Use Docker Desktop's dashboard to start, stop, or restart the `monofield` container, or use the CLI:
 
 ```bash
 # Using docker compose directly
@@ -141,7 +141,7 @@ bash deploy/scripts/update.sh
 To update to a specific image:
 
 ```bash
-bash deploy/scripts/update.sh --image=ghcr.io/nexu-io/od@sha256:<digest>
+bash deploy/scripts/update.sh --image=ghcr.io/jhy0285/monofield@sha256:<digest>
 ```
 
 The update script:
@@ -173,10 +173,10 @@ All settings live in `deploy/.env`. Edit it directly or re-run the installer to 
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OPEN_DESIGN_IMAGE` | `ghcr.io/nexu-io/od:latest` | Full image reference |
-| `OPEN_DESIGN_PORT` | `7456` | Host-side port (bound to `127.0.0.1`) |
-| `OPEN_DESIGN_ALLOWED_ORIGINS` | _(empty)_ | CORS origins for reverse-proxy setups |
-| `OPEN_DESIGN_MEM_LIMIT` | `384m` | Container memory cap |
+| `MONOFIELD_IMAGE` | `ghcr.io/jhy0285/monofield:latest` | Full image reference |
+| `MONOFIELD_PORT` | `7456` | Host-side port (bound to `127.0.0.1`) |
+| `MONOFIELD_ALLOWED_ORIGINS` | _(empty)_ | CORS origins for reverse-proxy setups |
+| `MONOFIELD_MEM_LIMIT` | `384m` | Container memory cap |
 | `NODE_OPTIONS` | `--max-old-space-size=192` | Node.js heap cap inside the container |
 
 The container always binds `127.0.0.1:<port>:7456` — the daemon is never directly exposed to the network. To allow remote access, put an authenticated reverse proxy in front. See [`network-security.md`](network-security.md).
@@ -193,7 +193,7 @@ The container always binds `127.0.0.1:<port>:7456` — the daemon is never direc
 | systemd unit not created | `systemd` not found | Omit `--no-systemd` if systemd is available, or manage via Docker CLI |
 | `.env` has wrong port after re-install | Old backup not restored | Edit `deploy/.env` directly or delete it and re-run |
 | Container exits immediately | Image incompatibility | Check `docker compose -f deploy/docker-compose.yml logs` for errors |
-| `Authorization: Bearer <OD_API_TOKEN> required` on macOS | Docker Desktop bridge networking | Enable host networking — see [Docker Desktop on macOS](../deploy/README.md#docker-desktop-on-macos) |
+| `Authorization: Bearer <MONOFIELD_API_TOKEN> required` on macOS | Docker Desktop bridge networking | Enable host networking — see [Docker Desktop on macOS](../deploy/README.md#docker-desktop-on-macos) |
 
 ## References
 

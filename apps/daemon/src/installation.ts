@@ -28,7 +28,9 @@
 //   packaged (linux):  $XDG_CONFIG_HOME/MonoField Prerelease/installation.json
 //   tools-dev / OSS:   <dataDir>/installation.json  (no namespace concept; fall back to dataDir)
 //
-// `OD_INSTALLATION_DIR` is the env override. Packaged sidecars.ts sets it
+// `MONOFIELD_INSTALLATION_DIR` is the public env override. The historic
+// `OD_INSTALLATION_DIR` name is accepted only as a read-compatible fallback.
+// Packaged sidecars.ts sets both while older sidecars are still supported.
 // to the channel root explicitly; everything else falls back to dataDir
 // (where it sits next to app-config.json and behaves like the legacy
 // path — fine for dev because dev doesn't have namespace churn).
@@ -50,7 +52,7 @@ export interface InstallationFile {
 }
 
 export function resolveInstallationDir(dataDir: string): string {
-  const env = process.env.OD_INSTALLATION_DIR;
+  const env = process.env.MONOFIELD_INSTALLATION_DIR ?? process.env.OD_INSTALLATION_DIR;
   if (env && env.length > 0) return env;
   return dataDir;
 }

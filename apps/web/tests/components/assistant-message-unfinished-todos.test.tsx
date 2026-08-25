@@ -329,7 +329,7 @@ describe('AssistantMessage unfinished todo state', () => {
         streaming={false}
         projectId="project-1"
         projectFiles={[
-          workspaceFile('generated-plugin/open-design.json'),
+          workspaceFile('generated-plugin/monofield.json'),
           workspaceFile('generated-plugin/SKILL.md'),
           workspaceFile('generated-plugin/examples/demo.md'),
         ]}
@@ -351,6 +351,6 @@ describe('AssistantMessage unfinished todo state', () => {
     ).toBeNull();
 
     fireEvent.click(screen.getByTestId('assistant-plugin-open-manifest-generated-plugin'));
-    expect(onOpen).toHaveBeenCalledWith('generated-plugin/open-design.json');
+    expect(onOpen).toHaveBeenCalledWith('generated-plugin/monofield.json');
   });
 });

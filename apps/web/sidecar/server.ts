@@ -647,7 +647,7 @@ function shouldStartStandaloneBackendInProcess(): boolean {
 
 async function startStandaloneBackendInProcess(entryPath: string, port: number, origin: string): Promise<StandaloneBackend> {
   Object.assign(process.env, createStandaloneBackendEnv({ port }));
-  console.log(`[open-design web] starting in-process standalone Next.js server from ${entryPath}`);
+  console.log(`[monofield web] starting in-process standalone Next.js server from ${entryPath}`);
   const restoreChdir = await installInProcessStandaloneChdirAlias(dirname(entryPath));
   try {
     await import(pathToFileURL(entryPath).href);
@@ -715,7 +715,7 @@ async function startStandaloneBackend(webRoot: string | null): Promise<Standalon
     return await startStandaloneBackendInProcess(entryPath, port, origin);
   }
 
-  console.log(`[open-design web] starting standalone Next.js server from ${entryPath}`);
+  console.log(`[monofield web] starting standalone Next.js server from ${entryPath}`);
   const child = spawn(process.execPath, createStandaloneServerArgs(entryPath), {
     cwd: dirname(entryPath),
     env: createStandaloneBackendEnv({ port }),
@@ -731,7 +731,7 @@ async function startStandaloneBackend(webRoot: string | null): Promise<Standalon
   child.once("exit", (code, signal) => {
     standaloneRunning = false;
     standaloneExitReason = `code=${code ?? "null"} signal=${signal ?? "null"}`;
-    console.error(`[open-design web] standalone Next.js server exited ${standaloneExitReason}`);
+    console.error(`[monofield web] standalone Next.js server exited ${standaloneExitReason}`);
   });
 
   try {

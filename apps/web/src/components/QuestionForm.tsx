@@ -400,14 +400,14 @@ function QuestionFileInput({
     setBusy(true);
     setError(null);
     try {
-      // The daemon sanitizes leading-dot path segments to `_open-docs` so
+      // The daemon sanitizes leading-dot path segments to `_monofield` so
       // project uploads cannot create arbitrary hidden files. Keep the form
       // aligned with that persisted path when reopening the project.
       const directory = question.storage === 'dictionary'
-        ? '_open-docs/dictionaries'
+        ? '_monofield/dictionaries'
         : question.storage === 'mapping'
-          ? '_open-docs/mappings'
-          : '.open-docs/question-inputs';
+          ? '_monofield/mappings'
+          : '.monofield/question-inputs';
       const result = await uploadProjectFiles(projectId, [file], directory);
       const uploaded = result.uploaded[0];
       if (!uploaded?.path) {
@@ -475,7 +475,10 @@ function SavedDictionaryInput({
     setPaths(
       files
         .map((file) => file.path ?? file.name)
-        .filter((path) => path.startsWith('_open-docs/dictionaries/')),
+        .filter((path) =>
+          path.startsWith('_monofield/dictionaries/') ||
+          path.startsWith('_open-docs/dictionaries/'),
+        ),
     );
     setLibraries(libraryItems.map((item) => ({ ...item, versions: [item.latestVersion] })));
     setSnapshots(projectSnapshots);
@@ -625,7 +628,7 @@ function DictionaryUploadInput({
     setError(null);
     try {
       if (target === 'project') {
-        const result = await uploadProjectFiles(projectId, [file], '_open-docs/dictionaries');
+        const result = await uploadProjectFiles(projectId, [file], '_monofield/dictionaries');
         const uploaded = result.uploaded[0];
         if (!uploaded?.path) throw new Error(result.error ?? result.failed[0]?.error ?? t('qf.fileUploadFailed'));
         onChange(uploaded.path);
@@ -1111,7 +1114,7 @@ function DatabaseContextInput({
       }
       if (attachedTables.length === 0) throw new Error('No selected tables could be read.');
       const connection = connections.find((candidate) => candidate.id === connectionId);
-      const contextPath = '.open-docs/database-context/approved-db-context.json';
+      const contextPath = '.monofield/database-context/approved-db-context.json';
       const context = {
         source: 'desktop-database-broker',
         connectionId,

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { readAppConfig, writeAppConfig } from '../src/app-config.js';
 import {
   readInstallationFile,
+  resolveInstallationDir,
   writeInstallationFile,
 } from '../src/installation.js';
 
@@ -28,6 +29,7 @@ import {
 let rootDir: string;
 let dataDir: string;
 let installDir: string;
+const SAVED_MONOFIELD_INSTALL_ENV = process.env.MONOFIELD_INSTALLATION_DIR;
 const SAVED_INSTALL_ENV = process.env.OD_INSTALLATION_DIR;
 
 beforeEach(async () => {
@@ -36,10 +38,16 @@ beforeEach(async () => {
   installDir = join(rootDir, 'channel-root');
   await mkdir(dataDir, { recursive: true });
   await mkdir(installDir, { recursive: true });
-  process.env.OD_INSTALLATION_DIR = installDir;
+  process.env.MONOFIELD_INSTALLATION_DIR = installDir;
+  delete process.env.OD_INSTALLATION_DIR;
 });
 
 afterEach(async () => {
+  if (SAVED_MONOFIELD_INSTALL_ENV == null) {
+    delete process.env.MONOFIELD_INSTALLATION_DIR;
+  } else {
+    process.env.MONOFIELD_INSTALLATION_DIR = SAVED_MONOFIELD_INSTALL_ENV;
+  }
   if (SAVED_INSTALL_ENV == null) {
     delete process.env.OD_INSTALLATION_DIR;
   } else {
@@ -112,7 +120,14 @@ describe('installation.json migration', () => {
     expect(persisted.installationId).toBe('untouched');
   });
 
-  it('falls back to dataDir when OD_INSTALLATION_DIR is unset (dev / OSS / tools-dev paths)', async () => {
+  it('prefers MONOFIELD_INSTALLATION_DIR over the compatibility alias', () => {
+    process.env.MONOFIELD_INSTALLATION_DIR = installDir;
+    process.env.OD_INSTALLATION_DIR = join(rootDir, 'legacy-channel-root');
+    expect(resolveInstallationDir(dataDir)).toBe(installDir);
+  });
+
+  it('falls back to dataDir when installation overrides are unset (dev / OSS / tools-dev paths)', async () => {
+    delete process.env.MONOFIELD_INSTALLATION_DIR;
     delete process.env.OD_INSTALLATION_DIR;
     await writeAppConfig(dataDir, { installationId: 'devmode-id' });
     // With no override, the install file should land next to app-config.json.

@@ -17,7 +17,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { isApiAuthDisabled, isApiTokenMiddlewareEnabled } from '../src/api-token-auth.js';
 import { startServer } from '../src/server.js';
 
-const PREVIOUS_TOKEN = process.env.OD_API_TOKEN;
+const PREVIOUS_TOKEN = process.env.MONOFIELD_API_TOKEN;
 const PREVIOUS_HOST  = process.env.OD_BIND_HOST;
 const PREVIOUS_DISABLE_API_AUTH = process.env.OD_DISABLE_API_AUTH;
 
@@ -30,8 +30,8 @@ afterEach(async () => {
   if (server) await new Promise<void>((resolve) => server!.close(() => resolve()));
   server = undefined;
   shutdown = undefined;
-  if (PREVIOUS_TOKEN === undefined) delete process.env.OD_API_TOKEN;
-  else process.env.OD_API_TOKEN = PREVIOUS_TOKEN;
+  if (PREVIOUS_TOKEN === undefined) delete process.env.MONOFIELD_API_TOKEN;
+  else process.env.MONOFIELD_API_TOKEN = PREVIOUS_TOKEN;
   if (PREVIOUS_HOST === undefined) delete process.env.OD_BIND_HOST;
   else process.env.OD_BIND_HOST = PREVIOUS_HOST;
   if (PREVIOUS_DISABLE_API_AUTH === undefined) delete process.env.OD_DISABLE_API_AUTH;
@@ -39,14 +39,15 @@ afterEach(async () => {
 });
 
 describe('bound-API-token guard', () => {
-  it('refuses to start with OD_BIND_HOST=0.0.0.0 when OD_API_TOKEN is unset', async () => {
+  it('refuses to start with a public bind host when MONOFIELD_API_TOKEN is unset', async () => {
+    delete process.env.MONOFIELD_API_TOKEN;
     delete process.env.OD_API_TOKEN;
     await expect(startServer({ port: 0, host: '0.0.0.0', returnServer: true }))
-      .rejects.toThrow(/OD_API_TOKEN/);
+      .rejects.toThrow(/MONOFIELD_API_TOKEN/);
   });
 
-  it('starts on a public host when OD_API_TOKEN is set', async () => {
-    process.env.OD_API_TOKEN = 'test-token-abc';
+  it('starts on a public host when MONOFIELD_API_TOKEN is set', async () => {
+    process.env.MONOFIELD_API_TOKEN = 'test-token-abc';
     // Bind to 127.0.0.1 (loopback) but pretend we crossed the guard
     // by setting the env var; the assertion is that startup succeeds.
     const started = (await startServer({ port: 0, host: '127.0.0.1', returnServer: true })) as {
@@ -74,7 +75,7 @@ describe('bound-API-token guard', () => {
 
 describe('bearer middleware', () => {
   beforeEach(async () => {
-    process.env.OD_API_TOKEN = 'secret-test-token';
+    process.env.MONOFIELD_API_TOKEN = 'secret-test-token';
     const started = (await startServer({ port: 0, host: '127.0.0.1', returnServer: true })) as {
       url: string;
       server: http.Server;
@@ -103,14 +104,14 @@ describe('bearer middleware', () => {
     expect(
       isApiTokenMiddlewareEnabled({
         ...process.env,
-        OD_API_TOKEN: 'secret-test-token',
-        OD_DISABLE_API_AUTH: '1',
+        MONOFIELD_API_TOKEN: 'secret-test-token',
+        MONOFIELD_DISABLE_API_AUTH: '1',
       }),
     ).toBe(false);
     expect(
       isApiAuthDisabled({
         ...process.env,
-        OD_DISABLE_API_AUTH: '1',
+        MONOFIELD_DISABLE_API_AUTH: '1',
       }),
     ).toBe(true);
   });

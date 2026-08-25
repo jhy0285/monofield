@@ -42,6 +42,15 @@ const PACKAGED_CHILD_ENV_ALLOWLIST = [
   "LANG",
   "LC_ALL",
   "LOGNAME",
+  "MONOFIELD_API_TOKEN",
+  "MONOFIELD_BUNDLED_PLUGIN_ALLOWLIST",
+  "MONOFIELD_DISABLE_API_AUTH",
+  "MONOFIELD_MARKETPLACE_ALLOWED_CATALOG_URLS",
+  "MONOFIELD_MARKETPLACE_ALLOWED_HOSTS",
+  "MONOFIELD_MARKETPLACE_ALLOWED_LICENSES",
+  "MONOFIELD_MARKETPLACE_AUTH_ENV",
+  "MONOFIELD_PLUGIN_INSTALL_MODE",
+  "MONOFIELD_PUBLIC_BASE_URL",
   "ALL_PROXY",
   "NODE_USE_ENV_PROXY",
   "NO_PROXY",
@@ -78,6 +87,9 @@ type ManagedSidecarChild = {
 };
 
 type PackagedDaemonManagedPathEnv = {
+  MONOFIELD_DATA_DIR: string;
+  MONOFIELD_RESOURCE_ROOT: string;
+  MONOFIELD_INSTALLATION_DIR: string;
   OD_DATA_DIR: string;
   OD_RESOURCE_ROOT: string;
   /**
@@ -90,6 +102,7 @@ type PackagedDaemonManagedPathEnv = {
    * even when the baked namespace token changes or per-namespace data is
    * cleared. See `apps/daemon/src/installation.ts`.
    */
+  /** @deprecated Compatibility for older daemon bundles. */
   OD_INSTALLATION_DIR: string;
 };
 
@@ -264,14 +277,14 @@ async function retireExistingSidecarEndpoint(ipcPath: string, logPath: string): 
   const pid = typeof status.pid === "number" ? status.pid : null;
   await appendSidecarLifecycleLog(
     logPath,
-    `[open-design packaged] existing sidecar endpoint detected ipc=${ipcPath} pid=${pid ?? "unknown"}; requesting shutdown before relaunch`,
+    `[monofield packaged] existing sidecar endpoint detected ipc=${ipcPath} pid=${pid ?? "unknown"}; requesting shutdown before relaunch`,
   );
   try {
     await requestJsonIpc(ipcPath, { type: SIDECAR_MESSAGES.SHUTDOWN }, { timeoutMs: 800 });
   } catch (error) {
     await appendSidecarLifecycleLog(
       logPath,
-      `[open-design packaged] existing sidecar shutdown request failed ipc=${ipcPath} error=${error instanceof Error ? error.message : String(error)}`,
+      `[monofield packaged] existing sidecar shutdown request failed ipc=${ipcPath} error=${error instanceof Error ? error.message : String(error)}`,
     );
   }
 
@@ -279,7 +292,7 @@ async function retireExistingSidecarEndpoint(ipcPath: string, logPath: string): 
     const exited = await waitForProcessExit(pid, 2500);
     await appendSidecarLifecycleLog(
       logPath,
-      `[open-design packaged] existing sidecar endpoint ${exited ? "exited" : "still-running"} ipc=${ipcPath} pid=${pid}`,
+      `[monofield packaged] existing sidecar endpoint ${exited ? "exited" : "still-running"} ipc=${ipcPath} pid=${pid}`,
     );
   }
 }
@@ -327,6 +340,9 @@ function createPackagedDaemonManagedPathEnv(
   paths: PackagedNamespacePaths,
 ): PackagedDaemonManagedPathEnv {
   return {
+    MONOFIELD_DATA_DIR: paths.dataRoot,
+    MONOFIELD_RESOURCE_ROOT: paths.resourceRoot,
+    MONOFIELD_INSTALLATION_DIR: paths.installationRoot,
     OD_DATA_DIR: paths.dataRoot,
     OD_RESOURCE_ROOT: paths.resourceRoot,
     OD_INSTALLATION_DIR: paths.installationRoot,
@@ -370,7 +386,9 @@ export function buildPackagedDaemonSpawnEnv(
     // bypass that a runtime-only handshake left open. Headless skips
     // it because there is no privileged shell.openPath surface and
     // no client to register a secret.
-    ...(options.requireDesktopAuth ? { OD_REQUIRE_DESKTOP_AUTH: "1" } : {}),
+    ...(options.requireDesktopAuth
+      ? { MONOFIELD_REQUIRE_DESKTOP_AUTH: "1", OD_REQUIRE_DESKTOP_AUTH: "1" }
+      : {}),
     // Packaged daemon managed paths are deliberately delivered through
     // the sidecar launch environment. The daemon may keep its own default
     // fallback, but packaged runtime must not rely on path inference from
@@ -379,7 +397,9 @@ export function buildPackagedDaemonSpawnEnv(
     ...(options.amrProfile == null || options.amrProfile.length === 0
       ? {}
       : { OPEN_DESIGN_AMR_PROFILE: options.amrProfile }),
-    ...(options.appVersion == null ? {} : { OD_APP_VERSION: options.appVersion }),
+    ...(options.appVersion == null
+      ? {}
+      : { MONOFIELD_APP_VERSION: options.appVersion, OD_APP_VERSION: options.appVersion }),
     // OD_LEGACY_DATA_DIR is the one-shot recovery handle for users
     // upgrading from 0.3.x .od/ layouts. The daemon's startup
     // migrator (legacy-data-migrator.ts) reads it; the env-allowlist
@@ -388,7 +408,10 @@ export function buildPackagedDaemonSpawnEnv(
     // daemon's "env set but path invalid" error path.
     ...(options.legacyDataDir == null || options.legacyDataDir.length === 0
       ? {}
-      : { OD_LEGACY_DATA_DIR: options.legacyDataDir }),
+      : {
+          MONOFIELD_LEGACY_DATA_DIR: options.legacyDataDir,
+          OD_LEGACY_DATA_DIR: options.legacyDataDir,
+        }),
     // for fork builds without the CI secret — the daemon's analytics
   };
 }
@@ -459,7 +482,7 @@ async function spawnSidecarChild(options: {
 
 async function closeManagedChild(child: ManagedSidecarChild): Promise<void> {
   const appendLifecycleLog = async (message: string): Promise<void> => appendSidecarLifecycleLog(child.logPath, message);
-  await appendLifecycleLog(`[open-design packaged] shutdown requested app=${child.app} pid=${child.child.pid ?? "unknown"}`);
+  await appendLifecycleLog(`[monofield packaged] shutdown requested app=${child.app} pid=${child.child.pid ?? "unknown"}`);
   try {
     await requestJsonIpc(child.ipcPath, { type: SIDECAR_MESSAGES.SHUTDOWN }, { timeoutMs: 1200 });
   } catch {
@@ -467,11 +490,11 @@ async function closeManagedChild(child: ManagedSidecarChild): Promise<void> {
   }
 
   if (!(await waitForProcessExit(child.child.pid, 5000))) {
-    await appendLifecycleLog(`[open-design packaged] shutdown timeout app=${child.app} pid=${child.child.pid ?? "unknown"}; forcing stop`);
+    await appendLifecycleLog(`[monofield packaged] shutdown timeout app=${child.app} pid=${child.child.pid ?? "unknown"}; forcing stop`);
     await stopProcesses([child.child.pid]);
   }
 
-  await appendLifecycleLog(`[open-design packaged] exited app=${child.app} pid=${child.child.pid ?? "unknown"} code=${child.child.exitCode ?? "unknown"} signal=${child.child.signalCode ?? "none"}`);
+  await appendLifecycleLog(`[monofield packaged] exited app=${child.app} pid=${child.child.pid ?? "unknown"} code=${child.child.exitCode ?? "unknown"} signal=${child.child.signalCode ?? "none"}`);
   await child.logHandle.close().catch(() => undefined);
 }
 

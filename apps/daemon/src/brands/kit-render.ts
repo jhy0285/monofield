@@ -6,7 +6,7 @@
 // deterministic and never agent-authored: the agent only writes brand.json and
 // asks the daemon to (re)render, so the user watches a real, on-brand kit fill
 // in instead of just a scrolling chat. While `status === 'extracting'` the page
-// soft-reloads itself, so each `od brand preview` pass shows up live.
+// soft-reloads itself, so each `monofield brand preview` pass shows up live.
 
 import fs from 'node:fs';
 import path from 'node:path';

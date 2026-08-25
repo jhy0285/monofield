@@ -189,7 +189,7 @@ function SkillPluginCandidateCard({
       } else {
         setNotice({ message: "Plugin draft created." });
       }
-      if (draftPath && onRequestOpenFile) onRequestOpenFile(`${draftPath}/open-design.json`);
+      if (draftPath && onRequestOpenFile) onRequestOpenFile(`${draftPath}/monofield.json`);
     } catch (err) {
       setNotice({ message: err instanceof Error ? err.message : String(err) });
     } finally {
@@ -1745,7 +1745,7 @@ function PluginActionPanel({
         <div>
           <div className="plugin-action-panel__title">Plugin ready</div>
           <div className="plugin-action-panel__subtitle">
-            Send the next step to the agent so it can run the od CLI.
+            Send the next step to the agent so it can run the MonoField CLI.
           </div>
         </div>
       </div>

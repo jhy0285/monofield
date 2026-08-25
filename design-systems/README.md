@@ -12,8 +12,8 @@ will read it as part of its system prompt.
   collage system: warm paper canvas, plaster-and-architecture imagery,
   oversized italic-mixed display type, Roman-numeral section markers,
   side rails of rotated micro-text, coordinate annotations, single
-  coral accent. Pairs with [`skills/open-design-landing/`](../skills/open-design-landing/)
-  and [`skills/open-design-landing-deck/`](../skills/open-design-landing-deck/)
+  coral accent. Pairs with [`skills/monofield-landing/`](../skills/monofield-landing/)
+  and [`skills/monofield-landing-deck/`](../skills/monofield-landing-deck/)
   for the canonical landing-page and slide-deck renderings.
 - **`kami/`** — 紙 / 纸. Editorial paper system distilled from
   [`tw93/kami`](https://github.com/tw93/kami) (MIT). Warm parchment canvas,

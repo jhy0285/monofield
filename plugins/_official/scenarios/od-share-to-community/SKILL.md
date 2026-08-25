@@ -1,6 +1,6 @@
 ---
 name: od-share-to-community
-description: Package the user's just-finished work as an Open Design plugin without asking for fields the project files already answer, then surface the existing Add-to-My-plugins / Open-Design-PR buttons.
+description: Package the user's just-finished work as an MonoField plugin without asking for fields the project files already answer, then surface the existing Add-to-My-plugins / Open-Design-PR buttons.
 od:
   scenario: plugin-sharing
   mode: scenario
@@ -8,7 +8,7 @@ od:
 
 # od-share-to-community (scenario)
 
-Triggered by the post-completion "Share to Open Design" submission action. The user just finished a piece of work in this project and wants to ship it as a plugin. They have not been asked any questions yet.
+Triggered by the post-completion "Share to MonoField" submission action. The user just finished a piece of work in this project and wants to ship it as a plugin. They have not been asked any questions yet.
 
 ## Required outcome
 
@@ -48,7 +48,7 @@ Do NOT suggest follow-up CLI commands such as `od plugin publish`, `od plugin pu
 
 - **Add to My plugins** — already satisfied by this turn's `od plugin install --source` step.
 - **Publish repo** — creates / updates the author's `plugin.repo` GitHub repo through a gh + git sequence the agent is told exactly how to run.
-- **Open Design PR** — opens a draft PR against `nexu-io/open-design` for the community catalog.
+- **MonoField PR** — opens a draft PR against `nexu-io/open-design` for the community catalog.
 
 Point the user at whichever button they want next; do NOT recreate those flows as freeform shell suggestions in this summary. Recreating them drifts from the button prompts' guarantees and is the source of the bug that closed #2332.
 

@@ -6,7 +6,7 @@ import type {
   SkillPluginCandidate,
   SkillPluginCandidateSourceRef,
 } from '@open-design/contracts';
-import { OPEN_DESIGN_PLUGIN_SPEC_VERSION } from '@open-design/contracts';
+import { MONOFIELD_PLUGIN_SPEC_VERSION } from '@open-design/contracts';
 import { validatePluginFolder, flattenValidationDiagnostics } from './validate.js';
 
 type SqliteDb = Database.Database;
@@ -166,7 +166,7 @@ export async function generateSkillPluginDraft(
   const folder = path.join(projectRoot, ...draftPath.split('/'));
   await fs.mkdir(path.join(folder, 'references'), { recursive: true });
   await fs.writeFile(path.join(folder, 'SKILL.md'), synthesizeSkill(candidate), 'utf8');
-  await fs.writeFile(path.join(folder, 'open-design.json'), JSON.stringify(buildManifest(slug, candidate), null, 2) + '\n', 'utf8');
+  await fs.writeFile(path.join(folder, 'monofield.json'), JSON.stringify(buildManifest(slug, candidate), null, 2) + '\n', 'utf8');
   await fs.writeFile(path.join(folder, 'references', 'provenance.json'), JSON.stringify({
     candidateId: candidate.id,
     projectId: candidate.projectId,
@@ -308,7 +308,7 @@ function isExplicitSkillPluginUrl(value: string): boolean {
     return false;
   }
   if (url.hostname !== 'github.com') return false;
-  return /\/(?:SKILL\.md|open-design\.json)$/u.test(decodeURIComponent(url.pathname));
+  return /\/(?:SKILL\.md|monofield\.json|open-design\.json)$/u.test(decodeURIComponent(url.pathname));
 }
 
 function deriveCandidateTitle(ref: SkillPluginCandidateSourceRef): string {
@@ -356,13 +356,13 @@ function synthesizeSkill(candidate: SkillPluginCandidate): string {
 
 function buildManifest(slug: string, candidate: SkillPluginCandidate) {
   return {
-    $schema: 'https://open-design.ai/schemas/plugin.v1.json',
-    specVersion: OPEN_DESIGN_PLUGIN_SPEC_VERSION,
+    $schema: 'https://raw.githubusercontent.com/jhy0285/monofield/main/docs/schemas/monofield.plugin.v1.json',
+    specVersion: MONOFIELD_PLUGIN_SPEC_VERSION,
     name: slug,
     title: candidate.title,
     version: '0.1.0',
     description: candidate.description,
-    od: {
+    monofield: {
       kind: 'skill',
       taskKind: 'new-generation',
       context: {

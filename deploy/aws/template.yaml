@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Open Design ECS/Fargate Deployment (VPC, ALB, EFS, Private Access)'
+Description: 'MonoField ECS/Fargate Deployment (VPC, ALB, EFS, Private Access)'
 
 Parameters:
   CustomDomainName:
@@ -13,7 +13,7 @@ Parameters:
   DockerImage:
     Type: String
     MinLength: 1
-    Description: 'REQUIRED: The full repository URI and tag for the Open Design Docker image (e.g., your-registry/open-design:latest). You must provide an explicit image as the public Docker Hub baseline is currently unmaintained.'
+    Description: 'REQUIRED: The full repository URI and tag for the MonoField Docker image (e.g., your-registry/monofield:latest). You must provide an explicit image as the public Docker Hub baseline is currently unmaintained.'
   AllowedSourceIp:
     Type: String
     AllowedPattern: '^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/(1[6-9]|2[0-9]|3[0-2])$'
@@ -28,13 +28,13 @@ Parameters:
     Description: 'The dynamic port used by the Nginx proxy (must be >= 1024 for unprivileged container).'
   AppStoragePath:
     Type: String
-    Description: 'Container path where the .od SQLite directory is stored.'
-    Default: '/app/.od'
+    Description: 'Container path where the .monofield SQLite directory is stored.'
+    Default: '/app/.monofield'
   ApiToken:
     Type: String
     NoEcho: true
     MinLength: 1
-    Description: 'REQUIRED: The secure API token used to authenticate requests to the Open Design backend. It is stored securely in AWS Secrets Manager.'
+    Description: 'REQUIRED: The secure API token used to authenticate requests to the MonoField backend. It is stored securely in AWS Secrets Manager.'
   VpcCidr:
     Type: String
     Default: '10.42.0.0/16'
@@ -59,7 +59,7 @@ Parameters:
     Type: String
     Default: small
     AllowedValues: [small, medium, large]
-    Description: 'The compute size for the Open Design application.'
+    Description: 'The compute size for the MonoField application.'
   TaskCpuArchitecture:
     Type: String
     Default: X86_64
@@ -249,7 +249,7 @@ Resources:
           ToPort: 2049
           SourceSecurityGroupId: !Ref FargateSecurityGroup
 
-  # 3. STORAGE (EFS for SQLite .od directory)
+  # 3. STORAGE (EFS for SQLite .monofield directory)
   FileSystem:
     Type: AWS::EFS::FileSystem
     DeletionPolicy: Retain
@@ -282,7 +282,7 @@ Resources:
         Uid: "1001"
         Gid: "1001"
       RootDirectory:
-        Path: "/od-data"
+        Path: "/monofield-data"
         CreationInfo:
           OwnerUid: "1001"
           OwnerGid: "1001"
@@ -420,17 +420,17 @@ Resources:
         - Name: app
           Image: !Ref DockerImage
           Environment:
-            - Name: OD_ALLOWED_ORIGINS
+            - Name: MONOFIELD_ALLOWED_ORIGINS
               Value: !If
                 - UseCustomDomain
                 - !Sub 'https://${CustomDomainName}'
                 - !Sub 'http://${LoadBalancer.DNSName}'
-            - Name: OD_BIND_HOST
+            - Name: MONOFIELD_BIND_HOST
               Value: "127.0.0.1"
-            - Name: OD_PORT
+            - Name: MONOFIELD_PORT
               Value: "7456"
           Secrets:
-            - Name: OD_API_TOKEN
+            - Name: MONOFIELD_API_TOKEN
               ValueFrom: !Ref ApiTokenSecret
           MountPoints:
             - SourceVolume: efs-storage
@@ -448,9 +448,9 @@ Resources:
           Environment:
             - Name: PROXY_PORT
               Value: !Ref ProxyPort
-            - Name: OD_BIND_HOST
+            - Name: MONOFIELD_BIND_HOST
               Value: "127.0.0.1"
-            - Name: OD_WEB_PORT
+            - Name: MONOFIELD_WEB_PORT
               Value: "7456"
           Secrets:
             - Name: PROXY_API_TOKEN
@@ -465,7 +465,7 @@ Resources:
                   listen ${PROXY_PORT};
 
                   location / {
-                      proxy_pass http://${OD_BIND_HOST}:${OD_WEB_PORT};
+                      proxy_pass http://${MONOFIELD_BIND_HOST}:${MONOFIELD_WEB_PORT};
                       proxy_set_header Host $host;
                       proxy_set_header X-Real-IP $remote_addr;
                       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -474,7 +474,7 @@ Resources:
                   }
 
                   location /api/ {
-                      proxy_pass http://${OD_BIND_HOST}:${OD_WEB_PORT};
+                      proxy_pass http://${MONOFIELD_BIND_HOST}:${MONOFIELD_WEB_PORT};
                       proxy_set_header Host $host;
                       proxy_set_header X-Real-IP $remote_addr;
                       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -491,7 +491,7 @@ Resources:
                   }
               }
               EOF
-              envsubst '$PROXY_PORT $OD_BIND_HOST $OD_WEB_PORT $PROXY_API_TOKEN' < /tmp/default.conf.template > /etc/nginx/conf.d/default.conf
+              envsubst '$PROXY_PORT $MONOFIELD_BIND_HOST $MONOFIELD_WEB_PORT $PROXY_API_TOKEN' < /tmp/default.conf.template > /etc/nginx/conf.d/default.conf
               exec nginx -g "daemon off;"
           LogConfiguration:
             LogDriver: awslogs
@@ -531,7 +531,7 @@ Resources:
   ApiTokenSecret:
       Type: AWS::SecretsManager::Secret
       Properties:
-        Description: "API Token for Open Design"
+        Description: "API Token for MonoField"
         SecretString: !Ref ApiToken
 
 Outputs:

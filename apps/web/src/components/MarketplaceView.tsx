@@ -86,7 +86,7 @@ export function MarketplaceView() {
       <section className="marketplace-view__grid" data-testid="marketplace-grid">
         {visible.length === 0 && !loading ? (
           <div className="marketplace-view__empty">
-            No plugins installed yet. Try <code>od plugin install &lt;source&gt;</code> or
+            No plugins installed yet. Try <code>monofield plugin install &lt;source&gt;</code> or
             register a marketplace below.
           </div>
         ) : null}
@@ -115,7 +115,7 @@ export function MarketplaceView() {
         <h2>Configured catalogs</h2>
         {marketplaces.length === 0 ? (
           <div>
-            None registered. Add one with <code>od marketplace add &lt;url&gt;</code>.
+            None registered. Add one with <code>monofield marketplace add &lt;url&gt;</code>.
           </div>
         ) : (
           <ul>

@@ -12,11 +12,17 @@ async function loadElectronApp() {
   return electron.app;
 }
 
-export const PACKAGED_CONFIG_PATH_ENV = "OD_PACKAGED_CONFIG_PATH";
-export const PACKAGED_NAMESPACE_ENV = "OD_PACKAGED_NAMESPACE";
-export const PACKAGED_WEB_OUTPUT_MODE_OVERRIDE_ENV = "OD_PACKAGED_ALLOW_WEB_OUTPUT_MODE_OVERRIDE";
-export const PACKAGED_WEB_STANDALONE_ROOT_ENV = "OD_WEB_STANDALONE_ROOT";
-export const PACKAGED_WEB_OUTPUT_MODE_ENV = "OD_WEB_OUTPUT_MODE";
+export const PACKAGED_CONFIG_PATH_ENV = "MONOFIELD_PACKAGED_CONFIG_PATH";
+export const PACKAGED_NAMESPACE_ENV = "MONOFIELD_PACKAGED_NAMESPACE";
+export const PACKAGED_WEB_OUTPUT_MODE_OVERRIDE_ENV = "MONOFIELD_PACKAGED_ALLOW_WEB_OUTPUT_MODE_OVERRIDE";
+export const PACKAGED_WEB_STANDALONE_ROOT_ENV = "MONOFIELD_WEB_STANDALONE_ROOT";
+export const PACKAGED_WEB_OUTPUT_MODE_ENV = "MONOFIELD_WEB_OUTPUT_MODE";
+
+const LEGACY_PACKAGED_CONFIG_PATH_ENV = "OD_PACKAGED_CONFIG_PATH";
+const LEGACY_PACKAGED_NAMESPACE_ENV = "OD_PACKAGED_NAMESPACE";
+const LEGACY_PACKAGED_WEB_OUTPUT_MODE_OVERRIDE_ENV = "OD_PACKAGED_ALLOW_WEB_OUTPUT_MODE_OVERRIDE";
+const LEGACY_PACKAGED_WEB_STANDALONE_ROOT_ENV = "OD_WEB_STANDALONE_ROOT";
+const LEGACY_PACKAGED_WEB_OUTPUT_MODE_ENV = "OD_WEB_OUTPUT_MODE";
 
 export type PackagedWebOutputMode = "server" | "standalone";
 export type PackagedAmrProfile = "prod" | "test" | "local";
@@ -66,11 +72,11 @@ async function readJsonIfExists(filePath: string): Promise<RawPackagedConfig | n
 }
 
 function resolveDefaultConfigPath(): string {
-  return join(process.resourcesPath, "open-design-config.json");
+  return join(process.resourcesPath, "monofield-config.json");
 }
 
 async function readRawPackagedConfig(): Promise<RawPackagedConfig> {
-  const explicit = process.env[PACKAGED_CONFIG_PATH_ENV];
+  const explicit = process.env[PACKAGED_CONFIG_PATH_ENV] ?? process.env[LEGACY_PACKAGED_CONFIG_PATH_ENV];
   if (explicit != null && explicit.length > 0) {
     const config = await readJsonIfExists(resolve(explicit));
     if (config == null) throw new Error(`packaged config not found at ${explicit}`);
@@ -80,6 +86,8 @@ async function readRawPackagedConfig(): Promise<RawPackagedConfig> {
   const electronApp = await loadElectronApp();
   return (
     (await readJsonIfExists(resolveDefaultConfigPath())) ??
+    (await readJsonIfExists(join(process.resourcesPath, "open-design-config.json"))) ??
+    (await readJsonIfExists(join(electronApp.getAppPath(), "monofield-config.json"))) ??
     (await readJsonIfExists(join(electronApp.getAppPath(), "open-design-config.json"))) ??
     {}
   );
@@ -137,7 +145,10 @@ async function resolvePackagedRelativeEntry(value: string | undefined): Promise<
 export async function readPackagedConfig(): Promise<PackagedConfig> {
   const raw = await readRawPackagedConfig();
   const namespace = normalizeNamespace(
-    process.env[PACKAGED_NAMESPACE_ENV] ?? raw.namespace ?? SIDECAR_DEFAULTS.namespace,
+    process.env[PACKAGED_NAMESPACE_ENV]
+      ?? process.env[LEGACY_PACKAGED_NAMESPACE_ENV]
+      ?? raw.namespace
+      ?? SIDECAR_DEFAULTS.namespace,
   );
   const electronApp = await loadElectronApp();
   const namespaceBaseRoot =
@@ -149,16 +160,23 @@ export async function readPackagedConfig(): Promise<PackagedConfig> {
       : raw.nodeCommandRelative;
   const nodeCommandCandidate = join(process.resourcesPath, relativeNodeCommand);
   const nodeCommand = (await pathExists(nodeCommandCandidate)) ? nodeCommandCandidate : null;
-  const allowWebOutputModeOverride = isTruthyEnv(process.env[PACKAGED_WEB_OUTPUT_MODE_OVERRIDE_ENV]);
+  const allowWebOutputModeOverride = isTruthyEnv(
+    process.env[PACKAGED_WEB_OUTPUT_MODE_OVERRIDE_ENV]
+      ?? process.env[LEGACY_PACKAGED_WEB_OUTPUT_MODE_OVERRIDE_ENV],
+  );
   const webOutputMode = resolvePackagedWebOutputMode(
     allowWebOutputModeOverride
-      ? process.env[PACKAGED_WEB_OUTPUT_MODE_ENV] ?? raw.webOutputMode
+      ? process.env[PACKAGED_WEB_OUTPUT_MODE_ENV]
+        ?? process.env[LEGACY_PACKAGED_WEB_OUTPUT_MODE_ENV]
+        ?? raw.webOutputMode
       : raw.webOutputMode,
   );
   const webStandaloneRoot = resolvePackagedWebStandaloneRoot(
     webOutputMode,
     allowWebOutputModeOverride
-      ? process.env[PACKAGED_WEB_STANDALONE_ROOT_ENV] ?? raw.webStandaloneRoot
+      ? process.env[PACKAGED_WEB_STANDALONE_ROOT_ENV]
+        ?? process.env[LEGACY_PACKAGED_WEB_STANDALONE_ROOT_ENV]
+        ?? raw.webStandaloneRoot
       : raw.webStandaloneRoot,
   );
   const daemonCliEntry = await resolvePackagedRelativeEntry(raw.daemonCliEntryRelative);

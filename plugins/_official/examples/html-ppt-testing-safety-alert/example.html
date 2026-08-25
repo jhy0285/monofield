@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Open Design · Local Data Safety Brief</title>
+<title>MonoField · Local Data Safety Brief</title>
 <style>/* html-ppt :: shared webfonts (only families actually used by this deck) */
 @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800;900&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap');
@@ -253,15 +253,15 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <section class="slide is-active">
     <div class="ts-stripe"></div>
     <div class="ts-chrome"><span class="ts-alert-tag">data safety · local-first</span><span class="ts-page">01 / 08</span></div>
-    <div class="ts-kicker">Open Design · Local Data Safety Brief</div>
+    <div class="ts-kicker">MonoField · Local Data Safety Brief</div>
     <h1 class="ts-h1" style="font-size:clamp(44px,7.6vh,58px)">Stop sending your designs<br><span class="strike">to someone else's server</span><br><span class="red">Keep data on your machine</span></h1>
     <p class="ts-sub">The cost of cloud AI design tools isn't just the subscription — your prompts, design files, brand assets, and API keys all pass through someone else's servers.</p>
     <div class="ts-alert-box">
-      <h3>Open Design: data never leaves your machine</h3>
+      <h3>MonoField: data never leaves your machine</h3>
       <p>Sessions, memory, and design artifacts all live in SQLite and the filesystem under your local <b>.od/</b> directory; API keys stay local and connect straight to the provider.<br><b>Apache-2.0 open source · Runs locally · BYOK · No sign-up</b>.</p>
     </div>
     <div class="ts-stripe-b"></div>
-    <div class="ts-footer"><span>OPEN DESIGN · DATA SAFETY BRIEF · 2026</span><span>01 / 08</span></div>
+    <div class="ts-footer"><span>MONOFIELD · DATA SAFETY BRIEF · 2026</span><span>01 / 08</span></div>
   </section>
 
   <!-- 2. SECTION -->
@@ -283,7 +283,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="ts-chrome"><span class="ts-alert-tag">data flow · 3 levels</span><span class="ts-page">03 / 08</span></div>
     <h2 class="ts-h2">Three flows, three risk profiles</h2>
     <div class="ts-grid-3">
-      <div class="ts-card" style="border-top:4px solid var(--ts-green)"><div class="lbl">L1 · Green</div><h4>Local-first</h4><p>Open Design: designs, memory, and SQLite all live in your local .od/; BYOK connects straight to the provider.<br><b style="color:var(--ts-green)">Risk: you're in control</b></p></div>
+      <div class="ts-card" style="border-top:4px solid var(--ts-green)"><div class="lbl">L1 · Green</div><h4>Local-first</h4><p>MonoField: designs, memory, and SQLite all live in your local .od/; BYOK connects straight to the provider.<br><b style="color:var(--ts-green)">Risk: you're in control</b></p></div>
       <div class="ts-card" style="border-top:4px solid var(--ts-amber)"><div class="lbl">L2 · Amber</div><h4>Partly in the cloud</h4><p>Cloud SaaS design tools: files live with the vendor, export formats are limited, and a shutdown cuts you off.<br><b style="color:var(--ts-amber)">Risk: at the vendor's mercy</b></p></div>
       <div class="ts-card" style="border-top:4px solid var(--ts-red)"><div class="lbl">L3 · Red</div><h4>Fully in the cloud</h4><p>Closed-source cloud AI design: prompts, artifacts, and keys all pass through a third party, model locked to one vendor.<br><b style="color:var(--ts-red)">Risk: unauditable</b></p></div>
     </div>
@@ -301,7 +301,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="ts-chrome"><span class="ts-alert-tag">privacy as architecture</span><span class="ts-page">04 / 08</span></div>
     <div class="ts-kicker">Don't trust the privacy policy · trust the local filesystem</div>
     <h2 class="ts-h2">Where your data lives,<br><span class="ts-highlight-red">verifiable at a glance</span></h2>
-    <pre class="ts-codebox"><span class="cm"># .od/ · Open Design local data directory · everything stays on your machine</span>
+    <pre class="ts-codebox"><span class="cm"># .od/ · MonoField local data directory · everything stays on your machine</span>
 <span class="kw">local_data</span>:
   - <span class="st">app.sqlite</span>          <span class="cm"># sessions, memory, preferences</span>
   - <span class="st">projects/&lt;id&gt;/</span>      <span class="cm"># agent working directories</span>
@@ -325,11 +325,11 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="ts-stripe"></div>
     <div class="ts-chrome"><span class="ts-alert-tag amber">cost report · byok</span><span class="ts-page">05 / 08</span></div>
     <h2 class="ts-h2">Same usage, monthly cost <span class="red">-80%</span></h2>
-    <p class="ts-sub">A Claude Design subscription runs $500/month; Open Design with end-to-end BYOK direct to providers runs ~$73/month.</p>
+    <p class="ts-sub">A Claude Design subscription runs $500/month; MonoField with end-to-end BYOK direct to providers runs ~$73/month.</p>
     <svg viewBox="0 0 1040 360" style="width:100%;max-width:1040px;margin-top:18px" xmlns="http://www.w3.org/2000/svg">
       <g font-family="Archivo,sans-serif" font-size="14" fill="#43434d">
         <line x1="70" y1="320" x2="1000" y2="320" stroke="#15151a" stroke-opacity=".3" stroke-width="1.5"/>
-        <!-- monthly cost columns: Claude Design vs Open Design (BYOK) -->
+        <!-- monthly cost columns: Claude Design vs MonoField (BYOK) -->
         <g transform="translate(180,0)">
           <rect x="0" y="70" width="120" height="250" fill="#c11f33"/>
           <text x="60" y="345" text-anchor="middle" font-weight="700">Claude Design</text>
@@ -337,13 +337,13 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
         </g>
         <g transform="translate(460,0)">
           <rect x="0" y="284" width="120" height="36" fill="#1a6b45"/>
-          <text x="60" y="345" text-anchor="middle" font-weight="700">Open Design</text>
+          <text x="60" y="345" text-anchor="middle" font-weight="700">MonoField</text>
           <text x="60" y="272" text-anchor="middle" font-weight="800" fill="#15151a">~$73 / mo</text>
         </g>
         <!-- legend -->
         <g transform="translate(720,60)">
           <rect x="0" y="0" width="16" height="16" fill="#c11f33"/><text x="24" y="13" font-weight="700">Closed cloud subscription · flat fee</text>
-          <rect x="0" y="26" width="16" height="16" fill="#1a6b45"/><text x="24" y="39" font-weight="700">Open Design · BYOK pay-per-use</text>
+          <rect x="0" y="26" width="16" height="16" fill="#1a6b45"/><text x="24" y="39" font-weight="700">MonoField · BYOK pay-per-use</text>
           <text x="0" y="74" font-size="13" fill="#73737d">The software itself is Apache-2.0, free and open source;</text>
           <text x="0" y="92" font-size="13" fill="#73737d">you pay only the model provider for actual usage — over 80% less.</text>
         </g>
@@ -359,7 +359,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="ts-chrome"><span class="ts-alert-tag green">tool-audit checklist</span><span class="ts-page">06 / 08</span></div>
     <h2 class="ts-h2">7 questions to ask <span class="red">before you choose a tool</span></h2>
     <div class="ts-checklist">
-      <div class="ts-check ok"><div class="box">✓</div><div class="txt">Where do design files live? Can you git diff them? (Open Design: local filesystem)</div></div>
+      <div class="ts-check ok"><div class="box">✓</div><div class="txt">Where do design files live? Can you git diff them? (MonoField: local filesystem)</div></div>
       <div class="ts-check ok"><div class="box">✓</div><div class="txt">Does your API key pass through third-party servers? (BYOK: stored locally, direct to provider)</div></div>
       <div class="ts-check"><div class="box">!</div><div class="txt">Cloud tools: will your prompts and artifacts be used for training? Most terms won't say.</div></div>
       <div class="ts-check ok"><div class="box">✓</div><div class="txt">If you go offline or the vendor shuts down, can you still open past work? (Local files: always)</div></div>
@@ -377,7 +377,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="ts-chrome"><span class="ts-alert-tag green">do it tonight</span><span class="ts-page">07 / 08</span></div>
     <h2 class="ts-h2">Three things to do <span class="ts-highlight-red">tonight</span></h2>
     <div class="ts-grid-3">
-      <div class="ts-card"><div class="lbl">1 · Download</div><h4>Install<br>Open Design</h4><p>macOS / Windows, runs locally, no sign-up. Apache-2.0 open source.</p></div>
+      <div class="ts-card"><div class="lbl">1 · Download</div><h4>Install<br>MonoField</h4><p>macOS / Windows, runs locally, no sign-up. Apache-2.0 open source.</p></div>
       <div class="ts-card"><div class="lbl">2 · Connect an agent</div><h4>Zero-config<br>with the CLIs you own</h4><p>Auto-detects 21 coding agents on your PATH, including Claude Code / Codex / Cursor.</p></div>
       <div class="ts-card"><div class="lbl">3 · BYOK</div><h4>Bring your own key<br>stored locally only</h4><p>Direct connections to Anthropic / OpenAI / Azure / Google — no servers in between.</p></div>
     </div>
@@ -396,7 +396,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div style="margin:auto 0">
       <div class="ts-kicker">Bringing frontier AI design power back to every creator's desk</div>
       <h1 class="ts-h1" style="font-size:140px">thank <span class="red">·</span> you</h1>
-      <p class="ts-sub" style="font-size:24px">Download Open Design (macOS / Windows) | Star on GitHub<br>github.com/nexu-io/open-design · discord.gg/9ptkbbqRu · x.com/nexudotio</p>
+      <p class="ts-sub" style="font-size:24px">Download MonoField (macOS / Windows) | Star on GitHub<br>github.com/nexu-io/open-design · discord.gg/9ptkbbqRu · x.com/nexudotio</p>
     </div>
     <div class="ts-stripe-b"></div>
     <div class="ts-footer"><span>end of brief</span><span>08 / 08</span></div>

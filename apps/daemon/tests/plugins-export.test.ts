@@ -1,4 +1,4 @@
-// Phase 4 / spec §14 — `od plugin export` unit test.
+// Phase 4 / spec §14 — `monofield plugin export` unit test.
 //
 // Exercises the three export targets directly through `exportPlugin()`
 // against an in-memory daemon DB. The HTTP route mounted in
@@ -63,20 +63,22 @@ function persistSampleSnapshot() {
 }
 
 describe('exportPlugin', () => {
-  it('target=od writes SKILL.md + open-design.json + README.md', async () => {
+  it('target=od compatibility target writes SKILL.md + monofield.json + README.md', async () => {
     const snap = persistSampleSnapshot();
     const result = await exportPlugin({ db, snapshotId: snap.snapshotId, target: 'od', outDir: tmpDir });
     expect(result.snapshotId).toBe(snap.snapshotId);
     expect(result.files.map((f) => path.basename(f)).sort()).toEqual([
       'README.md',
       'SKILL.md',
-      'open-design.json',
+      'monofield.json',
     ]);
     const manifest = JSON.parse(
-      await readFile(path.join(result.folder, 'open-design.json'), 'utf8'),
+      await readFile(path.join(result.folder, 'monofield.json'), 'utf8'),
     );
     expect(manifest.provenance.snapshotId).toBe(snap.snapshotId);
     expect(manifest.provenance.manifestSourceDigest).toBe('a'.repeat(64));
+    expect(manifest.monofield.kind).toBe('skill');
+    expect(manifest.od).toBeUndefined();
     // Unknown source licensing must stay unknown instead of being silently
     // relicensed as MIT in the exported package.
     expect(manifest).not.toHaveProperty('license');

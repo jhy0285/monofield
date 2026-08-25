@@ -8,7 +8,9 @@ import { resolveProjectRelativePath } from './home-expansion.js';
 const require = createRequire(import.meta.url);
 
 export const DAEMON_CLI_PATH_ENV = 'OD_DAEMON_CLI_PATH';
+export const MONOFIELD_DAEMON_CLI_PATH_ENV = 'MONOFIELD_DAEMON_CLI_PATH';
 export const RESOURCE_ROOT_ENV = 'OD_RESOURCE_ROOT';
+export const MONOFIELD_RESOURCE_ROOT_ENV = 'MONOFIELD_RESOURCE_ROOT';
 
 function cleanOptionalPath(value: string | undefined): string | null {
   return typeof value === 'string' && value.trim().length > 0
@@ -17,7 +19,10 @@ function cleanOptionalPath(value: string | undefined): string | null {
 }
 
 export function resolveDaemonCliPath(env: NodeJS.ProcessEnv = process.env): string {
-  const configured = cleanOptionalPath(env[DAEMON_CLI_PATH_ENV]) ?? cleanOptionalPath(env.OD_BIN);
+  const configured = cleanOptionalPath(env[MONOFIELD_DAEMON_CLI_PATH_ENV])
+    ?? cleanOptionalPath(env[DAEMON_CLI_PATH_ENV])
+    ?? cleanOptionalPath(env.MONOFIELD_BIN)
+    ?? cleanOptionalPath(env.OD_BIN);
   if (configured) return configured;
 
   const packageJsonPath = require.resolve('@open-design/daemon/package.json');
@@ -69,7 +74,7 @@ export interface ResolveDaemonResourceRootOptions {
 }
 
 export function resolveDaemonResourceRoot({
-  configured = process.env[RESOURCE_ROOT_ENV],
+  configured = process.env[MONOFIELD_RESOURCE_ROOT_ENV] ?? process.env[RESOURCE_ROOT_ENV],
   safeBases,
 }: ResolveDaemonResourceRootOptions = {}): string | null {
   if (!configured || configured.length === 0) return null;
@@ -81,7 +86,7 @@ export function resolveDaemonResourceRoot({
 
   if (!normalizedSafeBases.some((base) => isPathWithin(base, resolved))) {
     throw new Error(
-      `${RESOURCE_ROOT_ENV} must be under the workspace root or app resources path`,
+      `${MONOFIELD_RESOURCE_ROOT_ENV} must be under the workspace root or app resources path`,
     );
   }
 
@@ -130,9 +135,9 @@ export function resolveDataDir(
   const value = raw?.trim();
   if (!value) {
     if (options.requireExplicit) {
-      throw new Error('OD_DATA_DIR is required when OD_SANDBOX_MODE is enabled');
+      throw new Error('MONOFIELD_DATA_DIR is required when managed sandbox mode is enabled');
     }
-    return path.join(projectRoot, '.od');
+    return path.join(projectRoot, '.monofield');
   }
 
   const resolved = resolveProjectRelativePath(value, projectRoot);
@@ -151,7 +156,7 @@ export function resolveDataDir(
     const parentDir = path.dirname(resolved);
     throw new Error(
       [
-        `OD_DATA_DIR "${resolved}" is not writable: ${e.message}`,
+        `MONOFIELD_DATA_DIR "${resolved}" is not writable: ${e.message}`,
         `Current user: ${currentUser}`,
         'Check whether the folder or one of its parents is owned by another user, is a symlink to a protected location, or was previously created with sudo.',
         `Try: ls -ld "${parentDir}" "${resolved}"`,

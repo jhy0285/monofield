@@ -1,9 +1,9 @@
 /**
- * Unit tests for the OD_LEGACY_DATA_DIR one-shot migrator. Hermetic:
+ * Unit tests for the MONOFIELD_LEGACY_DATA_DIR one-shot migrator. Hermetic:
  * each test runs against a fresh pair of mkdtemp() directories so no
  * test ever touches a real OD install.
  *
- * The migrator's contract is "loud or correct": when OD_LEGACY_DATA_DIR
+ * The migrator's contract is "loud or correct": when MONOFIELD_LEGACY_DATA_DIR
  * is set, either the daemon migrates cleanly or it throws a
  * LegacyMigrationError the launcher can surface. Silently launching
  * empty was the original #710 footgun.
@@ -86,7 +86,7 @@ describe('migrateLegacyDataDirSync', () => {
     await rm(dataDir, { recursive: true, force: true });
   });
 
-  it('returns noop when OD_LEGACY_DATA_DIR is not set', () => {
+  it('returns noop when MONOFIELD_LEGACY_DATA_DIR is not set', () => {
     const log = makeLogger();
     expect(
       migrateLegacyDataDirSync({ legacyDir: undefined, dataDir, logger: log }),
@@ -94,7 +94,7 @@ describe('migrateLegacyDataDirSync', () => {
     expect(log.entries).toHaveLength(0);
   });
 
-  it('returns noop when OD_LEGACY_DATA_DIR is the empty string', () => {
+  it('returns noop when MONOFIELD_LEGACY_DATA_DIR is the empty string', () => {
     expect(
       migrateLegacyDataDirSync({ legacyDir: '', dataDir, logger: makeLogger() }),
     ).toMatchObject({ status: 'noop' });
@@ -186,6 +186,24 @@ describe('migrateLegacyDataDirSync', () => {
     ).toBe('<html>a</html>');
     expect(log.entries.some((e) => e.message.includes('migrating legacy data'))).toBe(true);
     expect(log.entries.some((e) => e.message.includes('migration complete'))).toBe(true);
+  });
+
+  it('leaves regenerable project .tmp trees behind', () => {
+    seedLegacyDir(legacyDir);
+    writeFile(
+      path.join(legacyDir, 'projects', 'p1', '.tmp', 'deck-build', 'node_modules', 'cache.txt'),
+      'regenerable',
+    );
+
+    const result = migrateLegacyDataDirSync({
+      legacyDir,
+      dataDir,
+      logger: makeLogger(),
+    });
+
+    expect(result.status).toBe('migrated');
+    expect(fs.existsSync(path.join(dataDir, 'projects', 'p1', '.tmp'))).toBe(false);
+    expect(fs.existsSync(path.join(dataDir, 'projects', 'p1', 'index.html'))).toBe(true);
   });
 
   it('writes a .migrated-from marker after success', () => {
@@ -327,12 +345,12 @@ describe('migrateLegacyDataDirSync', () => {
       migrateLegacyDataDirSync({ legacyDir, dataDir, logger: makeLogger() }),
     ).toThrowError(LegacyMigrationError);
 
-    // No .od-migrate-* sibling left behind.
+    // No .monofield-migrate-* sibling left behind.
     const parent = path.dirname(dataDir);
     const base = path.basename(dataDir);
     const leftovers = fs
       .readdirSync(parent)
-      .filter((entry) => entry.startsWith(`${base}.od-migrate-`));
+      .filter((entry) => entry.startsWith(`${base}.monofield-migrate-`));
     expect(leftovers).toEqual([]);
 
     fs.rmSync(escapeTarget, { recursive: true, force: true });
@@ -347,7 +365,7 @@ describe('migrateLegacyDataDirSync', () => {
     // the user mid-migration.
     const stagingDir = path.join(
       path.dirname(dataDir),
-      `${path.basename(dataDir)}.od-migrate-rollback-test`,
+      `${path.basename(dataDir)}.monofield-migrate-rollback-test`,
     );
     fs.mkdirSync(stagingDir, { recursive: true });
     writeFile(path.join(stagingDir, 'app.sqlite'), 'staged-sqlite');

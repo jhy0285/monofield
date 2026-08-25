@@ -1,10 +1,10 @@
-// Phase 4 / spec §14.1 — `od plugin scaffold` starter folder generator.
+// Phase 4 / spec §14.1 — `monofield plugin scaffold` starter folder generator.
 //
 // Pure, file-system-side helper that materialises the §17.2 "enriched
-// plugin" shape on disk: SKILL.md (canonical anchor, with the od:
-// frontmatter the skills protocol expects) + open-design.json (sidecar
+// plugin" shape on disk: SKILL.md (canonical anchor, with MonoField
+// frontmatter the skills protocol expects) + monofield.json (sidecar
 // with the v1 schema reference). Authors can drop the result into a
-// new git repo and start iterating immediately; `od plugin install ./<id>`
+// new git repo and start iterating immediately; `monofield plugin install ./<id>`
 // will pick it up via the local-folder backend.
 //
 // Kept module-pure (no daemon globals): tests pass a temp directory as
@@ -12,6 +12,7 @@
 
 import path from 'node:path';
 import { promises as fsp } from 'node:fs';
+import { LEGACY_PLUGIN_MANIFEST, MONOFIELD_PLUGIN_MANIFEST } from './manifest-file.js';
 
 export interface ScaffoldInput {
   // Target directory the scaffold tree is created under. The function
@@ -54,7 +55,7 @@ export async function scaffoldPlugin(input: ScaffoldInput): Promise<ScaffoldResu
   try {
     const entries = await fsp.readdir(folder).catch(() => []);
     const conflicts = entries.filter((e) =>
-      e === 'SKILL.md' || e === 'open-design.json' || e === '.claude-plugin' || e === 'README.md',
+      e === 'SKILL.md' || e === MONOFIELD_PLUGIN_MANIFEST || e === LEGACY_PLUGIN_MANIFEST || e === '.claude-plugin' || e === 'README.md',
     );
     if (conflicts.length > 0) {
       throw new ScaffoldError(`destination ${folder} already contains ${conflicts.join(', ')}; refusing to overwrite`);
@@ -77,7 +78,7 @@ export async function scaffoldPlugin(input: ScaffoldInput): Promise<ScaffoldResu
     '---',
     `name: ${input.id}`,
     `description: ${description}`,
-    'od:',
+    'monofield:',
     `  mode: ${input.mode ?? 'prototype'}`,
     `  scenario: ${input.scenario ?? 'general'}`,
     '---',
@@ -99,7 +100,7 @@ export async function scaffoldPlugin(input: ScaffoldInput): Promise<ScaffoldResu
   written.push(skillPath);
 
   const manifest: Record<string, unknown> = {
-    $schema:     'https://open-design.ai/schemas/plugin.v1.json',
+    $schema:     'https://raw.githubusercontent.com/jhy0285/monofield/main/docs/schemas/monofield.plugin.v1.json',
     specVersion: '1.0.0',
     name:        input.id,
     title,
@@ -108,7 +109,7 @@ export async function scaffoldPlugin(input: ScaffoldInput): Promise<ScaffoldResu
     license:     'MIT',
     tags:        [taskKind],
     compat:      { agentSkills: [{ path: './SKILL.md' }] },
-    od: {
+    monofield: {
       kind:     'skill',
       taskKind,
       mode:     input.mode ?? 'prototype',
@@ -124,7 +125,7 @@ export async function scaffoldPlugin(input: ScaffoldInput): Promise<ScaffoldResu
       capabilities: ['prompt:inject'],
     },
   };
-  const manifestPath = path.join(folder, 'open-design.json');
+  const manifestPath = path.join(folder, MONOFIELD_PLUGIN_MANIFEST);
   await fsp.writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
   written.push(manifestPath);
 
@@ -136,17 +137,17 @@ export async function scaffoldPlugin(input: ScaffoldInput): Promise<ScaffoldResu
     '## Try it',
     '',
     '```bash',
-    `od plugin install ./${input.id}`,
-    `od plugin apply ${input.id} --input audience=VC`,
+    `monofield plugin install ./${input.id}`,
+    `monofield plugin apply ${input.id} --input audience=VC`,
     '```',
     '',
     '## Files',
     '',
     '- `SKILL.md` — the canonical agent skill body.',
-    '- `open-design.json` — the versioned MonoField marketplace sidecar.',
+    '- `monofield.json` — the versioned MonoField marketplace sidecar.',
     '',
     'Edit `SKILL.md` to teach the agent how to perform the workflow.',
-    'Edit `open-design.json` to refine the marketplace card and inputs.',
+    'Edit `monofield.json` to refine the marketplace card and inputs.',
     '',
   ].join('\n');
   const readmePath = path.join(folder, 'README.md');

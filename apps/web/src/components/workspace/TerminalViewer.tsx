@@ -148,7 +148,7 @@ function subscribeToAppearanceChanges(onChange: () => void): () => void {
  * (`GET .../stream`, with EventSource's built-in `Last-Event-ID` replay on
  * reconnect), while keystrokes and resizes flow back up over plain POST
  * (`.../stdin`, `.../resize`). The PTY itself is created by the launcher action
- * (or `od shell`) BEFORE the tab opens, so this component attaches to an
+ * (or `monofield shell`) BEFORE the tab opens, so this component attaches to an
  * existing session id and tears it down on unmount.
  *
  * xterm is imported lazily on mount (see the effect): its bundle references
@@ -390,7 +390,7 @@ export function TerminalViewer({ terminalId, projectId, onClose, onSessionIdChan
           <div className={styles.loadingStack}>
             <div className={styles.loadingPromptLine} aria-hidden>
               <span className={styles.loadingPrompt}>$</span>
-              <span className={styles.loadingCommand}>open-design shell</span>
+              <span className={styles.loadingCommand}>monofield shell</span>
               <span className={styles.loadingCursor} />
             </div>
             <div className={styles.loadingCopy}>

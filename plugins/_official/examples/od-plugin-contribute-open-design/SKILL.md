@@ -1,6 +1,6 @@
 ---
 name: od-plugin-contribute-open-design
-description: Open a pull request adding a local Open Design plugin to the Open Design community catalog using gh CLI.
+description: Open a pull request adding a local MonoField plugin to the MonoField community catalog using gh CLI.
 triggers:
   - contribute plugin
   - open design pr
@@ -11,9 +11,9 @@ od:
   scenario: plugin-sharing
 ---
 
-# Contribute Plugin to Open Design
+# Contribute Plugin to MonoField
 
-Use this workflow when the active project contains a copied plugin folder and the user wants to propose it for the Open Design community catalog.
+Use this workflow when the active project contains a copied plugin folder and the user wants to propose it for the MonoField community catalog.
 
 ## Workflow
 
@@ -24,4 +24,4 @@ Use this workflow when the active project contains a copied plugin folder and th
 4. Read the JSON response. If `ok` is true, report the PR URL, branch name when present in the log, and any useful validation summary.
 5. If the endpoint fails, report its `message`, `code`, and useful log lines. When authentication is missing, tell the user to run `gh auth login --hostname github.com`.
 
-Keep the pull request focused. Do not modify unrelated Open Design files unless a manifest validation issue requires a tiny supporting change.
+Keep the pull request focused. Do not modify unrelated MonoField files unless a manifest validation issue requires a tiny supporting change.

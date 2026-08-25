@@ -38,7 +38,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
     // The daemon was bootstrapped as a sidecar (tools-dev, packaged) iff
     // bootstrapSidecarRuntime stamped OD_SIDECAR_IPC_PATH into the env.
     // In sidecar mode the snippet omits --daemon-url and the spawned
-    // `od mcp` discovers the live URL via the concrete IPC endpoint on
+    // `monofield mcp` discovers the live URL via the concrete IPC endpoint on
     // every spawn, so the client config survives ephemeral-port
     // restarts. For direct `od` / `od --port X` launches there is no
     // IPC socket; the helper bakes --daemon-url so custom ports keep
@@ -47,14 +47,14 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
     const isSidecarMode = sidecarIpcPath != null && sidecarIpcPath.length > 0;
     const sidecarEnv: Record<string, string> = {};
     if (isSidecarMode) {
-      sidecarEnv[SIDECAR_ENV.IPC_PATH] = sidecarIpcPath;
+      sidecarEnv.MONOFIELD_SIDECAR_IPC_PATH = sidecarIpcPath;
     }
     // tools-dev / packaged launchers export OD_WEB_PORT so the daemon
     // knows where the browser-facing MonoField studio is running.
     // CLI-only / headless launches set neither and webBaseUrl falls
     // through as null — MCP clients then just omit the studio deep
     // link from their responses.
-    const webPortRaw = process.env.OD_WEB_PORT;
+    const webPortRaw = process.env.MONOFIELD_WEB_PORT ?? process.env.OD_WEB_PORT;
     const webPortNum = webPortRaw ? Number(webPortRaw) : Number.NaN;
     const webBaseUrl = Number.isFinite(webPortNum) && webPortNum > 0
       ? `http://127.0.0.1:${webPortNum}`
@@ -97,7 +97,8 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
   // so we shell out to it rather than rewriting ~/.codex/config.toml
   // ourselves — that way we inherit Codex's merge / validation rules
   // and only need to track its argv. See apps/daemon/src/codex-cli.ts.
-  const CODEX_MCP_NAME = 'open-docs';
+  const CODEX_MCP_NAME = 'monofield';
+  const LEGACY_CODEX_MCP_NAME = 'open-docs';
 
   app.get('/api/mcp/install/codex/status', async (req, res) => {
     if (!isLocalSameOrigin(req, getResolvedPort())) {
@@ -105,7 +106,9 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
     }
     try {
       const status = await probeCodexInstall(CODEX_MCP_NAME);
-      res.json(status);
+      if (!status.available || status.installed) return res.json(status);
+      const legacy = await probeCodexInstall(LEGACY_CODEX_MCP_NAME);
+      res.json({ available: status.available, installed: legacy.installed });
     } catch (err) {
       sendApiError(res, 500, 'CODEX_PROBE_FAILED', err instanceof Error ? err.message : String(err));
     }
@@ -126,6 +129,8 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
         args: payload.args,
         env: payload.env,
       });
+      const legacy = await probeCodexInstall(LEGACY_CODEX_MCP_NAME);
+      if (legacy.installed) await uninstallCodexMcp(LEGACY_CODEX_MCP_NAME);
       res.json({ ok: true });
     } catch (err) {
       sendApiError(res, 500, 'CODEX_INSTALL_FAILED', err instanceof Error ? err.message : String(err));
@@ -137,7 +142,12 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
-      await uninstallCodexMcp(CODEX_MCP_NAME);
+      const [canonical, legacy] = await Promise.all([
+        probeCodexInstall(CODEX_MCP_NAME),
+        probeCodexInstall(LEGACY_CODEX_MCP_NAME),
+      ]);
+      if (canonical.installed) await uninstallCodexMcp(CODEX_MCP_NAME);
+      if (legacy.installed) await uninstallCodexMcp(LEGACY_CODEX_MCP_NAME);
       res.json({ ok: true });
     } catch (err) {
       sendApiError(res, 500, 'CODEX_UNINSTALL_FAILED', err instanceof Error ? err.message : String(err));
@@ -357,13 +367,13 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
 }
 
 function getPublicBaseUrl(req: any) {
-  const env = process.env.OD_PUBLIC_BASE_URL;
+  const env = process.env.MONOFIELD_PUBLIC_BASE_URL ?? process.env.OD_PUBLIC_BASE_URL;
   if (env && /^https?:\/\//i.test(env)) {
     return env.replace(/\/+$/u, '');
   }
   const proto = req.protocol || 'http';
   const host = req.get('host');
-  if (!host) return `http://localhost:${process.env.OD_PORT ?? '7456'}`;
+  if (!host) return `http://localhost:${process.env.MONOFIELD_PORT ?? process.env.OD_PORT ?? '7456'}`;
   return `${proto}://${host}`;
 }
 

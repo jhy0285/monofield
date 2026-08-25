@@ -1,12 +1,12 @@
 # Alibaba Cloud (阿里云) Deployment
 
-This guide covers self-hosting Open Design on Alibaba Cloud for users in mainland China and the broader Asia-Pacific region. It documents the supported deployment paths, image-pull optimisations, and ICP filing considerations for public-facing instances.
+This guide covers self-hosting MonoField on Alibaba Cloud for users in mainland China and the broader Asia-Pacific region. It documents the supported deployment paths, image-pull optimisations, and ICP filing considerations for public-facing instances.
 
 > **Status:** This is a docs-only guide. The flows below follow Alibaba Cloud's published product behaviour and the existing [`docs/deployment/docker.md`](../docker.md) and [`docs/install-guide.md`](../../install-guide.md) container model. Live ROS templates, one-click scripts, and verification screenshots are tracked as a follow-up under issue #1025; contributions from operators with active Alibaba Cloud accounts are welcome.
 
 ## Why Alibaba Cloud?
 
-For users in mainland China, deploying Open Design to Alibaba Cloud (阿里云) instead of an overseas provider gives you:
+For users in mainland China, deploying MonoField to Alibaba Cloud (阿里云) instead of an overseas provider gives you:
 
 - **Lower latency** for users on China Telecom, China Unicom, and China Mobile networks.
 - **Image acceleration** via Alibaba Cloud Container Registry (容器镜像服务 ACR) — Docker Hub pulls from the mainland are unreliable; ACR mirrors solve this.
@@ -33,7 +33,7 @@ Most first-time deployments should start with **Path A (ECS)**.
 
 ## Path A — Deploy to ECS
 
-This path puts Open Design on a single ECS instance using the same Docker Compose stack documented in [`docs/deployment/docker.md`](../docker.md).
+This path puts MonoField on a single ECS instance using the same Docker Compose stack documented in [`docs/deployment/docker.md`](../docker.md).
 
 ### Step 1: Create the ECS instance
 
@@ -42,7 +42,7 @@ Use the Alibaba Cloud console or the CLI. A reasonable starting shape for evalua
 | Setting | Recommended value | Notes |
 |---------|------------------|-------|
 | Instance type | `ecs.t6-c1m2.large` (2 vCPU / 4 GiB) | Lightweight; bump to `ecs.c7` for production |
-| Image | Ubuntu 24.04 LTS 64-bit | Open Design's Docker image is `linux/amd64` and `linux/arm64` |
+| Image | Ubuntu 24.04 LTS 64-bit | MonoField's Docker image is `linux/amd64` and `linux/arm64` |
 | Storage | 40 GiB ESSD | Enough for the image, agent CWDs, and SQLite |
 | Network | VPC with a public IP or EIP | Required if users will reach the instance directly |
 | Security group | Inbound `22/tcp` (your IP only), outbound all | Add `443/tcp` only behind a reverse proxy — see [Network exposure](#network-exposure) |
@@ -94,19 +94,19 @@ sudo systemctl restart docker
 
 Get your personal mirror prefix from the Alibaba Cloud console under **Container Registry → Image Tools → Image Accelerator** (容器镜像服务 → 镜像工具 → 镜像加速器).
 
-### Step 4: Run Open Design
+### Step 4: Run MonoField
 
 From this point the flow matches [`docs/install-guide.md`](../../install-guide.md):
 
 ```bash
-git clone https://github.com/nexu-io/open-design.git
-cd open-design
+git clone https://github.com/jhy0285/monofield.git
+cd monofield
 bash deploy/scripts/install.sh --non-interactive --port 7456
 ```
 
 ### Step 5: Put a reverse proxy in front
 
-Open Design binds to `127.0.0.1:7456` by design — the daemon is never directly exposed to the network. For public access, terminate TLS at Nginx or an Alibaba Cloud SLB / ALB and forward to `127.0.0.1:7456`. Do not expose port 7456 directly through the security group. See the network section of [`docs/install-guide.md`](../../install-guide.md) for the full rationale.
+MonoField binds to `127.0.0.1:7456` by design — the daemon is never directly exposed to the network. For public access, terminate TLS at Nginx or an Alibaba Cloud SLB / ALB and forward to `127.0.0.1:7456`. Do not expose port 7456 directly through the security group. See the network section of [`docs/install-guide.md`](../../install-guide.md) for the full rationale.
 
 A minimal Nginx block:
 
@@ -129,19 +129,19 @@ server {
     proxy_set_header Connection "upgrade";
 
     # Forward the bearer token to the daemon. The Compose stack always
-    # generates an OD_API_TOKEN and binds the daemon to 0.0.0.0 inside
+    # generates an MONOFIELD_API_TOKEN and binds the daemon to 0.0.0.0 inside
     # the container, so every /api/* call coming through Nginx must
     # carry Authorization: Bearer <token>. Only /api/health,
     # /api/version, and /api/daemon/status are exempt. The loopback
     # short-circuit in the daemon checks the TCP peer address, not the
     # X-Forwarded-For header, so reverse-proxy traffic never gets the
     # localhost bypass.
-    proxy_set_header Authorization "Bearer <OD_API_TOKEN from deploy/.env>";
+    proxy_set_header Authorization "Bearer <MONOFIELD_API_TOKEN from deploy/.env>";
   }
 }
 ```
 
-Set `OPEN_DESIGN_ALLOWED_ORIGINS` in `deploy/.env` to the public URL so CORS clears the proxy. The `OD_API_TOKEN` referenced in the Nginx block above is generated automatically by `deploy/scripts/install.sh` and written into `deploy/.env`; copy that value (or wire `proxy_set_header Authorization` to read it from a secrets manager) so the proxy authenticates on every request.
+Set `MONOFIELD_ALLOWED_ORIGINS` in `deploy/.env` to the public URL so CORS clears the proxy. The `MONOFIELD_API_TOKEN` referenced in the Nginx block above is generated automatically by `deploy/scripts/install.sh` and written into `deploy/.env`; copy that value (or wire `proxy_set_header Authorization` to read it from a secrets manager) so the proxy authenticates on every request.
 
 ## Path B — Deploy to ACK
 
@@ -151,53 +151,53 @@ Set `OPEN_DESIGN_ALLOWED_ORIGINS` in `deploy/.env` to the public URL so CORS cle
 - High availability across availability zones.
 - Standard Kubernetes tooling (`kubectl`, Helm) for ops.
 
-Open Design does not yet ship an official Helm chart. The minimal manifest below is a starting point — production users should harden it (resource limits, PodDisruptionBudget, NetworkPolicy, persistent storage class).
+MonoField does not yet ship an official Helm chart. The minimal manifest below is a starting point — production users should harden it (resource limits, PodDisruptionBudget, NetworkPolicy, persistent storage class).
 
-> **Required env for Kubernetes:** the daemon defaults to `OD_BIND_HOST=127.0.0.1`, which makes the readiness probe (and the Service) unable to reach the container. To make the Pod reachable inside the cluster you must set `OD_BIND_HOST=0.0.0.0`, and the daemon's bound-API-token guard then requires `OD_API_TOKEN` to be set whenever it binds to a non-loopback interface. Both env vars are reflected in the manifest below.
+> **Required env for Kubernetes:** the daemon defaults to `MONOFIELD_BIND_HOST=127.0.0.1`, which makes the readiness probe (and the Service) unable to reach the container. To make the Pod reachable inside the cluster you must set `MONOFIELD_BIND_HOST=0.0.0.0`, and the daemon's bound-API-token guard then requires `MONOFIELD_API_TOKEN` to be set whenever it binds to a non-loopback interface. Both env vars are reflected in the manifest below.
 >
-> Also note that the daemon reads `OD_ALLOWED_ORIGINS` directly. The `OPEN_DESIGN_ALLOWED_ORIGINS` name documented in `deploy/.env.example` is a Compose-only alias mapped in `deploy/docker-compose.yml`; for the direct-container ACK path you must set `OD_ALLOWED_ORIGINS` instead.
+> Also note that the daemon reads `MONOFIELD_ALLOWED_ORIGINS` directly. The `MONOFIELD_ALLOWED_ORIGINS` name documented in `deploy/.env.example` is a Compose-only alias mapped in `deploy/docker-compose.yml`; for the direct-container ACK path you must set `MONOFIELD_ALLOWED_ORIGINS` instead.
 
 Create the API-token secret first:
 
 ```bash
 # Generate a random token and store it in the cluster
-kubectl create secret generic open-design-secrets \
+kubectl create secret generic monofield-secrets \
   --from-literal=api-token="$(openssl rand -hex 32)"
 ```
 
 Then apply the manifest:
 
 ```yaml
-# open-design.yaml
+# monofield.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: open-design
+  name: monofield
 spec:
-  replicas: 1  # Open Design uses local SQLite; multi-replica needs shared storage
+  replicas: 1  # MonoField uses local SQLite; multi-replica needs shared storage
   selector:
-    matchLabels: { app: open-design }
+    matchLabels: { app: monofield }
   template:
     metadata:
-      labels: { app: open-design }
+      labels: { app: monofield }
     spec:
       containers:
-        - name: open-design
-          image: registry.cn-hangzhou.aliyuncs.com/<your-namespace>/open-design:latest
+        - name: monofield
+          image: registry.cn-hangzhou.aliyuncs.com/<your-namespace>/monofield:latest
           ports:
             - containerPort: 7456
           env:
             # Storage env vars are intentionally omitted here.
             # Before setting them, you MUST read root AGENTS.md -> Daemon data directory contract.
-            - name: OD_BIND_HOST
+            - name: MONOFIELD_BIND_HOST
               value: "0.0.0.0"            # required so the readinessProbe and Service can reach the daemon
-            - name: OD_API_TOKEN
+            - name: MONOFIELD_API_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: open-design-secrets
-                  key: api-token            # required whenever OD_BIND_HOST is non-loopback
-            - name: OD_ALLOWED_ORIGINS
-              value: "https://design.example.cn"  # set when fronting with an Ingress; daemon reads OD_*, not OPEN_DESIGN_*
+                  name: monofield-secrets
+                  key: api-token            # required whenever MONOFIELD_BIND_HOST is non-loopback
+            - name: MONOFIELD_ALLOWED_ORIGINS
+              value: "https://design.example.cn"  # set when fronting with an Ingress; daemon reads MONOFIELD_*, not MONOFIELD_*
           # Storage volume mounts are intentionally omitted here.
           # Before adding them, you MUST read root AGENTS.md -> Daemon data directory contract.
           readinessProbe:
@@ -209,27 +209,27 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: open-design-data
+            claimName: monofield-data
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: open-design
+  name: monofield
 spec:
   type: ClusterIP
-  selector: { app: open-design }
+  selector: { app: monofield }
   ports:
     - port: 80
       targetPort: 7456
 ```
 
-Apply with `kubectl apply -f open-design.yaml`. Front the Service with an Ingress (NGINX Ingress Controller is preinstalled on ACK Pro) and an ACM-issued certificate. With `OD_API_TOKEN` set, every `/api/*` request from non-loopback origins must carry an `Authorization: Bearer <token>` header — wire that into your Ingress / proxy auth layer.
+Apply with `kubectl apply -f monofield.yaml`. Front the Service with an Ingress (NGINX Ingress Controller is preinstalled on ACK Pro) and an ACM-issued certificate. With `MONOFIELD_API_TOKEN` set, every `/api/*` request from non-loopback origins must carry an `Authorization: Bearer <token>` header — wire that into your Ingress / proxy auth layer.
 
 > **Note on `replicas: 1`:** before changing storage paths or shared persistent storage, you MUST read root [`AGENTS.md`](../../../AGENTS.md) → **Daemon data directory contract**. Running multiple replicas without shared persistent daemon storage will diverge state. A multi-replica ACK topology needs an external database; that is out of scope for this guide.
 
 ## Path C — ROS templates
 
-Resource Orchestration Service (资源编排 ROS) provisions the same resources declaratively. There is no first-party ROS template for Open Design yet. Operators with Alibaba Cloud access are welcome to contribute one as a follow-up to this guide; the natural location is `deploy/aliyun/ros/`.
+Resource Orchestration Service (资源编排 ROS) provisions the same resources declaratively. There is no first-party ROS template for MonoField yet. Operators with Alibaba Cloud access are welcome to contribute one as a follow-up to this guide; the natural location is `deploy/aliyun/ros/`.
 
 Until a template lands, treat ROS as advanced infra-as-code and use Path A or Path B above.
 
@@ -265,11 +265,11 @@ A practical pattern for many teams: deploy to **Hong Kong (`cn-hongkong`)** firs
 
 ## Network exposure
 
-Open Design's daemon binds to `127.0.0.1:7456` and is never exposed directly. Public access must go through:
+MonoField's daemon binds to `127.0.0.1:7456` and is never exposed directly. Public access must go through:
 
 1. A reverse proxy that terminates TLS (Nginx, Caddy, Alibaba Cloud SLB/ALB).
 2. An ICP-filed domain (for mainland regions).
-3. CORS allowlist set via `OPEN_DESIGN_ALLOWED_ORIGINS` (Compose / `deploy/.env` path) or `OD_ALLOWED_ORIGINS` (direct-container / Kubernetes path).
+3. CORS allowlist set via `MONOFIELD_ALLOWED_ORIGINS` (Compose / `deploy/.env` path) or `MONOFIELD_ALLOWED_ORIGINS` (direct-container / Kubernetes path).
 
 See [`docs/install-guide.md`](../../install-guide.md) for the full topology and reverse-proxy guidance.
 
@@ -281,8 +281,8 @@ See [`docs/install-guide.md`](../../install-guide.md) for the full topology and 
 | HTTP/HTTPS to your domain is blocked | Domain not ICP-filed for a mainland region | Complete ICP filing, or move to a non-mainland region (HK/SG) |
 | `aliyun ecs RunInstances` fails with "Real-name authentication required" | Account not 实名认证 | Complete real-name verification in the account console |
 | ACK pods stuck in `ImagePullBackOff` from a private ACR repo | Cluster lacks pull credentials for the namespace | Create an `aliyun-acr-credential-helper` secret or use the cluster's ACR plugin |
-| 200 from `/api/health` but UI fails to load | CORS rejecting the proxied origin, **or** the reverse proxy not forwarding the bearer token (Compose always generates `OD_API_TOKEN`; only `/api/health`, `/api/version`, `/api/daemon/status` skip auth) | Set `OPEN_DESIGN_ALLOWED_ORIGINS` (Compose / `deploy/.env`) or `OD_ALLOWED_ORIGINS` (direct container / ACK) to the public URL, **and** add `proxy_set_header Authorization "Bearer <OD_API_TOKEN>"` to the Nginx / SLB upstream config |
-| ACK Pod stuck in `NotReady`, readiness probe fails | Daemon defaulting to `OD_BIND_HOST=127.0.0.1` so the kubelet can't reach it | Set `OD_BIND_HOST=0.0.0.0` and `OD_API_TOKEN` in the Pod env (the daemon refuses non-loopback binds without a token) |
+| 200 from `/api/health` but UI fails to load | CORS rejecting the proxied origin, **or** the reverse proxy not forwarding the bearer token (Compose always generates `MONOFIELD_API_TOKEN`; only `/api/health`, `/api/version`, `/api/daemon/status` skip auth) | Set `MONOFIELD_ALLOWED_ORIGINS` (Compose / `deploy/.env`) or `MONOFIELD_ALLOWED_ORIGINS` (direct container / ACK) to the public URL, **and** add `proxy_set_header Authorization "Bearer <MONOFIELD_API_TOKEN>"` to the Nginx / SLB upstream config |
+| ACK Pod stuck in `NotReady`, readiness probe fails | Daemon defaulting to `MONOFIELD_BIND_HOST=127.0.0.1` so the kubelet can't reach it | Set `MONOFIELD_BIND_HOST=0.0.0.0` and `MONOFIELD_API_TOKEN` in the Pod env (the daemon refuses non-loopback binds without a token) |
 | SLB health check fails | SLB hits `7456` but security group blocks intra-VPC | Allow the SLB backend CIDR on `7456/tcp` in the security group |
 
 ## Follow-up work
@@ -297,8 +297,8 @@ This guide is intentionally docs-only. Tracked under #1025, contributions welcom
 
 ## References
 
-- Open Design Docker deployment: [`docs/deployment/docker.md`](../docker.md)
-- Open Design one-click installer: [`docs/install-guide.md`](../../install-guide.md)
+- MonoField Docker deployment: [`docs/deployment/docker.md`](../docker.md)
+- MonoField one-click installer: [`docs/install-guide.md`](../../install-guide.md)
 - Alibaba Cloud ECS docs: <https://www.alibabacloud.com/help/en/ecs>
 - Alibaba Cloud ACK docs: <https://www.alibabacloud.com/help/en/ack>
 - Alibaba Cloud Container Registry docs: <https://www.alibabacloud.com/help/en/acr>

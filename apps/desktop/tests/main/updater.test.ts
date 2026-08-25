@@ -381,7 +381,7 @@ describe("desktop updater", () => {
 
       await updater.checkForUpdates({ autoDownload: false });
 
-      expect(logger.info).toHaveBeenCalledWith("[open-design updater] lifecycle", expect.objectContaining({
+      expect(logger.info).toHaveBeenCalledWith("[monofield updater] lifecycle", expect.objectContaining({
         enabled: true,
         event: "session-start",
         metadataUrl: fixture.metadataUrl,
@@ -389,7 +389,7 @@ describe("desktop updater", () => {
         sessionId: "2026-06-09T07:50:51.000Z-12345",
         source: SIDECAR_SOURCES.PACKAGED,
       }));
-      expect(logger.info).toHaveBeenCalledWith("[open-design updater] lifecycle", expect.objectContaining({
+      expect(logger.info).toHaveBeenCalledWith("[monofield updater] lifecycle", expect.objectContaining({
         event: "check-start",
         metadataUrl: fixture.metadataUrl,
         namespace: "release-beta",
@@ -2545,7 +2545,7 @@ describe("desktop updater", () => {
         removedAt: "2026-06-09T07:50:51.000Z",
         state: "cleanup-removed",
       });
-      expect(logger.info).toHaveBeenCalledWith("[open-design updater] lifecycle", expect.objectContaining({
+      expect(logger.info).toHaveBeenCalledWith("[monofield updater] lifecycle", expect.objectContaining({
         event: "launcher-lifecycle",
         removed: 1,
         retained: 1,
@@ -2625,7 +2625,28 @@ describe("desktop updater", () => {
           },
           source: SIDECAR_SOURCES.PACKAGED,
         }),
-      ).toThrow(`${DESKTOP_UPDATE_ENV.CHECK_INTERVAL_MS} must be greater than 0 milliseconds`);
+      ).toThrow(`MONOFIELD_UPDATE_CHECK_INTERVAL_MS must be greater than 0 milliseconds`);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("prefers canonical MonoField updater environment names", () => {
+    const root = makeRoot();
+    try {
+      const config = resolveDesktopUpdaterConfig({
+        currentVersion: "1.2.3",
+        downloadRoot: root,
+        env: {
+          MONOFIELD_UPDATE_ENABLED: "1",
+          MONOFIELD_UPDATE_METADATA_URL: "https://updates.company.example/monofield.json",
+          OD_UPDATE_METADATA_URL: "https://legacy.example/metadata.json",
+        },
+        source: SIDECAR_SOURCES.PACKAGED,
+      });
+
+      expect(config.enabled).toBe(true);
+      expect(config.metadataUrl).toBe("https://updates.company.example/monofield.json");
     } finally {
       rmSync(root, { force: true, recursive: true });
     }

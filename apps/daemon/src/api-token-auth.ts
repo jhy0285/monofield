@@ -4,11 +4,11 @@ export function isTruthyEnvFlag(value: unknown): boolean {
 }
 
 export function isApiAuthDisabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return isTruthyEnvFlag(env.OD_DISABLE_API_AUTH);
+  return isTruthyEnvFlag(env.MONOFIELD_DISABLE_API_AUTH ?? env.OD_DISABLE_API_AUTH);
 }
 
 export function apiTokenFromEnv(env: NodeJS.ProcessEnv = process.env): string {
-  return (env.OD_API_TOKEN ?? '').trim();
+  return (env.MONOFIELD_API_TOKEN ?? env.OD_API_TOKEN ?? '').trim();
 }
 
 export function isApiTokenMiddlewareEnabled(env: NodeJS.ProcessEnv = process.env): boolean {

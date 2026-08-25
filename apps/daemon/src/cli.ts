@@ -15,6 +15,7 @@ import { parseDesignSystemRenameArgs } from './design-systems/rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
+import { MONOFIELD_PLUGIN_MANIFEST, resolveExistingPluginManifest } from './plugins/manifest-file.js';
 import { requestJsonIpc } from '@open-design/sidecar';
 import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
 import {
@@ -25,13 +26,46 @@ import {
   removeJsonInstall,
 } from './mcp-agent-install.js';
 
+// Public MonoField environment names are canonical. The OD_* aliases remain
+// accepted internally so existing packaged runtimes and stored integrations
+// continue to work during the compatibility window.
+const MONOFIELD_ENV_ALIASES = {
+  MONOFIELD_API_TOKEN: 'OD_API_TOKEN',
+  MONOFIELD_BIND_HOST: 'OD_BIND_HOST',
+  MONOFIELD_BROWSER_SESSION: 'OD_BROWSER_SESSION',
+  MONOFIELD_BUNDLED_PLUGIN_ALLOWLIST: 'OD_BUNDLED_PLUGIN_ALLOWLIST',
+  MONOFIELD_DAEMON_URL: 'OD_DAEMON_URL',
+  MONOFIELD_DATA_DIR: 'OD_DATA_DIR',
+  MONOFIELD_LEGACY_DATA_DIR: 'OD_LEGACY_DATA_DIR',
+  MONOFIELD_DISABLE_API_AUTH: 'OD_DISABLE_API_AUTH',
+  MONOFIELD_MARKETPLACE_ALLOWED_CATALOG_URLS: 'OD_MARKETPLACE_ALLOWED_CATALOG_URLS',
+  MONOFIELD_MARKETPLACE_ALLOWED_HOSTS: 'OD_MARKETPLACE_ALLOWED_HOSTS',
+  MONOFIELD_MARKETPLACE_ALLOWED_LICENSES: 'OD_MARKETPLACE_ALLOWED_LICENSES',
+  MONOFIELD_MARKETPLACE_AUTH_ENV: 'OD_MARKETPLACE_AUTH_ENV',
+  MONOFIELD_PLUGIN_INSTALL_MODE: 'OD_PLUGIN_INSTALL_MODE',
+  MONOFIELD_PORT: 'OD_PORT',
+  MONOFIELD_PROJECT_ID: 'OD_PROJECT_ID',
+  MONOFIELD_SIDECAR_IPC_PATH: 'OD_SIDECAR_IPC_PATH',
+  MONOFIELD_TOOL_TOKEN: 'OD_TOOL_TOKEN',
+};
+
+for (const [canonical, legacy] of Object.entries(MONOFIELD_ENV_ALIASES)) {
+  const value = process.env[canonical]?.trim();
+  if (value && !process.env[legacy]) process.env[legacy] = value;
+}
+for (const [canonical, value] of Object.entries(process.env)) {
+  if (!canonical.startsWith('MONOFIELD_') || !value) continue;
+  const legacy = `OD_${canonical.slice('MONOFIELD_'.length)}`;
+  if (!process.env[legacy]) process.env[legacy] = value;
+}
+
 const argv = process.argv.slice(2);
 
 // ---- Subcommand router ----------------------------------------------------
 //
-// `od` is two CLIs glued together:
+// `monofield` is two CLIs glued together:
 //   - default mode: starts the daemon + opens the web UI.
-//   - `od media …`: a thin client that POSTs to the running daemon. This
+//   - `monofield media …`: a thin client that POSTs to the running daemon. This
 //     is what the code agent invokes from inside a chat to actually
 //     produce image / video / audio bytes (the unifying contract).
 //
@@ -39,7 +73,7 @@ const argv = process.argv.slice(2);
 // working unchanged. Subcommand routing is keyword-based; flags are
 // parsed inside each handler.
 
-// Flags accepted by `od media generate`. Whitelisted so a hallucinated
+// Flags accepted by `monofield media generate`. Whitelisted so a hallucinated
 // `--length 5` from the LLM fails fast instead of silently no-op'ing
 // while we route a bogus body to the daemon.
 //
@@ -48,7 +82,7 @@ const argv = process.argv.slice(2);
 // synchronously during module evaluation, and runMedia references these
 // `const` Sets — leaving them at the bottom of the file would hit the
 // TDZ ("Cannot access 'MEDIA_GENERATE_STRING_FLAGS' before
-// initialization") and crash every `od media …` invocation.
+// initialization") and crash every `monofield media …` invocation.
 const MEDIA_GENERATE_STRING_FLAGS = new Set([
   'project',
   'surface',
@@ -81,7 +115,7 @@ const MCP_BOOLEAN_FLAGS = new Set([
 ]);
 
 // Hoisted next to MCP_*_FLAGS for the same TDZ reason as the MEDIA flags
-// above: `od mcp install <agent>` dispatches through SUBCOMMAND_MAP during
+// above: `monofield mcp install <agent>` dispatches through SUBCOMMAND_MAP during
 // top-level module evaluation, and runMcpInstall references these `const`
 // Sets — defining them next to runMcpInstall lower in the file would hit
 // the TDZ.
@@ -159,18 +193,18 @@ const UI_BOOLEAN_FLAGS = new Set([
   'h',
   'json',
   'skip',
-  // Plan §6 Phase 2A.5 — `od ui show --schema` returns just the
+  // Plan §6 Phase 2A.5 — `monofield ui show --schema` returns just the
   // surface's JSON Schema (or `null` when the surface declares
   // none). Lets a code agent inspect the contract before piping a
-  // value back through `od ui respond --value-json`.
+  // value back through `monofield ui respond --value-json`.
   'schema',
 ]);
 
 // Hoist flag set bindings consumed by handlers reachable through
 // the top-of-file dispatcher. The dispatch block runs synchronously
 // during module load; any const declared further down the file is
-// still in TDZ when the handler executes, so `od status` /
-// `od atoms list` / etc. would crash with `Cannot access X before
+// still in TDZ when the handler executes, so `monofield status` /
+// `monofield atoms list` / etc. would crash with `Cannot access X before
 // initialization`.
 const DAEMON_STRING_FLAGS = new Set([
   'daemon-url', 'port', 'host',
@@ -180,7 +214,7 @@ const DAEMON_BOOLEAN_FLAGS = new Set([
 ]);
 const LIBRARY_STRING_FLAGS = new Set(['daemon-url', 'query', 'tag']);
 const LIBRARY_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
-// `od library …` (OD Library asset registry). Hoisted so the dispatcher can
+// `monofield library …` (OD Library asset registry). Hoisted so the dispatcher can
 // parse flags without hitting a temporal-dead-zone on these sets.
 const LIBRARY_ASSET_STRING_FLAGS = new Set([
   'daemon-url', 'kind', 'tag', 'source', 'date', 'query', 'project', 'label', 'out', 'dir',
@@ -200,7 +234,7 @@ const PROJECT_STRING_FLAGS = new Set([
   'title', 'against', 'seed-from', 'fork-after', 'mode',
 ]);
 const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow']);
-// `od templates …` mirrors NewProjectPanel / ExamplesTab. Same surface,
+// `monofield templates …` mirrors NewProjectPanel / ExamplesTab. Same surface,
 // same /api/templates store. The CLI form is the embeddability contract:
 // external agents (hermes-agent, openclaw, ...) can snapshot, list, or
 // remove user-saved project templates without going through the web UI.
@@ -208,7 +242,7 @@ const TEMPLATES_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'description',
 ]);
 const TEMPLATES_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
-// `od automation …` mirrors the Automations tab. Same surface, same
+// `monofield automation …` mirrors the Automations tab. Same surface, same
 // /api/routines store. The CLI form is the embeddability contract:
 // external agents (hermes-agent, openclaw, etc.) can drive MonoField
 // automations headlessly without going through the web UI.
@@ -224,16 +258,16 @@ const AUTOMATION_BOOLEAN_FLAGS = new Set([
 ]);
 const MEMORY_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'description', 'type', 'body', 'body-file',
-  // `od memory profile set` reads structured fields verbatim and/or a prose
+  // `monofield memory profile set` reads structured fields verbatim and/or a prose
   // body; `--field "Label=Value"` is repeatable (scanned manually below since
   // parseFlags collapses duplicate keys). `--prompt-file <path|->` mirrors the
-  // long-prose embeddability contract used by `od automation`/`od brand`.
+  // long-prose embeddability contract used by `monofield automation`/`monofield brand`.
   'field', 'prompt-file', 'assertion', 'check', 'rationale',
-  // `od memory rule suggest` distils annotations into rule proposals: a single
+  // `monofield memory rule suggest` distils annotations into rule proposals: a single
   // `--note` plus optional target context, or a `--prompt-file` carrying a JSON
   // array of annotations / newline-separated notes.
   'note', 'target', 'file', 'current-text',
-  // `od memory config` toggles accept true|false values (string, not boolean)
+  // `monofield memory config` toggles accept true|false values (string, not boolean)
   // so an agent can set OR clear a hook in one shape: `--profile false`.
   'enabled', 'profile', 'rewrite', 'verify', 'extraction',
 ]);
@@ -255,7 +289,7 @@ const FIGMA_STRING_FLAGS = new Set([
 const FIGMA_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json', 'build',
 ]);
-// `od brand …` mirrors the Brands library + New Brand modal. Same surface,
+// `monofield brand …` mirrors the Brands library + New Brand modal. Same surface,
 // same /api/brands store. The CLI form is the embeddability contract: an
 // external agent (hermes-agent, openclaw, scripted job) can extract, list,
 // inspect, and remove brands headlessly without rendering the web UI.
@@ -352,18 +386,18 @@ const BROWSER_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'continue-on-error']
 
 function printBrowserHelp() {
   console.log(`Usage:
-  od browser status --session <id>
-  od browser page-info --session <id>
-  od browser snapshot --session <id>
-  od browser screenshot --session <id> --out <png-path>
-  od browser navigate --session <id> --url <same-origin-url>
-  od browser click --session <id> --selector <css-selector>
-  od browser hover --session <id> --selector <css-selector>
-  od browser drag --session <id> --selector <source> --target-selector <target>
-  od browser type-text --session <id> --selector <css-selector> --text <value>
-  od browser upload --session <id> --selector <file-input> --file <project-file>
-  od browser scroll --session <id> [--to top|bottom|page | --pixels <n>]
-  od browser batch --session <id> --steps <json-array> [--continue-on-error]
+  monofield browser status --session <id>
+  monofield browser page-info --session <id>
+  monofield browser snapshot --session <id>
+  monofield browser screenshot --session <id> --out <png-path>
+  monofield browser navigate --session <id> --url <same-origin-url>
+  monofield browser click --session <id> --selector <css-selector>
+  monofield browser hover --session <id> --selector <css-selector>
+  monofield browser drag --session <id> --selector <source> --target-selector <target>
+  monofield browser type-text --session <id> --selector <css-selector> --text <value>
+  monofield browser upload --session <id> --selector <file-input> --file <project-file>
+  monofield browser scroll --session <id> [--to top|bottom|page | --pixels <n>]
+  monofield browser batch --session <id> --steps <json-array> [--continue-on-error]
 
 The session must first be approved by the user from MonoField Browser >
 Automate. Sessions remain active until stopped or revoked, are bound to one
@@ -391,9 +425,9 @@ async function runBrowser(args) {
     printBrowserHelp();
     process.exit(2);
   }
-  const sessionId = flags.session || process.env.OD_BROWSER_SESSION;
+  const sessionId = flags.session || process.env.MONOFIELD_BROWSER_SESSION || process.env.OD_BROWSER_SESSION;
   if (!sessionId) {
-    console.error('browser automation requires --session <id> (or OD_BROWSER_SESSION)');
+    console.error('browser automation requires --session <id> (or MONOFIELD_BROWSER_SESSION)');
     process.exit(2);
   }
   const body = { action, sessionId };
@@ -485,7 +519,7 @@ const EXPORT_IMAGE_FORMATS = ['png', 'jpeg'];
 
 function printExportHelp() {
   console.log(`Usage:
-  od export <file> --project <id> --format <fmt> [options]
+  monofield export <file> --project <id> --format <fmt> [options]
 
 Programmatic export of an HTML/deck artifact to PDF or image. Runs
 entirely from the rendered design (no model/agent calls). Rasterization uses
@@ -505,8 +539,8 @@ Options:
   --daemon-url <url>       Override daemon URL
 
 Examples:
-  od export index.html --project p1 --format pdf --out page.pdf
-  od export slide.html --project p1 --format image --image-format png --out slide.png`);
+  monofield export index.html --project p1 --format pdf --out page.pdf
+  monofield export slide.html --project p1 --format image --image-format png --out slide.png`);
 }
 async function runExport(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
@@ -657,74 +691,74 @@ if (dispatchedSubcommand) {
 
 function printRootHelp() {
   console.log(`Usage:
-  od [--port <n>] [--host <addr>] [--no-open]
+  monofield [--port <n>] [--host <addr>] [--no-open]
       Start the local daemon and open the web UI.
 
-  od tools live-artifacts <create|list|update|refresh> [options]
+  monofield tools live-artifacts <create|list|update|refresh> [options]
       Manage live artifacts through daemon wrapper commands.
 
-  od artifacts create --name <path> --input <file> [--project <id-or-name>]
+  monofield artifacts create --name <path> --input <file> [--project <id-or-name>]
       Create a normal project artifact through the local daemon.
 
-  od tools connectors <list|execute|github-design-context> [options]
+  monofield tools connectors <list|execute|github-design-context> [options]
       Discover and execute configured connectors.
 
-  od tools design-systems read --path <manifest-declared-path>
+  monofield tools design-systems read --path <manifest-declared-path>
       Read active design-system pull-layer files through daemon wrapper commands.
 
-  od mcp live-artifacts
+  monofield mcp live-artifacts
       Start the MCP server exposing live-artifact and connector tools.
 
-  od research search --query <text> [--max-sources 5] [--daemon-url <url>]
+  monofield research search --query <text> [--max-sources 5] [--daemon-url <url>]
       Run agent-callable Tavily research through the local daemon.
 
-  od plugin <list|info|install|uninstall|apply|doctor|replay|trust> [args]
+  monofield plugin <list|info|install|uninstall|apply|doctor|replay|trust> [args]
       Discover, install, and apply plugins through the local daemon.
-  od plugin publish-repo <folder>
+  monofield plugin publish-repo <folder>
       Create/update the author's GitHub repo for a local plugin folder.
-  od plugin open-design-pr <folder>
+  monofield plugin monofield-pr <folder>
       Push a community-catalog branch and open the MonoField PR form.
 
-  od automation <list|get|create|update|run|runs|pause|resume|delete> [args]
+  monofield automation <list|get|create|update|run|runs|pause|resume|delete> [args]
       Drive the Automations surface headlessly. Same store as the UI's
       Automations tab, so an external agent (hermes, openclaw, ...) can
       schedule, trigger, or harvest results from a routine without
       opening the web UI.
 
-  od memory tree <list|view|edit|move> [args]
+  monofield memory tree <list|view|edit|move> [args]
       Inspect and edit the memory tree that is injected into agent prompts.
 
-  od share <open-design|url> [options]
+  monofield share <monofield|url> [options]
       Build localized social-share targets for the MonoField repo or a
       deployed project URL. Use --json for scripted integrations.
 
-  od ui <list|show|respond|revoke|prefill> [args]
+  monofield ui <list|show|respond|revoke|prefill> [args]
       Read and answer GenUI surfaces (form / choice / confirmation / oauth-prompt) headlessly.
 
-  od chat new --project <id> [--seed-from <cid>] [--fork-after <mid>] [--title "<t>"] [--json]
+  monofield chat new --project <id> [--seed-from <cid>] [--fork-after <mid>] [--title "<t>"] [--json]
       Create a Side Chat: a new conversation that inherits another
       conversation's context by copying its messages (--seed-from), optionally
       stopping at one message (--fork-after). Mirrors the web chat fork action.
 
-  od diagnostics export [<path>] [--json]
+  monofield diagnostics export [<path>] [--json]
       Bundle daemon/web/desktop logs, machine info, and recent crash reports
       into a zip for support tickets. Same output as Settings → About →
       Export diagnostics.
 
-  od export <file> --project <id> --format <pdf|image> [--out <path>]
+  monofield export <file> --project <id> --format <pdf|image> [--out <path>]
       Programmatically export an HTML/deck artifact to PDF or image
       (no model/agent calls). Mirrors the web Download menu; rasterization uses
       the desktop runtime's bundled Chromium.
 
-  "$OD_NODE_BIN" "$OD_BIN" tools ...
-      Recommended agent-runtime form; avoids relying on user PATH for od or node.
+  "$MONOFIELD_NODE_BIN" "$MONOFIELD_BIN" tools ...
+      Recommended source-runtime form; avoids relying on user PATH for monofield or node.
 
-  od media generate --surface <image|video|audio> --model <id> [opts]
+  monofield media generate --surface <image|video|audio> --model <id> [opts]
       Generate a media artifact and write it into the active project.
-      Designed to be invoked by a code agent - picks up OD_DAEMON_URL
-      and OD_PROJECT_ID from the env that the daemon injected on spawn.
+      Designed to be invoked by a code agent - picks up MONOFIELD_DAEMON_URL
+      and MONOFIELD_PROJECT_ID from the environment injected for the run.
 
-  od mcp [--daemon-url <url>]
+  monofield mcp [--daemon-url <url>]
       Run a stdio MCP server that proxies project tool calls to a
       running MonoField daemon. Wire it into a coding agent
       (Claude Code, Cursor, VS Code, Zed, Windsurf) in another repo
@@ -732,8 +766,8 @@ function printRootHelp() {
       project-scoped artifacts without exporting a zip.
 
 Options:
-  --port <n>       Port to listen on (default: 7456, env: OD_PORT).
-  --host <addr>    Interface address to bind to (default: 127.0.0.1, env: OD_BIND_HOST).
+  --port <n>       Port to listen on (default: 7456, env: MONOFIELD_PORT).
+  --host <addr>    Interface address to bind to (default: 127.0.0.1, env: MONOFIELD_BIND_HOST).
                    Set to a specific IP (e.g. a Tailscale address) to restrict access
                    to that interface only.
   --no-open        Do not open the browser after start.
@@ -743,18 +777,18 @@ What the daemon does:
   * serves the chat UI at http://<host>:<port>
   * proxies messages (text + images) to the selected agent via child-process spawn
   * exposes /api/projects/:id/media/generate — the unified image/video/audio
-     dispatcher that the agent calls via \`od media generate\`.`);
+     dispatcher that the agent calls via \`monofield media generate\`.`);
 }
 
 // ---------------------------------------------------------------------------
-// Subcommand: od amr …
+// Subcommand: monofield amr …
 // ---------------------------------------------------------------------------
 
 async function runAmr(args) {
   const sub = args[0];
   if (!sub || sub === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
-  od amr status [--refresh] [--json]
+  monofield amr status [--refresh] [--json]
 
 Options:
   --daemon-url <url>   MonoField daemon HTTP base.
@@ -786,13 +820,13 @@ Options:
       return;
     }
     default:
-      console.error(`unknown subcommand: od amr ${sub}`);
+      console.error(`unknown subcommand: monofield amr ${sub}`);
       process.exit(2);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Subcommand: od research …
+// Subcommand: monofield research …
 // ---------------------------------------------------------------------------
 
 async function runResearch(args) {
@@ -802,7 +836,7 @@ async function runResearch(args) {
     process.exit(sub === 'help' || args.includes('--help') || args.includes('-h') ? 0 : 2);
   }
   if (sub !== 'search') {
-    console.error(`unknown subcommand: od research ${sub}`);
+    console.error(`unknown subcommand: monofield research ${sub}`);
     printResearchHelp();
     process.exit(2);
   }
@@ -864,7 +898,7 @@ async function runDocs(args) {
 
 function printResearchHelp() {
   console.log(`Usage:
-  od research search --query <text> [--max-sources 5] [--daemon-url <url>]
+  monofield research search --query <text> [--max-sources 5] [--daemon-url <url>]
 
 Runs Tavily-backed shallow research through the local MonoField daemon.
 Output is JSON only on stdout:
@@ -873,11 +907,11 @@ Output is JSON only on stdout:
 Flags:
   --query        Required search query.
   --max-sources  Optional source cap. Defaults to 5, clamped to Tavily's max.
-  --daemon-url   Local daemon URL. Defaults to OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456.`);
+  --daemon-url   Local daemon URL. Defaults to MONOFIELD_DAEMON_URL, local Desktop discovery, or http://127.0.0.1:7456.`);
 }
 
 // ---------------------------------------------------------------------------
-// Subcommand: od media …
+// Subcommand: monofield media …
 // ---------------------------------------------------------------------------
 
 async function runMedia(args) {
@@ -887,7 +921,7 @@ async function runMedia(args) {
     return;
   }
   if (sub !== 'generate' && sub !== 'wait') {
-    console.error(`unknown subcommand: od media ${sub}`);
+    console.error(`unknown subcommand: monofield media ${sub}`);
     printMediaHelp();
     process.exit(1);
   }
@@ -912,11 +946,11 @@ async function runMediaGenerate(rawArgs) {
   }
 
   const daemonUrl = await cliDaemonUrl(flags);
-  const projectId = flags.project || process.env.OD_PROJECT_ID;
-  const token = process.env.OD_TOOL_TOKEN;
+  const projectId = flags.project || process.env.MONOFIELD_PROJECT_ID || process.env.OD_PROJECT_ID;
+  const token = process.env.MONOFIELD_TOOL_TOKEN || process.env.OD_TOOL_TOKEN;
   if (!projectId && !token) {
     console.error(
-      'project id required. Pass --project <id> or set OD_PROJECT_ID. The daemon injects this when it spawns the code agent.',
+      'project id required. Pass --project <id> or set MONOFIELD_PROJECT_ID. MonoField injects this for agent runs.',
     );
     process.exit(2);
   }
@@ -985,7 +1019,7 @@ async function runMediaGenerate(rawArgs) {
 async function runMediaWait(rawArgs) {
   const taskId = rawArgs.find((a) => a && !a.startsWith('--'));
   if (!taskId) {
-    console.error('usage: od media wait <taskId> [--since <n>] [--daemon-url <url>]');
+    console.error('usage: monofield media wait <taskId> [--since <n>] [--daemon-url <url>]');
     process.exit(2);
   }
   const flagsOnly = rawArgs.filter((a) => a !== taskId);
@@ -1109,7 +1143,7 @@ async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}
       : `exit code ${stillRunningExitCode} = still running.`;
   process.stderr.write(
     `task ${taskId} still running after ${handoff.elapsed}s. ` +
-      `Run \`"$OD_NODE_BIN" "$OD_BIN" media wait ${taskId} --since ${since}\` to continue in an agent runtime ` +
+      `Run \`"$MONOFIELD_NODE_BIN" "$MONOFIELD_BIN" media wait ${taskId} --since ${since}\` to continue in a source runtime ` +
       `(${stillRunningHint}).\n`,
   );
   process.exit(stillRunningExitCode);
@@ -1144,7 +1178,7 @@ function parseFlags(argv, opts = {}) {
   const booleanFlags = opts.boolean instanceof Set ? opts.boolean : new Set();
   const knownFlags = new Set([...stringFlags, ...booleanFlags]);
   // Positionals collected silently; callers that take `<id>` style
-  // positional args (e.g. `od plugin info <id>`) re-scan `argv`
+  // positional args (e.g. `monofield plugin info <id>`) re-scan `argv`
   // themselves to pick them up. Strict positional rejection here
   // would break those commands, so we only enforce strict-flag
   // semantics for things that *are* prefixed with `--`.
@@ -1215,13 +1249,13 @@ async function cliDaemonBaseUrl(flags) {
 }
 
 function printMediaHelp() {
-  console.log(`Usage: od media generate --surface <image|video|audio> --model <id> [opts]
-       "$OD_NODE_BIN" "$OD_BIN" media generate --surface <image|video|audio> --model <id> [opts]
+  console.log(`Usage: monofield media generate --surface <image|video|audio> --model <id> [opts]
+       "$MONOFIELD_NODE_BIN" "$MONOFIELD_BIN" media generate --surface <image|video|audio> --model <id> [opts]
 
 Required:
   --surface  image | video | audio
   --model    Model id from /api/media/models (e.g. gpt-image-2, seedance-2, suno-v5).
-  --project  Project id. Auto-resolved from OD_PROJECT_ID when invoked by the daemon.
+  --project  Project id. Auto-resolved from MONOFIELD_PROJECT_ID when invoked by MonoField.
 
 Common options:
   --prompt "<text>"         Generation prompt. ElevenLabs SFX prompts must stay under 450 characters.
@@ -1253,7 +1287,7 @@ files folder so the FileViewer can preview them immediately.`);
 }
 
 // ---------------------------------------------------------------------------
-// Subcommand: od mcp
+// Subcommand: monofield mcp
 // ---------------------------------------------------------------------------
 
 async function runMcp(args) {
@@ -1283,7 +1317,7 @@ async function runMcp(args) {
 }
 
 function printMcpHelp() {
-  console.log(`Usage: od mcp [--daemon-url <url>]
+  console.log(`Usage: monofield mcp [--daemon-url <url>]
 
 Run a stdio MCP (Model Context Protocol) server that proxies project
 tool calls to a running MonoField daemon. Wire it into a coding agent
@@ -1293,7 +1327,7 @@ every iteration.
 
 Options:
   --daemon-url <url>   MonoField daemon HTTP base URL. Resolution
-                       order: this flag, OD_DAEMON_URL, OD_SIDECAR_IPC_PATH,
+                       order: this flag, MONOFIELD_DAEMON_URL, Desktop discovery,
                        then http://127.0.0.1:7456. Each new MCP spawn
                        discovers the live daemon URL at startup, so
                        MCP client configs stay valid across daemon
@@ -1324,12 +1358,12 @@ for your machine, plus a one-click deeplink for Cursor), open Settings
 for tool calls to succeed.
 
 To register this server into a coding agent's own config automatically:
-  od mcp install <agent> [--uninstall] [--print] [--json] [--daemon-url <url>]
+  monofield mcp install <agent> [--uninstall] [--print] [--json] [--daemon-url <url>]
   Agents: ${AGENT_SLUGS.join(' ')}`);
 }
 
 // ---------------------------------------------------------------------------
-// Subcommand: od mcp install <agent>
+// Subcommand: monofield mcp install <agent>
 //
 // Wires this daemon's stdio MCP server into a coding agent's own config.
 // The pure planner (mcp-agent-install.ts) maps a resolved launch spec onto
@@ -1341,7 +1375,7 @@ To register this server into a coding agent's own config automatically:
 // Resolve the canonical launch spec from the running daemon's
 // /api/mcp/install-info (the same payload the Settings → MCP panel and the
 // Codex one-click install use), so every install path configures byte-for-
-// byte the same command. Falls back to a minimal `od mcp --daemon-url`
+// byte the same command. Falls back to a minimal `monofield mcp --daemon-url`
 // spec when the daemon is unreachable.
 async function resolveMcpLaunchSpec(flags) {
   const base = await cliDaemonBaseUrl(flags);
@@ -1361,7 +1395,7 @@ async function resolveMcpLaunchSpec(flags) {
     // daemon not running / unreachable — fall through to the minimal spec
   }
   return {
-    command: 'od',
+    command: 'monofield',
     args: ['mcp', '--daemon-url', base],
     env: {},
   };
@@ -1411,7 +1445,7 @@ async function runMcpInstall(args) {
 
   const uninstall = Boolean(flags.uninstall || flags.remove);
   const dryRun = Boolean(flags.print || flags['dry-run']);
-  const serverName = flags.name || 'open-design';
+  const serverName = flags.name || 'monofield';
 
   const os = await import('node:os');
   const spec = await resolveMcpLaunchSpec(flags);
@@ -1551,7 +1585,7 @@ async function runMcpInstall(args) {
 }
 
 function printMcpInstallHelp() {
-  console.log(`Usage: od mcp install <agent> [options]
+  console.log(`Usage: monofield mcp install <agent> [options]
 
 Register MonoField's stdio MCP server into a coding agent's own config.
 
@@ -1562,17 +1596,17 @@ Options:
   --uninstall, --remove   Remove the MonoField MCP server instead.
   --print, --dry-run      Show what would change; write nothing.
   --json                  Machine-readable result.
-  --name <name>           MCP server name in the agent config (default: open-design).
+  --name <name>           MCP server name in the agent config (default: monofield).
   --daemon-url <url>      Daemon URL used to resolve the launch command.
 
 The launch command is resolved from the running daemon's
 /api/mcp/install-info, so the installed entry matches the Settings → MCP
 panel snippet byte-for-byte. Start the daemon first for an exact match;
-otherwise a minimal \`od mcp --daemon-url <url>\` command is used.`);
+otherwise a minimal \`monofield mcp --daemon-url <url>\` command is used.`);
 }
 
 // ---------------------------------------------------------------------------
-// Subcommand: od plugin …
+// Subcommand: monofield plugin …
 // ---------------------------------------------------------------------------
 
 // Plan §3.B1 / spec §12.4: CLI structured error helper. Maps a daemon
@@ -1675,18 +1709,19 @@ async function runPlugin(args) {
     case 'export':   return runPluginExport(rest);
     case 'publish':  return runPluginPublish(rest);
     case 'publish-repo': return runPluginPublishRepo(rest);
-    case 'open-design-pr': return runPluginOpenDocsPr(rest);
+    case 'monofield-pr': return runPluginOpenDocsPr(rest);
+    case 'open-design-pr': return runPluginOpenDocsPr(rest); // compatibility alias
     case 'yank':     return runPluginYank(rest);
     default:
-      console.error(`unknown subcommand: od plugin ${sub}`);
+      console.error(`unknown subcommand: monofield plugin ${sub}`);
       printPluginHelp();
       process.exit(2);
   }
 }
 
-// Phase 4 / spec §14.1 — `od plugin scaffold` interactive starter.
+// Phase 4 / spec §14.1 — `monofield plugin scaffold` interactive starter.
 //
-// Side-effect: writes a SKILL.md + open-design.json starter under
+// Side-effect: writes a SKILL.md + monofield.json starter under
 // `<targetDir>/<id>/`. Default targetDir is process.cwd() so a code
 // agent can drop the scaffold into the current repo root.
 async function runPluginScaffold(rest) {
@@ -1698,19 +1733,19 @@ async function runPluginScaffold(rest) {
   });
   if (rest.length === 0 || flags.help || flags.h) {
     console.log(`Usage:
-  od plugin scaffold --id <id> [--title "<title>"] [--description "<text>"]
+  monofield plugin scaffold --id <id> [--title "<title>"] [--description "<text>"]
                      [--task-kind new-generation|code-migration|figma-migration|tune-collab]
                      [--mode <mode>] [--scenario <scenario>]
                      [--out <dir>] [--with-claude-plugin]
 
-Writes <out|cwd>/<id>/{SKILL.md,open-design.json,README.md}.`);
+Writes <out|cwd>/<id>/{SKILL.md,monofield.json,README.md}.`);
     process.exit(rest.length === 0 ? 2 : 0);
   }
   const id = typeof flags.id === 'string' && flags.id.length > 0
     ? flags.id
     : rest.find((a) => !a.startsWith('-'));
   if (!id) {
-    console.error('Usage: od plugin scaffold --id <id>');
+    console.error('Usage: monofield plugin scaffold --id <id>');
     process.exit(2);
   }
   const targetDir = typeof flags.out === 'string' && flags.out.length > 0
@@ -1734,7 +1769,7 @@ Writes <out|cwd>/<id>/{SKILL.md,open-design.json,README.md}.`);
     if (flags.json) return process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     console.log(`[scaffold] ${result.folder}`);
     for (const file of result.files) console.log(`  ${file}`);
-    console.log(`\nNext: od plugin install ${result.folder}`);
+    console.log(`\nNext: monofield plugin install ${result.folder}`);
   } catch (err) {
     if (err instanceof ScaffoldError) {
       console.error(`[scaffold] ${err.message}`);
@@ -1744,7 +1779,7 @@ Writes <out|cwd>/<id>/{SKILL.md,open-design.json,README.md}.`);
   }
 }
 
-// Phase 4 / spec §11.5 / plan §3.W1 — `od plugin validate <folder>`.
+// Phase 4 / spec §11.5 / plan §3.W1 — `monofield plugin validate <folder>`.
 //
 // Pre-install lint pass against an author's working dir. Optionally
 // fetches the daemon's registry view so skill / DS / atom refs in
@@ -1757,7 +1792,7 @@ async function runPluginValidate(rest) {
   });
   if (flags.help || flags.h || rest.length === 0 || rest[0]?.startsWith('-')) {
     console.log(`Usage:
-  od plugin validate <folder> [--json] [--no-daemon] [--daemon-url <url>]
+  monofield plugin validate <folder> [--json] [--no-daemon] [--daemon-url <url>]
 
 Runs the plugin doctor against an unfinished plugin folder before
 install. Validates manifest shape, atom ids, until expressions, and
@@ -1834,7 +1869,7 @@ Exit codes:
   process.exit(result.ok ? 0 : 4);
 }
 
-// Phase 4 / spec §14 / plan §3.X1 — `od plugin pack <folder>`.
+// Phase 4 / spec §14 / plan §3.X1 — `monofield plugin pack <folder>`.
 //
 // Produces a gzip-compressed tar archive ready to install via the
 // installer's HTTPS-tarball path. The output path is folder-base +
@@ -1846,11 +1881,11 @@ async function runPluginPack(rest) {
   });
   if (flags.help || flags.h || rest.length === 0 || rest[0]?.startsWith('-')) {
     console.log(`Usage:
-  od plugin pack <folder> [--out <path>] [--json]
+  monofield plugin pack <folder> [--out <path>] [--json]
 
 Builds a gzip-compressed tar archive of <folder> at --out (default
 '<folder>/../<basename>-<manifest.version>.tgz'). The archive is the
-exact shape \`od plugin install --source <https://...>\` consumes.
+exact shape \`monofield plugin install --source <https://...>\` consumes.
 
 Skipped when packing:
   node_modules / .git / .next / dist / build / out / coverage /
@@ -1863,7 +1898,7 @@ rejection at install).
 Exit codes:
   0  archive written
   2  CLI usage error
-  4  pack-time error (missing open-design.json, invalid JSON, etc)`);
+  4  pack-time error (missing monofield.json, invalid JSON, etc)`);
     process.exit(rest.length === 0 ? 2 : 0);
   }
   const folder = rest[0];
@@ -1903,7 +1938,7 @@ Exit codes:
       console.log(`[pack] out:    ${result.outPath}`);
       console.log(`[pack] files:  ${result.files.length}`);
       console.log(`[pack] bytes:  ${result.bytes}`);
-      console.log(`\nNext: od plugin install --source ${result.outPath}`);
+      console.log(`\nNext: monofield plugin install --source ${result.outPath}`);
     }
   } catch (err) {
     console.error(`[pack] failed: ${err?.message ?? err}`);
@@ -1918,7 +1953,7 @@ async function runPluginLogin(rest) {
   });
   if (flags.help || flags.h) {
     console.log(`Usage:
-  od plugin login [--host github.com]
+  monofield plugin login [--host github.com]
 
 Wraps GitHub CLI auth for MonoField registry publishing. The token stays in gh.`);
     return;
@@ -1940,7 +1975,7 @@ async function runPluginWhoami(rest) {
   });
   if (flags.help || flags.h) {
     console.log(`Usage:
-  od plugin whoami [--host github.com] [--json]
+  monofield plugin whoami [--host github.com] [--json]
 
 Shows the GitHub account gh will use for MonoField registry publishing.`);
     return;
@@ -1957,7 +1992,7 @@ Shows the GitHub account gh will use for MonoField registry publishing.`);
       }, null, 2) + '\n');
       return;
     }
-    console.error(`[plugin whoami] gh is not authenticated for ${host}. Run: od plugin login --host ${host}`);
+    console.error(`[plugin whoami] gh is not authenticated for ${host}. Run: monofield plugin login --host ${host}`);
     if (auth.stderr || auth.stdout) console.error(auth.stderr || auth.stdout);
     process.exit(1);
   }
@@ -2054,7 +2089,7 @@ function inferGithubHost(target) {
   }
 }
 
-// Phase 4 / spec §14 — `od plugin export <projectId> --as <target>`.
+// Phase 4 / spec §14 — `monofield plugin export <projectId> --as <target>`.
 //
 // Produces a publish-ready folder from the AppliedPluginSnapshot
 // behind a given project (or directly from a snapshot id). Three
@@ -2066,8 +2101,8 @@ async function runPluginExport(rest) {
   });
   if (rest.length === 0 || flags.help || flags.h) {
     console.log(`Usage:
-  od plugin export <projectId> --as od|claude-plugin|agent-skill --out <dir>
-  od plugin export --snapshot-id <id> --as od|claude-plugin|agent-skill --out <dir>
+  monofield plugin export <projectId> --as monofield|claude-plugin|agent-skill --out <dir>
+  monofield plugin export --snapshot-id <id> --as monofield|claude-plugin|agent-skill --out <dir>
 
 The export resolves through the daemon HTTP \`POST /api/applied-plugins/export\`
 endpoint so the running daemon's installed_plugins / applied_plugin_snapshots
@@ -2078,12 +2113,13 @@ view is the single source of truth.`);
   const projectId = flags.project ?? positional ?? null;
   const snapshotId = typeof flags['snapshot-id'] === 'string' ? flags['snapshot-id'] : null;
   if (!projectId && !snapshotId) {
-    console.error('Usage: od plugin export <projectId> --as <target> --out <dir>');
+    console.error('Usage: monofield plugin export <projectId> --as <target> --out <dir>');
     process.exit(2);
   }
-  const target = String(flags.as ?? 'od');
+  const requestedTarget = String(flags.as ?? 'monofield');
+  const target = requestedTarget === 'monofield' ? 'od' : requestedTarget;
   if (target !== 'od' && target !== 'claude-plugin' && target !== 'agent-skill') {
-    console.error(`--as must be one of: od, claude-plugin, agent-skill (got "${target}")`);
+    console.error(`--as must be one of: monofield, claude-plugin, agent-skill (got "${requestedTarget}")`);
     process.exit(2);
   }
   const out = typeof flags.out === 'string' && flags.out.length > 0
@@ -2109,28 +2145,28 @@ view is the single source of truth.`);
   for (const f of data.files ?? []) console.log(`  ${f}`);
 }
 
-// Plan §3.B4 / spec §6: `od marketplace …` minimum verbs. Add / list /
+// Plan §3.B4 / spec §6: `monofield marketplace …` minimum verbs. Add / list /
 // refresh / remove / trust. The Phase 3 follow-up wires
-// `od plugin install <name>` resolution through these catalogs.
+// `monofield plugin install <name>` resolution through these catalogs.
 async function runMarketplace(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
-  od marketplace add     <url> [--trust trusted|restricted]   Register a federated catalog.
-                          [--enterprise] [--auth-env OD_MARKETPLACE_TOKEN]
+  monofield marketplace add     <url> [--trust trusted|restricted]   Register a federated catalog.
+                          [--enterprise] [--auth-env MONOFIELD_MARKETPLACE_TOKEN]
                           [--licenses Apache-2.0,MIT] [--assurance standard|high]
-  od marketplace list                                         List registered marketplaces.
-  od marketplace info    <id>                                 Inspect one marketplace + cached manifest.
-  od marketplace plugins <id> [--json]                        List cached plugin entries for one marketplace.
-  od marketplace search  <query> [--json]                     Search cached marketplace entries.
-  od marketplace doctor  [id] [--strict] [--json]             Validate cached marketplace entries.
-  od marketplace login   <id|url> [--host github.com]         Authenticate gh for private GitHub catalogs.
-  od marketplace refresh <id>                                 Re-fetch the manifest.
-  od marketplace remove  <id>                                 Forget a marketplace.
-  od marketplace trust   <id> [--trust trusted|restricted|official]
+  monofield marketplace list                                         List registered marketplaces.
+  monofield marketplace info    <id>                                 Inspect one marketplace + cached manifest.
+  monofield marketplace plugins <id> [--json]                        List cached plugin entries for one marketplace.
+  monofield marketplace search  <query> [--json]                     Search cached marketplace entries.
+  monofield marketplace doctor  [id] [--strict] [--json]             Validate cached marketplace entries.
+  monofield marketplace login   <id|url> [--host github.com]         Authenticate gh for private GitHub catalogs.
+  monofield marketplace refresh <id>                                 Re-fetch the manifest.
+  monofield marketplace remove  <id>                                 Forget a marketplace.
+  monofield marketplace trust   <id> [--trust trusted|restricted|official]
                                                               Update the marketplace trust tier.
 
 Common options:
-  --daemon-url <url>   MonoField daemon HTTP base (default OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
+  --daemon-url <url>   MonoField daemon HTTP base (default MONOFIELD_DAEMON_URL, Desktop discovery, or http://127.0.0.1:7456).
   --json               Emit raw JSON (suitable for scripts).`);
     process.exit(args.length === 0 ? 2 : 0);
   }
@@ -2149,7 +2185,7 @@ Common options:
       }
       const rows = data?.marketplaces ?? [];
       if (rows.length === 0) {
-        console.log('No marketplaces registered. Run `od marketplace add <url>`.');
+        console.log('No marketplaces registered. Run `monofield marketplace add <url>`.');
         return;
       }
       for (const m of rows) {
@@ -2163,7 +2199,7 @@ Common options:
       // by substring on name + description + tags.
       const query = (rest.find((a) => !a.startsWith('-')) ?? '').toLowerCase();
       if (!query) {
-        console.error('Usage: od marketplace search "<query>" [--tag <tag>]');
+        console.error('Usage: monofield marketplace search "<query>" [--tag <tag>]');
         process.exit(2);
       }
       const tag = typeof flags.tag === 'string' ? flags.tag.toLowerCase() : null;
@@ -2209,7 +2245,7 @@ Common options:
     case 'plugins': {
       const id = rest.find((a) => !a.startsWith('-'));
       if (!id) {
-        console.error('Usage: od marketplace plugins <id> [--json]');
+        console.error('Usage: monofield marketplace plugins <id> [--json]');
         process.exit(2);
       }
       const resp = await fetch(`${base}/api/marketplaces/${encodeURIComponent(id)}/plugins`);
@@ -2284,7 +2320,7 @@ Common options:
     case 'add': {
       const url = rest.find((a) => !a.startsWith('-'));
       if (!url) {
-        console.error('Usage: od marketplace add <url> [--trust trusted|restricted] [--enterprise] [--auth-env <name>] [--licenses <SPDX,...>] [--assurance standard|high]');
+        console.error('Usage: monofield marketplace add <url> [--trust trusted|restricted] [--enterprise] [--auth-env <name>] [--licenses <SPDX,...>] [--assurance standard|high]');
         process.exit(2);
       }
       const enterprise = flags.enterprise === true;
@@ -2340,7 +2376,7 @@ Common options:
       const id = rest.find((a) => !a.startsWith('-')
         && a !== flags.trust);
       if (!id) {
-        console.error(`Usage: od marketplace ${sub} <id>`);
+        console.error(`Usage: monofield marketplace ${sub} <id>`);
         process.exit(2);
       }
       let url;
@@ -2368,24 +2404,24 @@ Common options:
       return;
     }
     default:
-      console.error(`unknown subcommand: od marketplace ${sub}`);
+      console.error(`unknown subcommand: monofield marketplace ${sub}`);
       process.exit(2);
   }
 }
 
 // Plan §3.A5 / spec §16 Phase 5: operator escape hatch for snapshot GC.
 // Two subcommands:
-//   - `od plugin snapshots list [--project <id>]` — list snapshots
-//   - `od plugin snapshots prune [--before <ts>]` — force-delete expired
+//   - `monofield plugin snapshots list [--project <id>]` — list snapshots
+//   - `monofield plugin snapshots prune [--before <ts>]` — force-delete expired
 //     (and optionally older-than-cutoff unreferenced) rows.
 async function runPluginSnapshots(args) {
   const sub = args[0];
   if (!sub || sub === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
-  od plugin snapshots list  [--project <id>]               List applied plugin snapshots.
-  od plugin snapshots show  <snapshotId> [--json]          Print one snapshot's full contents.
-  od plugin snapshots diff  <id-a> <id-b> [--json]         Compare two snapshots field-by-field.
-  od plugin snapshots prune [--before <unix-ms>]           Delete expired (or older-than-cutoff) snapshots.`);
+  monofield plugin snapshots list  [--project <id>]               List applied plugin snapshots.
+  monofield plugin snapshots show  <snapshotId> [--json]          Print one snapshot's full contents.
+  monofield plugin snapshots diff  <id-a> <id-b> [--json]         Compare two snapshots field-by-field.
+  monofield plugin snapshots prune [--before <unix-ms>]           Delete expired (or older-than-cutoff) snapshots.`);
     process.exit(args.length === 0 ? 2 : 0);
   }
   const flags = parseFlags(args.slice(1), { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
@@ -2394,7 +2430,7 @@ async function runPluginSnapshots(args) {
     const positional = args.slice(1).filter((a) => !a.startsWith('-'));
     const id = positional[0];
     if (!id) {
-      console.error('Usage: od plugin snapshots show <snapshotId>');
+      console.error('Usage: monofield plugin snapshots show <snapshotId>');
       process.exit(2);
     }
     const url = `${base}/api/applied-plugins/${encodeURIComponent(id)}`;
@@ -2414,7 +2450,7 @@ async function runPluginSnapshots(args) {
   if (sub === 'diff') {
     const positional = args.slice(1).filter((a) => !a.startsWith('-'));
     if (positional.length < 2) {
-      console.error('Usage: od plugin snapshots diff <id-a> <id-b>');
+      console.error('Usage: monofield plugin snapshots diff <id-a> <id-b>');
       process.exit(2);
     }
     const [idA, idB] = positional;
@@ -2493,12 +2529,12 @@ async function runPluginSnapshots(args) {
     console.log(`[snapshots] pruned ${data.removed ?? 0} snapshot(s)`);
     return;
   }
-  console.error(`unknown subcommand: od plugin snapshots ${sub}`);
+  console.error(`unknown subcommand: monofield plugin snapshots ${sub}`);
   process.exit(2);
 }
 
-// Plan §3.B3: `od plugin run <id>` shorthand. Today this is a thin
-// wrapper around `od plugin apply` + `POST /api/runs` so a code agent
+// Plan §3.B3: `monofield plugin run <id>` shorthand. Today this is a thin
+// wrapper around `monofield plugin apply` + `POST /api/runs` so a code agent
 // can drive the apply→start→follow loop without two hops.
 async function runPluginRun(rest) {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
@@ -2515,7 +2551,7 @@ async function runPluginRun(rest) {
     && a !== flags.capabilities
     && a !== flags['grant-caps']);
   if (!id) {
-    console.error('Usage: od plugin run <id> --project <projectId> [--inputs <json>] [--agent <id>] [--message "<text>"] [--grant-caps a,b] [--follow]');
+    console.error('Usage: monofield plugin run <id> --project <projectId> [--inputs <json>] [--agent <id>] [--message "<text>"] [--grant-caps a,b] [--follow]');
     process.exit(2);
   }
   if (!flags.project) {
@@ -2560,7 +2596,7 @@ async function runPluginRun(rest) {
     if (runResp.status === 409 && runData?.error?.code === 'capabilities-required') {
       const missing = (runData.error.data?.missing ?? []).join(',');
       console.error(`[run] capabilities required: ${missing}`);
-      console.error(`[run] retry with --grant-caps ${missing} or run \`od plugin trust ${id} --capabilities ${missing}\``);
+      console.error(`[run] retry with --grant-caps ${missing} or run \`monofield plugin trust ${id} --capabilities ${missing}\``);
       process.exit(66);
     }
     console.error(`run failed: ${runResp.status} ${JSON.stringify(runData)}`);
@@ -2581,8 +2617,8 @@ async function pluginDaemonUrl(flags) {
   return cliDaemonUrl(flags);
 }
 
-// Plan §3.Y1 — filter knobs on `od plugin list` (and feeds
-// `od plugin search` below). Recognising these as string flags
+// Plan §3.Y1 — filter knobs on `monofield plugin list` (and feeds
+// `monofield plugin search` below). Recognising these as string flags
 // keeps the parseFlags() argv consumer happy.
 async function runPluginList(rest) {
   const flags = parseFlags(rest, {
@@ -2591,15 +2627,15 @@ async function runPluginList(rest) {
   });
   if (flags.help || flags.h) {
     console.log(`Usage:
-  od plugin list [--task-kind <kind>] [--mode <mode>] [--tag <tag>] \\
+  monofield plugin list [--task-kind <kind>] [--mode <mode>] [--tag <tag>] \\
                  [--trust <tier>] [--bundled | --no-bundled] [--json]
 
 Lists installed plugins. Filters AND together: --task-kind=code-migration
 + --tag=phase-7 returns only code-migration plugins tagged 'phase-7'.
 
-  --task-kind   Match od.taskKind (new-generation / figma-migration /
+  --task-kind   Match monofield.taskKind (new-generation / figma-migration /
                 code-migration / tune-collab).
-  --mode        Match od.mode.
+  --mode        Match monofield.mode.
   --tag         Match an entry in tags[].
   --trust       Match trust tier (trusted / restricted / bundled).
   --bundled     Restrict to bundled plugins (sourceKind='bundled' OR
@@ -2612,7 +2648,7 @@ Lists installed plugins. Filters AND together: --task-kind=code-migration
   emitPluginList({ entries: filtered, json: !!flags.json, emptyMessage: 'No plugins matched the filter.' });
 }
 
-// Plan §3.Y1 — `od plugin search <query>`.
+// Plan §3.Y1 — `monofield plugin search <query>`.
 async function runPluginSearch(rest) {
   const flags = parseFlags(rest, {
     string:  PLUGIN_LIST_FILTER_FLAGS,
@@ -2622,13 +2658,13 @@ async function runPluginSearch(rest) {
   const query = positional[0];
   if (flags.help || flags.h || !query) {
     console.log(`Usage:
-  od plugin search <query> [--task-kind <kind>] [--mode <mode>] \\
+  monofield plugin search <query> [--task-kind <kind>] [--mode <mode>] \\
                            [--tag <tag>] [--trust <tier>] \\
                            [--bundled | --no-bundled] [--json]
 
 Free-text search across installed plugins. Matches case-insensitively
 on id / title / description / tags. Combines with the same filter
-flags as 'od plugin list'.`);
+flags as 'monofield plugin list'.`);
     process.exit(query ? 0 : 2);
   }
   const data = await fetchPluginList(flags);
@@ -2641,7 +2677,7 @@ flags as 'od plugin list'.`);
   });
 }
 
-// Plan §3.DD1 — `od plugin stats`. Pretty-prints the
+// Plan §3.DD1 — `monofield plugin stats`. Pretty-prints the
 // pluginInventoryStats + snapshotInventoryStats aggregation. The
 // daemon-side route owns the SQLite reads; the CLI is a thin
 // formatter.
@@ -2652,7 +2688,7 @@ async function runPluginStats(rest) {
   });
   if (flags.help || flags.h) {
     console.log(`Usage:
-  od plugin stats [--json]
+  monofield plugin stats [--json]
 
 Prints an at-a-glance plugin + snapshot inventory:
   - Plugin counts by sourceKind, trust, taskKind.
@@ -2777,7 +2813,7 @@ async function runPluginInfo(rest) {
     && a !== flags.source
     && a !== flags.version);
   if (!id) {
-    console.error('Usage: od plugin info <id-or-marketplace-name> [--version <version|tag|range>] [--json]');
+    console.error('Usage: monofield plugin info <id-or-marketplace-name> [--version <version|tag|range>] [--json]');
     process.exit(2);
   }
   const base = (await pluginDaemonUrl(flags)).replace(/\/$/, '');
@@ -2859,16 +2895,16 @@ function resolveCliEntryVersion(entry, range) {
   };
 }
 
-// Plan §3.MM1 — `od plugin manifest <id>`. Prints just the parsed
+// Plan §3.MM1 — `monofield plugin manifest <id>`. Prints just the parsed
 // manifest JSON, no wrapper. Useful for plugin authors who want to
-// compare the daemon's view to their on-disk open-design.json
+// compare the daemon's view to their on-disk monofield.json
 // without scrolling past the registry record fields (sourceKind /
 // fsPath / installedAt etc).
 async function runPluginManifest(rest) {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
   const id = rest.find((a) => !a.startsWith('--') && a !== flags['daemon-url'] && a !== flags.source);
   if (!id) {
-    console.error('Usage: od plugin manifest <id>');
+    console.error('Usage: monofield plugin manifest <id>');
     process.exit(2);
   }
   const url = `${(await pluginDaemonUrl(flags)).replace(/\/$/, '')}/api/plugins/${encodeURIComponent(id)}`;
@@ -2886,10 +2922,18 @@ async function runPluginManifest(rest) {
     console.error(`plugin ${id} has no recorded manifest (registry row is incomplete)`);
     process.exit(1);
   }
-  process.stdout.write(JSON.stringify(data.manifest, null, 2) + '\n');
+  process.stdout.write(JSON.stringify(toPublicPluginManifest(data.manifest), null, 2) + '\n');
 }
 
-// Plan §3.MM2 — `od plugin sources`. Lists every distinct install
+function toPublicPluginManifest(manifest) {
+  if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) return manifest;
+  const out = { ...manifest };
+  if (out.monofield === undefined && out.od !== undefined) out.monofield = out.od;
+  delete out.od;
+  return out;
+}
+
+// Plan §3.MM2 — `monofield plugin sources`. Lists every distinct install
 // source string + count of plugins installed from it, ordered by
 // count descending then source ascending. Useful for ops audits
 // ('which github repos do my plugins come from') + for plugin
@@ -2938,11 +2982,11 @@ async function runPluginInstall(rest) {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
   const source = typeof flags.source === 'string' ? flags.source : rest.find((a) => !a.startsWith('-'));
   if (!source) {
-    console.error('Usage: od plugin install <source-or-name>\n' +
-      '       od plugin install ./local-folder\n' +
-      '       od plugin install github:owner/repo[@ref][/subpath]\n' +
-      '       od plugin install https://example.com/plugin.tar.gz\n' +
-      '       od plugin install <name>[@version|tag|range]  # resolves through configured marketplaces');
+    console.error('Usage: monofield plugin install <source-or-name>\n' +
+      '       monofield plugin install ./local-folder\n' +
+      '       monofield plugin install github:owner/repo[@ref][/subpath]\n' +
+      '       monofield plugin install https://example.com/plugin.tar.gz\n' +
+      '       monofield plugin install <name>[@version|tag|range]  # resolves through configured marketplaces');
     process.exit(2);
   }
   const url = `${(await pluginDaemonUrl(flags)).replace(/\/$/, '')}/api/plugins/install`;
@@ -2999,10 +3043,10 @@ async function runPluginInstall(rest) {
   process.exit(exitCode);
 }
 
-// Plan §3.Z2 — `od plugin upgrade <id>`. Re-installs the plugin
+// Plan §3.Z2 — `monofield plugin upgrade <id>`. Re-installs the plugin
 // from its recorded source. Streams the same SSE event shape as
 // install, so 'progress' / 'success' / 'error' arrive verbatim.
-// Plan §3.II1 — `od plugin events tail`. Tails the daemon's
+// Plan §3.II1 — `monofield plugin events tail`. Tails the daemon's
 // in-memory plugin event ring buffer via SSE. -f keeps the
 // connection open and prints live events; otherwise prints the
 // backlog and exits when the daemon closes the stream.
@@ -3010,10 +3054,10 @@ async function runPluginEvents(rest) {
   const sub = rest[0];
   if (!sub || sub === 'help' || rest.includes('--help') || rest.includes('-h')) {
     console.log(`Usage:
-  od plugin events tail     [-f] [--since <id>] [--kind <k>] [--plugin-id <id>] [--json]
-  od plugin events snapshot [--since <id>] [--kind <k>] [--plugin-id <id>] [--json]
-  od plugin events stats    [--json]
-  od plugin events purge    [--confirm] [--json]    (loopback-only)
+  monofield plugin events tail     [-f] [--since <id>] [--kind <k>] [--plugin-id <id>] [--json]
+  monofield plugin events snapshot [--since <id>] [--kind <k>] [--plugin-id <id>] [--json]
+  monofield plugin events stats    [--json]
+  monofield plugin events purge    [--confirm] [--json]    (loopback-only)
 
 Tail / snapshot / stats / purge over the daemon's in-memory
 plugin event ring buffer (capped at 1000 entries; resets on
@@ -3075,7 +3119,7 @@ Lifecycle vocabulary:
   }
 
   if (sub === 'purge') {
-    // Refuse to run without an explicit --confirm so 'od plugin
+    // Refuse to run without an explicit --confirm so 'monofield plugin
     // events purge' alone never drops audit data accidentally.
     const purgeFlags = parseFlags(rest.slice(1), {
       string:  new Set(['daemon-url']),
@@ -3122,7 +3166,7 @@ Lifecycle vocabulary:
   }
 
   if (sub !== 'tail') {
-    console.error(`unknown subcommand: od plugin events ${sub}`);
+    console.error(`unknown subcommand: monofield plugin events ${sub}`);
     process.exit(2);
   }
   const follow = flags.f === true || flags.follow === true;
@@ -3203,9 +3247,9 @@ Lifecycle vocabulary:
   }
 }
 
-// Plan §3.FF1 — `od plugin verify <pluginId>` CI meta-command.
+// Plan §3.FF1 — `monofield plugin verify <pluginId>` CI meta-command.
 //
-// Reads an optional .od-verify.json config from the plugin folder
+// Reads an optional .monofield-verify.json config from the plugin folder
 // or --config <path> and runs the enabled subset of:
 //
 //   doctor   — calls /api/plugins/<id>/doctor
@@ -3224,10 +3268,10 @@ async function runPluginVerify(rest) {
   const id = positional[0];
   if (flags.help || flags.h || !id) {
     console.log(`Usage:
-  od plugin verify <pluginId> [--config <path>] [--json]
+  monofield plugin verify <pluginId> [--config <path>] [--json]
 
 CI meta-command. Reads an optional config from
-'<plugin-folder>/.od-verify.json' (or --config <path>) and runs:
+'<plugin-folder>/.monofield-verify.json' (or --config <path>) and runs:
 
   doctor    — manifest + atom + ref lint
   simulate  — convergence dry-run for every until expression,
@@ -3236,7 +3280,7 @@ CI meta-command. Reads an optional config from
               config.canon.fixturePath using the snapshot at
               config.canon.snapshotId
 
-Sample .od-verify.json:
+Sample .monofield-verify.json:
 
   {
     "enabled": ["doctor", "simulate"],
@@ -3270,25 +3314,27 @@ Exit codes:
   }
   const plugin = await pluginResp.json();
 
-  // 2. Load .od-verify.json from --config or <fsPath>/.od-verify.json.
+  // 2. Load the canonical config, with the old filename accepted as a fallback.
   const fs = await import('node:fs/promises');
   const path = await import('node:path');
-  const configPath = typeof flags.config === 'string'
-    ? path.resolve(flags.config)
-    : (typeof plugin?.fsPath === 'string' ? path.join(plugin.fsPath, '.od-verify.json') : null);
+  const configPaths = typeof flags.config === 'string'
+    ? [path.resolve(flags.config)]
+    : (typeof plugin?.fsPath === 'string'
+        ? [path.join(plugin.fsPath, '.monofield-verify.json'), path.join(plugin.fsPath, '.od-verify.json')]
+        : []);
   let config = { enabled: ['doctor', 'simulate', 'canon'] };
-  if (configPath) {
+  for (const configPath of configPaths) {
     try {
       const raw = await fs.readFile(configPath, 'utf8');
       config = JSON.parse(raw);
+      break;
     } catch (err) {
       const e = err;
       if (e?.code !== 'ENOENT') {
         console.error(`[verify] cannot read config ${configPath}: ${e?.message ?? e}`);
         process.exit(2);
       }
-      // ENOENT → run with defaults. canon will skip cleanly because no
-      // config.canon entry was supplied.
+      // ENOENT → try the compatibility filename, then use defaults.
     }
   }
 
@@ -3374,7 +3420,7 @@ Exit codes:
   process.exit(report.passed ? 0 : 4);
 }
 
-// Plan §3.EE1 — `od plugin simulate <pluginId> [-s key=value ...]`.
+// Plan §3.EE1 — `monofield plugin simulate <pluginId> [-s key=value ...]`.
 //
 // Walks the plugin's pipeline against caller-supplied signals and
 // reports per-stage convergence (iterations + outcome). No LLM is
@@ -3394,21 +3440,21 @@ async function runPluginSimulate(rest) {
   const id = positional[0];
   if (flags.help || flags.h || !id) {
     console.log(`Usage:
-  od plugin simulate <pluginId> [-s key=value ...] [--cap <n>] [--json]
+  monofield plugin simulate <pluginId> [-s key=value ...] [--cap <n>] [--json]
 
 Walks the plugin's pipeline against caller-supplied signals and
 reports per-stage convergence. No LLM is invoked.
 
 Examples:
   # critique-theater stage that exits when score >= 4
-  od plugin simulate my-plugin -s critique.score=5
+  monofield plugin simulate my-plugin -s critique.score=5
 
   # build-test devloop where both signals must hold
-  od plugin simulate code-migration \\
+  monofield plugin simulate code-migration \\
       -s build.passing=true -s tests.passing=true
 
   # raise the per-stage iteration cap (default 10)
-  od plugin simulate my-plugin -s critique.score=2 --cap 20
+  monofield plugin simulate my-plugin -s critique.score=2 --cap 20
 
 Closed signal vocabulary:
   critique.score (number)
@@ -3444,7 +3490,7 @@ Closed signal vocabulary:
     if (flags.json) {
       process.stdout.write(JSON.stringify({ outcome: 'no-pipeline', stages: [] }, null, 2) + '\n');
     } else {
-      console.log(`[simulate] plugin ${id} has no od.pipeline (or it is empty); nothing to walk.`);
+      console.log(`[simulate] plugin ${id} has no monofield.pipeline (or it is empty); nothing to walk.`);
     }
     return;
   }
@@ -3478,7 +3524,7 @@ Closed signal vocabulary:
   if (result.outcome === 'cap-hit' || result.outcome === 'unparsable') process.exit(4);
 }
 
-// Plan §3.CC1 / §3.DD2 — `od plugin canon <snapshotId>`. Prints the
+// Plan §3.CC1 / §3.DD2 — `monofield plugin canon <snapshotId>`. Prints the
 // canonical `## Active plugin` block a snapshot will splice into
 // the system prompt. Useful for understanding what the agent
 // reads + locking byte-equality regression tests against the
@@ -3497,8 +3543,8 @@ async function runPluginCanon(rest) {
   const id = positional[0];
   if (flags.help || flags.h || !id) {
     console.log(`Usage:
-  od plugin canon <snapshotId> [--json]
-  od plugin canon <snapshotId> --check <expected-file>
+  monofield plugin canon <snapshotId> [--json]
+  monofield plugin canon <snapshotId> --check <expected-file>
 
 Prints the canonical '## Active plugin' / '## Plugin inputs' /
 '## Plugin atoms' block this snapshot would splice into the
@@ -3566,7 +3612,7 @@ fixtures into a plugin's own tests/.`);
   if (!body.endsWith('\n')) process.stdout.write('\n');
 }
 
-// Plan §3.AA1 — `od plugin diff <a> <b>`. Compares two installed
+// Plan §3.AA1 — `monofield plugin diff <a> <b>`. Compares two installed
 // plugins (by id) and prints a structured report. Useful for
 // debugging replay invariance + reviewing version bumps.
 async function runPluginDiff(rest) {
@@ -3574,7 +3620,7 @@ async function runPluginDiff(rest) {
   const positional = rest.filter((a) => !a.startsWith('-'));
   if (flags.help || flags.h || positional.length < 2) {
     console.log(`Usage:
-  od plugin diff <id-a> <id-b> [--json]
+  monofield plugin diff <id-a> <id-b> [--json]
 
 Compares two installed plugins (or two installs of the same id at
 different versions) and prints every changed field. Output groups
@@ -3628,7 +3674,7 @@ async function runPluginUpgrade(rest) {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
   const id = rest.find((a) => !a.startsWith('-') && a !== flags['daemon-url'] && a !== flags.source);
   if (!id) {
-    console.error('Usage: od plugin upgrade <id> [--policy latest|pinned] [--json]');
+    console.error('Usage: monofield plugin upgrade <id> [--policy latest|pinned] [--json]');
     process.exit(2);
   }
   const url = `${(await pluginDaemonUrl(flags)).replace(/\/$/, '')}/api/plugins/${encodeURIComponent(id)}/upgrade`;
@@ -3694,7 +3740,7 @@ async function runPluginUninstall(rest) {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
   const id = rest.find((a) => !a.startsWith('-') && a !== flags['daemon-url'] && a !== flags.source);
   if (!id) {
-    console.error('Usage: od plugin uninstall <id>');
+    console.error('Usage: monofield plugin uninstall <id>');
     process.exit(2);
   }
   const url = `${(await pluginDaemonUrl(flags)).replace(/\/$/, '')}/api/plugins/${encodeURIComponent(id)}/uninstall`;
@@ -3716,7 +3762,7 @@ async function runPluginApply(rest) {
     && a !== flags.project
     && a !== flags['grant-caps']);
   if (!id) {
-    console.error('Usage: od plugin apply <id> [--inputs <json>] [--input k=v ...] [--project <id>] [--grant-caps a,b]');
+    console.error('Usage: monofield plugin apply <id> [--inputs <json>] [--input k=v ...] [--project <id>] [--grant-caps a,b]');
     process.exit(2);
   }
   // Plan §3.B2: support both --inputs <json> and repeated --input k=v
@@ -3801,9 +3847,9 @@ async function runPluginCandidates(rest) {
   });
   if (!sub || flags.help || flags.h) {
     console.log(`Usage:
-  od plugin candidates list --project <projectId> [--json] [--include-dismissed]
-  od plugin candidates draft <candidateId> --project <projectId> [--json]
-  od plugin candidates dismiss <candidateId> --project <projectId> [--json]
+  monofield plugin candidates list --project <projectId> [--json] [--include-dismissed]
+  monofield plugin candidates draft <candidateId> --project <projectId> [--json]
+  monofield plugin candidates dismiss <candidateId> --project <projectId> [--json]
 
 Lists and formalizes persisted skill-to-plugin candidates.`);
     process.exit(!sub ? 2 : 0);
@@ -3867,11 +3913,11 @@ Lists and formalizes persisted skill-to-plugin candidates.`);
     else console.error(`[candidate] dismiss failed: ${data?.message ?? JSON.stringify(data)}`);
     process.exit(resp.ok ? 0 : 1);
   }
-  console.error(`unknown subcommand: od plugin candidates ${sub}`);
+  console.error(`unknown subcommand: monofield plugin candidates ${sub}`);
   process.exit(2);
 }
 
-// Phase 4 / spec §14.1 — `od plugin publish --to <catalog>`.
+// Phase 4 / spec §14.1 — `monofield plugin publish --to <catalog>`.
 //
 // Reads the installed plugin's manifest metadata (or the snapshot's
 // frozen view via --snapshot-id) and prints the catalog submission URL
@@ -3886,9 +3932,9 @@ async function runPluginPublish(rest) {
   });
   if (rest.length === 0 || flags.help || flags.h) {
     console.log(`Usage:
-  od plugin publish <pluginId> --to open-design|anthropics-skills|awesome-agent-skills|clawhub|skills-sh
+  monofield plugin publish <pluginId> --to monofield|anthropics-skills|awesome-agent-skills|clawhub|skills-sh
                     [--repo <github-url>] [--snapshot-id <id>] [--open] [--json]
-  od plugin publish <pluginId> --to marketplace-json --catalog ./open-design-marketplace.json --repo <github-url>
+  monofield plugin publish <pluginId> --to marketplace-json --catalog ./monofield-marketplace.json --repo <github-url>
 
 The CLI prints the catalog's submission URL + a pre-filled PR body.
 Pass --open to auto-launch the system browser. Use --snapshot-id to
@@ -3899,13 +3945,14 @@ publish from a frozen run snapshot rather than the live installed copy.`);
     && a !== flags.to
     && a !== flags.repo
     && a !== flags['snapshot-id']);
-  const target = String(flags.to ?? '');
+  const requestedTarget = String(flags.to ?? '');
+  const target = requestedTarget === 'monofield' ? 'open-design' : requestedTarget;
   if (!id) {
-    console.error('Usage: od plugin publish <pluginId> --to <catalog>');
+    console.error('Usage: monofield plugin publish <pluginId> --to <catalog>');
     process.exit(2);
   }
   if (!target) {
-    console.error('--to <catalog> is required (one of: open-design, anthropics-skills, awesome-agent-skills, clawhub, skills-sh)');
+    console.error('--to <catalog> is required (one of: monofield, anthropics-skills, awesome-agent-skills, clawhub, skills-sh)');
     process.exit(2);
   }
   if (isPublicPluginPublishTarget(target)) {
@@ -4007,7 +4054,7 @@ async function runPluginPublishRepo(rest) {
   });
   if (rest.length === 0 || flags.help || flags.h) {
     console.log(`Usage:
-  od plugin publish-repo <folder> [--host github.com] [--owner github-login-or-org] [--dry-run] [--json]
+  monofield plugin publish-repo <folder> [--host github.com] [--owner github-login-or-org] [--dry-run] [--json]
 
 Creates or updates the public GitHub repository named by the plugin manifest.
 If plugin.repo is missing or uses a placeholder owner, the CLI resolves the
@@ -4017,7 +4064,7 @@ GitHub API as a last resort. It never publishes to placeholder owners.`);
   }
   const folder = rest.find((a) => !a.startsWith('-') && a !== flags.host && a !== flags.owner);
   if (!folder) {
-    console.error('Usage: od plugin publish-repo <folder>');
+    console.error('Usage: monofield plugin publish-repo <folder>');
     process.exit(2);
   }
   blockManagedPublicPluginPublication('to a public GitHub repository', flags);
@@ -4029,7 +4076,11 @@ GitHub API as a last resort. It never publishes to placeholder owners.`);
     import('node:os'),
   ]);
   const absFolder = resolve(process.cwd(), folder);
-  const manifestPath = resolve(absFolder, 'open-design.json');
+  const manifestPath = resolveExistingPluginManifest(absFolder);
+  if (!manifestPath) {
+    console.error(`[publish-repo] ${MONOFIELD_PLUGIN_MANIFEST} is required`);
+    process.exit(2);
+  }
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
   const host = typeof flags.host === 'string' ? flags.host : 'github.com';
   const target = await resolvePluginGithubTarget({ host, owner: flags.owner, manifest, purpose: 'publish-repo' });
@@ -4170,7 +4221,7 @@ async function runPluginOpenDocsPr(rest) {
   });
   if (rest.length === 0 || flags.help || flags.h) {
     console.log(`Usage:
-  od plugin open-design-pr <folder> [--host github.com] [--owner github-login-or-fork-owner] [--dry-run] [--json]
+  monofield plugin monofield-pr <folder> [--host github.com] [--owner github-login-or-fork-owner] [--dry-run] [--json]
 
 Copies a local plugin folder into plugins/community/<name>/ on the author's
 fork of jhy0285/monofield, pushes a branch, and opens the PR form with --web.`);
@@ -4178,7 +4229,7 @@ fork of jhy0285/monofield, pushes a branch, and opens the PR form with --web.`);
   }
   const folder = rest.find((a) => !a.startsWith('-') && a !== flags.host && a !== flags.owner);
   if (!folder) {
-    console.error('Usage: od plugin open-design-pr <folder>');
+    console.error('Usage: monofield plugin monofield-pr <folder>');
     process.exit(2);
   }
   blockManagedPublicPluginPublication('to the public MonoField catalog', flags);
@@ -4188,19 +4239,23 @@ fork of jhy0285/monofield, pushes a branch, and opens the PR form with --web.`);
     import('node:os'),
   ]);
   const absFolder = resolve(process.cwd(), folder);
-  const manifestPath = resolve(absFolder, 'open-design.json');
+  const manifestPath = resolveExistingPluginManifest(absFolder);
+  if (!manifestPath) {
+    console.error(`[monofield-pr] ${MONOFIELD_PLUGIN_MANIFEST} is required`);
+    process.exit(2);
+  }
   const manifest = JSON.parse(await fsp.readFile(manifestPath, 'utf8'));
   const host = typeof flags.host === 'string' ? flags.host : 'github.com';
   const target = await resolvePluginGithubTarget({ host, owner: flags.owner, manifest, purpose: 'open-design-pr' });
   const name = String(manifest.name ?? '').trim();
   if (!name) {
-    console.error('[open-design-pr] manifest.name is required');
+    console.error('[monofield-pr] manifest.name is required');
     process.exit(2);
   }
   const title = String(manifest.title ?? name).trim();
   const branch = `plugin/${name}-${Math.floor(Date.now() / 1000)}`;
-  const tmpRoot = await fsp.mkdtemp(join(os.tmpdir(), 'od-open-design-pr-'));
-  const checkout = join(tmpRoot, 'open-design');
+  const tmpRoot = await fsp.mkdtemp(join(os.tmpdir(), 'monofield-pr-'));
+  const checkout = join(tmpRoot, 'monofield');
   const steps = [];
   const run = async (label, command, args, opts = {}) => {
     steps.push({ label, command: [command, ...args].join(' ') });
@@ -4214,7 +4269,7 @@ fork of jhy0285/monofield, pushes a branch, and opens the PR form with --web.`);
     if (!result.ok && !opts.tolerate?.(result)) {
       emitPluginWorkflowResult(flags, {
         ok: false,
-        action: 'open-design-pr',
+        action: 'monofield-pr',
         folder: absFolder,
         login: target.login,
         owner: target.owner,
@@ -4239,7 +4294,7 @@ fork of jhy0285/monofield, pushes a branch, and opens the PR form with --web.`);
     '--branch', 'main',
     '--filter=blob:none',
     '--sparse',
-    `https://github.com/${target.owner}/open-design.git`,
+    `https://github.com/${target.owner}/monofield.git`,
     checkout,
   ], { timeout: 240_000 });
   await run('sparse checkout', 'git', ['sparse-checkout', 'set', 'plugins/community'], { cwd: checkout });
@@ -4268,10 +4323,10 @@ fork of jhy0285/monofield, pushes a branch, and opens the PR form with --web.`);
     '--body', body,
     '--web',
   ], { cwd: checkout });
-  const prUrl = extractFirstUrl(pr.stdout || pr.stderr) ?? `https://github.com/${target.owner}/open-design/pull/new/${branch}`;
+  const prUrl = extractFirstUrl(pr.stdout || pr.stderr) ?? `https://github.com/${target.owner}/monofield/pull/new/${branch}`;
   emitPluginWorkflowResult(flags, {
     ok: true,
-    action: 'open-design-pr',
+    action: 'monofield-pr',
     folder: absFolder,
     login: target.login,
     owner: target.owner,
@@ -4293,7 +4348,7 @@ function isPublicPluginPublishTarget(target) {
 }
 
 function blockManagedPublicPluginPublication(action, flags = {}) {
-  if (process.env.OD_PLUGIN_INSTALL_MODE?.trim().toLowerCase() !== 'managed') return;
+  if ((process.env.MONOFIELD_PLUGIN_INSTALL_MODE ?? process.env.OD_PLUGIN_INSTALL_MODE)?.trim().toLowerCase() !== 'managed') return;
   const error = {
     code: 'managed-publication-disabled',
     message: `Public plugin publication ${action} is disabled in managed mode. Use the approved company marketplace promotion workflow.`,
@@ -4523,9 +4578,9 @@ function emitPluginWorkflowResult(flags, payload) {
     if (payload.manifestRewritten) console.log('[publish-repo] manifest repo fields were normalized before publishing.');
     return;
   }
-  if (payload.action === 'open-design-pr') {
-    if (payload.ownerSource) console.log(`[open-design-pr] owner resolved from ${payload.ownerSource}: ${payload.owner}`);
-    if (payload.apiRateLimited) console.log('[open-design-pr] GitHub API was rate limited; continued with the locally resolved owner.');
+  if (payload.action === 'monofield-pr') {
+    if (payload.ownerSource) console.log(`[monofield-pr] owner resolved from ${payload.ownerSource}: ${payload.owner}`);
+    if (payload.apiRateLimited) console.log('[monofield-pr] GitHub API was rate limited; continued with the locally resolved owner.');
     console.log(`Open this URL and click Create to file the PR: ${payload.prUrl}`);
     return;
   }
@@ -4548,7 +4603,7 @@ async function runPluginYank(rest) {
   });
   if (rest.length === 0 || flags.help || flags.h) {
     console.log(`Usage:
-  od plugin yank <vendor/plugin-name>@<version> --reason "<why>" [--to open-design] [--json]
+  monofield plugin yank <vendor/plugin-name>@<version> --reason "<why>" [--to monofield] [--json]
 
 Yanking never deletes metadata or bytes. It opens the registry review flow that
 marks a version unresolvable for new installs while preserving lockfile replay.`);
@@ -4558,16 +4613,17 @@ marks a version unresolvable for new installs while preserving lockfile replay.`
   const reason = typeof flags.reason === 'string' ? flags.reason.trim() : '';
   const parsed = parseCliPluginSpecifier(spec);
   if (!parsed.name || !parsed.range) {
-    console.error('Usage: od plugin yank <vendor/plugin-name>@<version> --reason "<why>"');
+    console.error('Usage: monofield plugin yank <vendor/plugin-name>@<version> --reason "<why>"');
     process.exit(2);
   }
   if (!reason) {
     console.error('--reason is required for yanking');
     process.exit(2);
   }
-  const target = flags.to ?? 'open-design';
+  const requestedTarget = flags.to ?? 'monofield';
+  const target = requestedTarget === 'monofield' ? 'open-design' : requestedTarget;
   if (target !== 'open-design') {
-    console.error('Only --to open-design is supported in this v1 GitHub-backed yank flow.');
+    console.error('Only --to monofield is supported in this GitHub-backed yank flow.');
     process.exit(2);
   }
   const title = `Yank ${parsed.name}@${parsed.range}`;
@@ -4587,7 +4643,7 @@ marks a version unresolvable for new installs while preserving lockfile replay.`
     }, null, 2),
     '```',
     '',
-    'Generated by `od plugin yank`.',
+    'Generated by `monofield plugin yank`.',
   ].join('\n');
   const params = new URLSearchParams({ title, body });
   const payload = {
@@ -4624,7 +4680,7 @@ async function runPluginDoctor(rest) {
   });
   const id = rest.find((a) => !a.startsWith('-') && a !== flags['daemon-url'] && a !== flags.source);
   if (!id) {
-    console.error('Usage: od plugin doctor <id> [--strict] [--json]');
+    console.error('Usage: monofield plugin doctor <id> [--strict] [--json]');
     process.exit(2);
   }
   const url = `${(await pluginDaemonUrl(flags)).replace(/\/$/, '')}/api/plugins/${encodeURIComponent(id)}/doctor`;
@@ -4660,12 +4716,12 @@ function safeParseJson(s) {
   try { return JSON.parse(s); } catch { return null; }
 }
 
-// `od plugin replay <runId> --snapshot-id <id>` — re-emit the immutable
+// `monofield plugin replay <runId> --snapshot-id <id>` — re-emit the immutable
 // snapshot the original run was launched against, so the caller (or
 // another agent) can re-apply the same plugin against fresh state. Phase
 // 2A keeps replay headless: the CLI prints the snapshot + rerun bundle;
-// the agent restarts the run via `od plugin apply` followed by a normal
-// `od run start`. Future Phase 2C `od plugin run` will collapse this
+// the agent restarts the run via `monofield plugin apply` followed by a normal
+// `monofield run start`. Future Phase 2C `monofield plugin run` will collapse this
 // into a one-shot wrapper.
 async function runPluginReplay(rest) {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
@@ -4677,12 +4733,12 @@ async function runPluginReplay(rest) {
     && a !== flags['snapshot-id']
     && a !== flags.capabilities);
   if (!runId) {
-    console.error('Usage: od plugin replay <runId> --snapshot-id <id>');
+    console.error('Usage: monofield plugin replay <runId> --snapshot-id <id>');
     process.exit(2);
   }
   const snapshotId = flags['snapshot-id'];
   if (!snapshotId) {
-    console.error('--snapshot-id is required (runs are in-memory in Phase 2A; pass the snapshot id returned by od plugin apply)');
+    console.error('--snapshot-id is required (runs are in-memory in Phase 2A; pass the snapshot id returned by monofield plugin apply)');
     process.exit(2);
   }
   const url = `${(await pluginDaemonUrl(flags)).replace(/\/$/, '')}/api/runs/${encodeURIComponent(runId)}/replay`;
@@ -4702,10 +4758,10 @@ async function runPluginReplay(rest) {
   }
   console.log(`[replay] ${data.rerun?.pluginId}@${data.rerun?.pluginVersion} digest=${(data.rerun?.manifestSourceDigest ?? '').slice(0, 12)}…`);
   console.log(`[replay] inputs: ${JSON.stringify(data.rerun?.inputs ?? {})}`);
-  console.log('[replay] re-apply via: od plugin apply ' + data.rerun?.pluginId + ' --inputs ' + JSON.stringify(JSON.stringify(data.rerun?.inputs ?? {})));
+  console.log('[replay] re-apply via: monofield plugin apply ' + data.rerun?.pluginId + ' --inputs ' + JSON.stringify(JSON.stringify(data.rerun?.inputs ?? {})));
 }
 
-// `od plugin trust <id> --capabilities <comma-sep>` — flip a plugin's
+// `monofield plugin trust <id> --capabilities <comma-sep>` — flip a plugin's
 // capabilities_granted set. Plan §3.A2 / spec §9.1: the CLI is the
 // canonical write surface (invariant I4). The daemon validates the
 // capability vocabulary; unknown / malformed entries surface as
@@ -4720,7 +4776,7 @@ async function runPluginTrust(rest) {
     && a !== flags['snapshot-id']
     && a !== flags.capabilities);
   if (!id) {
-    console.error('Usage: od plugin trust <id> --capabilities connector:figma,connector:notion [--revoke]');
+    console.error('Usage: monofield plugin trust <id> --capabilities connector:figma,connector:notion [--revoke]');
     process.exit(2);
   }
   const capsCsv = typeof flags.capabilities === 'string' ? flags.capabilities : '';
@@ -4757,7 +4813,7 @@ async function runPluginTrust(rest) {
 }
 
 // ---------------------------------------------------------------------------
-// Subcommand: od ui …  (spec §10.3.4 headless GenUI surface inbox)
+// Subcommand: monofield ui …  (spec §10.3.4 headless GenUI surface inbox)
 // ---------------------------------------------------------------------------
 
 async function runUi(args) {
@@ -4774,7 +4830,7 @@ async function runUi(args) {
     case 'revoke':  return runUiRevoke(rest);
     case 'prefill': return runUiPrefill(rest);
     default:
-      console.error(`unknown subcommand: od ui ${sub}`);
+      console.error(`unknown subcommand: monofield ui ${sub}`);
       printUiHelp();
       process.exit(2);
   }
@@ -4791,7 +4847,7 @@ async function runUiList(rest) {
   if (flags.run) url = `${base}/api/runs/${encodeURIComponent(flags.run)}/genui`;
   else if (flags.project) url = `${base}/api/projects/${encodeURIComponent(flags.project)}/genui`;
   else {
-    console.error('Usage: od ui list --run <runId> | --project <projectId>');
+    console.error('Usage: monofield ui list --run <runId> | --project <projectId>');
     process.exit(2);
   }
   const resp = await fetch(url);
@@ -4829,7 +4885,7 @@ async function runUiShow(rest) {
   const runId = flags.run ?? positional[0];
   const surfaceId = flags['snapshot-id'] ? null : positional[flags.run ? 0 : 1];
   if (!runId || !surfaceId) {
-    console.error('Usage: od ui show --run <runId> <surfaceId>');
+    console.error('Usage: monofield ui show --run <runId> <surfaceId>');
     process.exit(2);
   }
   const url = `${(await uiDaemonUrl(flags)).replace(/\/$/, '')}/api/runs/${encodeURIComponent(runId)}/genui/${encodeURIComponent(surfaceId)}`;
@@ -4841,7 +4897,7 @@ async function runUiShow(rest) {
   const data = await resp.json();
   // Plan §6 Phase 2A.5 — `--schema` prints the spec's JSON Schema
   // only (null if the surface declares none). Designed to feed
-  // `od ui respond --value-json "$(...)"` in headless / agent flows.
+  // `monofield ui respond --value-json "$(...)"` in headless / agent flows.
   if (flags.schema) {
     const schema = data?.spec?.schema ?? null;
     process.stdout.write(JSON.stringify(schema, null, 2) + '\n');
@@ -4865,7 +4921,7 @@ async function runUiRespond(rest) {
   const runId = flags.run ?? positional[0];
   const surfaceId = positional[flags.run ? 0 : 1];
   if (!runId || !surfaceId) {
-    console.error('Usage: od ui respond --run <runId> <surfaceId> [--value <text> | --value-json <json> | --skip]');
+    console.error('Usage: monofield ui respond --run <runId> <surfaceId> [--value <text> | --value-json <json> | --skip]');
     process.exit(2);
   }
   let value = null;
@@ -4915,7 +4971,7 @@ async function runUiRevoke(rest) {
   const projectId = flags.project ?? positional[0];
   const surfaceId = positional[flags.project ? 0 : 1];
   if (!projectId || !surfaceId) {
-    console.error('Usage: od ui revoke --project <projectId> <surfaceId>');
+    console.error('Usage: monofield ui revoke --project <projectId> <surfaceId>');
     process.exit(2);
   }
   const url = `${(await uiDaemonUrl(flags)).replace(/\/$/, '')}/api/projects/${encodeURIComponent(projectId)}/genui/${encodeURIComponent(surfaceId)}/revoke`;
@@ -4948,7 +5004,7 @@ async function runUiPrefill(rest) {
   const surfaceId = positional[flags.project ? 0 : 1];
   const snapshotId = flags['snapshot-id'];
   if (!projectId || !surfaceId || !snapshotId) {
-    console.error('Usage: od ui prefill --project <projectId> --snapshot-id <id> <surfaceId> [--value <text> | --value-json <json>] [--persist run|conversation|project] [--kind form|choice|confirmation|oauth-prompt]');
+    console.error('Usage: monofield ui prefill --project <projectId> --snapshot-id <id> <surfaceId> [--value <text> | --value-json <json>] [--persist run|conversation|project] [--kind form|choice|confirmation|oauth-prompt]');
     process.exit(2);
   }
   let value = null;
@@ -4986,67 +5042,67 @@ async function runUiPrefill(rest) {
 
 function printUiHelp() {
   console.log(`Usage:
-  od ui list  --run <runId>                          List GenUI surfaces for a run.
-  od ui list  --project <projectId>                  List GenUI surfaces for a project.
-  od ui show  --run <runId> <surfaceId> [--schema]   Read a single surface (kind / schema / value). --schema prints just the JSON Schema.
-  od ui respond --run <runId> <surfaceId> [--value <txt> | --value-json <json> | --skip]
+  monofield ui list  --run <runId>                          List GenUI surfaces for a run.
+  monofield ui list  --project <projectId>                  List GenUI surfaces for a project.
+  monofield ui show  --run <runId> <surfaceId> [--schema]   Read a single surface (kind / schema / value). --schema prints just the JSON Schema.
+  monofield ui respond --run <runId> <surfaceId> [--value <txt> | --value-json <json> | --skip]
                                                      Answer a pending surface from any process.
-  od ui revoke --project <projectId> <surfaceId>     Invalidate a project-tier cached answer.
-  od ui prefill --project <projectId> --snapshot-id <id> <surfaceId>
+  monofield ui revoke --project <projectId> <surfaceId>     Invalidate a project-tier cached answer.
+  monofield ui prefill --project <projectId> --snapshot-id <id> <surfaceId>
                 [--value <text> | --value-json <json>] [--persist run|conversation|project]
                                                      Pre-answer a surface so the run never broadcasts it.
 
 Common options:
-  --daemon-url <url>   MonoField daemon HTTP base (default OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
+  --daemon-url <url>   MonoField daemon HTTP base (default MONOFIELD_DAEMON_URL, Desktop discovery, or http://127.0.0.1:7456).
   --json               Emit raw JSON (suitable for scripts) instead of human-readable output.`);
 }
 
 function printPluginHelp() {
   console.log(`Usage:
-  od plugin list [--task-kind <kind>]     List installed plugins (filterable).
-  od plugin search <query> [--tag <t>]    Search installed plugins by id/title/desc/tag.
-  od plugin stats [--json]                Inventory + snapshot health report.
-  od plugin info <id>                     Print a plugin's manifest + trust state as JSON.
-  od plugin manifest <id>                 Print only the parsed manifest JSON (no wrapper).
-  od plugin sources                       List distinct install sources + counts.
-  od plugin install --source <path>       Install a plugin from a local folder (Phase 1).
-  od plugin upgrade <id>                  Re-install a plugin from its recorded source.
-  od plugin uninstall <id>                Remove a plugin from the registry + on-disk staging.
-  od plugin apply <id> [--inputs <json>]  Compute an ApplyResult (preview) for a plugin.
-  od plugin doctor <id>                   Lint a plugin's manifest, atoms and resolved refs.
-  od plugin canon <snapshotId>            Print the canonical system-prompt block for a snapshot.
+  monofield plugin list [--task-kind <kind>]     List installed plugins (filterable).
+  monofield plugin search <query> [--tag <t>]    Search installed plugins by id/title/desc/tag.
+  monofield plugin stats [--json]                Inventory + snapshot health report.
+  monofield plugin info <id>                     Print a plugin's manifest + trust state as JSON.
+  monofield plugin manifest <id>                 Print only the parsed manifest JSON (no wrapper).
+  monofield plugin sources                       List distinct install sources + counts.
+  monofield plugin install --source <path>       Install a plugin from a local folder (Phase 1).
+  monofield plugin upgrade <id>                  Re-install a plugin from its recorded source.
+  monofield plugin uninstall <id>                Remove a plugin from the registry + on-disk staging.
+  monofield plugin apply <id> [--inputs <json>]  Compute an ApplyResult (preview) for a plugin.
+  monofield plugin doctor <id>                   Lint a plugin's manifest, atoms and resolved refs.
+  monofield plugin canon <snapshotId>            Print the canonical system-prompt block for a snapshot.
                                           (--check <file> for byte-equality fixtures.)
-  od plugin simulate <pluginId> [-s k=v]  Walk the plugin's pipeline against caller-supplied
+  monofield plugin simulate <pluginId> [-s k=v]  Walk the plugin's pipeline against caller-supplied
                                           signals; report stage convergence + iterations
                                           (no LLM in the loop).
-  od plugin verify <pluginId>             CI meta-command: doctor + simulate + canon --check
-                                          driven by an .od-verify.json config in the plugin folder.
-  od plugin events tail [-f] [--kind k]   Tail the in-memory plugin event ring buffer.
-  od plugin events snapshot               One-shot read (filterable, no SSE).
-  od plugin events stats                  Roll-up: counts by kind / pluginId / time range.
-  od plugin events purge                  Drop every event in the buffer (loopback-only).
-  od plugin diff <a> <b> [--json]         Compare two installed plugins by id.
-  od plugin replay <runId> --snapshot-id <id>
+  monofield plugin verify <pluginId>             CI meta-command: doctor + simulate + canon --check
+                                          driven by a .monofield-verify.json config in the plugin folder.
+  monofield plugin events tail [-f] [--kind k]   Tail the in-memory plugin event ring buffer.
+  monofield plugin events snapshot               One-shot read (filterable, no SSE).
+  monofield plugin events stats                  Roll-up: counts by kind / pluginId / time range.
+  monofield plugin events purge                  Drop every event in the buffer (loopback-only).
+  monofield plugin diff <a> <b> [--json]         Compare two installed plugins by id.
+  monofield plugin replay <runId> --snapshot-id <id>
                                           Re-emit the immutable snapshot a run launched against.
-  od plugin trust <id> --capabilities a,b
+  monofield plugin trust <id> --capabilities a,b
                                           Stage a capability grant (full mutation lands Phase 3).
-  od plugin validate <folder> [--json]    Lint a plugin folder before installing
+  monofield plugin validate <folder> [--json]    Lint a plugin folder before installing
                                           (manifest parse + atom + ref checks).
-  od plugin pack <folder> [--out <path>]  Build a .tgz archive of a plugin
+  monofield plugin pack <folder> [--out <path>]  Build a .tgz archive of a plugin
                                           folder for distribution.
-  od plugin candidates list --project <id>
+  monofield plugin candidates list --project <id>
                                           List persisted skill-to-plugin candidates.
-  od plugin publish-repo <folder>         Create/update the author's public
+  monofield plugin publish-repo <folder>         Create/update the author's public
                                           GitHub repo for a plugin folder.
-  od plugin open-design-pr <folder>       Push a community-catalog branch and
+  monofield plugin monofield-pr <folder>         Push a community-catalog branch and
                                           open the jhy0285/monofield PR form.
-  od plugin publish <folder> --to open-design|anthropics-skills|awesome-agent-skills|clawhub|skills-sh
+  monofield plugin publish <folder> --to monofield|anthropics-skills|awesome-agent-skills|clawhub|skills-sh
                                           Prepare a registry submission link.
-  od plugin login [--host github.com]      Authenticate registry publishing via gh.
-  od plugin whoami [--host github.com]     Show the gh account used for publishing.
+  monofield plugin login [--host github.com]      Authenticate registry publishing via gh.
+  monofield plugin whoami [--host github.com]     Show the gh account used for publishing.
 
 Common options:
-  --daemon-url <url>   MonoField daemon HTTP base (default OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
+  --daemon-url <url>   MonoField daemon HTTP base (default MONOFIELD_DAEMON_URL, Desktop discovery, or http://127.0.0.1:7456).
   --json               Emit raw JSON (suitable for scripts) instead of human-readable output.
 
 Installs support local folders, github:owner/repo refs, HTTPS .tgz archives,
@@ -5054,7 +5110,7 @@ and bare marketplace names resolved through configured registry sources.`);
 }
 
 // ---------------------------------------------------------------------------
-// Subcommand: od project / od run / od files / od conversation
+// Subcommand: monofield project / monofield run / monofield files / monofield conversation
 //
 // Plan §6 Phase 1 follow-up + Phase 2C: thin CLI wrappers over the
 // existing daemon HTTP endpoints (POST /api/projects, POST /api/runs,
@@ -5070,8 +5126,8 @@ async function projectDaemonUrl(flags) {
 
 function printShareUsage() {
   console.log(`Usage:
-  od share open-design [--locale <locale>] [--platform <id>] [--json]
-  od share url --url <https-url> [--title <title>] [--text <text>]
+  monofield share monofield [--locale <locale>] [--platform <id>] [--json]
+  monofield share url --url <https-url> [--title <title>] [--text <text>]
                [--copy-text <text>] [--locale <locale>] [--platform <id>] [--json]
 
 Platforms:
@@ -5092,8 +5148,9 @@ async function runShare(args) {
     process.exit(args.length === 0 ? 2 : 0);
   }
 
-  const sub = args[0] && !args[0].startsWith('-') ? args[0] : 'open-design';
-  const rest = sub === args[0] ? args.slice(1) : args;
+  const requestedSub = args[0] && !args[0].startsWith('-') ? args[0] : 'monofield';
+  const sub = requestedSub === 'open-design' ? 'monofield' : requestedSub;
+  const rest = requestedSub === args[0] ? args.slice(1) : args;
   const flags = parseFlags(rest, {
     string: SHARE_STRING_FLAGS,
     boolean: SHARE_BOOLEAN_FLAGS,
@@ -5118,13 +5175,13 @@ async function runShare(args) {
         locale: flags.locale,
       };
 
-  if (sub !== 'open-design' && sub !== 'url') {
+  if (sub !== 'monofield' && sub !== 'url') {
     console.error(`unknown share target: ${sub}`);
     printShareUsage();
     process.exit(2);
   }
   if (body.kind === 'project-html' && !body.url) {
-    console.error('Usage: od share url --url <https-url>');
+    console.error('Usage: monofield share url --url <https-url>');
     process.exit(2);
   }
 
@@ -5159,9 +5216,9 @@ async function runShare(args) {
 
 function printFigmaUsage() {
   console.log(`Usage:
-  od figma import --project <id> --file <path.fig> [--notes "<text>"]
+  monofield figma import --project <id> --file <path.fig> [--notes "<text>"]
                   [--build] [--prompt "<text>" | --prompt-file <path|->] [--json]
-  od figma import --project <id> --figma-url <url> [--notes "<text>"] [--json]
+  monofield figma import --project <id> --figma-url <url> [--notes "<text>"] [--json]
 
 Imports a Figma design into a project. A .fig file is decoded fully offline
 (no Figma account); a Figma URL runs through the od-figma-migration scenario
@@ -5186,7 +5243,7 @@ async function runFigma(args) {
     process.exit(sub ? 0 : 2);
   }
   if (sub !== 'import') {
-    console.error(`unknown subcommand: od figma ${sub}`);
+    console.error(`unknown subcommand: monofield figma ${sub}`);
     printFigmaUsage();
     process.exit(2);
   }
@@ -5207,7 +5264,7 @@ async function runFigma(args) {
   }
 
   // Figma URL → the existing migration scenario (OAuth lives in the run
-  // pipeline). Start it through the same /api/runs path `od run start` uses.
+  // pipeline). Start it through the same /api/runs path `monofield run start` uses.
   if (figmaUrl && !file) {
     const runBody = {
       projectId: flags.project,
@@ -5277,7 +5334,7 @@ async function runFigma(args) {
 }
 
 // ---------------------------------------------------------------------------
-// Subcommand: od brand …
+// Subcommand: monofield brand …
 //
 // Headless surface for the Brands library. This is the dual-track contract:
 // every capability the Brands UI exposes (extract from a URL, list, inspect,
@@ -5330,7 +5387,7 @@ async function runBrand(args) {
     case 'delete':   return runBrandDelete(rest);
     case 'remove':   return runBrandDelete(rest);
     default:
-      console.error(`unknown subcommand: od brand ${sub}`);
+      console.error(`unknown subcommand: monofield brand ${sub}`);
       console.log(BRAND_USAGE);
       process.exit(2);
   }
@@ -5360,7 +5417,7 @@ async function runBrandList(rest) {
   }
   const brands = Array.isArray(data?.brands) ? data.brands : [];
   if (brands.length === 0) {
-    console.log('No brands yet. Extract one with: od brand create <url>');
+    console.log('No brands yet. Extract one with: monofield brand create <url>');
     return;
   }
   console.log('# id\tname\tdomain\tstatus');
@@ -5385,8 +5442,8 @@ async function runBrandCreate(rest) {
     if (typeof fromFile === 'string') url = fromFile.trim();
   }
   if (!url) {
-    console.error('Usage: od brand create <url> [--json]\n' +
-      '       od brand create --prompt-file <path|-> [--json]');
+    console.error('Usage: monofield brand create <url> [--json]\n' +
+      '       monofield brand create --prompt-file <path|-> [--json]');
     process.exit(2);
   }
 
@@ -5413,7 +5470,7 @@ async function runBrandCreate(rest) {
 
   // Extraction is agent-driven: this kickoff reserves the brand + a backing
   // project with the target site open in a browser tab and a seeded prompt.
-  // The agent then runs the chain (measure → synthesize → `od brand finalize`).
+  // The agent then runs the chain (measure → synthesize → `monofield brand finalize`).
   const data = await resp.json();
   if (flags.json) {
     process.stdout.write(JSON.stringify({ ok: true, ...data }, null, 2) + '\n');
@@ -5421,7 +5478,7 @@ async function runBrandCreate(rest) {
   }
   process.stderr.write(
     '[brand] extraction project created — open it to run the agent, ' +
-    `then it self-finalizes with: od brand finalize ${data?.id ?? ''}\n`,
+    `then it self-finalizes with: monofield brand finalize ${data?.id ?? ''}\n`,
   );
   // Clean stdout result: "<id>\t<projectId>" so jq / cut / xargs can chain.
   console.log(`${data?.id ?? ''}\t${data?.projectId ?? ''}`);
@@ -5437,7 +5494,7 @@ async function runBrandFinalize(rest) {
   }
   const id = positionalArgs(rest, BRAND_STRING_FLAGS)[0];
   if (!id) {
-    console.error('Usage: od brand finalize <id> [--project <projectId>] [--json]');
+    console.error('Usage: monofield brand finalize <id> [--project <projectId>] [--json]');
     process.exit(2);
   }
   const base = await cliDaemonBaseUrl(flags);
@@ -5488,7 +5545,7 @@ async function readFileFlagOrStdin(value) {
   return await readFile(value, 'utf8');
 }
 
-// od brand extract-from-html <id> --html-file <path|-> [--css-file <path>]
+// monofield brand extract-from-html <id> --html-file <path|-> [--css-file <path>]
 //   [--base-url <url>] [--json]
 // Re-runs extraction against pre-captured rendered HTML (e.g. a page an external
 // agent already loaded past an anti-bot wall), mirroring the UI's browser-assist
@@ -5503,7 +5560,7 @@ async function runBrandExtractFromHtml(rest) {
   }
   const id = positionalArgs(rest, BRAND_STRING_FLAGS)[0];
   if (!id) {
-    console.error('Usage: od brand extract-from-html <id> --html-file <path|-> '
+    console.error('Usage: monofield brand extract-from-html <id> --html-file <path|-> '
       + '[--css-file <path>] [--base-url <url>] [--json]');
     process.exit(2);
   }
@@ -5572,7 +5629,7 @@ async function runBrandPreview(rest) {
   }
   const id = positionalArgs(rest, BRAND_STRING_FLAGS)[0];
   if (!id) {
-    console.error('Usage: od brand preview <id> [--project <projectId>] [--json]');
+    console.error('Usage: monofield brand preview <id> [--project <projectId>] [--json]');
     process.exit(2);
   }
   const base = await cliDaemonBaseUrl(flags);
@@ -5614,7 +5671,7 @@ async function runBrandGet(rest) {
   }
   const id = positionalArgs(rest, BRAND_STRING_FLAGS)[0];
   if (!id) {
-    console.error('Usage: od brand get <id> [--json]');
+    console.error('Usage: monofield brand get <id> [--json]');
     process.exit(2);
   }
   const base = await cliDaemonBaseUrl(flags);
@@ -5663,7 +5720,7 @@ async function runBrandDelete(rest) {
   }
   const id = positionalArgs(rest, BRAND_STRING_FLAGS)[0];
   if (!id) {
-    console.error('Usage: od brand delete <id> [--json]');
+    console.error('Usage: monofield brand delete <id> [--json]');
     process.exit(2);
   }
   const base = await cliDaemonBaseUrl(flags);
@@ -5788,21 +5845,21 @@ async function postImportFolderToDaemon(base, body, baseDir) {
 async function runProject(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
-  od project create [--name "<title>"] [--skill <id>] [--design-system <id>]
+  monofield project create [--name "<title>"] [--skill <id>] [--design-system <id>]
                     [--plugin <id>] [--inputs <json>] [--metadata-json <path|->]
                     [--mode design|chat]
-  od project import <baseDir> [--name "<title>"]
-  od project import-folder <path> [--name "<title>"] [--skill <id>]
+  monofield project import <baseDir> [--name "<title>"]
+  monofield project import-folder <path> [--name "<title>"] [--skill <id>]
                     [--design-system <id>] [--json]
-  od project list                         List projects.
-  od project info <id>                    Print one project.
-  od project delete <id>                  Delete a project.
-  od project editors                      List locally-installed editors that
+  monofield project list                         List projects.
+  monofield project info <id>                    Print one project.
+  monofield project delete <id>                  Delete a project.
+  monofield project editors                      List locally-installed editors that
                                           can open a project (hand-off targets).
-  od project open-in <id> --editor <slug> Open the project's working directory
+  monofield project open-in <id> --editor <slug> Open the project's working directory
                                           in the chosen editor (cursor, zed,
                                           vscode, finder, terminal, …).
-  od project handoff <id> --conversation <id> --api-key <key> --model <model>
+  monofield project handoff <id> --conversation <id> --api-key <key> --model <model>
                     [--base-url <url>] [--max-tokens <n>]
                     Synthesize a resume-conversation handoff prompt.
 
@@ -5815,7 +5872,7 @@ Common options:
   const rest = args.slice(1);
   // Handoff owns its own flag parsing, daemon-URL resolution, and
   // structured fail() output. Dispatch it before the generic project
-  // parser below so a malformed `od project handoff` invocation
+  // parser below so a malformed `monofield project handoff` invocation
   // (`--unknown`, `--max-tokens` with no value) hits handoff-cli's
   // machine-readable fail() path instead of throwing out of parseFlags.
   if (sub === 'handoff') {
@@ -5833,7 +5890,7 @@ Common options:
       if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       const projects = data?.projects ?? [];
       if (projects.length === 0) {
-        console.log('No projects. Create one with `od project create --name "..."`.');
+        console.log('No projects. Create one with `monofield project create --name "..."`.');
         return;
       }
       for (const p of projects) console.log(`${p.id}\t${p.name}\t${p.skillId ?? '-'}`);
@@ -5842,7 +5899,7 @@ Common options:
     case 'info': {
       const id = rest.find((a) => !a.startsWith('-'));
       if (!id) {
-        console.error('Usage: od project info <id>');
+        console.error('Usage: monofield project info <id>');
         process.exit(2);
       }
       const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}`);
@@ -5906,7 +5963,7 @@ Common options:
       const [baseDir] = positionalArgs(rest, PROJECT_STRING_FLAGS);
       const importBaseDir = typeof baseDir === 'string' ? baseDir.trim() : '';
       if (!importBaseDir) {
-        console.error('Usage: od project import <baseDir> [--name "<title>"]');
+        console.error('Usage: monofield project import <baseDir> [--name "<title>"]');
         process.exit(2);
       }
       const body = { baseDir: importBaseDir };
@@ -5935,7 +5992,7 @@ Common options:
       const parts = collectCliPositionals(rest, PROJECT_STRING_FLAGS);
       const folderArg = flags.path ?? flags.dir ?? parts[0];
       if (!folderArg) {
-        console.error('Usage: od project import-folder <path> [--skill <id>] [--design-system <id>]');
+        console.error('Usage: monofield project import-folder <path> [--skill <id>] [--design-system <id>]');
         process.exit(2);
       }
       const folderPath = await resolveFolderPathForCli(folderArg);
@@ -5955,7 +6012,7 @@ Common options:
     case 'delete': {
       const id = rest.find((a) => !a.startsWith('-'));
       if (!id) {
-        console.error('Usage: od project delete <id>');
+        console.error('Usage: monofield project delete <id>');
         process.exit(2);
       }
       const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}`, { method: 'DELETE' });
@@ -5978,12 +6035,12 @@ Common options:
     case 'open-in': {
       const id = rest.find((a) => !a.startsWith('-'));
       if (!id) {
-        console.error('Usage: od project open-in <id> --editor <slug>');
+        console.error('Usage: monofield project open-in <id> --editor <slug>');
         process.exit(2);
       }
       const editor = typeof flags.editor === 'string' ? flags.editor : '';
       if (!editor) {
-        console.error('--editor <slug> is required. Run `od project editors` to list options.');
+        console.error('--editor <slug> is required. Run `monofield project editors` to list options.');
         process.exit(2);
       }
       const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/open-in`, {
@@ -6002,7 +6059,7 @@ Common options:
       return;
     }
     default:
-      console.error(`unknown subcommand: od project ${sub}`);
+      console.error(`unknown subcommand: monofield project ${sub}`);
       process.exit(2);
   }
 }
@@ -6010,16 +6067,16 @@ Common options:
 async function runRun(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
-  od run start --project <projectId> [--conversation <id>] [--message "<text>"]
+  monofield run start --project <projectId> [--conversation <id>] [--message "<text>"]
                [--plugin <id>] [--inputs <json>] [--grant-caps a,b]
                [--agent claude|codex|gemini] [--model <id>] [--follow] [--json]
-  od run redesign [--path <folder>] [--message "<text>" | --prompt-file <path|->]
+  monofield run redesign [--path <folder>] [--message "<text>" | --prompt-file <path|->]
                [--agent claude] [--model <id>] [--follow] [--json]
-  od run watch  <runId>                     ND-JSON event stream on stdout.
-  od run cancel <runId>                     Request cancellation.
-  od run list   [--project <id>]            List recent runs.
-  od run info   <runId>                     One run's status.
-  od run result-package <runId> [--json]    Inspect run outputs and workspace
+  monofield run watch  <runId>                     ND-JSON event stream on stdout.
+  monofield run cancel <runId>                     Request cancellation.
+  monofield run list   [--project <id>]            List recent runs.
+  monofield run info   <runId>                     One run's status.
+  monofield run result-package <runId> [--json]    Inspect run outputs and workspace
                                             provenance without applying them.
 
 Common options:
@@ -6049,7 +6106,7 @@ Common options:
     case 'info': {
       const id = rest.find((a) => !a.startsWith('-'));
       if (!id) {
-        console.error('Usage: od run info <runId>');
+        console.error('Usage: monofield run info <runId>');
         process.exit(2);
       }
       const resp = await fetch(`${base}/api/runs/${encodeURIComponent(id)}`);
@@ -6061,7 +6118,7 @@ Common options:
     case 'result-package': {
       const id = rest.find((a) => !a.startsWith('-'));
       if (!id) {
-        console.error('Usage: od run result-package <runId> [--json]');
+        console.error('Usage: monofield run result-package <runId> [--json]');
         process.exit(2);
       }
       const resp = await fetch(`${base}/api/runs/${encodeURIComponent(id)}/result-package`);
@@ -6085,7 +6142,7 @@ Common options:
     case 'cancel': {
       const id = rest.find((a) => !a.startsWith('-'));
       if (!id) {
-        console.error('Usage: od run cancel <runId>');
+        console.error('Usage: monofield run cancel <runId>');
         process.exit(2);
       }
       const resp = await fetch(`${base}/api/runs/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
@@ -6096,7 +6153,7 @@ Common options:
     case 'watch': {
       const id = rest.find((a) => !a.startsWith('-'));
       if (!id) {
-        console.error('Usage: od run watch <runId>');
+        console.error('Usage: monofield run watch <runId>');
         process.exit(2);
       }
       await streamRunEvents(base, id);
@@ -6215,7 +6272,7 @@ Common options:
       return;
     }
     default:
-      console.error(`unknown subcommand: od run ${sub}`);
+      console.error(`unknown subcommand: monofield run ${sub}`);
       process.exit(2);
   }
 }
@@ -6256,7 +6313,7 @@ async function streamRunEvents(base, runId) {
   }
 }
 
-// `od shell --project <id>` opens an interactive PTY rooted at the project's
+// `monofield shell --project <id>` opens an interactive PTY rooted at the project's
 // working directory and attaches to it. This is the CLI parity for the web
 // Terminal tab — both surfaces drive `/api/projects/:id/terminals`. Output
 // streams down over SSE; local keystrokes are POSTed back up to /stdin. When
@@ -6265,7 +6322,7 @@ async function streamRunEvents(base, runId) {
 async function runShell(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
-  od shell --project <projectId> [--shell <path>] [--json]
+  monofield shell --project <projectId> [--shell <path>] [--json]
                                   Open an interactive shell in the project's
                                   working directory and attach to it.
 
@@ -6381,14 +6438,14 @@ async function attachTerminal(base, projectId, terminalId) {
 async function runFiles(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
-  od files list   <projectId>                  List files in a project.
-  od files read   <projectId> <relpath>        Stream file bytes to stdout.
-  od files write  <projectId> <relpath> [< stdin]
+  monofield files list   <projectId>                  List files in a project.
+  monofield files read   <projectId> <relpath>        Stream file bytes to stdout.
+  monofield files write  <projectId> <relpath> [< stdin]
                                                Write content from stdin.
-  od files upload <projectId> <localpath> [--as <relpath>]
+  monofield files upload <projectId> <localpath> [--as <relpath>]
                                                Upload a local file.
-  od files delete <projectId> <name>           Delete a project file.
-  od files diff   <projectId> <relpathA> [<relpathB> | --against -]
+  monofield files delete <projectId> <name>           Delete a project file.
+  monofield files diff   <projectId> <relpathA> [<relpathB> | --against -]
                                                Print a unified diff.
 
 Common options:
@@ -6404,7 +6461,7 @@ Common options:
     case 'list': {
       const id = rest.find((a) => !a.startsWith('-'));
       if (!id) {
-        console.error('Usage: od files list <projectId>');
+        console.error('Usage: monofield files list <projectId>');
         process.exit(2);
       }
       const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/files`);
@@ -6419,7 +6476,7 @@ Common options:
       const positional = rest.filter((a) => !a.startsWith('-'));
       const [id, rel] = positional;
       if (!id || !rel) {
-        console.error('Usage: od files read <projectId> <relpath>');
+        console.error('Usage: monofield files read <projectId> <relpath>');
         process.exit(2);
       }
       const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/files/${rel.split('/').map(encodeURIComponent).join('/')}`);
@@ -6433,7 +6490,7 @@ Common options:
         && a !== flags.as);
       const [id, localPath] = positional;
       if (!id || !localPath) {
-        console.error('Usage: od files upload <projectId> <localpath> [--as <relpath>]');
+        console.error('Usage: monofield files upload <projectId> <localpath> [--as <relpath>]');
         process.exit(2);
       }
       const buf = readFileSync(localPath);
@@ -6459,7 +6516,7 @@ Common options:
       const positional = rest.filter((a) => !a.startsWith('-'));
       const [id, rel] = positional;
       if (!id || !rel) {
-        console.error('Usage: od files write <projectId> <relpath> [< stdin]');
+        console.error('Usage: monofield files write <projectId> <relpath> [< stdin]');
         process.exit(2);
       }
       // Read stdin synchronously into a buffer.
@@ -6491,7 +6548,7 @@ Common options:
       const positional = rest.filter((a) => !a.startsWith('-'));
       const [id, name] = positional;
       if (!id || !name) {
-        console.error('Usage: od files delete <projectId> <name>');
+        console.error('Usage: monofield files delete <projectId> <name>');
         process.exit(2);
       }
       const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/files/${encodeURIComponent(name)}`, { method: 'DELETE' });
@@ -6504,7 +6561,7 @@ Common options:
       const [id, relA, relB] = positional;
       const against = typeof flags.against === 'string' ? flags.against : null;
       if (!id || !relA || (!relB && !against) || (relB && against)) {
-        console.error('Usage: od files diff <projectId> <relpathA> [<relpathB> | --against -]');
+        console.error('Usage: monofield files diff <projectId> <relpathA> [<relpathB> | --against -]');
         process.exit(2);
       }
       const left = await fetchProjectFileText(base, id, relA);
@@ -6518,7 +6575,7 @@ Common options:
       return;
     }
     default:
-      console.error(`unknown subcommand: od files ${sub}`);
+      console.error(`unknown subcommand: monofield files ${sub}`);
       process.exit(2);
   }
 }
@@ -6542,7 +6599,7 @@ async function readStdinUtf8() {
 }
 
 async function mintCliImportToken(baseDir) {
-  const socketPath = process.env[SIDECAR_ENV.IPC_PATH];
+  const socketPath = process.env.MONOFIELD_SIDECAR_IPC_PATH ?? process.env[SIDECAR_ENV.IPC_PATH];
   if (typeof socketPath !== 'string' || socketPath.length === 0) return null;
   let result;
   try {
@@ -6666,7 +6723,7 @@ function renderDiffLineContent(value) {
   return String(value).replace(/\r/g, '\\r');
 }
 
-// `od templates …` is the headless face of NewProjectPanel /
+// `monofield templates …` is the headless face of NewProjectPanel /
 // ExamplesTab — same /api/templates store, same DTO shapes. External
 // agents (hermes-agent, openclaw, custom bots) use these to snapshot a
 // project as a reusable starting point, list everything the user has
@@ -6675,11 +6732,11 @@ function renderDiffLineContent(value) {
 async function runTemplates(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
-  od templates list                                  List user-saved templates.
-  od templates save  <projectId> --name <name>      Snapshot a project's current
+  monofield templates list                                  List user-saved templates.
+  monofield templates save  <projectId> --name <name>      Snapshot a project's current
                                                     files as a new template.
                      [--description <text>]
-  od templates delete <id>                          Delete a saved template by id.
+  monofield templates delete <id>                          Delete a saved template by id.
 
 Common options:
   --daemon-url <url>   MonoField daemon HTTP base.
@@ -6699,7 +6756,7 @@ Common options:
   // Extract positional arguments while stepping past `--flag value`
   // pairs for any string-valued template flag. Without this the id has
   // to be the very first token after the sub-verb, so a headless caller
-  // that prefixes shared options (`od templates save --daemon-url ...
+  // that prefixes shared options (`monofield templates save --daemon-url ...
   // proj-1 --name Cards`) would hit the missing-id usage path before
   // ever reaching the daemon. Mirrors the `positionalArgs` helper in
   // `runAutomation`.
@@ -6739,7 +6796,7 @@ Common options:
       if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       const templates = Array.isArray(data?.templates) ? data.templates : [];
       if (templates.length === 0) {
-        console.log('No templates. Save one with `od templates save <projectId> --name "..."`.');
+        console.log('No templates. Save one with `monofield templates save <projectId> --name "..."`.');
         return;
       }
       for (const t of templates) console.log(`${t.id}\t${t.name}`);
@@ -6751,7 +6808,7 @@ Common options:
       // so callers can put shared options before or after the id.
       const projectId = positionalArgs(rest)[0] ?? '';
       if (!projectId) {
-        console.error('Usage: od templates save <projectId> --name <name> [--description <text>]');
+        console.error('Usage: monofield templates save <projectId> --name <name> [--description <text>]');
         process.exit(2);
       }
       const name = typeof flags.name === 'string' ? flags.name.trim() : '';
@@ -6797,7 +6854,7 @@ Common options:
     case 'delete': {
       const id = positionalArgs(rest)[0] ?? '';
       if (!id) {
-        console.error('Usage: od templates delete <id>');
+        console.error('Usage: monofield templates delete <id>');
         process.exit(2);
       }
       let resp;
@@ -6822,7 +6879,7 @@ Common options:
       return;
     }
     default:
-      console.error(`unknown subcommand: od templates ${sub}`);
+      console.error(`unknown subcommand: monofield templates ${sub}`);
       process.exit(2);
   }
 }
@@ -6830,14 +6887,14 @@ Common options:
 async function runConversation(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
-  od conversation new  <projectId> [--title "<title>"] [--seed-from <cid>] [--fork-after <mid>] [--mode design|chat]
+  monofield conversation new  <projectId> [--title "<title>"] [--seed-from <cid>] [--fork-after <mid>] [--mode design|chat]
                                            Create a conversation in a project.
                                            --seed-from copies another
                                            conversation's messages in (Side Chat).
                                            --fork-after stops the copy at one
                                            source message.
-  od conversation list <projectId>           List conversations in a project.
-  od conversation info <conversationId>      Print one conversation.
+  monofield conversation list <projectId>           List conversations in a project.
+  monofield conversation info <conversationId>      Print one conversation.
 
 Common options:
   --daemon-url <url>   MonoField daemon HTTP base.
@@ -6852,7 +6909,7 @@ Common options:
     case 'new': {
       const [id] = positionalArgs(rest, PROJECT_STRING_FLAGS);
       if (!id) {
-        console.error('Usage: od conversation new <projectId> [--title "<title>"] [--seed-from <cid>] [--fork-after <mid>]');
+        console.error('Usage: monofield conversation new <projectId> [--title "<title>"] [--seed-from <cid>] [--fork-after <mid>]');
         process.exit(2);
       }
       const body = {};
@@ -6884,7 +6941,7 @@ Common options:
     case 'list': {
       const id = rest.find((a) => !a.startsWith('-'));
       if (!id) {
-        console.error('Usage: od conversation list <projectId>');
+        console.error('Usage: monofield conversation list <projectId>');
         process.exit(2);
       }
       const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/conversations`);
@@ -6896,7 +6953,7 @@ Common options:
     case 'info': {
       const id = rest.find((a) => !a.startsWith('-'));
       if (!id) {
-        console.error('Usage: od conversation info <conversationId>');
+        console.error('Usage: monofield conversation info <conversationId>');
         process.exit(2);
       }
       const resp = await fetch(`${base}/api/conversations/${encodeURIComponent(id)}`);
@@ -6906,15 +6963,15 @@ Common options:
       return;
     }
     default:
-      console.error(`unknown subcommand: od conversation ${sub}`);
+      console.error(`unknown subcommand: monofield conversation ${sub}`);
       process.exit(2);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Subcommand: od chat  (Side Chat — context-seeded conversations)
+// Subcommand: monofield chat  (Side Chat — context-seeded conversations)
 //
-// `od chat new --project <id> [--seed-from <cid>] [--fork-after <mid>] [--title "<t>"] [--json]`
+// `monofield chat new --project <id> [--seed-from <cid>] [--fork-after <mid>] [--title "<t>"] [--json]`
 //   Creates a new conversation that inherits another conversation's context
 //   by copying its messages, optionally truncating at one source message.
 //   Mirrors the web chat fork action and POSTs to the same
@@ -6925,7 +6982,7 @@ Common options:
 async function runChat(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
-  od chat new --project <id> [--seed-from <cid>] [--fork-after <mid>] [--title "<title>"] [--mode design|chat] [--json]
+  monofield chat new --project <id> [--seed-from <cid>] [--fork-after <mid>] [--title "<title>"] [--mode design|chat] [--json]
                                            Create a Side Chat — a new conversation
                                            that copies in another conversation's
                                            context (--seed-from). Use
@@ -6949,7 +7006,7 @@ Common options:
         ? flags.project
         : positionalArgs(rest, PROJECT_STRING_FLAGS)[0];
       if (!id) {
-        console.error('Usage: od chat new --project <id> [--seed-from <cid>] [--fork-after <mid>] [--title "<title>"]');
+        console.error('Usage: monofield chat new --project <id> [--seed-from <cid>] [--fork-after <mid>] [--title "<title>"]');
         process.exit(2);
       }
       const body = {};
@@ -6985,38 +7042,38 @@ Common options:
       return;
     }
     default:
-      console.error(`unknown subcommand: od chat ${sub}`);
+      console.error(`unknown subcommand: monofield chat ${sub}`);
       process.exit(2);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Subcommand: od daemon  (Phase 1.5 lifecycle, plan §6 / §3.F2)
+// Subcommand: monofield daemon  (Phase 1.5 lifecycle, plan §6 / §3.F2)
 //
-// `od daemon start [--headless] [--serve-web] [--port <n>] [--host <addr>]`
+// `monofield daemon start [--headless] [--serve-web] [--port <n>] [--host <addr>]`
 //   - --headless: implies --no-open, never tries to launch a browser.
-//                 The default `od` (no subcommand) keeps its
+//                 The default `monofield` (no subcommand) keeps its
 //                 desktop-friendly behaviour for back-compat.
 //   - --serve-web: same as --headless but allows the Next.js bundle to
 //                  serve over the existing port. v1 doesn't bundle a
 //                  separate web port; the flag is reserved so downstream
 //                  packaged callers can branch on it.
 //
-// `od daemon status [--json] [--daemon-url <url>]` calls /api/daemon/status.
-// `od daemon stop   [--daemon-url <url>]`         calls POST /api/daemon/shutdown.
+// `monofield daemon status [--json] [--daemon-url <url>]` calls /api/daemon/status.
+// `monofield daemon stop   [--daemon-url <url>]`         calls POST /api/daemon/shutdown.
 // ---------------------------------------------------------------------------
 
 async function runDaemon(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
-  od daemon start [--headless] [--serve-web] [--port <n>] [--host <addr>] [--no-open]
+  monofield daemon start [--headless] [--serve-web] [--port <n>] [--host <addr>] [--no-open]
                                           Start the daemon (Phase 1.5 headless mode).
-  od daemon status [--json] [--daemon-url <url>]
+  monofield daemon status [--json] [--daemon-url <url>]
                                           Print the daemon's runtime snapshot.
-  od daemon stop   [--daemon-url <url>]   Send a graceful shutdown signal.
-  od daemon db     status                 Print SQLite path + size + table row counts.
-  od daemon db     verify [--quick]       Run integrity_check + foreign_key_check.
-  od daemon db     vacuum                 Run SQLite VACUUM to reclaim space after deletes.
+  monofield daemon stop   [--daemon-url <url>]   Send a graceful shutdown signal.
+  monofield daemon db     status                 Print SQLite path + size + table row counts.
+  monofield daemon db     verify [--quick]       Run integrity_check + foreign_key_check.
+  monofield daemon db     vacuum                 Run SQLite VACUUM to reclaim space after deletes.
 
 Common options:
   --daemon-url <url>   MonoField daemon HTTP base.
@@ -7034,24 +7091,24 @@ Common options:
     case 'stop':    return runDaemonStop(flags);
     case 'db':      return runDaemonDb(rest, flags);
     default:
-      console.error(`unknown subcommand: od daemon ${sub}`);
+      console.error(`unknown subcommand: monofield daemon ${sub}`);
       process.exit(2);
   }
 }
 
-// Plan §3.GG1 — `od daemon db status`. Prints a SQLite inventory
+// Plan §3.GG1 — `monofield daemon db status`. Prints a SQLite inventory
 // (file path, size on disk, schema version, per-table row counts).
 async function runDaemonDb(rest, flags) {
   const sub = rest[0];
   if (!sub || sub === 'help' || rest.includes('--help') || rest.includes('-h')) {
     console.log(`Usage:
-  od daemon db status [--json] [--daemon-url <url>]
-  od daemon db verify [--quick] [--json] [--daemon-url <url>]
-  od daemon db vacuum [--json] [--daemon-url <url>]
+  monofield daemon db status [--json] [--daemon-url <url>]
+  monofield daemon db verify [--quick] [--json] [--daemon-url <url>]
+  monofield daemon db vacuum [--json] [--daemon-url <url>]
 
 status:
   Prints a structured inventory of the daemon's SQLite backend:
-    - file path (under .od/ by default; OD_DATA_DIR overrides)
+    - file path (under MonoField's local data directory; MONOFIELD_DATA_DIR overrides)
     - size on disk (primary + WAL + SHM)
     - schema version (user_version PRAGMA)
     - per-table row counts (system tables excluded)
@@ -7110,7 +7167,7 @@ vacuum:
     process.exit(data.ok ? 0 : 4);
   }
   if (sub !== 'status') {
-    console.error(`unknown subcommand: od daemon db ${sub}`);
+    console.error(`unknown subcommand: monofield daemon db ${sub}`);
     process.exit(2);
   }
   const resp = await fetch(`${base}/api/daemon/db`);
@@ -7148,8 +7205,8 @@ function formatBytes(n) {
 }
 
 async function runDaemonStart(flags) {
-  const port = Number(flags.port ?? process.env.OD_PORT ?? 7456);
-  const host = String(flags.host ?? process.env.OD_BIND_HOST ?? '127.0.0.1').trim() || '127.0.0.1';
+  const port = Number(flags.port ?? process.env.MONOFIELD_PORT ?? process.env.OD_PORT ?? 7456);
+  const host = String(flags.host ?? process.env.MONOFIELD_BIND_HOST ?? process.env.OD_BIND_HOST ?? '127.0.0.1').trim() || '127.0.0.1';
   const headless = Boolean(flags.headless || flags['no-open'] || flags['serve-web']);
   const runtime = await startDaemonRuntime({
     host,
@@ -7157,7 +7214,7 @@ async function runDaemonStart(flags) {
     openBrowser: !headless,
     port,
   });
-  console.log(`[od] listening on ${runtime.url} (${headless ? 'headless' : 'desktop'})`);
+  console.log(`[monofield] listening on ${runtime.url} (${headless ? 'headless' : 'desktop'})`);
 
   await new Promise((resolve) => {
     let shuttingDown = false;
@@ -7211,7 +7268,7 @@ async function runDaemonStop(flags) {
 }
 
 // ---------------------------------------------------------------------------
-// Subcommand: od atoms / od skills / od design-systems / od craft / od status
+// Subcommand: monofield atoms / monofield skills / monofield design-systems / monofield craft / monofield status
 //
 // Plan §3.H2 / §3.H3 / spec §12.2 — design-library + status introspection
 // CLI parity. Every UI feature reachable via /api/* gets a CLI mirror
@@ -7225,9 +7282,9 @@ async function libraryDaemonUrl(flags) {
 async function runAtoms(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
-  od atoms list             List first-party atoms (implemented + planned).
-  od atoms show <id>        Print one atom's metadata.
-  od atoms info <id>        Print metadata + the bundled SKILL.md body.
+  monofield atoms list             List first-party atoms (implemented + planned).
+  monofield atoms show <id>        Print one atom's metadata.
+  monofield atoms info <id>        Print metadata + the bundled SKILL.md body.
 
 Common options:
   --daemon-url <url>   MonoField daemon HTTP base.
@@ -7253,7 +7310,7 @@ Common options:
     case 'show': {
       const id = rest.find((a) => !a.startsWith('-'));
       if (!id) {
-        console.error('Usage: od atoms show <id>');
+        console.error('Usage: monofield atoms show <id>');
         process.exit(2);
       }
       const resp = await fetch(`${base}/api/atoms`);
@@ -7270,7 +7327,7 @@ Common options:
     case 'info': {
       const id = rest.find((a) => !a.startsWith('-'));
       if (!id) {
-        console.error('Usage: od atoms info <id>');
+        console.error('Usage: monofield atoms info <id>');
         process.exit(2);
       }
       const resp = await fetch(`${base}/api/atoms/${encodeURIComponent(id)}`);
@@ -7296,13 +7353,13 @@ Common options:
       return;
     }
     default:
-      console.error(`unknown subcommand: od atoms ${sub}`);
+      console.error(`unknown subcommand: monofield atoms ${sub}`);
       process.exit(2);
   }
 }
 
 function printLibraryHelp() {
-  console.log(`Usage: od library <command> [options]
+  console.log(`Usage: monofield library <command> [options]
 
 Commands:
   list                      List library assets. Filters: --kind --tag --source --date
@@ -7313,8 +7370,8 @@ Commands:
                             Restricted to design formats (images, fonts, text, HTML, JSON);
                             audio, video, and other binaries are rejected.
   apply <id>                Copy an asset into a project's design files. Requires --project.
-  edit-as-page <id>         Turn a captured html asset into a new editable OD project (prints projectId).
-  figma <id>                Export an html asset's OD Figma capture IR (clipper-captured pages).
+  edit-as-page <id>         Turn a captured HTML asset into a new editable MonoField project (prints projectId).
+  figma <id>                Export an HTML asset's MonoField Figma capture IR (browser-captured pages).
   sync                      Pull design systems + agent-generated project artifacts into the Library.
   pair                      Mint a browser-extension pairing code.
 
@@ -7380,7 +7437,7 @@ async function runLibrary(args) {
       case 'get': {
         const id = pos[0];
         if (!id) {
-          console.error('Usage: od library get <id>');
+          console.error('Usage: monofield library get <id>');
           process.exit(2);
         }
         const resp = await fetch(`${base}/api/library/assets/${encodeURIComponent(id)}`);
@@ -7390,7 +7447,7 @@ async function runLibrary(args) {
       case 'rm': {
         const id = pos[0];
         if (!id) {
-          console.error('Usage: od library rm <id>');
+          console.error('Usage: monofield library rm <id>');
           process.exit(2);
         }
         const resp = await fetch(`${base}/api/library/assets/${encodeURIComponent(id)}`, {
@@ -7404,7 +7461,7 @@ async function runLibrary(args) {
       case 'import': {
         const sources = pos;
         if (!sources.length) {
-          console.error('Usage: od library import <file|url> [<file|url> ...]');
+          console.error('Usage: monofield library import <file|url> [<file|url> ...]');
           process.exit(2);
         }
         const { readFile } = await import('node:fs/promises');
@@ -7459,11 +7516,11 @@ async function runLibrary(args) {
       case 'apply': {
         const id = pos[0];
         if (!id) {
-          console.error('Usage: od library apply <id> --project <projectId> [--dir <subdir>]');
+          console.error('Usage: monofield library apply <id> --project <projectId> [--dir <subdir>]');
           process.exit(2);
         }
         if (!flags.project) {
-          console.error('Usage: od library apply <id> --project <projectId> [--dir <subdir>]');
+          console.error('Usage: monofield library apply <id> --project <projectId> [--dir <subdir>]');
           process.exit(2);
         }
         const body = { projectId: flags.project };
@@ -7482,7 +7539,7 @@ async function runLibrary(args) {
       case 'edit-as-page': {
         const id = pos[0];
         if (!id) {
-          console.error('Usage: od library edit-as-page <id>');
+          console.error('Usage: monofield library edit-as-page <id>');
           process.exit(2);
         }
         const resp = await fetch(`${base}/api/library/assets/${encodeURIComponent(id)}/edit-as-page`, {
@@ -7499,7 +7556,7 @@ async function runLibrary(args) {
       case 'figma': {
         const id = pos[0];
         if (!id) {
-          console.error('Usage: od library figma <id> [--out <file>]');
+          console.error('Usage: monofield library figma <id> [--out <file>]');
           process.exit(2);
         }
         const resp = await fetch(`${base}/api/library/assets/${encodeURIComponent(id)}/figma`);
@@ -7535,11 +7592,11 @@ async function runLibrary(args) {
         const data = await resp.json();
         if (flags.json) return writeJson(data);
         console.log(`Pairing code: ${data.code}`);
-        console.log('Enter this code in the OD Clipper extension popup within 5 minutes.');
+        console.log('Enter this code in the MonoField browser extension popup within 5 minutes.');
         return;
       }
       default:
-        console.error(`unknown subcommand: od library ${sub}`);
+        console.error(`unknown subcommand: monofield library ${sub}`);
         printLibraryHelp();
         process.exit(2);
     }
@@ -7552,8 +7609,8 @@ async function runLibrary(args) {
 async function runLibraryList(name, args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
-  od ${name} list           List ${name}.
-  od ${name} show <id>      Print one entry.`);
+  monofield ${name} list           List ${name}.
+  monofield ${name} show <id>      Print one entry.`);
     process.exit(args.length === 0 ? 2 : 0);
   }
   const sub = args[0];
@@ -7577,7 +7634,7 @@ async function runLibraryList(name, args) {
     case 'show': {
       const id = rest.find((a) => !a.startsWith('-'));
       if (!id) {
-        console.error(`Usage: od ${name} show <id>`);
+        console.error(`Usage: monofield ${name} show <id>`);
         process.exit(2);
       }
       const resp = await fetch(`${base}${apiPath}/${encodeURIComponent(id)}`);
@@ -7587,7 +7644,7 @@ async function runLibraryList(name, args) {
       return;
     }
     default:
-      console.error(`unknown subcommand: od ${name} ${sub}`);
+      console.error(`unknown subcommand: monofield ${name} ${sub}`);
       process.exit(2);
   }
 }
@@ -7609,7 +7666,7 @@ async function runDesignSystems(args) {
   return runLibraryList('design-systems', args);
 }
 
-// od design-systems download <id> [--out <path>] [--json] [--daemon-url <url>]
+// monofield design-systems download <id> [--out <path>] [--json] [--daemon-url <url>]
 //
 // Streams GET /api/design-systems/:id/archive — the same self-contained brand
 // .zip (every system file plus a generated SKILLS.md usage guide) the web
@@ -7618,7 +7675,7 @@ async function runDesignSystems(args) {
 async function runDesignSystemDownload(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
-  od design-systems download <id> [--out <path>] [--json] [--daemon-url <url>]
+  monofield design-systems download <id> [--out <path>] [--json] [--daemon-url <url>]
 
 Downloads an editable design system as a shareable .zip (all files plus a
 generated SKILLS.md usage guide).
@@ -7631,7 +7688,7 @@ generated SKILLS.md usage guide).
   const flags = parseFlags(args, { string: stringFlags, boolean: LIBRARY_BOOLEAN_FLAGS });
   const id = positionalArgs(args, stringFlags)[0];
   if (!id) {
-    console.error('Usage: od design-systems download <id> [--out <path>]');
+    console.error('Usage: monofield design-systems download <id> [--out <path>]');
     process.exit(2);
   }
   const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
@@ -7670,7 +7727,7 @@ generated SKILLS.md usage guide).
   console.log(`Downloaded ${id} -> ${out} (${buffer.length} bytes)`);
 }
 
-// od design-systems import-local <path> [--name <name>]
+// monofield design-systems import-local <path> [--name <name>]
 //   [--import-mode <mode>] [--craft <slug,slug>] [--json] [--daemon-url <url>]
 //
 // Imports a local app/design-system project through the same daemon endpoint as
@@ -7679,8 +7736,8 @@ generated SKILLS.md usage guide).
 async function runDesignSystemImportLocal(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
-  od design-systems import-local <path> [--name <name>] [--import-mode <mode>] [--craft <slugs>] [--json] [--daemon-url <url>]
-  od design-systems import-local --path <path> [--name <name>] [--json]
+  monofield design-systems import-local <path> [--name <name>] [--import-mode <mode>] [--craft <slugs>] [--json] [--daemon-url <url>]
+  monofield design-systems import-local --path <path> [--name <name>] [--json]
 
 Imports a local project directory as an editable MonoField design system.
 
@@ -7695,7 +7752,7 @@ Imports a local project directory as an editable MonoField design system.
   const flags = parseFlags(args, { string: stringFlags, boolean: LIBRARY_BOOLEAN_FLAGS });
   const localPath = typeof flags.path === 'string' ? flags.path : positionalArgs(args, stringFlags)[0];
   if (!localPath) {
-    console.error('Usage: od design-systems import-local <path>');
+    console.error('Usage: monofield design-systems import-local <path>');
     process.exit(2);
   }
   const pathModule = await import('node:path');
@@ -7705,13 +7762,13 @@ Imports a local project directory as an editable MonoField design system.
   return postDesignSystemImport(flags, '/api/design-systems/import/local', body);
 }
 
-// od design-systems import-github <url> [--branch <branch>] [--name <name>]
+// monofield design-systems import-github <url> [--branch <branch>] [--name <name>]
 //   [--import-mode <mode>] [--craft <slug,slug>] [--json] [--daemon-url <url>]
 async function runDesignSystemImportGithub(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
-  od design-systems import-github <url> [--branch <branch>] [--name <name>] [--import-mode <mode>] [--craft <slugs>] [--json] [--daemon-url <url>]
-  od design-systems import-github --url <url> [--branch <branch>] [--json]
+  monofield design-systems import-github <url> [--branch <branch>] [--name <name>] [--import-mode <mode>] [--craft <slugs>] [--json] [--daemon-url <url>]
+  monofield design-systems import-github --url <url> [--branch <branch>] [--json]
 
 Imports a public GitHub repository as an editable MonoField design system.
 
@@ -7727,7 +7784,7 @@ Imports a public GitHub repository as an editable MonoField design system.
   const flags = parseFlags(args, { string: stringFlags, boolean: LIBRARY_BOOLEAN_FLAGS });
   const url = typeof flags.url === 'string' ? flags.url : positionalArgs(args, stringFlags)[0];
   if (!url) {
-    console.error('Usage: od design-systems import-github <url>');
+    console.error('Usage: monofield design-systems import-github <url>');
     process.exit(2);
   }
   const body = designSystemImportRequestBody(flags, {
@@ -7769,7 +7826,7 @@ async function postDesignSystemImport(flags, endpoint, body) {
   }
 }
 
-// od design-systems rebuild-token-contract <id> [--force] [--json]
+// monofield design-systems rebuild-token-contract <id> [--force] [--json]
 //
 // Starts the same review-gated token contract rebuild job exposed in the web
 // design-system detail view. Without --force the daemon only queues a job when
@@ -7777,7 +7834,7 @@ async function postDesignSystemImport(flags, endpoint, body) {
 async function runDesignSystemTokenContractRebuild(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
-  od design-systems rebuild-token-contract <id> [--force] [--json] [--daemon-url <url>]
+  monofield design-systems rebuild-token-contract <id> [--force] [--json] [--daemon-url <url>]
 
 Starts a review-gated TOKEN_SCHEMA token contract rebuild for an editable imported design system.
 
@@ -7791,7 +7848,7 @@ Starts a review-gated TOKEN_SCHEMA token contract rebuild for an editable import
   });
   const id = positionalArgs(args, LIBRARY_STRING_FLAGS)[0];
   if (!id) {
-    console.error('Usage: od design-systems rebuild-token-contract <id>');
+    console.error('Usage: monofield design-systems rebuild-token-contract <id>');
     process.exit(2);
   }
   const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
@@ -7811,7 +7868,7 @@ Starts a review-gated TOKEN_SCHEMA token contract rebuild for an editable import
   console.log(`Token contract rebuild not queued for ${id}: ${decision?.reason ?? 'no rebuild needed'}`);
 }
 
-// od design-systems import-shadcn <reference> [--name <name>]
+// monofield design-systems import-shadcn <reference> [--name <name>]
 //   [--import-mode <mode>] [--craft <slug,slug>] [--json] [--daemon-url <url>]
 //
 // Imports a shadcn registry item as an editable user design system via
@@ -7822,7 +7879,7 @@ Starts a review-gated TOKEN_SCHEMA token contract rebuild for an editable import
 async function runDesignSystemImportShadcn(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
-  od design-systems import-shadcn <reference> [--name <name>] [--import-mode <mode>] [--craft <slugs>] [--json] [--daemon-url <url>]
+  monofield design-systems import-shadcn <reference> [--name <name>] [--import-mode <mode>] [--craft <slugs>] [--json] [--daemon-url <url>]
 
 Imports a shadcn registry item as an MonoField design system.
 
@@ -7837,14 +7894,14 @@ Imports a shadcn registry item as an MonoField design system.
   const flags = parseFlags(args, { string: stringFlags, boolean: LIBRARY_BOOLEAN_FLAGS });
   const reference = positionalArgs(args, stringFlags)[0];
   if (!reference) {
-    console.error('Usage: od design-systems import-shadcn <reference>');
+    console.error('Usage: monofield design-systems import-shadcn <reference>');
     process.exit(2);
   }
   const body = designSystemImportRequestBody(flags, { reference });
   return postDesignSystemImport(flags, '/api/design-systems/import/shadcn', body);
 }
 
-// od design-systems rename <id> --title <new-title> [--json]
+// monofield design-systems rename <id> --title <new-title> [--json]
 // Renames an editable (user-created) design system via PATCH
 // /api/design-systems/:id. Built-in systems are read-only and the daemon
 // returns 404, surfaced here as a structured failure. Arg parsing lives in
@@ -7852,15 +7909,15 @@ Imports a shadcn registry item as an MonoField design system.
 async function runDesignSystemRename(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
-  od design-systems rename <id> --title <new-title> [--json] [--daemon-url <url>]
-  od design-systems rename <id> "<new title>" [--json]
+  monofield design-systems rename <id> --title <new-title> [--json] [--daemon-url <url>]
+  monofield design-systems rename <id> "<new title>" [--json]
 
 Renames an editable (user-created) design system. Built-in systems are read-only.`);
     process.exit(args.length === 0 ? 2 : 0);
   }
   const parsed = parseDesignSystemRenameArgs(args);
   if (!parsed) {
-    console.error('Usage: od design-systems rename <id> --title <new-title>');
+    console.error('Usage: monofield design-systems rename <id> --title <new-title>');
     process.exit(2);
   }
   const flags = parseFlags(args, {
@@ -7881,17 +7938,17 @@ Renames an editable (user-created) design system. Built-in systems are read-only
 }
 
 async function runStatus(args) {
-  // Alias of `od daemon status`.
+  // Alias of `monofield daemon status`.
   return runDaemon(['status', ...args]);
 }
 
 // ---------------------------------------------------------------------------
-// Subcommand: od diagnostics export <path> [--json]
+// Subcommand: monofield diagnostics export <path> [--json]
 //
 // CLI surface for the Settings → About “Export diagnostics” feature. The
 // daemon already exposes the bundle behind a local-loopback HTTP endpoint;
 // this command is a thin shell over that endpoint so headless callers (CI,
-// `od doctor` follow-ups, shell scripts) can collect a support bundle
+// `monofield doctor` follow-ups, shell scripts) can collect a support bundle
 // without driving the web UI.
 // ---------------------------------------------------------------------------
 
@@ -7899,14 +7956,14 @@ async function runDiagnostics(args) {
   const sub = args[0];
   if (!sub || sub === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
-  od diagnostics export [<path>] [--output <path>] [--json] [--daemon-url <url>]
+  monofield diagnostics export [<path>] [--output <path>] [--json] [--daemon-url <url>]
 
 Bundles daemon/web/desktop logs, machine info, and recent crash reports
 into a zip. The bundle is the same one Settings → About → Export
 diagnostics produces.
 
   <path>                 Where to write the zip. Defaults to
-                         ./open-design-diagnostics-<timestamp>.zip in the
+                         ./monofield-diagnostics-<timestamp>.zip in the
                          current working directory. Alias: --output <path>.
   --json                 Print {path, sizeBytes} on stdout instead of a
                          human-readable summary. The file is still written
@@ -7915,7 +7972,7 @@ diagnostics produces.
     process.exit(0);
   }
   if (sub !== 'export') {
-    console.error(`unknown subcommand: od diagnostics ${sub}`);
+    console.error(`unknown subcommand: monofield diagnostics ${sub}`);
     process.exit(2);
   }
 
@@ -7980,17 +8037,17 @@ async function runVersion(args) {
 }
 
 // ---------------------------------------------------------------------------
-// Subcommand: od doctor / od config (Phase 4 CLI parity tail).
+// Subcommand: monofield doctor / monofield config (Phase 4 CLI parity tail).
 //
 // Plan §3.I2 / spec §12.2.
 //
-// `od doctor` — repo-wide diagnostics. Hits /api/daemon/status, lists
+// `monofield doctor` — repo-wide diagnostics. Hits /api/daemon/status, lists
 // installed plugins + runs the per-plugin doctor, lists skills /
 // design-systems / craft / atoms. Exits non-zero when any plugin
 // doctor returns ok=false. Useful in CI: a failed exit causes the
 // pipeline to surface plugin-system regressions.
 //
-// `od config get/set/list/unset` — wraps GET/PUT /api/app-config so a
+// `monofield config get/set/list/unset` — wraps GET/PUT /api/app-config so a
 // code agent can flip provider keys / orbit settings / pet config
 // without leaving the terminal. JSON values pass through unchanged;
 // scalar strings/numbers/booleans are coerced.
@@ -8000,7 +8057,7 @@ async function runDoctor(args) {
   const flags = parseFlags(args, { string: CONFIG_STRING_FLAGS, boolean: CONFIG_BOOLEAN_FLAGS });
   if (flags.help || flags.h) {
     console.log(`Usage:
-  od doctor [--json]   Print a daemon + plugin + design-library health summary.
+  monofield doctor [--json]   Print a daemon + plugin + design-library health summary.
 
 Exit code is non-zero when any installed plugin's doctor returns ok=false
 or the daemon cannot be reached.`);
@@ -8108,12 +8165,12 @@ or the daemon cannot be reached.`);
 async function runConfig(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
-  od config list                      Print the full app config as JSON.
-  od config get <key>                 Print one top-level key.
-  od config set <key> <value>         Set a top-level key (string / number / boolean).
-  od config set <key> --value-json '<json>'
+  monofield config list                      Print the full app config as JSON.
+  monofield config get <key>                 Print one top-level key.
+  monofield config set <key> <value>         Set a top-level key (string / number / boolean).
+  monofield config set <key> --value-json '<json>'
                                        Set a key to a JSON value.
-  od config unset <key>               Remove a top-level key.
+  monofield config unset <key>               Remove a top-level key.
 
 Common options:
   --daemon-url <url>   MonoField daemon HTTP base.
@@ -8150,7 +8207,7 @@ Common options:
     case 'get': {
       const key = rest.find((a) => !a.startsWith('-'));
       if (!key) {
-        console.error('Usage: od config get <key>');
+        console.error('Usage: monofield config get <key>');
         process.exit(2);
       }
       const cfg = await fetchConfig();
@@ -8168,7 +8225,7 @@ Common options:
         && a !== flags['value-json']);
       const [key, scalarValue] = positional;
       if (!key) {
-        console.error('Usage: od config set <key> <value> | od config set <key> --value-json <json>');
+        console.error('Usage: monofield config set <key> <value> | monofield config set <key> --value-json <json>');
         process.exit(2);
       }
       let parsed;
@@ -8198,7 +8255,7 @@ Common options:
     case 'unset': {
       const key = rest.find((a) => !a.startsWith('-'));
       if (!key) {
-        console.error('Usage: od config unset <key>');
+        console.error('Usage: monofield config unset <key>');
         process.exit(2);
       }
       const cfg = await fetchConfig();
@@ -8213,13 +8270,13 @@ Common options:
       return;
     }
     default:
-      console.error(`unknown subcommand: od config ${sub}`);
+      console.error(`unknown subcommand: monofield config ${sub}`);
       process.exit(2);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Subcommand: od memory …
+// Subcommand: monofield memory …
 //
 // Headless surface for the same editable markdown memory tree shown in
 // Settings. Agents can inspect what will be injected into future prompts,
@@ -8228,54 +8285,54 @@ Common options:
 
 function printMemoryHelp() {
   console.log(`Usage:
-  od memory tree list [--json]
+  monofield memory tree list [--json]
       List derived memory-tree folders and entry nodes.
 
-  od memory tree view <id> [--json]
+  monofield memory tree view <id> [--json]
       Print one folder node or entry body.
 
-  od memory tree edit <id> [--name <title>] [--description <text>]
+  monofield memory tree edit <id> [--name <title>] [--description <text>]
                        [--type user|feedback|project|reference]
                        [--body <markdown> | --body-file <path|->] [--json]
       Patch an editable entry node. Folder nodes are derived from entry types.
 
-  od memory tree move <id> --type user|feedback|project|reference [--json]
+  monofield memory tree move <id> --type user|feedback|project|reference [--json]
       Move an entry node to a different memory bucket while preserving its id.
 
-  od memory profile show [--json]
+  monofield memory profile show [--json]
       Print the singleton structured user profile (the PRE-loop reads this to
       expand a short query into a brief), or "no profile yet" when unset.
 
-  od memory profile set [--field "Label=Value" ...] [--prompt-file <path|->]
+  monofield memory profile set [--field "Label=Value" ...] [--prompt-file <path|->]
                         [--description <text>] [--json]
       Upsert the user_profile entry. --field merges by label into the existing
       profile body; --prompt-file (path or - for stdin) replaces the body
       verbatim. Combine both: --prompt-file seeds the body, --field overrides.
 
-  od memory rule list [--json]
+  monofield memory rule list [--json]
       List verified rule memories (name + description). The POST loop enforces
       these as scorecard rubric items.
 
-  od memory rule add --name <name> --assertion <text> --check <text>
+  monofield memory rule add --name <name> --assertion <text> --check <text>
                      [--description <text>] [--rationale <text>]
                      [--prompt-file <path|->] [--json]
       Add a rule. The body is "Assertion: …\nCheck: …" (plus an optional
       Rationale line), or the verbatim --prompt-file content when supplied.
 
-  od memory rule suggest --note <text> [--target <label>] [--file <path>]
+  monofield memory rule suggest --note <text> [--target <label>] [--file <path>]
                          [--current-text <text>] [--json]
-  od memory rule suggest --prompt-file <path|-> [--json]
+  monofield memory rule suggest --prompt-file <path|-> [--json]
       Distil annotations into candidate rule proposals (display-only). Pass one
       annotation via --note, or a JSON array of annotations / one note per line
-      via --prompt-file. Keep one with: od memory rule add.
+      via --prompt-file. Keep one with: monofield memory rule add.
 
-  od memory verify [list] [--json]
+  monofield memory verify [list] [--json]
       List recent POST self-verify enforcement outcomes (pass/fail/missing) the
       daemon recorded for artifact turns with active rules.
-  od memory verify clear [--json]
+  monofield memory verify clear [--json]
       Drop the in-memory verification history.
 
-  od memory config [--enabled true|false] [--extraction true|false]
+  monofield memory config [--enabled true|false] [--extraction true|false]
                    [--profile true|false] [--rewrite true|false]
                    [--verify true|false] [--json]
       With no toggle flags, print every memory switch. With flags, PATCH the
@@ -8381,7 +8438,7 @@ async function fetchMemoryEntry(base, id) {
   return data.entry ?? data;
 }
 
-// Read the verbatim prose body for `od memory profile set` / `rule add`.
+// Read the verbatim prose body for `monofield memory profile set` / `rule add`.
 // Accepts `--prompt-file <path>` or `--prompt-file -` (stdin). Returns
 // undefined when neither is supplied so the caller can fall back to flags.
 async function readMemoryPromptFile(flags) {
@@ -8404,7 +8461,7 @@ async function readMemoryPromptFile(flags) {
 
 // Collect repeated `--field "Label=Value"` flags from the raw argv slice.
 // parseFlags collapses duplicate keys, so we scan manually like `--input`
-// in `od plugin apply`. Returns an ordered list of {label, value} pairs.
+// in `monofield plugin apply`. Returns an ordered list of {label, value} pairs.
 function collectMemoryFieldFlags(rest) {
   const out = [];
   for (let i = 0; i < rest.length; i++) {
@@ -8466,7 +8523,7 @@ function printMemoryProfile(entry) {
   printMemoryEntry(entry);
 }
 
-// `od memory config` reads every switch off GET /api/memory (the master
+// `monofield memory config` reads every switch off GET /api/memory (the master
 // `enabled`, the extraction hook `chatExtractionEnabled`, and the three new
 // loop hooks). The new flags may be absent from older daemons / before the
 // route patch lands, so we coalesce missing booleans to a printable dash.
@@ -8489,11 +8546,11 @@ async function runMemory(args) {
     && topic !== 'config'
     && topic !== 'verify'
   ) {
-    console.error(`unknown subcommand: od memory ${topic}`);
+    console.error(`unknown subcommand: monofield memory ${topic}`);
     printMemoryHelp();
     process.exit(2);
   }
-  // `od memory config` takes no inner action verb; the others are
+  // `monofield memory config` takes no inner action verb; the others are
   // `<topic> <action>` and re-scan positionals below for the verb.
   const rest = args.slice(1);
   let flags;
@@ -8542,7 +8599,7 @@ async function runMemory(args) {
   if (action === 'view') {
     const id = parts[1];
     if (!id) {
-      console.error('Usage: od memory tree view <id>');
+      console.error('Usage: monofield memory tree view <id>');
       process.exit(2);
     }
     const treeData = await fetchMemoryTree(base);
@@ -8573,7 +8630,7 @@ async function runMemory(args) {
   if (action === 'edit') {
     const id = parts[1];
     if (!id) {
-      console.error('Usage: od memory tree edit <id> [--name ...] [--description ...] [--type ...] [--body ...|--body-file ...]');
+      console.error('Usage: monofield memory tree edit <id> [--name ...] [--description ...] [--type ...] [--body ...|--body-file ...]');
       process.exit(2);
     }
     const body = {};
@@ -8596,7 +8653,7 @@ async function runMemory(args) {
     const id = parts[1];
     const type = flags.type ?? parts[2];
     if (!id || !type) {
-      console.error('Usage: od memory tree move <id> --type user|feedback|project|reference');
+      console.error('Usage: monofield memory tree move <id> --type user|feedback|project|reference');
       process.exit(2);
     }
     const data = await patchMemoryTreeNode(base, id, { type });
@@ -8605,12 +8662,12 @@ async function runMemory(args) {
     return;
   }
 
-  console.error(`unknown subcommand: od memory tree ${action}`);
+  console.error(`unknown subcommand: monofield memory tree ${action}`);
   printMemoryHelp();
   process.exit(2);
 }
 
-// `od memory profile <show|set>` — the singleton structured user profile the
+// `monofield memory profile <show|set>` — the singleton structured user profile the
 // PRE loop (intent gateway) reads to expand a short query into a full brief.
 // Same store as every other memory entry; the well-known id is `user_profile`.
 async function runMemoryProfile(base, rest, flags, writeJson) {
@@ -8629,7 +8686,7 @@ async function runMemoryProfile(base, rest, flags, writeJson) {
     const fields = collectMemoryFieldFlags(rest);
     const promptBody = await readMemoryPromptFile(flags);
     if (fields.length === 0 && typeof promptBody !== 'string') {
-      console.error('Usage: od memory profile set [--field "Label=Value" ...] [--prompt-file <path|->] [--description <text>]');
+      console.error('Usage: monofield memory profile set [--field "Label=Value" ...] [--prompt-file <path|->] [--description <text>]');
       process.exit(2);
     }
     const existing = await fetchMemoryEntry(base, PROFILE_ID);
@@ -8670,12 +8727,12 @@ async function runMemoryProfile(base, rest, flags, writeJson) {
     return;
   }
 
-  console.error(`unknown subcommand: od memory profile ${action}`);
+  console.error(`unknown subcommand: monofield memory profile ${action}`);
   printMemoryHelp();
   process.exit(2);
 }
 
-// `od memory rule <list|add>` — verified rules (assertion + check) the POST
+// `monofield memory rule <list|add>` — verified rules (assertion + check) the POST
 // self-verify loop enforces as scorecard rubric items.
 async function runMemoryRule(base, rest, flags, writeJson) {
   const parts = memoryPositionals(rest);
@@ -8706,7 +8763,7 @@ async function runMemoryRule(base, rest, flags, writeJson) {
   if (action === 'add') {
     const name = flags.name;
     if (typeof name !== 'string' || name.length === 0) {
-      console.error('Usage: od memory rule add --name <name> --assertion <text> --check <text> [--description <text>] [--rationale <text>] [--prompt-file <path|->]');
+      console.error('Usage: monofield memory rule add --name <name> --assertion <text> --check <text> [--description <text>] [--rationale <text>] [--prompt-file <path|->]');
       process.exit(2);
     }
     // --prompt-file content becomes the rule body verbatim; otherwise we
@@ -8755,13 +8812,13 @@ async function runMemoryRule(base, rest, flags, writeJson) {
   if (action === 'suggest') {
     // Distil annotations into rule proposals (THREAD 1). Display-only: the
     // daemon never writes; the user Keeps a proposal (web) or pipes it into
-    // `od memory rule add` (CLI) to commit it. Annotations come from a single
+    // `monofield memory rule add` (CLI) to commit it. Annotations come from a single
     // --note (+ optional --target/--file/--current-text) or a --prompt-file
     // carrying a JSON array of annotation objects or newline-separated notes.
     const annotations = await collectDistillAnnotations(flags);
     if (annotations.length === 0) {
-      console.error('Usage: od memory rule suggest --note <text> [--target <label>] [--file <path>] [--current-text <text>]');
-      console.error('   or: od memory rule suggest --prompt-file <path|->   (JSON array of annotations, or one note per line)');
+      console.error('Usage: monofield memory rule suggest --note <text> [--target <label>] [--file <path>] [--current-text <text>]');
+      console.error('   or: monofield memory rule suggest --prompt-file <path|->   (JSON array of annotations, or one note per line)');
       process.exit(2);
     }
     let resp;
@@ -8791,16 +8848,16 @@ async function runMemoryRule(base, rest, flags, writeJson) {
       console.log(`  Check: ${p.check}`);
       if (p.rationale) console.log(`  Rationale: ${p.rationale}`);
     }
-    console.log('\nTo keep one: od memory rule add --name "<name>" --assertion "<...>" --check "<...>"');
+    console.log('\nTo keep one: monofield memory rule add --name "<name>" --assertion "<...>" --check "<...>"');
     return;
   }
 
-  console.error(`unknown subcommand: od memory rule ${action}`);
+  console.error(`unknown subcommand: monofield memory rule ${action}`);
   printMemoryHelp();
   process.exit(2);
 }
 
-// Collect annotation inputs for `od memory rule suggest` from either a single
+// Collect annotation inputs for `monofield memory rule suggest` from either a single
 // --note (+ optional target context) or a --prompt-file. The prompt-file may
 // hold a JSON array of annotation objects, or plain text with one note per
 // line — both keep the --prompt-file embeddability contract clean for jobs
@@ -8853,7 +8910,7 @@ async function collectDistillAnnotations(flags) {
   return annotations;
 }
 
-// `od memory verify <list|clear>` — inspect or wipe the POST self-verify
+// `monofield memory verify <list|clear>` — inspect or wipe the POST self-verify
 // enforcement history (THREAD 2). `list` prints recent enforcement outcomes
 // (`pass` / `fail` / `missing`) the daemon recorded for artifact turns with
 // active rules; `clear` drops the in-memory buffer.
@@ -8905,12 +8962,12 @@ async function runMemoryVerify(base, rest, flags, writeJson) {
     return;
   }
 
-  console.error(`unknown subcommand: od memory verify ${action}`);
+  console.error(`unknown subcommand: monofield memory verify ${action}`);
   printMemoryHelp();
   process.exit(2);
 }
 
-// `od memory config` — inspect or toggle the master switch + the four hooks.
+// `monofield memory config` — inspect or toggle the master switch + the four hooks.
 // No flags ⇒ print every switch (read off GET /api/memory). Toggle flags ⇒
 // PATCH /api/memory/config and print the result. Flags accept true|false.
 async function runMemoryConfig(base, rest, flags, writeJson) {
@@ -8987,7 +9044,7 @@ async function runMemoryConfig(base, rest, flags, writeJson) {
 }
 
 // ---------------------------------------------------------------------------
-// Subcommand: od automation …
+// Subcommand: monofield automation …
 //
 // Headless surface for the Automations tab. This is the dual-track contract:
 // every capability the Automations UI exposes is reachable here so an
@@ -9163,22 +9220,22 @@ async function readPromptFromFlags(flags) {
 
 function printAutomationHelp() {
   console.log(`Usage:
-  od automation template list                                List built-in automation templates.
-  od automation template get <id>                            Print one built-in automation template.
-  od automation source ingest --source-kind <kind> --title <title>
+  monofield automation template list                                List built-in automation templates.
+  monofield automation template get <id>                            Print one built-in automation template.
+  monofield automation source ingest --source-kind <kind> --title <title>
                               [--source-ref <ref>] [--template <id>]
                               [--body <markdown> | --body-file <path|->]
                               [--connector <id>] [--compression off|balanced|aggressive]
                               [--json]
-  od automation source list [--limit 20] [--json]             List ingested source packets.
-  od automation source get <id> [--json]                      Print one source packet.
-  od automation proposal list [--status pending-review]       List self-evolution proposals.
-  od automation proposal get <id>                             Print one proposal.
-  od automation proposal apply <id>                           Apply a reviewable proposal.
-  od automation proposal reject <id> [--reason "<why>"]       Reject a reviewable proposal.
-  od automation list                                         List automations.
-  od automation get <id>                                     Print one automation.
-  od automation create --name "<title>" --prompt "<text>"
+  monofield automation source list [--limit 20] [--json]             List ingested source packets.
+  monofield automation source get <id> [--json]                      Print one source packet.
+  monofield automation proposal list [--status pending-review]       List self-evolution proposals.
+  monofield automation proposal get <id>                             Print one proposal.
+  monofield automation proposal apply <id>                           Apply a reviewable proposal.
+  monofield automation proposal reject <id> [--reason "<why>"]       Reject a reviewable proposal.
+  monofield automation list                                         List automations.
+  monofield automation get <id>                                     Print one automation.
+  monofield automation create --name "<title>" --prompt "<text>"
                        --schedule <spec>
                        [--target new-project|reuse=<projectId>]
                        [--disabled] [--json]
@@ -9186,17 +9243,17 @@ function printAutomationHelp() {
                        [--skill <id>[,<id>]] [--plugin <id>[,<id>]]
                        [--mcp <id>[,<id>]] [--connector <id>[,<id>]]
                        [--agent <id>]
-  od automation update <id> [--name ...] [--prompt ...]
+  monofield automation update <id> [--name ...] [--prompt ...]
                             [--schedule ...] [--target ...]
                             [--skill ...] [--plugin ...] [--mcp ...]
                             [--connector ...] [--enabled|--disabled]
                             Patch fields.
-  od automation run <id>                                       Trigger a manual run; prints projectId/conversationId.
-  od automation runs <id> [--limit 10]                         Print run history.
-  od automation crystallize-run <routineId> <runId> [--json]    Turn a succeeded run into skill/memory proposals.
-  od automation pause <id>                                     Mark disabled.
-  od automation resume <id>                                    Mark enabled.
-  od automation delete <id>                                    Remove the automation (history retained).
+  monofield automation run <id>                                       Trigger a manual run; prints projectId/conversationId.
+  monofield automation runs <id> [--limit 10]                         Print run history.
+  monofield automation crystallize-run <routineId> <runId> [--json]    Turn a succeeded run into skill/memory proposals.
+  monofield automation pause <id>                                     Mark disabled.
+  monofield automation resume <id>                                    Mark enabled.
+  monofield automation delete <id>                                    Remove the automation (history retained).
 
 Schedule formats:
   hourly:<minute>                    Every hour at :MM.
@@ -9255,7 +9312,7 @@ async function runAutomation(args) {
   const requireId = (label) => {
     const id = positionalArgs(rest)[0];
     if (!id) {
-      console.error(`Usage: od automation ${label} <id>`);
+      console.error(`Usage: monofield automation ${label} <id>`);
       process.exit(2);
     }
     return id;
@@ -9305,7 +9362,7 @@ async function runAutomation(args) {
       if (action === 'get') {
         const id = parts[1];
         if (!id) {
-          console.error('Usage: od automation template get <id>');
+          console.error('Usage: monofield automation template get <id>');
           process.exit(2);
         }
         let resp;
@@ -9319,7 +9376,7 @@ async function runAutomation(args) {
         const data = await resp.json();
         return writeJson(flags.json ? data : (data.template ?? data));
       }
-      console.error(`unknown subcommand: od automation template ${action}`);
+      console.error(`unknown subcommand: monofield automation template ${action}`);
       printAutomationHelp();
       process.exit(2);
     }
@@ -9331,7 +9388,7 @@ async function runAutomation(args) {
       if (action === 'ingest') {
         const sourceKind = flags['source-kind'] ?? (sub === 'ingest' ? parts[0] : parts[1]);
         if (!sourceKind) {
-          console.error('Usage: od automation source ingest --source-kind <kind> --body-file <path|->');
+          console.error('Usage: monofield automation source ingest --source-kind <kind> --body-file <path|->');
           process.exit(2);
         }
         const bodyMarkdown = await readAutomationIngestBody();
@@ -9418,7 +9475,7 @@ async function runAutomation(args) {
       if (action === 'get') {
         const id = parts[1];
         if (!id) {
-          console.error('Usage: od automation source get <id>');
+          console.error('Usage: monofield automation source get <id>');
           process.exit(2);
         }
         let resp;
@@ -9431,7 +9488,7 @@ async function runAutomation(args) {
         if (!resp.ok) return structuredHttpFailure(resp);
         return writeJson(await resp.json());
       }
-      console.error(`unknown subcommand: od automation source ${action}`);
+      console.error(`unknown subcommand: monofield automation source ${action}`);
       printAutomationHelp();
       process.exit(2);
     }
@@ -9472,7 +9529,7 @@ async function runAutomation(args) {
       if (action === 'get') {
         const id = parts[1];
         if (!id) {
-          console.error('Usage: od automation proposal get <id>');
+          console.error('Usage: monofield automation proposal get <id>');
           process.exit(2);
         }
         let resp;
@@ -9488,7 +9545,7 @@ async function runAutomation(args) {
       if (action === 'apply' || action === 'reject') {
         const id = parts[1];
         if (!id) {
-          console.error(`Usage: od automation proposal ${action} <id>`);
+          console.error(`Usage: monofield automation proposal ${action} <id>`);
           process.exit(2);
         }
         let resp;
@@ -9513,7 +9570,7 @@ async function runAutomation(args) {
         console.log(`[automation proposal] ${action === 'apply' ? 'applied' : 'rejected'} ${data.proposal?.id ?? id}`);
         return;
       }
-      console.error(`unknown subcommand: od automation proposal ${action}`);
+      console.error(`unknown subcommand: monofield automation proposal ${action}`);
       printAutomationHelp();
       process.exit(2);
     }
@@ -9530,7 +9587,7 @@ async function runAutomation(args) {
       if (flags.json) return writeJson(data);
       const routines = data.routines ?? [];
       if (routines.length === 0) {
-        console.log('No automations. Create one with `od automation create --name "..." --prompt "..." --schedule daily:09:00`.');
+        console.log('No automations. Create one with `monofield automation create --name "..." --prompt "..." --schedule daily:09:00`.');
         return;
       }
       console.log('# id\tname\tschedule\ttarget\tstatus\tnextRun');
@@ -9590,7 +9647,7 @@ async function runAutomation(args) {
       const routineId = parts[0];
       const runId = parts[1];
       if (!routineId || !runId) {
-        console.error('Usage: od automation crystallize-run <routineId> <runId> [--json]');
+        console.error('Usage: monofield automation crystallize-run <routineId> <runId> [--json]');
         process.exit(2);
       }
       let resp;
@@ -9796,7 +9853,7 @@ async function runAutomation(args) {
       return;
     }
     default:
-      console.error(`unknown subcommand: od automation ${sub}`);
+      console.error(`unknown subcommand: monofield automation ${sub}`);
       printAutomationHelp();
       process.exit(2);
   }

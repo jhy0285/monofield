@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Open Design — Uninstaller
+# MonoField — Uninstaller
 # Stops and removes the Docker Compose deployment
 #
 # Usage: ./uninstall.sh [--keep-data] [--non-interactive]
@@ -82,7 +82,7 @@ for arg in "$@"; do
     --keep-data)       KEEP_DATA=1 ;;
     --help|-h)
       echo "Usage: uninstall.sh [options]"
-      echo "  --keep-data         Preserve the open_design_data volume"
+      echo "  --keep-data         Preserve the monofield_data volume"
       echo "  --non-interactive   Skip confirmation prompts"
       exit 0
       ;;
@@ -95,7 +95,7 @@ done
 printf "\n"
 printf "${BOLD}  ┌──────────────────────────────────────┐${RESET}\n"
 printf "${BOLD}  │${RESET}                                      ${BOLD}│${RESET}\n"
-printf "${BOLD}  │${RESET}   ${CYAN}◈${RESET}  ${BOLD}Open Design${RESET}                     ${BOLD}│${RESET}\n"
+printf "${BOLD}  │${RESET}   ${CYAN}◈${RESET}  ${BOLD}MonoField${RESET}                     ${BOLD}│${RESET}\n"
 printf "${BOLD}  │${RESET}      ${DIM}Uninstaller${RESET}                     ${BOLD}│${RESET}\n"
 printf "${BOLD}  │${RESET}                                      ${BOLD}│${RESET}\n"
 printf "${BOLD}  └──────────────────────────────────────┘${RESET}\n"
@@ -104,9 +104,9 @@ printf "\n"
 # ---------------------------------------------------------------------------
 # Find data volume (Compose prepends project name)
 # ---------------------------------------------------------------------------
-CONTAINER_NAME="${COMPOSE_CONTAINER_NAME:-open-design}"
-VOLUME_BASE="${COMPOSE_VOLUME_NAME:-open_design_data}"
-PROJECT_NAME="${COMPOSE_PROJECT_NAME:-open-design}"
+CONTAINER_NAME="${COMPOSE_CONTAINER_NAME:-monofield}"
+VOLUME_BASE="${COMPOSE_VOLUME_NAME:-monofield_data}"
+PROJECT_NAME="${COMPOSE_PROJECT_NAME:-monofield}"
 
 DATA_VOLUME=""
 for _vol in "${PROJECT_NAME}_${VOLUME_BASE}" "${VOLUME_BASE}"; do
@@ -129,7 +129,7 @@ _do_backup() {
 
   # Try container cp first (works if container exists, running or stopped)
   if $RUNTIME inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
-    $RUNTIME cp "$CONTAINER_NAME":/app/.od/. "$_dest/" 2>/dev/null
+    $RUNTIME cp "$CONTAINER_NAME":/app/.monofield/. "$_dest/" 2>/dev/null
   fi
 
   # If container cp didn't work or container doesn't exist, use temp container
@@ -157,12 +157,12 @@ _do_backup() {
 
 if [ "$KEEP_DATA" = "0" ] && [ -n "$DATA_VOLUME" ]; then
   if [ "$NON_INTERACTIVE" = "0" ]; then
-    _default_backup="${HOME}/open-design-backup-$(date +%Y%m%d%H%M%S)"
+    _default_backup="${HOME}/monofield-backup-$(date +%Y%m%d%H%M%S)"
     prompt_text "Backup destination" "$_default_backup"
     BACKUP_DIR="$PROMPT_RESULT"
     _do_backup "$BACKUP_DIR"
   else
-    BACKUP_DIR="${HOME}/open-design-backup-$(date +%Y%m%d%H%M%S)"
+    BACKUP_DIR="${HOME}/monofield-backup-$(date +%Y%m%d%H%M%S)"
     _do_backup "$BACKUP_DIR"
   fi
 fi
@@ -205,10 +205,10 @@ if [ "$KEEP_DATA" = "0" ] && [ -n "$DATA_VOLUME" ]; then
 fi
 
 # Remove systemd unit (Linux)
-SYSTEMD_UNIT="${HOME}/.config/systemd/user/open-design.service"
+SYSTEMD_UNIT="${HOME}/.config/systemd/user/monofield.service"
 if [ -f "$SYSTEMD_UNIT" ]; then
   step "Removing systemd unit..."
-  systemctl --user disable --now open-design 2>/dev/null || true
+  systemctl --user disable --now monofield 2>/dev/null || true
   rm -f "$SYSTEMD_UNIT"
   systemctl --user daemon-reload
   ok "systemd unit removed."

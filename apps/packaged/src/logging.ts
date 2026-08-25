@@ -4,7 +4,8 @@ import type { SidecarStamp } from "@open-design/sidecar-proto";
 
 import type { PackagedNamespacePaths } from "./paths.js";
 
-const DESKTOP_LOG_ECHO_ENV = "OD_DESKTOP_LOG_ECHO";
+const DESKTOP_LOG_ECHO_ENV = "MONOFIELD_DESKTOP_LOG_ECHO";
+const LEGACY_DESKTOP_LOG_ECHO_ENV = "OD_DESKTOP_LOG_ECHO";
 
 type LogLevel = "error" | "info" | "warn";
 
@@ -193,7 +194,10 @@ export function appendDesktopLogLine(
 }
 
 export function createPackagedDesktopLogger(paths: PackagedNamespacePaths): PackagedDesktopLogger {
-  const echo = process.env[DESKTOP_LOG_ECHO_ENV] !== "0";
+  const echo = (
+    process.env[DESKTOP_LOG_ECHO_ENV]
+      ?? process.env[LEGACY_DESKTOP_LOG_ECHO_ENV]
+  ) !== "0";
 
   const write = (level: LogLevel, message: string, meta?: Record<string, unknown>) => {
     appendDesktopLogLine(paths.desktopLogPath, serializeMessage(level, message, meta));

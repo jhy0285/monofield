@@ -61,20 +61,20 @@ or signing key is compromised.
 
 ## Managed enterprise marketplace
 
-Set `OD_PLUGIN_INSTALL_MODE=managed` before starting the daemon to restrict
+Set `MONOFIELD_PLUGIN_INSTALL_MODE=managed` before starting MonoField to restrict
 plugin installation to package names resolved from approved enterprise
 catalogs. Configure these comma-separated, administrator-owned settings before
 launch:
 
-- `OD_MARKETPLACE_ALLOWED_CATALOG_URLS` contains exact HTTPS catalog URLs,
+- `MONOFIELD_MARKETPLACE_ALLOWED_CATALOG_URLS` contains exact HTTPS catalog URLs,
   including their paths and any non-default ports.
-- `OD_MARKETPLACE_ALLOWED_HOSTS` contains exact artifact hostnames; wildcards,
+- `MONOFIELD_MARKETPLACE_ALLOWED_HOSTS` contains exact artifact hostnames; wildcards,
   ports, credentials, and URL-shaped values are not accepted.
-- `OD_MARKETPLACE_ALLOWED_LICENSES` contains the license identifiers or
+- `MONOFIELD_MARKETPLACE_ALLOWED_LICENSES` contains the license identifiers or
   proprietary labels that the organization has approved.
-- `OD_MARKETPLACE_AUTH_ENV` contains only the name of the environment variable
-  that holds a catalog credential, such as `OD_MARKETPLACE_TOKEN_PLATFORM`.
-- `OD_BUNDLED_PLUGIN_ALLOWLIST` contains the IDs of bundled plugins approved for
+- `MONOFIELD_MARKETPLACE_AUTH_ENV` contains only the name of the environment variable
+  that holds a catalog credential, such as `MONOFIELD_MARKETPLACE_TOKEN_PLATFORM`.
+- `MONOFIELD_BUNDLED_PLUGIN_ALLOWLIST` contains the IDs of bundled plugins approved for
   that deployment.
 
 The marketplace record and UI store or display only the credential environment

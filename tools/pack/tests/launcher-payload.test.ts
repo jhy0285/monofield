@@ -171,7 +171,7 @@ async function writeFakeWinUnpackedApp(root: string, namespace: string, version:
   await mkdir(join(paths.unpackedRoot, "resources", "app"), { recursive: true });
   await writeFile(
     join(paths.unpackedRoot, "resources", "app", "package.json"),
-    `${JSON.stringify({ name: "open-design-packaged-app", version })}\n`,
+    `${JSON.stringify({ name: "monofield-packaged-app", version })}\n`,
     "utf8",
   );
   await mkdir(join(paths.packagedConfigPath, ".."), { recursive: true });

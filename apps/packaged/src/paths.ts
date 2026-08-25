@@ -55,22 +55,22 @@ function resolvePackagedDataRoot(
   namespace: string,
   env: NodeJS.ProcessEnv = {},
 ): string {
-  const odDataDir = env.OD_DATA_DIR?.trim();
-  if (odDataDir) {
-    const expanded = expandHomePrefix(odDataDir);
+  const configuredDataDir = (env.MONOFIELD_DATA_DIR ?? env.OD_DATA_DIR)?.trim();
+  if (configuredDataDir) {
+    const expanded = expandHomePrefix(configuredDataDir);
     const isAbs = process.platform === "win32"
       ? win32.isAbsolute(expanded)
       : isAbsolute(expanded);
     if (!isAbs) {
       throw new PackagedPathAccessError(
         [
-          "MonoField' packaged runtime requires OD_DATA_DIR to be an absolute path.",
+          "MonoField's packaged runtime requires MONOFIELD_DATA_DIR to be an absolute path.",
           "",
-          `Configured value: ${odDataDir}`,
+          `Configured value: ${configuredDataDir}`,
           "",
-          "Set OD_DATA_DIR to an absolute path (for example, C:\\\\Users\\\\You\\\\MonoField on Windows or /Users/you/MonoField on macOS/Linux) and relaunch MonoField.",
+          "Set MONOFIELD_DATA_DIR to an absolute path (for example, C:\\\\Users\\\\You\\\\MonoField on Windows or /Users/you/MonoField on macOS/Linux) and relaunch MonoField.",
         ].join("\n"),
-        { title: "MonoField cannot start with this OD_DATA_DIR" },
+        { title: "MonoField cannot start with this data directory" },
       );
     }
     const scopedNamespace = getScopedPackagedDataRootNamespace(expanded);
@@ -78,15 +78,15 @@ function resolvePackagedDataRoot(
       if (scopedNamespace !== namespace) {
         throw new PackagedPathAccessError(
           [
-            "MonoField' packaged runtime requires OD_DATA_DIR to target the active namespace.",
+            "MonoField's packaged runtime requires MONOFIELD_DATA_DIR to target the active namespace.",
             "",
-            `Configured value: ${odDataDir}`,
+            `Configured value: ${configuredDataDir}`,
             `Configured namespace: ${scopedNamespace}`,
             `Active namespace: ${namespace}`,
             "",
             "Use an unscoped absolute base path or relaunch the matching packaged namespace.",
           ].join("\n"),
-          { title: "MonoField cannot start with this OD_DATA_DIR" },
+          { title: "MonoField cannot start with this data directory" },
         );
       }
       return expanded;

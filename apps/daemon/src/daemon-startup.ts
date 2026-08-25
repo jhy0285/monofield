@@ -30,6 +30,23 @@ export type DaemonCliStartupParseResult =
 
 export const DEFAULT_DAEMON_BIND_HOST = '127.0.0.1';
 
+/**
+ * MonoField environment variables are the public contract. Internally, some
+ * mature subsystems still read the original OD_* keys. Mirror canonical values
+ * before the server graph is dynamically imported so every feature accepts the
+ * new prefix without breaking existing deployments that still set a legacy key.
+ */
+export function applyMonoFieldEnvironmentAliases(
+  env: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  for (const [key, value] of Object.entries(env)) {
+    if (!key.startsWith('MONOFIELD_') || value == null || value.length === 0) continue;
+    const legacyKey = `OD_${key.slice('MONOFIELD_'.length)}`;
+    if (env[legacyKey] == null || env[legacyKey]?.length === 0) env[legacyKey] = value;
+  }
+  return env;
+}
+
 export function normalizeDaemonBindHost(input: unknown): string {
   const host = String(input ?? '').trim();
   return host || DEFAULT_DAEMON_BIND_HOST;
@@ -46,8 +63,8 @@ export function parseDaemonCliStartupArgs(
   argv: string[],
   env: NodeJS.ProcessEnv = process.env,
 ): DaemonCliStartupParseResult {
-  let port = Number(env.OD_PORT) || 7456;
-  let host = normalizeDaemonBindHost(env.OD_BIND_HOST);
+  let port = Number(env.MONOFIELD_PORT ?? env.OD_PORT) || 7456;
+  let host = normalizeDaemonBindHost(env.MONOFIELD_BIND_HOST ?? env.OD_BIND_HOST);
   let open = true;
 
   for (let i = 0; i < argv.length; i++) {
@@ -72,7 +89,7 @@ export function parseDaemonCliStartupArgs(
     } else if (a.startsWith('-')) {
       return { ok: false, kind: 'error', message: `unknown option: ${a}` };
     } else {
-      return { ok: false, kind: 'error', message: `unknown command: od ${a}` };
+      return { ok: false, kind: 'error', message: `unknown command: monofield ${a}` };
     }
   }
 
@@ -116,6 +133,7 @@ export async function closeHttpServer(
 }
 
 export async function startDaemonRuntime(options: DaemonRuntimeOptions = {}): Promise<StartedDaemonRuntime> {
+  applyMonoFieldEnvironmentAliases();
   const { openBrowser: shouldOpenBrowser = false, logListening = false, ...serverOptions } = options;
   const { startServer } = await import('./server.js');
   const started = await startServer({
@@ -135,7 +153,7 @@ export async function startDaemonRuntime(options: DaemonRuntimeOptions = {}): Pr
   };
 
   if (logListening) {
-    console.log(`[od] listening on ${started.url}`);
+    console.log(`[monofield] listening on ${started.url}`);
   }
   if (shouldOpenBrowser) {
     const { openBrowser } = await import('./browser-open.js');

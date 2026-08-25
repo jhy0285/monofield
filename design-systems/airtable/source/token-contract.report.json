@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "contract": "TOKEN_SCHEMA",
   "generatedAt": "2026-06-06T00:00:00.000Z",
-  "sourceScope": "open-design-bundled-fixture",
+  "sourceScope": "monofield-bundled-fixture",
   "summary": {
     "totalTokens": 56,
     "declaredTokens": 56,

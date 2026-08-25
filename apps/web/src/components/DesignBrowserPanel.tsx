@@ -3758,8 +3758,8 @@ function browserReviewBatchPrompt(
           'Automatic browser verification is approved for this request.',
           `MonoField browser automation session: ${automationSession.sessionId}`,
           `Approved origin: ${automationSession.origin}`,
-          `After editing, reload the bound page with \`od browser navigate --session ${automationSession.sessionId} --url ${currentUrl}\`.`,
-          `Then use \`od browser snapshot --session ${automationSession.sessionId}\` and \`od browser screenshot --session ${automationSession.sessionId} --out .open-agent/verification/latest.png\` to verify the affected UI.`,
+          `After editing, reload the bound page with \`monofield browser navigate --session ${automationSession.sessionId} --url ${currentUrl}\`.`,
+          `Then use \`monofield browser snapshot --session ${automationSession.sessionId}\` and \`monofield browser screenshot --session ${automationSession.sessionId} --out .monofield/verification/latest.png\` to verify the affected UI.`,
           'Exercise the changed behavior with bounded click, type, scroll, hover, drag, upload, or batch commands only when the flow requires it.',
         ]
       : [

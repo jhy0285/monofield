@@ -5,10 +5,14 @@ import { describe, expect, it } from 'vitest';
 import { __forTestReadProjectPluginManifest } from '../src/server.js';
 
 describe('readProjectPluginManifest', () => {
-  async function withManifest(name: string, fn: (folder: string) => Promise<void>) {
+  async function withManifest(
+    name: string,
+    fn: (folder: string) => Promise<void>,
+    manifestFile = 'monofield.json',
+  ) {
     const folder = await mkdtemp(path.join(tmpdir(), 'od-plugin-manifest-'));
     try {
-      await writeFile(path.join(folder, 'open-design.json'), JSON.stringify({ name }), 'utf8');
+      await writeFile(path.join(folder, manifestFile), JSON.stringify({ name }), 'utf8');
       await fn(folder);
     } finally {
       await rm(folder, { recursive: true, force: true });
@@ -29,5 +33,13 @@ describe('readProjectPluginManifest', () => {
         name: 'my-plugin.v2',
       });
     });
+  });
+
+  it('continues to read the legacy manifest filename', async () => {
+    await withManifest('legacy-plugin', async (folder) => {
+      await expect(__forTestReadProjectPluginManifest(folder)).resolves.toMatchObject({
+        name: 'legacy-plugin',
+      });
+    }, 'open-design.json');
   });
 });

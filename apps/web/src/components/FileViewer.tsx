@@ -128,7 +128,7 @@ import {
 import { applyPodMemberRemoval } from '../lib/pod-members';
 import { AnnotationHoverPopover, BoardComposerPopover } from './BoardComposerPopover';
 import {
-  OD_PREVIEW_KEEP_ALIVE,
+  MONOFIELD_PREVIEW_KEEP_ALIVE,
   PooledIframe,
   previewIframeKeepAliveKey,
 } from './IframeKeepAlivePool';
@@ -7747,7 +7747,10 @@ function HtmlViewer({
   const exportTitle = file.name.replace(/\.html?$/i, '') || file.name;
   const artifactKind = file.artifactManifest?.kind ?? file.artifactKind ?? null;
   const rendererId = file.artifactManifest?.renderer ?? null;
-  const isStructuredInterfaceSpec = source?.includes('data-open-docs-kind="interface-spec"') === true;
+  const isStructuredInterfaceSpec = source != null && (
+    source.includes('data-monofield-kind="interface-spec"')
+    || source.includes('data-open-docs-kind="interface-spec"')
+  );
   const isDeckArtifact = isDeck || artifactKind === 'deck' || rendererId === 'deck-html' || file.kind === 'presentation';
   const isMarkdownArtifact =
     artifactKind === 'markdown-document' ||
@@ -9171,7 +9174,7 @@ function HtmlViewer({
                     onToolbarClick={fireDrawToolbarClick}
                   >
                     <div className="artifact-preview-transport-stack">
-                      {OD_PREVIEW_KEEP_ALIVE ? (
+                      {MONOFIELD_PREVIEW_KEEP_ALIVE ? (
                         <PooledIframe
                           ref={urlPreviewIframeRef}
                           cacheKey={urlPreviewKeepAliveKey}

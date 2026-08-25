@@ -306,7 +306,7 @@ export async function writeAssembledApp(
         dependencies,
         description: "MonoField packaged runtime",
         main: "./main.cjs",
-        name: "open-design-packaged-app",
+        name: "monofield-packaged-app",
         private: true,
         productName: identity.productName,
         version: packageVersion,
