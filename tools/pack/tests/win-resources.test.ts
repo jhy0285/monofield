@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -6,7 +6,8 @@ import { describe, expect, it } from "vitest";
 
 import { ToolPackCache } from "../src/cache.js";
 import type { ToolPackConfig } from "../src/config.js";
-import { prepareResourceTree } from "../src/win/resources.js";
+import { winResources } from "../src/resources.js";
+import { copyWinIcon, prepareResourceTree } from "../src/win/resources.js";
 import type { WinPaths } from "../src/win/types.js";
 
 const RESOURCE_TREE_CACHE_TEST_TIMEOUT_MS = 15_000;
@@ -309,4 +310,27 @@ describe("prepareResourceTree", () => {
       await rm(root, { force: true, recursive: true });
     }
   }, RESOURCE_TREE_CACHE_TEST_TIMEOUT_MS);
+
+  it("replaces stale AppX assets instead of merging case-colliding names", async () => {
+    const root = await mkdtemp(join(tmpdir(), "tools-pack-appx-assets-"));
+    const winAppxAssetsRoot = join(root, "resources", "win", "appx");
+    const winIconPath = join(root, "resources", "win", "icon.ico");
+
+    try {
+      await mkdir(winAppxAssetsRoot, { recursive: true });
+      await writeFile(join(winAppxAssetsRoot, "storelogo.png"), "stale");
+
+      await copyWinIcon({ winAppxAssetsRoot, winIconPath } as WinPaths);
+
+      expect((await readdir(winAppxAssetsRoot)).sort()).toEqual([
+        "Square150x150Logo.png",
+        "Square44x44Logo.png",
+        "StoreLogo.png",
+        "Wide310x150Logo.png",
+      ]);
+      expect(await readFile(winIconPath)).toEqual(await readFile(winResources.icon));
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
 });

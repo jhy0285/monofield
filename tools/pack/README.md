@@ -74,6 +74,7 @@ Local lifecycle commands:
 
 - `tools-pack win build --to dir` for fast unpacked smoke builds.
 - `tools-pack win build --to nsis` for installer builds.
+- `tools-pack win build --to store` for an unsigned Partner Center AppX package.
 - `tools-pack win build --to all` for both outputs.
 - `tools-pack win install`
 - `tools-pack win start`
@@ -88,6 +89,20 @@ Build artifacts are namespace-scoped under `.tmp/tools-pack/out/win/namespaces/<
 Packaged runtime state is namespace-scoped under `.tmp/tools-pack/runtime/win/namespaces/<namespace>/`.
 `--to dir` may point `built-app.json` at an immutable cached `win-unpacked` executable while keeping
 namespace-local config and runtime paths outside that cache entry.
+
+The Store target requires the exact package identity values shown in Partner
+Center under **Product identity**:
+
+```powershell
+$env:MONOFIELD_WINDOWS_STORE_IDENTITY_NAME = "<Package/Identity/Name>"
+$env:MONOFIELD_WINDOWS_STORE_PUBLISHER = "<Package/Identity/Publisher>"
+$env:MONOFIELD_WINDOWS_STORE_PUBLISHER_DISPLAY_NAME = "<Publisher display name>"
+pnpm tools-pack win build --to store --portable --app-version 0.11.3
+```
+
+The resulting `MonoField-<namespace>-store.appx` is intentionally unsigned.
+Upload it to Partner Center, where Microsoft validates and signs the public
+Store package. Do not distribute that unsigned AppX directly to users.
 
 ## Linux
 

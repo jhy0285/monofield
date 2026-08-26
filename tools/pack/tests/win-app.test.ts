@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ToolPackConfig } from "../src/config.js";
 import { INTERNAL_PACKAGES } from "../src/win/constants.js";
-import { createWorkspaceTarballsCacheKey } from "../src/win/app.js";
+import { createWorkspaceTarballsCacheKey, toRelativeImportSpecifier } from "../src/win/app.js";
 
 const PACKAGE_DIRS = INTERNAL_PACKAGES.map((packageInfo) => packageInfo.directory);
 
@@ -70,5 +70,19 @@ describe("createWorkspaceTarballsCacheKey", () => {
     } finally {
       await rm(root, { force: true, recursive: true });
     }
+  });
+});
+
+describe("toRelativeImportSpecifier", () => {
+  it.skipIf(process.platform !== "win32")("keeps cross-volume Windows imports absolute", () => {
+    expect(toRelativeImportSpecifier("D:\\cache\\entrypoints", "C:\\workspace\\daemon\\index.js")).toBe(
+      "C:/workspace/daemon/index.js",
+    );
+  });
+
+  it("keeps same-volume imports relative", () => {
+    const from = join(process.cwd(), "cache", "entrypoints");
+    const target = join(process.cwd(), "workspace", "daemon", "index.js");
+    expect(toRelativeImportSpecifier(from, target)).toMatch(/^\.\.\//);
   });
 });

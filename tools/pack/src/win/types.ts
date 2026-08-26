@@ -88,6 +88,7 @@ export type WinPaths = {
   resourceRoot: string;
   setupPath: string;
   setupZipPath: string;
+  storePackagePath: string;
   startMenuShortcutPath: string;
   tarballsRoot: string;
   userDesktopShortcutPath: string;
@@ -99,6 +100,8 @@ export type WinPaths = {
   webSidecarPrebundleMetaPath: string;
   webSidecarPrebundlePath: string;
   winIconPath: string;
+  winBuildResourcesRoot: string;
+  winAppxAssetsRoot: string;
   unpackedExePath: string;
   unpackedRoot: string;
 };
@@ -110,6 +113,7 @@ export type WinPackResult = {
   outputRoot: string;
   payloadPath: string | null;
   portableZipPath: string | null;
+  storePackagePath: string | null;
   resourceRoot: string;
   runtimeNamespaceRoot: string;
   cacheReport: CacheReport;
@@ -139,13 +143,14 @@ export type WinSizeReport = {
     };
     nodeGypRebuild: boolean;
     npmRebuild: boolean;
-    targets: Array<"dir" | "nsis" | "zip">;
+    targets: Array<"dir" | "nsis" | "store" | "zip">;
     webOutputMode: ToolPackConfig["webOutputMode"];
   };
   generatedAt: string;
   installerBytes: number | null;
   outputRootBytes: number;
   portableZipBytes: number | null;
+  storePackageBytes: number | null;
   resourceRootBytes: number;
   runtimeNamespaceRoot: string;
   topLevel: {

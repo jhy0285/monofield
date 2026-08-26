@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
@@ -44,6 +44,7 @@ import {
   resolveElectronBuilderWinTargets,
   shouldBuildWinNsisInstaller,
   shouldBuildWinPortableZip,
+  shouldBuildWindowsStorePackage,
 } from "./report.js";
 import type { ResourceTreeResult } from "./resources.js";
 import {
@@ -65,7 +66,7 @@ import type {
 
 const execFileAsync = promisify(execFile);
 const WIN_ARCHIVE_CACHE_VERSION = 3;
-const WIN_ELECTRON_BUILDER_DIR_CACHE_VERSION = 6;
+const WIN_ELECTRON_BUILDER_DIR_CACHE_VERSION = 7;
 const WIN_NSIS_BASE_PAYLOAD_INPUT_HASH_CACHE_VERSION = 2;
 
 async function hashWinNsisInstallerImplementation(config: ToolPackConfig): Promise<string> {
@@ -165,13 +166,34 @@ async function runElectronBuilderRaw(
       writeWebStandaloneHookConfig(config, paths)
     )
     : null;
+  const storeIdentity = config.windowsStoreIdentity;
+  if (config.to === "store" && storeIdentity == null) {
+    throw new Error("Windows Store identity was not resolved before packaging");
+  }
   const builderConfig = {
     appId: "io.monofield.desktop",
+    appx: storeIdentity == null ? undefined : {
+      applicationId: "MonoField",
+      artifactName: `${PRODUCT_NAME}-${namespaceToken}-store.\${ext}`,
+      backgroundColor: "#090909",
+      displayName: PRODUCT_NAME,
+      electronUpdaterAware: false,
+      identityName: storeIdentity.identityName,
+      languages: ["en-US", "ko-KR"],
+      maxVersionTested: "10.0.26100.0",
+      minVersion: "10.0.19041.0",
+      publisher: storeIdentity.publisher,
+      publisherDisplayName: storeIdentity.publisherDisplayName,
+      showNameOnTiles: true,
+    },
     afterPack: webStandaloneHookConfigPath == null ? undefined : winResources.webStandaloneAfterPackHook,
     asar: ELECTRON_BUILDER_ASAR,
     buildDependenciesFromSource: ELECTRON_BUILDER_BUILD_DEPENDENCIES_FROM_SOURCE,
     compression: "maximum",
-    directories: { output: paths.appBuilderOutputRoot },
+    directories: {
+      buildResources: paths.winBuildResourcesRoot,
+      output: paths.appBuilderOutputRoot,
+    },
     // Let electron-builder download the win32 Electron itself instead of
     // pointing at node_modules' dist. pnpm does not reliably materialize the
     // Electron dist on CI runners (electron.exe can be missing), which made
@@ -504,9 +526,11 @@ export async function runElectronBuilder(
       }
     : {};
   const afterPackHook = config.webOutputMode === "standalone" ? await hashPath(winResources.webStandaloneAfterPackHook) : null;
+  const appxAssets = config.to === "store" ? await hashPath(winResources.appxAssets) : null;
   const winIcon = await hashPath(winResources.icon);
   const electronBuilderKeyInput = {
     afterPackHook,
+    appxAssets,
     cacheVersion: WIN_ELECTRON_BUILDER_DIR_CACHE_VERSION,
     asar: ELECTRON_BUILDER_ASAR,
     buildDependenciesFromSource: ELECTRON_BUILDER_BUILD_DEPENDENCIES_FROM_SOURCE,
@@ -520,8 +544,9 @@ export async function runElectronBuilder(
     platform: "win32",
     packagedVersionScope: versionCore,
     resourceTreeKey: resourceTree.key,
-    target: "dir",
+    target: config.to === "store" ? "store" : "dir",
     webOutputMode: config.webOutputMode,
+    windowsStoreIdentity: config.windowsStoreIdentity ?? null,
     winIcon,
     filePatterns: ELECTRON_BUILDER_FILE_PATTERNS,
   };
@@ -543,7 +568,7 @@ export async function runElectronBuilder(
     build: async ({ entryRoot }: { entryRoot: string }): Promise<ElectronBuilderDirCacheMetadata> => {
       const packagedAppRoot = await getPackagedAppRoot();
       await runElectronBuilderRaw(
-        { ...config, to: "dir" },
+        config.to === "store" ? config : { ...config, to: "dir" },
         { ...createCacheLocalWinPaths(paths, entryRoot), resourceRoot: resourceTree.resourceRoot },
         packagedAppRoot,
       );
@@ -566,7 +591,7 @@ export async function runElectronBuilder(
           build: async ({ entryRoot }: { entryRoot: string }): Promise<ElectronBuilderDirCacheMetadata> => {
             await runSegment("electron-builder-dir:build-raw", async () => {
               const rawSegments = await runElectronBuilderRaw(
-                { ...config, to: "dir" },
+                config.to === "store" ? config : { ...config, to: "dir" },
                 { ...createCacheLocalWinPaths(paths, entryRoot), resourceRoot: resourceTree.resourceRoot },
                 packagedAppRoot,
               );
@@ -583,13 +608,22 @@ export async function runElectronBuilder(
   const cachedUnpackedRoot = join(cachedBuilderRoot, "win-unpacked");
   const cachedExecutablePath = join(cachedUnpackedRoot, `${PRODUCT_NAME}.exe`);
   await runSegment("electron-builder-dir:prepare-namespace", async () => {
-    if (shouldBuildWinNsisInstaller(config.to) || shouldBuildWinPortableZip(config.to)) {
+    if (shouldBuildWinNsisInstaller(config.to) || shouldBuildWinPortableZip(config.to) || shouldBuildWindowsStorePackage(config.to)) {
       await mkdir(paths.appBuilderOutputRoot, { recursive: true });
     } else {
       await removeTree(paths.appBuilderOutputRoot);
     }
     await writePackagedConfig(config, paths, packagedVersion, packagedConfigEntrypoints);
   });
+  if (shouldBuildWindowsStorePackage(config.to)) {
+    await runSegment("electron-builder-store:materialize", async () => {
+      const cachedStorePackagePath = join(cachedBuilderRoot, basename(paths.storePackagePath));
+      if (!(await pathExists(cachedStorePackagePath))) {
+        throw new Error(`electron-builder did not produce the expected Partner Center package: ${cachedStorePackagePath}`);
+      }
+      await cp(cachedStorePackagePath, paths.storePackagePath);
+    });
+  }
   await runSegment("electron-builder-dir:materialize-audit", async () => {
     await materializeCachedElectronBuilderAudit(manifest.entryPath, paths);
   });

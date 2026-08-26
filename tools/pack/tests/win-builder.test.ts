@@ -50,6 +50,7 @@ function createPaths(root: string): WinPaths {
     resourceRoot: join(namespaceRoot, "resources", "open-design"),
     setupPath: join(namespaceRoot, "builder", "MonoField-second-setup.exe"),
     setupZipPath: join(namespaceRoot, "builder", "MonoField-second-portable.zip"),
+    storePackagePath: join(namespaceRoot, "builder", "MonoField-second-store.appx"),
     startMenuShortcutPath: join(namespaceRoot, "start-menu.lnk"),
     tarballsRoot: join(namespaceRoot, "tarballs"),
     userDesktopShortcutPath: join(namespaceRoot, "desktop", "user.lnk"),
@@ -61,6 +62,8 @@ function createPaths(root: string): WinPaths {
     webSidecarPrebundleMetaPath: join(namespaceRoot, "prebundle-meta", "web-sidecar.meta.json"),
     webSidecarPrebundlePath: join(namespaceRoot, "assembled", "app", "prebundled", "web-sidecar.mjs"),
     winIconPath: join(namespaceRoot, "resources", "win", "icon.ico"),
+    winBuildResourcesRoot: join(namespaceRoot, "resources", "win"),
+    winAppxAssetsRoot: join(namespaceRoot, "resources", "win", "appx"),
     unpackedExePath: join(namespaceRoot, "builder", "win-unpacked", "MonoField.exe"),
     unpackedRoot: join(namespaceRoot, "builder", "win-unpacked"),
   };
@@ -125,6 +128,12 @@ describe("materializeCachedUnpackedForInstaller", () => {
 });
 
 describe("Windows pack artifact boundaries", () => {
+  it("installs production dependencies without duplicate lifecycle scripts before Electron rebuild", async () => {
+    const source = await readFile(new URL("../src/win/app.ts", import.meta.url), "utf8");
+    expect(source).toContain('"--ignore-scripts", "--no-audit", "--no-fund"');
+    expect(source.indexOf('"--ignore-scripts"')).toBeLessThan(source.indexOf("await runElectronRebuild"));
+  });
+
   it("does not build launcher payload artifacts for a pure dir target", async () => {
     const source = await readFile(new URL("../src/win/build.ts", import.meta.url), "utf8");
     expect(source).toContain("const hasLauncherPayloadTarget = hasNsisTarget || hasZipTarget");

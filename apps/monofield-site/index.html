@@ -10,6 +10,8 @@
     <meta property="og:type" content="website" />
     <meta property="og:image" content="/social-card.svg?v=monofield-m1" />
     <meta name="twitter:card" content="summary_large_image" />
+    <!-- Fill with the 12-character Partner Center Store ID after certification. -->
+    <meta name="monofield-store-product-id" content="" />
     <link rel="icon" href="/mark.svg?v=monofield-m1" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/mark.svg?v=monofield-m1" />
     <link rel="stylesheet" href="/styles.css" />
@@ -32,7 +34,7 @@
         <button class="lang-toggle" type="button" aria-label="Switch language">
           <span data-lang-choice="en">EN</span><i aria-hidden="true">/</i><span data-lang-choice="ko">KO</span>
         </button>
-        <a class="header-download" href="https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-setup.exe" data-en="Download" data-ko="다운로드">Download</a>
+        <a class="header-download" data-primary-download href="https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-setup.exe" data-en="Download" data-ko="다운로드">Download</a>
       </div>
     </header>
 
@@ -48,8 +50,12 @@
           Open a working folder. Review the diff, run the project, check the live screen, and deliver the code or document from the same workspace.
         </p>
         <div class="hero-actions">
-          <a class="button button-primary" href="https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-setup.exe">
-            <span data-en="Download for Windows" data-ko="Windows용 다운로드">Download for Windows</span>
+          <a class="button button-primary button-store" data-store-download hidden href="#">
+            <span data-en="Get it from Microsoft" data-ko="Microsoft Store에서 받기">Get it from Microsoft</span>
+            <span aria-hidden="true">↗</span>
+          </a>
+          <a class="button button-primary button-direct" data-direct-download data-store-fallback-primary href="https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-setup.exe">
+            <span data-en="Direct EXE download" data-ko="EXE 직접 다운로드">Direct EXE download</span>
             <span aria-hidden="true">↘</span>
           </a>
           <a class="button button-quiet button-github" href="https://github.com/jhy0285/monofield" aria-label="GitHub — MonoField">
@@ -58,7 +64,7 @@
             <span aria-hidden="true">↗</span>
           </a>
         </div>
-        <p class="hero-note" data-en="Local-first desktop · Apache-2.0 · Bring your own model" data-ko="로컬 우선 데스크톱 · Apache-2.0 · 원하는 모델 연결">Local-first desktop · Apache-2.0 · Bring your own model</p>
+        <p class="hero-note" data-en="The EXE downloads directly from the latest GitHub Release · Local-first · Apache-2.0" data-ko="EXE는 최신 GitHub Release에서 바로 다운로드됩니다 · 로컬 우선 · Apache-2.0">The EXE downloads directly from the latest GitHub Release · Local-first · Apache-2.0</p>
       </section>
 
       <section class="app-showcase" id="product" aria-labelledby="app-showcase-title">
@@ -331,7 +337,8 @@
         <p class="eyebrow">monofield</p>
         <h2 data-en="Bring the whole project into one workspace" data-ko="프로젝트 전체를 하나의 공간으로">Bring the whole project into one workspace</h2>
         <div class="hero-actions">
-          <a class="button button-primary" href="https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-setup.exe"><span data-en="Get MonoField" data-ko="MonoField 받기">Get MonoField</span><span aria-hidden="true">↘</span></a>
+          <a class="button button-primary button-store" data-store-download hidden href="#"><span data-en="Get it from Microsoft" data-ko="Microsoft Store에서 받기">Get it from Microsoft</span><span aria-hidden="true">↗</span></a>
+          <a class="button button-primary button-direct" data-direct-download data-store-fallback-primary href="https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-setup.exe"><span data-en="Direct EXE download" data-ko="EXE 직접 다운로드">Direct EXE download</span><span aria-hidden="true">↘</span></a>
           <a class="button button-quiet" href="https://github.com/jhy0285/monofield"><span>GitHub</span><span aria-hidden="true">↗</span></a>
         </div>
       </section>
@@ -344,6 +351,8 @@
           <p data-en="code / design / documents" data-ko="코드 / 디자인 / 문서">code / design / documents</p>
         </div>
         <nav class="footer-links" aria-label="Footer navigation">
+          <a data-store-download hidden href="#">Microsoft Store</a>
+          <a data-direct-download href="https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-setup.exe" data-en="Direct EXE" data-ko="EXE 직접 다운로드">Direct EXE</a>
           <a href="https://github.com/jhy0285/monofield">GitHub</a>
           <a href="https://github.com/jhy0285/monofield/releases">Releases</a>
           <a href="/open-source.html" data-en="Open source notices" data-ko="오픈소스 고지">Open source notices</a>

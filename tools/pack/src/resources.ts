@@ -39,6 +39,7 @@ export const macResources = {
 } as const;
 
 export const winResources = {
+  appxAssets: join(resourcesRoot, "win", "appx"),
   icon: join(resourcesRoot, "win", "icon.ico"),
   sevenZipDll: join(resourcesRoot, "win", "7zip", "7z.dll"),
   sevenZipExe: join(resourcesRoot, "win", "7zip", "7z.exe"),

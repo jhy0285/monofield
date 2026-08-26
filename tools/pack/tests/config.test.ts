@@ -7,6 +7,14 @@ const savedTelemetryRelayUrl = process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
 const savedPosthogKey = process.env.POSTHOG_KEY;
 const savedPosthogHost = process.env.POSTHOG_HOST;
 const savedAmrProfile = process.env.OPEN_DESIGN_AMR_PROFILE;
+const savedStoreIdentityName = process.env.MONOFIELD_WINDOWS_STORE_IDENTITY_NAME;
+const savedStorePublisher = process.env.MONOFIELD_WINDOWS_STORE_PUBLISHER;
+const savedStorePublisherDisplayName = process.env.MONOFIELD_WINDOWS_STORE_PUBLISHER_DISPLAY_NAME;
+
+function restoreEnvironment(name: string, value: string | undefined): void {
+  if (value == null) delete process.env[name];
+  else process.env[name] = value;
+}
 
 afterEach(() => {
   if (savedTelemetryRelayUrl == null) {
@@ -29,6 +37,9 @@ afterEach(() => {
   } else {
     process.env.OPEN_DESIGN_AMR_PROFILE = savedAmrProfile;
   }
+  restoreEnvironment("MONOFIELD_WINDOWS_STORE_IDENTITY_NAME", savedStoreIdentityName);
+  restoreEnvironment("MONOFIELD_WINDOWS_STORE_PUBLISHER", savedStorePublisher);
+  restoreEnvironment("MONOFIELD_WINDOWS_STORE_PUBLISHER_DISPLAY_NAME", savedStorePublisherDisplayName);
 });
 
 describe("resolveToolPackConfig AMR profile", () => {
@@ -67,6 +78,27 @@ describe("resolveToolPackConfig win build target", () => {
     expect(resolveToolPackConfig("win", { to: "all" }).to).toBe("all");
     expect(resolveToolPackConfig("win", { to: "nsis" }).to).toBe("nsis");
     expect(() => resolveToolPackConfig("win", { to: "dmg" })).toThrow(/unsupported win --to target: dmg/);
+  });
+
+  it("requires the exact Partner Center identity for Store builds", () => {
+    delete process.env.MONOFIELD_WINDOWS_STORE_IDENTITY_NAME;
+    delete process.env.MONOFIELD_WINDOWS_STORE_PUBLISHER;
+    delete process.env.MONOFIELD_WINDOWS_STORE_PUBLISHER_DISPLAY_NAME;
+    expect(() => resolveToolPackConfig("win", { to: "store" })).toThrow(
+      /MONOFIELD_WINDOWS_STORE_IDENTITY_NAME is required/,
+    );
+
+    process.env.MONOFIELD_WINDOWS_STORE_IDENTITY_NAME = "12345MonoField.Desktop";
+    process.env.MONOFIELD_WINDOWS_STORE_PUBLISHER = "CN=01234567-89ab-cdef-0123-456789abcdef";
+    process.env.MONOFIELD_WINDOWS_STORE_PUBLISHER_DISPLAY_NAME = "MonoField contributors";
+    expect(resolveToolPackConfig("win", { to: "store" })).toMatchObject({
+      to: "store",
+      windowsStoreIdentity: {
+        identityName: "12345MonoField.Desktop",
+        publisher: "CN=01234567-89ab-cdef-0123-456789abcdef",
+        publisherDisplayName: "MonoField contributors",
+      },
+    });
   });
 });
 

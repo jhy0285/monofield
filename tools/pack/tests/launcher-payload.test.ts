@@ -133,6 +133,7 @@ function createWinPaths(root: string, namespace: string): WinPaths {
     resourceRoot: join(namespaceRoot, "resources", "open-design"),
     setupPath: join(namespaceRoot, "builder", "MonoField-release-beta-win-setup.exe"),
     setupZipPath: join(namespaceRoot, "builder", "MonoField-release-beta-win-portable.zip"),
+    storePackagePath: join(namespaceRoot, "builder", "MonoField-release-beta-win-store.appx"),
     startMenuShortcutPath: join(namespaceRoot, "start-menu.lnk"),
     tarballsRoot: join(namespaceRoot, "tarballs"),
     userDesktopShortcutPath: join(namespaceRoot, "desktop", "user.lnk"),
@@ -144,6 +145,8 @@ function createWinPaths(root: string, namespace: string): WinPaths {
     webSidecarPrebundleMetaPath: join(namespaceRoot, "prebundle-meta", "web-sidecar.meta.json"),
     webSidecarPrebundlePath: join(namespaceRoot, "assembled", "app", "prebundled", "web-sidecar.mjs"),
     winIconPath: join(namespaceRoot, "resources", "win", "icon.ico"),
+    winBuildResourcesRoot: join(namespaceRoot, "resources", "win"),
+    winAppxAssetsRoot: join(namespaceRoot, "resources", "win", "appx"),
     unpackedExePath: join(namespaceRoot, "builder", "win-unpacked", "MonoField.exe"),
     unpackedRoot: join(namespaceRoot, "builder", "win-unpacked"),
   };

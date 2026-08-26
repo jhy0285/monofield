@@ -103,6 +103,7 @@ describe("tools-pack launcher layout", () => {
     expect(paths.launcherPayloadPath).toBe(join(config.roots.output.namespaceRoot, "payload", "MonoField-release-beta-win-payload.7z"));
     expect(paths.setupPath).toBe(join(config.roots.output.namespaceRoot, "builder", "MonoField-release-beta-win-setup.exe"));
     expect(paths.setupZipPath).toBe(join(config.roots.output.namespaceRoot, "builder", "MonoField-release-beta-win-portable.zip"));
+    expect(paths.storePackagePath).toBe(join(config.roots.output.namespaceRoot, "builder", "MonoField-release-beta-win-store.appx"));
   });
 
   it("uses zip payload archives for mac and 7z payload archives for Windows", () => {

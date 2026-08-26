@@ -19,6 +19,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html { scroll-behavior: smooth; background: var(--bg); }
 body { margin: 0; color: var(--text); background: var(--bg); font-family: var(--sans); line-height: 1.5; -webkit-font-smoothing: antialiased; }
 button, a { font: inherit; }
@@ -42,7 +43,7 @@ button { color: inherit; }
 .lang-toggle span.is-active { color: #08090a; background: var(--text); }
 .lang-toggle i { color: #50555a; font-style: normal; }
 .lang-toggle:hover { border-color: var(--accent); }
-.header-download { padding: 0 15px; font-size: 12px; background: var(--text); color: var(--bg); }
+.header-download { min-width: 110px; padding: 0 15px; font-size: 12px; background: var(--text); color: var(--bg); }
 .lang-toggle:focus-visible, .header-download:focus-visible, .button:focus-visible, .workspace-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 main { overflow: clip; }
@@ -54,11 +55,14 @@ main { overflow: clip; }
 .hero h1 span { display: block; }
 .hero-muted { color: #777d83; }
 .hero-copy { position: relative; max-width: 710px; margin: clamp(34px, 5vw, 62px) 0 0; color: #c9cccf; font-size: clamp(17px, 1.5vw, 22px); line-height: 1.6; letter-spacing: -.02em; }
-.hero-actions { position: relative; display: flex; gap: 10px; margin-top: 38px; }
+.hero-actions { position: relative; display: flex; flex-wrap: wrap; gap: 10px; margin-top: 38px; }
 .button { min-width: 190px; min-height: 52px; display: inline-flex; align-items: center; justify-content: space-between; gap: 28px; padding: 0 18px; border: 1px solid var(--line-strong); font-size: 13px; transition: background 160ms ease, color 160ms ease, border-color 160ms ease, transform 160ms ease; }
 .button:hover { transform: translateY(-2px); }
 .button-primary { color: var(--bg); background: var(--text); border-color: var(--text); }
 .button-primary:hover { background: var(--accent); border-color: var(--accent); }
+.button-store { min-width: 235px; }
+.button-direct.is-secondary { color: var(--text); background: transparent; border-color: var(--line-strong); }
+.button-direct.is-secondary:hover { background: var(--surface-2); border-color: rgba(255,255,255,.4); }
 .button-quiet:hover { background: var(--surface-2); border-color: rgba(255,255,255,.4); }
 .button-github svg { width: 18px; height: 18px; flex: 0 0 auto; }
 .hero-note { position: relative; margin: 18px 0 0; color: var(--faint); font: 11px/1.4 var(--mono); }

@@ -23,6 +23,7 @@ import {
   collectWinSizeReport,
   shouldBuildWinNsisInstaller,
   shouldBuildWinPortableZip,
+  shouldBuildWindowsStorePackage,
 } from "./report.js";
 import { copyWinIcon, prepareResourceTree } from "./resources.js";
 import type { WinPackResult, WinPackTiming, WinPaths } from "./types.js";
@@ -59,12 +60,18 @@ async function writeLocalLatestYml(config: ToolPackConfig, paths: WinPaths): Pro
 }
 
 export async function packWin(config: ToolPackConfig): Promise<WinPackResult> {
+  // Microsoft Store packages are updated by the Store. Never bake the direct
+  // installer feed into this distribution even if the release shell exports it.
+  if (config.to === "store" && config.updateMetadataUrl != null) {
+    config = { ...config, updateMetadataUrl: undefined };
+  }
   const paths = resolveWinPaths(config);
   const cache = new ToolPackCache(config.roots.cacheRoot);
   const timings: WinPackTiming[] = [];
   const segments: WinPackTiming[] = [];
   const hasNsisTarget = shouldBuildWinNsisInstaller(config.to);
   const hasZipTarget = shouldBuildWinPortableZip(config.to);
+  const hasStoreTarget = shouldBuildWindowsStorePackage(config.to);
   const hasLauncherPayloadTarget = hasNsisTarget || hasZipTarget;
   const runPhase = async <T>(phase: string, task: () => Promise<T>): Promise<T> => {
     const startedAt = Date.now();
@@ -94,6 +101,9 @@ export async function packWin(config: ToolPackConfig): Promise<WinPackResult> {
     }
     if (!hasZipTarget) {
       await rm(paths.setupZipPath, { force: true });
+    }
+    if (!hasStoreTarget) {
+      await rm(paths.storePackagePath, { force: true });
     }
   });
   await runPhase("workspace-build", async () => {
@@ -144,6 +154,7 @@ export async function packWin(config: ToolPackConfig): Promise<WinPackResult> {
     outputRoot: config.roots.output.namespaceRoot,
     payloadPath: (await pathExists(paths.launcherPayloadPath)) ? paths.launcherPayloadPath : null,
     portableZipPath: hasZipTarget && await pathExists(paths.setupZipPath) ? paths.setupZipPath : null,
+    storePackagePath: hasStoreTarget && await pathExists(paths.storePackagePath) ? paths.storePackagePath : null,
     resourceRoot: builtApp == null ? paths.resourceRoot : join(builtApp.unpackedRoot, "resources", "open-design"),
     runtimeNamespaceRoot: config.roots.runtime.namespaceRoot,
     cacheReport: cache.report(),

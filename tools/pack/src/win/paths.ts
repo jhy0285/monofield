@@ -59,6 +59,7 @@ export function resolveWinPaths(config: ToolPackConfig): WinPaths {
     resourceRoot: join(namespaceRoot, "resources", "open-design"),
     setupPath: join(namespaceRoot, "builder", `${PRODUCT_NAME}-${namespaceToken}-setup.exe`),
     setupZipPath: join(namespaceRoot, "builder", `${PRODUCT_NAME}-${namespaceToken}-portable.zip`),
+    storePackagePath: join(namespaceRoot, "builder", `${PRODUCT_NAME}-${namespaceToken}-store.appx`),
     startMenuShortcutPath: join(process.env.APPDATA ?? join(homedir(), "AppData", "Roaming"), "Microsoft", "Windows", "Start Menu", "Programs", identity.shortcutName),
     tarballsRoot: join(namespaceRoot, "tarballs"),
     userDesktopShortcutPath: join(homedir(), "Desktop", identity.shortcutName),
@@ -70,6 +71,8 @@ export function resolveWinPaths(config: ToolPackConfig): WinPaths {
     webSidecarPrebundleMetaPath: join(namespaceRoot, WIN_PREBUNDLE_META_DIR_NAME, "web-sidecar.meta.json"),
     webSidecarPrebundlePath: join(namespaceRoot, "assembled", WIN_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH),
     winIconPath: join(namespaceRoot, "resources", "win", "icon.ico"),
+    winBuildResourcesRoot: join(namespaceRoot, "resources", "win"),
+    winAppxAssetsRoot: join(namespaceRoot, "resources", "win", "appx"),
     unpackedExePath: join(namespaceRoot, "builder", "win-unpacked", `${PRODUCT_NAME}.exe`),
     unpackedRoot: join(namespaceRoot, "builder", "win-unpacked"),
   };

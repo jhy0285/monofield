@@ -1,4 +1,4 @@
-import { cp, mkdir } from "node:fs/promises";
+import { cp, mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import { hashJson, hashPath, ToolPackCache } from "../cache.js";
@@ -95,4 +95,10 @@ export async function prepareResourceTree(
 export async function copyWinIcon(paths: WinPaths): Promise<void> {
   await mkdir(dirname(paths.winIconPath), { recursive: true });
   await cp(winResources.icon, paths.winIconPath);
+  // AppX asset names are case-sensitive in electron-builder's fallback check,
+  // while MakeAppx treats output paths case-insensitively. Clear stale assets
+  // first so renamed files cannot collide in the package mapping.
+  await rm(paths.winAppxAssetsRoot, { force: true, recursive: true });
+  await mkdir(paths.winAppxAssetsRoot, { recursive: true });
+  await cp(winResources.appxAssets, paths.winAppxAssetsRoot, { recursive: true });
 }

@@ -15,7 +15,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const WORKSPACE_ROOT = resolve(__dirname, "../../..");
 
 export type ToolPackPlatform = "mac" | "win" | "linux";
-export type ToolPackBuildOutput = "all" | "app" | "appimage" | "dir" | "dmg" | "nsis" | "zip";
+export type ToolPackBuildOutput = "all" | "app" | "appimage" | "dir" | "dmg" | "nsis" | "store" | "zip";
 export type ToolPackMacCompression = "store" | "normal" | "maximum";
 export type ToolPackWebOutputMode = "server" | "standalone";
 export type ToolPackAmrProfile = "prod" | "test" | "local";
@@ -89,15 +89,50 @@ export type ToolPackConfig = {
   updateMetadataUrl?: string;
   to: ToolPackBuildOutput;
   webOutputMode: ToolPackWebOutputMode;
+  windowsStoreIdentity?: ToolPackWindowsStoreIdentity;
   workspaceRoot: string;
+};
+
+export type ToolPackWindowsStoreIdentity = {
+  identityName: string;
+  publisher: string;
+  publisherDisplayName: string;
 };
 
 function resolveToolPackBuildOutput(platform: ToolPackPlatform, value: string | undefined): ToolPackBuildOutput {
   if (value == null || value.length === 0) return platform === "win" ? "nsis" : "all";
   if (platform === "mac" && (value === "all" || value === "app" || value === "dmg" || value === "zip")) return value;
-  if (platform === "win" && (value === "all" || value === "dir" || value === "nsis" || value === "zip")) return value;
+  if (platform === "win" && (value === "all" || value === "dir" || value === "nsis" || value === "store" || value === "zip")) return value;
   if (platform === "linux" && (value === "all" || value === "appimage" || value === "dir")) return value;
   throw new Error(`unsupported ${platform} --to target: ${value}`);
+}
+
+function requireWindowsStoreEnvironment(name: string): string {
+  const value = process.env[name]?.trim();
+  if (value == null || value.length === 0) {
+    throw new Error(`${name} is required for tools-pack win build --to store; copy the exact value from Partner Center > Product identity`);
+  }
+  return value;
+}
+
+function resolveWindowsStoreIdentity(
+  platform: ToolPackPlatform,
+  to: ToolPackBuildOutput,
+): ToolPackWindowsStoreIdentity | undefined {
+  if (platform !== "win" || to !== "store") return undefined;
+  const identityName = requireWindowsStoreEnvironment("MONOFIELD_WINDOWS_STORE_IDENTITY_NAME");
+  if (!/^[A-Za-z0-9.-]{3,50}$/.test(identityName)) {
+    throw new Error("MONOFIELD_WINDOWS_STORE_IDENTITY_NAME must be 3-50 characters using letters, numbers, periods, or hyphens");
+  }
+  const publisher = requireWindowsStoreEnvironment("MONOFIELD_WINDOWS_STORE_PUBLISHER");
+  if (!/^CN=.+/i.test(publisher)) {
+    throw new Error("MONOFIELD_WINDOWS_STORE_PUBLISHER must be the exact Partner Center Publisher value and begin with CN=");
+  }
+  return {
+    identityName,
+    publisher,
+    publisherDisplayName: requireWindowsStoreEnvironment("MONOFIELD_WINDOWS_STORE_PUBLISHER_DISPLAY_NAME"),
+  };
 }
 
 function resolveToolPackMacCompression(value: string | undefined): ToolPackMacCompression {
@@ -194,6 +229,7 @@ export function resolveToolPackConfig(
   const outputPlatformRoot = join(outputRoot, platform);
   const outputNamespaceRoot = join(outputPlatformRoot, "namespaces", namespace);
   const runtimeNamespaceBaseRoot = join(toolPackRoot, "runtime", platform, "namespaces");
+  const to = resolveToolPackBuildOutput(platform, options.to);
 
   return {
     appVersion,
@@ -230,8 +266,9 @@ export function resolveToolPackConfig(
     signed: options.signed === true,
     amrProfile: resolveToolPackAmrProfile(process.env.OPEN_DESIGN_AMR_PROFILE),
     updateMetadataUrl: resolveToolPackUpdateMetadataUrl(process.env.OD_UPDATE_METADATA_URL),
-    to: resolveToolPackBuildOutput(platform, options.to),
+    to,
     webOutputMode: resolveToolPackWebOutputMode(platform, process.env.OD_WEB_OUTPUT_MODE),
+    windowsStoreIdentity: resolveWindowsStoreIdentity(platform, to),
     workspaceRoot: WORKSPACE_ROOT,
   };
 }

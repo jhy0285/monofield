@@ -90,9 +90,15 @@ Ask for explanation, analysis, or review.
 
 ### Install the Desktop app
 
+- Microsoft Store — enabled on the [MonoField website](https://monofield.vercel.app)
+  after the public listing is certified
 - [Windows installer](https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-setup.exe)
 - [Portable package](https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-portable.zip)
 - [Release notes and checksums](https://github.com/jhy0285/monofield/releases/latest)
+
+The Windows installer link downloads the EXE directly from the latest GitHub
+Release. Store packaging and publication steps are documented in
+[docs/windows-store-release.md](docs/windows-store-release.md).
 
 ### Requirements
 

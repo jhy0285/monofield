@@ -5,6 +5,7 @@ import {
   resolveWinTargets,
   shouldBuildWinNsisInstaller,
   shouldBuildWinPortableZip,
+  shouldBuildWindowsStorePackage,
 } from "../src/win/report.js";
 
 describe("resolveWinTargets", () => {
@@ -16,6 +17,7 @@ describe("resolveWinTargets", () => {
     expect(resolveWinTargets("dir")).toEqual(["dir"]);
     expect(resolveWinTargets("nsis")).toEqual(["nsis"]);
     expect(resolveWinTargets("zip")).toEqual(["zip"]);
+    expect(resolveWinTargets("store")).toEqual(["store"]);
   });
 });
 
@@ -25,6 +27,7 @@ describe("resolveElectronBuilderWinTargets", () => {
     expect(resolveElectronBuilderWinTargets("all")).toEqual(["dir", "nsis"]);
     expect(resolveElectronBuilderWinTargets("nsis")).toEqual(["nsis"]);
     expect(resolveElectronBuilderWinTargets("dir")).toEqual(["dir"]);
+    expect(resolveElectronBuilderWinTargets("store")).toEqual(["dir", "appx"]);
   });
 });
 
@@ -39,5 +42,8 @@ describe("shouldBuildWinNsisInstaller / shouldBuildWinPortableZip", () => {
     expect(shouldBuildWinPortableZip("all")).toBe(true);
     expect(shouldBuildWinPortableZip("nsis")).toBe(false);
     expect(shouldBuildWinPortableZip("dir")).toBe(false);
+
+    expect(shouldBuildWindowsStorePackage("store")).toBe(true);
+    expect(shouldBuildWindowsStorePackage("all")).toBe(false);
   });
 });

@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { dirname, join, relative } from "node:path";
+import { dirname, isAbsolute, join, relative } from "node:path";
 import { promisify } from "node:util";
 
 import { rebuild } from "@electron/rebuild";
@@ -60,7 +60,10 @@ async function runPnpm(config: ToolPackConfig, args: string[], extraEnv: NodeJS.
 
 async function runNpmInstall(appRoot: string): Promise<void> {
   const invocation = createCommandInvocation({
-    args: ["install", "--omit=dev", "--no-package-lock"],
+    // Native modules are rebuilt for the target Electron ABI immediately
+    // afterwards. Running dependency lifecycle scripts here duplicates that
+    // work and npm 11 can retain an open Windows handle after reporting exit 0.
+    args: ["install", "--omit=dev", "--no-package-lock", "--ignore-scripts", "--no-audit", "--no-fund"],
     command: process.platform === "win32" ? "npm.cmd" : "npm",
   });
   await execFileAsync(invocation.command, invocation.args, {
@@ -279,8 +282,14 @@ function toPosixPath(value: string): string {
   return value.replaceAll("\\", "/");
 }
 
-function toRelativeImportSpecifier(fromDirectory: string, targetPath: string): string {
-  const specifier = toPosixPath(relative(fromDirectory, targetPath));
+export function toRelativeImportSpecifier(fromDirectory: string, targetPath: string): string {
+  const relativePath = relative(fromDirectory, targetPath);
+  // path.relative() returns an absolute drive-qualified path when the two
+  // locations are on different Windows volumes. Prefixing that value with
+  // "./" produces the invalid specifier "./C:/...". Esbuild accepts the
+  // normalized absolute path and can bundle it into the portable runtime.
+  if (isAbsolute(relativePath)) return toPosixPath(targetPath);
+  const specifier = toPosixPath(relativePath);
   return specifier.startsWith(".") ? specifier : `./${specifier}`;
 }
 
@@ -408,7 +417,7 @@ export async function createWinPackagedAppCacheKey(
     packedTarballs,
     platform: "win32",
     prebundle: shouldUseWinStandalonePrebundle(config.webOutputMode),
-    schemaVersion: 3,
+    schemaVersion: 5,
     tarballsKey,
     webOutputMode: config.webOutputMode,
   });

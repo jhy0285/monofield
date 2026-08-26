@@ -22,7 +22,7 @@ function isBetterSqlite3SourceResidue(path: string): boolean {
   );
 }
 
-export function resolveWinTargets(to: ToolPackConfig["to"]): Array<"dir" | "nsis" | "zip"> {
+export function resolveWinTargets(to: ToolPackConfig["to"]): Array<"dir" | "nsis" | "store" | "zip"> {
   switch (to) {
     case "dir":
       return ["dir"];
@@ -30,6 +30,8 @@ export function resolveWinTargets(to: ToolPackConfig["to"]): Array<"dir" | "nsis
       return ["dir", "nsis", "zip"];
     case "nsis":
       return ["nsis"];
+    case "store":
+      return ["store"];
     case "zip":
       return ["zip"];
     default:
@@ -42,8 +44,9 @@ export function resolveWinTargets(to: ToolPackConfig["to"]): Array<"dir" | "nsis
 // content using bundled 7z, so we filter the zip target out before handing the
 // list to electron-builder. When the user asks for `zip` alone we still need
 // the unpacked dir, so the helper substitutes `dir` in its place.
-export function resolveElectronBuilderWinTargets(to: ToolPackConfig["to"]): Array<"dir" | "nsis"> {
-  const filtered = resolveWinTargets(to).filter((target): target is "dir" | "nsis" => target !== "zip");
+export function resolveElectronBuilderWinTargets(to: ToolPackConfig["to"]): Array<"appx" | "dir" | "nsis"> {
+  if (to === "store") return ["dir", "appx"];
+  const filtered = resolveWinTargets(to).filter((target): target is "dir" | "nsis" => target !== "zip" && target !== "store");
   if (filtered.length === 0) return ["dir"];
   return filtered;
 }
@@ -54,6 +57,10 @@ export function shouldBuildWinNsisInstaller(to: ToolPackConfig["to"]): boolean {
 
 export function shouldBuildWinPortableZip(to: ToolPackConfig["to"]): boolean {
   return resolveWinTargets(to).includes("zip");
+}
+
+export function shouldBuildWindowsStorePackage(to: ToolPackConfig["to"]): boolean {
+  return resolveWinTargets(to).includes("store");
 }
 
 export async function collectWinSizeReport(
@@ -90,6 +97,7 @@ export async function collectWinSizeReport(
     installerBytes: await sizeExistingFileBytes(paths.setupPath),
     outputRootBytes: namespaceSizeIndex.sizePathBytes(config.roots.output.namespaceRoot),
     portableZipBytes: await sizeExistingFileBytes(paths.setupZipPath),
+    storePackageBytes: await sizeExistingFileBytes(paths.storePackagePath),
     resourceRootBytes: sizeIndex.sizePathBytes(join(appResourcesRoot, "open-design")),
     runtimeNamespaceRoot: config.roots.runtime.namespaceRoot,
     topLevel: {
