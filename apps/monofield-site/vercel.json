@@ -1,5 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/newsletter.js": {
+      "maxDuration": 10
+    }
+  },
   "cleanUrls": true,
   "trailingSlash": false,
   "headers": [

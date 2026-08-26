@@ -67,8 +67,8 @@ main { overflow: clip; }
 .button-github svg { width: 18px; height: 18px; flex: 0 0 auto; }
 .hero-note { position: relative; margin: 18px 0 0; color: var(--faint); font: 11px/1.4 var(--mono); }
 
-.app-showcase, .why-section, .field-section, .workflow-section, .process-section, .local-section { padding: var(--section-space) var(--page-gutter); border-bottom: 1px solid var(--line); }
-.why-section, .field-section, .workflow-section, .process-section, .local-section, .closing-section, .site-footer { content-visibility: auto; contain-intrinsic-size: auto 900px; }
+.app-showcase, .why-section, .field-section, .workflow-section, .process-section, .local-section, .guide-section { padding: var(--section-space) var(--page-gutter); border-bottom: 1px solid var(--line); }
+.why-section, .field-section, .workflow-section, .process-section, .local-section, .guide-section, .closing-section, .site-footer { content-visibility: auto; contain-intrinsic-size: auto 900px; }
 .app-showcase { position: relative; background: #f0efeb; color: #111315; }
 .showcase-intro { display: grid; grid-template-columns: minmax(300px, 1.15fr) minmax(280px, .85fr); gap: clamp(36px, 7vw, 120px); align-items: end; max-width: 1450px; margin: 0 auto clamp(56px, 6vw, 84px); }
 .showcase-intro .section-index { grid-column: 1 / -1; margin-bottom: -18px; color: #4562c8; }
@@ -439,6 +439,23 @@ main { overflow: clip; }
 .boundary-arrow { display: flex; flex-direction: column; justify-content: center; align-items: center; color: var(--faint); text-align: center; font: 8px/1.4 var(--mono); }
 .boundary-arrow i { margin: 14px 0; color: var(--accent); font: normal 28px/1 var(--sans); }
 
+.guide-section { display: grid; grid-template-columns: minmax(340px, .9fr) minmax(360px, .72fr); gap: clamp(48px, 9vw, 150px); align-items: center; background: #0b0d0f; }
+.guide-copy h2 { max-width: 760px; margin: 0 0 26px; font-size: clamp(44px, 5.6vw, 82px); line-height: .95; letter-spacing: -.06em; font-weight: 520; }
+.guide-copy > p:not(.section-index, .guide-meta) { max-width: 720px; margin: 0; color: var(--muted); font-size: 16px; }
+.guide-outline { margin: 38px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line-strong); }
+.guide-outline li { display: grid; grid-template-columns: 54px 1fr; align-items: center; gap: 12px; min-height: 52px; border-bottom: 1px solid var(--line); }
+.guide-outline span { color: var(--accent); font: 9px/1 var(--mono); }
+.guide-outline b { font-size: 13px; font-weight: 500; }
+.guide-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 34px; }
+.guide-meta { margin: 14px 0 0; color: var(--faint); font: 9px/1.5 var(--mono); text-transform: uppercase; letter-spacing: .08em; }
+.guide-preview { position: relative; justify-self: center; width: min(100%, 470px); padding: 18px 18px 0; border: 1px solid var(--line-strong); background: #161a1e; box-shadow: 0 42px 100px rgba(0,0,0,.38); transition: transform .18s ease, border-color .18s ease; }
+.guide-preview:hover { transform: translateY(-4px); border-color: rgba(141,164,255,.72); }
+.guide-preview:focus-visible { outline: 2px solid var(--accent); outline-offset: 5px; }
+.guide-preview img { display: block; width: 100%; height: auto; background: #f7f7f5; }
+.guide-preview > span { display: flex; align-items: center; justify-content: space-between; min-height: 52px; color: var(--faint); font: 9px/1 var(--mono); }
+.guide-preview b { color: var(--text); font-weight: 500; }
+.guide-preview em { color: var(--accent); font-style: normal; }
+
 .closing-section { min-height: 72svh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 100px 20px; text-align: center; background: radial-gradient(circle at center, rgba(141,164,255,.11), transparent 40%); }
 .closing-section h2 { max-width: 1000px; margin: 0; font-size: clamp(48px, 7.2vw, 104px); line-height: .94; letter-spacing: -.07em; font-weight: 520; }
 .closing-section .hero-actions { justify-content: center; }
@@ -456,7 +473,7 @@ main { overflow: clip; }
   .site-header { grid-template-columns: 1fr auto; }
   .site-header nav { display: none; }
   .hero { min-height: auto; padding-top: 120px; }
-  .showcase-intro, .why-heading, .section-heading, .split-heading, .local-section { grid-template-columns: 1fr; }
+  .showcase-intro, .why-heading, .section-heading, .split-heading, .local-section, .guide-section { grid-template-columns: 1fr; }
   .showcase-intro .section-index, .why-heading .section-index { margin-bottom: -8px; }
   .product-demo-window { overflow-x: auto; scrollbar-width: thin; }
   .demo-appbar, .demo-appbody { min-width: 980px; }
@@ -468,6 +485,7 @@ main { overflow: clip; }
   .workflow-lines article { grid-template-columns: 44px 1fr; }
   .workflow-lines article ul { grid-column: 2; }
   .boundary-diagram { grid-template-columns: 1fr 80px 1fr; }
+  .guide-preview { margin-top: 20px; }
   .footer-main { flex-direction: column; align-items: center; text-align: center; }
   .footer-links { justify-content: center; }
 }
@@ -480,7 +498,7 @@ main { overflow: clip; }
   .hero h1 { font-size: clamp(52px, 18vw, 80px); }
   .hero-actions { width: 100%; flex-direction: column; }
   .button { width: 100%; }
-  .app-showcase, .why-section, .field-section, .workflow-section, .process-section, .local-section { padding: 80px 20px; }
+  .app-showcase, .why-section, .field-section, .workflow-section, .process-section, .local-section, .guide-section { padding: 80px 20px; }
   .app-showcase { padding-right: 0; padding-left: 0; }
   .showcase-intro { padding: 0 20px; gap: 24px; }
   .mode-showcase { border-right: 0; border-left: 0; }
@@ -524,6 +542,10 @@ main { overflow: clip; }
   .boundary-diagram { grid-template-columns: 1fr; }
   .boundary-arrow { min-height: 110px; }
   .boundary-arrow i { transform: rotate(90deg); }
+  .guide-copy h2 { font-size: clamp(42px, 14vw, 64px); }
+  .guide-actions { flex-direction: column; }
+  .guide-actions .button { width: 100%; }
+  .guide-preview { width: 100%; padding: 10px 10px 0; }
   .document-preview { grid-template-columns: 1fr; }
   .document-preview aside { display: none; }
   .sheet { margin: 14px; padding: 20px; }
