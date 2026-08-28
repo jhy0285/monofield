@@ -10,6 +10,8 @@ const savedAmrProfile = process.env.OPEN_DESIGN_AMR_PROFILE;
 const savedStoreIdentityName = process.env.MONOFIELD_WINDOWS_STORE_IDENTITY_NAME;
 const savedStorePublisher = process.env.MONOFIELD_WINDOWS_STORE_PUBLISHER;
 const savedStorePublisherDisplayName = process.env.MONOFIELD_WINDOWS_STORE_PUBLISHER_DISPLAY_NAME;
+const savedMonoFieldUpdateMetadataUrl = process.env.MONOFIELD_UPDATE_METADATA_URL;
+const savedLegacyUpdateMetadataUrl = process.env.OD_UPDATE_METADATA_URL;
 
 function restoreEnvironment(name: string, value: string | undefined): void {
   if (value == null) delete process.env[name];
@@ -40,6 +42,27 @@ afterEach(() => {
   restoreEnvironment("MONOFIELD_WINDOWS_STORE_IDENTITY_NAME", savedStoreIdentityName);
   restoreEnvironment("MONOFIELD_WINDOWS_STORE_PUBLISHER", savedStorePublisher);
   restoreEnvironment("MONOFIELD_WINDOWS_STORE_PUBLISHER_DISPLAY_NAME", savedStorePublisherDisplayName);
+  restoreEnvironment("MONOFIELD_UPDATE_METADATA_URL", savedMonoFieldUpdateMetadataUrl);
+  restoreEnvironment("OD_UPDATE_METADATA_URL", savedLegacyUpdateMetadataUrl);
+});
+
+describe("resolveToolPackConfig update feed", () => {
+  it("bakes the public GitHub latest-release feed into stable desktop builds", () => {
+    delete process.env.MONOFIELD_UPDATE_METADATA_URL;
+    delete process.env.OD_UPDATE_METADATA_URL;
+    expect(resolveToolPackConfig("win", { appVersion: "0.11.4" }).updateMetadataUrl).toBe(
+      "https://api.github.com/repos/jhy0285/monofield/releases/latest",
+    );
+    expect(resolveToolPackConfig("win", { appVersion: "0.11.4-beta.1" }).updateMetadataUrl).toBeUndefined();
+  });
+
+  it("prefers the MonoField override while retaining the legacy compatibility env", () => {
+    process.env.OD_UPDATE_METADATA_URL = "https://legacy.example.test/metadata.json";
+    process.env.MONOFIELD_UPDATE_METADATA_URL = "https://updates.example.test/metadata.json";
+    expect(resolveToolPackConfig("win", { appVersion: "0.11.4" }).updateMetadataUrl).toBe(
+      "https://updates.example.test/metadata.json",
+    );
+  });
 });
 
 describe("resolveToolPackConfig AMR profile", () => {

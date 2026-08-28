@@ -88,6 +88,33 @@ describe('NewProjectModal layout', () => {
     expect(screen.getByTestId('create-project')).toBeTruthy();
   });
 
+  it('uses a dedicated code-project surface for software development', () => {
+    render(
+      <NewProjectModal
+        open
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={[]}
+        promptTemplates={[]}
+        onCreate={() => {}}
+        onClose={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('work-mode-development'));
+
+    expect(screen.getByTestId('development-project-surface')).toBeTruthy();
+    expect(screen.queryByTestId('new-project-tabs')).toBeNull();
+    expect(screen.queryByText('Target platforms')).toBeNull();
+    expect(screen.queryByText('Document style')).toBeNull();
+    expect(screen.getByTestId('create-project').textContent).toContain('Develop software');
+
+    fireEvent.click(screen.getByTestId('work-mode-creation'));
+    expect(screen.queryByTestId('development-project-surface')).toBeNull();
+    expect(screen.getByTestId('new-project-tabs')).toBeTruthy();
+  });
+
   it('keeps the modal open with a waiting state until project creation finishes', async () => {
     let resolveCreate!: (value: boolean) => void;
     const onCreate = vi.fn(
@@ -186,10 +213,10 @@ describe('NewProjectModal template deletion plumbing', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('tab', { name: 'From template' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Saved preset' }));
     fireEvent.click(screen.getByLabelText(/delete template/i));
     await screen.findByRole('alertdialog');
-    fireEvent.click(screen.getByRole('button', { name: 'Delete template' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete preset' }));
 
     expect(onDelete).toHaveBeenCalledWith('tmpl-landing');
   });

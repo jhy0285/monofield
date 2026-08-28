@@ -165,7 +165,12 @@ async function probeVersionAtPath(
   try {
     const { stdout, stderr } = await execAgentFile(resolved, def.versionArgs, {
       env,
-      timeout: def.versionProbeTimeoutMs ?? 3000,
+      // GUI-launched Windows CLIs commonly go through npm .CMD shims. A cold
+      // Node + security-scanner start takes 5-7 seconds on otherwise healthy
+      // installs, so the old 3-second default surfaced installed CLIs with a
+      // blank version. Probes run concurrently and only for resolved binaries,
+      // making 10 seconds a bounded but realistic cross-platform budget.
+      timeout: def.versionProbeTimeoutMs ?? 10_000,
     });
     // A few Windows wrappers/native CLIs print their version to stderr while
     // still exiting successfully. Treat that as normal version output so the

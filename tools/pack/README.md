@@ -97,7 +97,7 @@ Center under **Product identity**:
 $env:MONOFIELD_WINDOWS_STORE_IDENTITY_NAME = "<Package/Identity/Name>"
 $env:MONOFIELD_WINDOWS_STORE_PUBLISHER = "<Package/Identity/Publisher>"
 $env:MONOFIELD_WINDOWS_STORE_PUBLISHER_DISPLAY_NAME = "<Publisher display name>"
-pnpm tools-pack win build --to store --portable --app-version 0.11.3
+pnpm tools-pack win build --to store --portable --app-version 0.11.4
 ```
 
 The resulting `MonoField-<namespace>-store.appx` is intentionally unsigned.

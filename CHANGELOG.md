@@ -4,6 +4,22 @@ MonoField uses semantic versions for source and Desktop releases. Historical
 upstream development remains available in Git history; this file records the
 independent MonoField product line.
 
+## 0.11.4 — 2026-08-28
+
+- Made usage reporting explicit across Codex, Claude, Gemini, Copilot, local
+  CLIs, and BYOK providers: the displayed input is the full context reported by
+  the selected runtime, not a MonoField-only token surcharge.
+- Added multi-project development discovery, per-project run state, broader
+  Node/Python/Go/Java run configurations, environment profiles, terminal
+  access, branch switching, and clearer side-by-side Git review.
+- Improved controlled database development, project-scoped connection policy,
+  Windows and UNC path handling, and safe read/write execution guidance.
+- Reduced startup work with lazy locale loading, faster local-chat routing,
+  slimmer packaged assets, and more resilient runtime executable discovery.
+- Added guided first-run tours for development and document/design work,
+  expanded downloadable user guides, update notices, and optional GitHub Star
+  support prompts while removing the newsletter flow.
+
 ## 0.11.3 — 2026-08-26
 
 - Added reviewed GPT-5.6 Sol, Terra, and Luna recommendations without allowing

@@ -100,6 +100,37 @@ export interface ProjectLocationPrefs {
   path: string;
 }
 
+export interface PetAtlasRowPrefs {
+  index: number;
+  id: string;
+  frames: number;
+  fps: number;
+}
+
+export interface PetAtlasPrefs {
+  cols: number;
+  rows: number;
+  rowsDef: PetAtlasRowPrefs[];
+}
+
+export interface PetCustomPrefs {
+  name: string;
+  glyph: string;
+  accent: string;
+  greeting: string;
+  imageUrl?: string;
+  frames?: number;
+  fps?: number;
+  atlas?: PetAtlasPrefs;
+}
+
+export interface PetConfigPrefs {
+  adopted: boolean;
+  enabled: boolean;
+  petId: string;
+  custom: PetCustomPrefs;
+}
+
 export interface AppConfigPrefs {
   onboardingCompleted?: boolean;
   agentId?: string | null;
@@ -122,6 +153,7 @@ export interface AppConfigPrefs {
   // `metadata.linkedDirs` (read-only `--add-dir` awareness, no Design Files
   // import). Stored most-recent-first; capped at RECENT_LINKED_DIRS_MAX.
   recentLinkedDirs?: string[];
+  pet?: PetConfigPrefs;
 }
 
 // Cap on how many recent working directories we remember. Keeps the picker's
@@ -146,6 +178,7 @@ const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'projectLocations',
   'defaultProjectLocationId',
   'recentLinkedDirs',
+  'pet',
 ] as const);
 
 function configFile(dataDir: string): string {
@@ -192,7 +225,10 @@ const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
     'OPENCODE_TEST_HOME',
   ])],
   ['aider', new Set(['AIDER_BIN'])],
+  ['amp', new Set(['AMP_BIN'])],
+  ['antigravity', new Set(['ANTIGRAVITY_BIN'])],
   ['claude', new Set(['CLAUDE_CONFIG_DIR', 'CLAUDE_BIN', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'MMD_MODEL_ROUTES_FILE'])],
+  ['codebuddy', new Set(['CODEBUDDY_BIN'])],
   ['codex', new Set(['CODEX_HOME', 'CODEX_BIN', 'OPENAI_BASE_URL', 'CODEX_API_KEY', 'OPENAI_API_KEY'])],
   ['copilot', new Set(['COPILOT_BIN'])],
   ['cursor-agent', new Set(['CURSOR_AGENT_BIN'])],
@@ -200,6 +236,7 @@ const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ['devin', new Set(['DEVIN_BIN'])],
   ['mimo', new Set(['MIMO_BIN'])],
   ['gemini', new Set(['GEMINI_BIN'])],
+  ['grok-build', new Set(['GROK_BIN'])],
   ['hermes', new Set(['HERMES_BIN'])],
   ['kimi', new Set(['KIMI_BIN'])],
   ['kiro', new Set(['KIRO_BIN'])],
@@ -208,6 +245,7 @@ const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ['pi', new Set(['PI_BIN'])],
   ['qoder', new Set(['QODER_BIN'])],
   ['qwen', new Set(['QWEN_BIN'])],
+  ['reasonix', new Set(['REASONIX_BIN'])],
   ['trae-cli', new Set(['TRAE_CLI_BIN'])],
   ['vibe', new Set(['VIBE_BIN'])],
 ]);
@@ -315,6 +353,71 @@ function validateOrbit(raw: unknown): OrbitConfigPrefs | undefined {
   }
 
   return orbit;
+}
+
+const PET_IMAGE_MAX_CHARS = 3_000_000;
+
+function boundedPetString(value: unknown, fallback: string, max: number): string {
+  if (typeof value !== 'string') return fallback;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, max) : fallback;
+}
+
+function boundedPetInteger(value: unknown, fallback: number, min: number, max: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+function validatePetAtlas(raw: unknown): PetAtlasPrefs | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const obj = raw as Record<string, unknown>;
+  const cols = boundedPetInteger(obj.cols, 1, 1, 64);
+  const rows = boundedPetInteger(obj.rows, 1, 1, 64);
+  if (!Array.isArray(obj.rowsDef)) return undefined;
+  const rowsDef = obj.rowsDef.slice(0, 64).flatMap((entry): PetAtlasRowPrefs[] => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
+    const row = entry as Record<string, unknown>;
+    return [{
+      index: boundedPetInteger(row.index, 0, 0, rows - 1),
+      id: boundedPetString(row.id, 'idle', 64),
+      frames: boundedPetInteger(row.frames, 1, 1, cols),
+      fps: boundedPetInteger(row.fps, 8, 1, 60),
+    }];
+  });
+  return rowsDef.length > 0 ? { cols, rows, rowsDef } : undefined;
+}
+
+function validatePet(raw: unknown): PetConfigPrefs | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const obj = raw as Record<string, unknown>;
+  const customObj = obj.custom && typeof obj.custom === 'object' && !Array.isArray(obj.custom)
+    ? obj.custom as Record<string, unknown>
+    : {};
+  const custom: PetCustomPrefs = {
+    name: boundedPetString(customObj.name, 'Buddy', 80),
+    glyph: boundedPetString(customObj.glyph, '🦄', 32),
+    accent: typeof customObj.accent === 'string' && /^#[0-9a-f]{6}$/iu.test(customObj.accent.trim())
+      ? customObj.accent.trim().toLowerCase()
+      : '#c96442',
+    greeting: boundedPetString(customObj.greeting, 'Hi! I am here whenever you need me.', 240),
+  };
+  if (
+    typeof customObj.imageUrl === 'string'
+    && customObj.imageUrl.length <= PET_IMAGE_MAX_CHARS
+    && /^data:image\/(?:png|jpe?g|webp|gif|svg\+xml);base64,/iu.test(customObj.imageUrl)
+  ) {
+    custom.imageUrl = customObj.imageUrl;
+  }
+  if (customObj.frames !== undefined) custom.frames = boundedPetInteger(customObj.frames, 1, 1, 128);
+  if (customObj.fps !== undefined) custom.fps = boundedPetInteger(customObj.fps, 8, 1, 60);
+  const atlas = validatePetAtlas(customObj.atlas);
+  if (atlas) custom.atlas = atlas;
+  return {
+    adopted: obj.adopted === true,
+    enabled: obj.enabled === true,
+    petId: boundedPetString(obj.petId, 'mochi', 128),
+    custom,
+  };
 }
 
 function normalizeLocationId(raw: string, fallback: string): string {
@@ -583,6 +686,15 @@ function applyConfigValue(
         if (cleaned.length >= RECENT_LINKED_DIRS_MAX) break;
       }
       target[key] = cleaned;
+    } else {
+      delete target[key];
+    }
+    return;
+  }
+  if (key === 'pet') {
+    const validated = validatePet(value);
+    if (validated !== undefined) {
+      target[key] = validated;
     } else {
       delete target[key];
     }

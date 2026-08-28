@@ -388,6 +388,7 @@ export function ComposerPlusMenu({
         <div
           ref={popupRef}
           className={`plus-menu__popup plus-menu__popup--flyout-${flyoutPlacement} plus-menu__popup--flyout-y-${flyoutVerticalPlacement}`}
+          data-testid="composer-plus-menu"
           role="menu"
           style={popupStyle}
         >

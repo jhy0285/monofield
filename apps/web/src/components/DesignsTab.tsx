@@ -493,7 +493,7 @@ export function DesignsTab({
 		<div
 			className={`tab-panel${view === "kanban" ? " design-kanban-view" : ""}`}
 		>
-			<div className="tab-panel-toolbar designs-toolbar">
+			<div className="tab-panel-toolbar designs-toolbar" data-testid="projects-toolbar">
 				<div className="toolbar-left">
 					<div
 						className="subtab-pill"

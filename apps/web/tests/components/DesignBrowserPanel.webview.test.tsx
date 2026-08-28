@@ -377,6 +377,55 @@ describe('DesignBrowserPanel <webview> navigation', () => {
     expect(prompt).toContain('Do not launch a separate browser');
   });
 
+  it('offers the real origin approval when project auto verification is enabled', async () => {
+    restoreHost?.();
+    const begin = vi.fn(async (input: { origin: string }) => ({
+      expiresAt: null,
+      ok: true as const,
+      origin: input.origin,
+      scopes: ['page:read', 'page:pointer'] as const,
+      sessionId: 'browser_session_auto_verify_1234567890',
+    }));
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        browser: {
+          automation: {
+            begin,
+            stop: vi.fn(async () => ({ ok: true as const, stopped: true })),
+            subscribe: () => () => undefined,
+          },
+        },
+      },
+    });
+    const { container } = render(
+      <DesignBrowserPanel
+        autoVerify
+        projectId="proj-auto-verify"
+        initialUrl="http://127.0.0.1:5173/orders"
+        onOpenFile={() => {}}
+        onRefreshFiles={() => {}}
+      />,
+    );
+    const webview = container.querySelector('webview.db-webview') as HTMLElement & {
+      getURL?: () => string;
+      getWebContentsId?: () => number;
+    };
+    webview.getURL = () => 'http://127.0.0.1:5173/orders';
+    webview.getWebContentsId = () => 57;
+    act(() => webview.dispatchEvent(new Event('dom-ready')));
+
+    expect(await screen.findByRole('dialog', { name: /Allow agent automation/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to system approval' }));
+
+    await waitFor(() => expect(begin).toHaveBeenCalledWith({
+      guestWebContentsId: 57,
+      origin: 'http://127.0.0.1:5173',
+      projectDir: null,
+      projectId: 'proj-auto-verify',
+    }));
+    expect(screen.getByTestId('browser-agent-pointer-status')).toBeTruthy();
+  });
+
   it('inherits an approved same-origin popup automation session', async () => {
     restoreHost?.();
     const inherited = {

@@ -1,6 +1,7 @@
 import type { Express } from 'express';
 import type { RouteDeps } from '../server-context.js';
 import type { createTerminalService } from '../terminals.js';
+import { resolveDevelopmentCwd } from '../projects.js';
 
 export interface RegisterTerminalRoutesDeps
   extends RouteDeps<'db' | 'http' | 'paths' | 'projectStore' | 'projectFiles'> {
@@ -52,7 +53,8 @@ export function registerTerminalRoutes(app: Express, ctx: RegisterTerminalRoutes
       return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
     }
     const body = req.body || {};
-    const cwd = resolveProjectDir(PROJECTS_DIR, project.id, project.metadata);
+    const workspaceRoot = resolveProjectDir(PROJECTS_DIR, project.id, project.metadata);
+    const cwd = await resolveDevelopmentCwd(workspaceRoot, project.metadata);
     try {
       const session = await terminals.create({
         projectId: project.id,

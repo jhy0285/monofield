@@ -60,6 +60,20 @@
 }
 
 .runSelect { flex: 1 1 170px; width: clamp(150px, 20vw, 260px); max-width: 260px; }
+.projectSelect { flex: 0 1 190px; width: clamp(140px, 16vw, 210px); max-width: 210px; font-family: var(--mono); }
+.runningCount {
+  flex: 0 0 auto;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 9px;
+  border: 1px solid color-mix(in srgb, var(--green) 42%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--green) 10%, transparent);
+  color: var(--fg);
+  font: 600 11px/1 var(--mono);
+  white-space: nowrap;
+}
 .databaseSelect { width: clamp(150px, 18vw, 240px); max-width: 240px; }
 
 .action,
@@ -74,6 +88,16 @@
 }
 
 .iconAction { width: 26px; padding: 0; }
+.refreshAction {
+  width: auto;
+  max-width: 190px;
+  padding-inline: 8px;
+}
+.refreshAction span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.refreshAction[data-loading='true'] svg { animation: developmentSpin 800ms linear infinite; }
 .action:hover,
 .iconAction:hover,
 .select:hover { border-color: var(--control-border-hover); background: var(--control-hover); }
@@ -111,7 +135,152 @@
 }
 .verifyStatus[data-active='true'] { background: var(--green); }
 
-.error,
+.configurationSummary {
+  display: flex;
+  flex: 1 0 100%;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+  padding: 5px 8px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.runSettings {
+  display: grid;
+  grid-template-columns: minmax(180px, .7fr) minmax(240px, 1fr) auto;
+  flex: 1 0 100%;
+  align-items: end;
+  gap: 8px;
+  padding: 9px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-subtle);
+}
+
+.runSettingsHeading { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 8px; }
+.runSettingsHeading strong { color: var(--text); font-size: 11px; }
+.runSettingsHeading span { color: var(--text-muted); font-size: 10px; }
+.runSettings label { display: grid; min-width: 0; gap: 4px; }
+.runSettings label > span { color: var(--text-muted); font-size: 10px; font-weight: 650; }
+.runSettings input {
+  width: 100%;
+  height: 28px;
+  min-width: 0;
+  padding: 0 8px;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-sm);
+  outline: 0;
+  background: var(--control-bg);
+  color: var(--text);
+  font: 11px/1 var(--mono);
+}
+.runSettings input:hover { border-color: var(--control-border-hover); }
+.runSettings input:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.runSettingsActions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 5px; }
+.runSettingsActions button {
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-sm);
+  background: var(--control-bg);
+  color: var(--text);
+  font: 650 10px/1 var(--sans);
+  cursor: pointer;
+}
+.runSettingsActions button:hover { border-color: var(--control-border-hover); background: var(--control-hover); }
+.runSettingsActions button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.runSettingsActions .primaryAction { background: var(--accent); color: var(--accent-contrast); border-color: var(--accent); }
+
+.configurationSummary strong {
+  flex: 0 0 auto;
+  color: var(--text);
+  font: 650 10px/1.2 var(--mono);
+}
+
+.configurationSummary code,
+.configurationSummary span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.configurationSummary code {
+  flex: 1 1 auto;
+  min-width: 80px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: 10px/1.2 var(--mono);
+}
+
+.configurationSummary span { flex: 0 1 auto; font-family: var(--mono); }
+
+.launchProgress {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  flex: 1 0 100%;
+  align-items: center;
+  min-width: 0;
+  gap: 5px 12px;
+  padding: 7px 10px 8px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-subtle);
+}
+
+.launchSummary {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  gap: 7px;
+  font-size: 11px;
+}
+
+.launchSummary strong { flex: 0 0 auto; color: var(--text); font-weight: 700; }
+.launchSummary span {
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.launchProgress time {
+  color: var(--text-muted);
+  font: 600 10px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.launchTrack {
+  grid-column: 1 / -1;
+  position: relative;
+  overflow: hidden;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--control-border);
+}
+
+.launchTrack i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 32%;
+  border-radius: inherit;
+  background: var(--accent);
+  animation: developmentLaunch 1.15s ease-in-out infinite;
+}
+
+.launchProgress code {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: 10px/1.35 var(--mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .notice {
   max-width: 180px;
   overflow: hidden;
@@ -121,10 +290,32 @@
   white-space: nowrap;
 }
 
+.error {
+  flex: 1 0 100%;
+  width: 100%;
+  min-width: 0;
+  max-height: 132px;
+  padding: 6px 8px;
+  overflow: auto;
+  border-inline-start: 2px solid var(--red);
+  background: var(--bg-subtle);
+  color: var(--red);
+  font: 11px/1.45 var(--mono);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 @keyframes developmentPulse { to { opacity: .35; } }
+@keyframes developmentSpin { to { transform: rotate(360deg); } }
+@keyframes developmentLaunch {
+  from { transform: translateX(-105%); }
+  to { transform: translateX(315%); }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .state_starting i { animation: none; }
+  .refreshAction[data-loading='true'] svg { animation: none; }
+  .launchTrack i { width: 100%; animation: none; }
 }
 
 @media (max-width: 900px) {
@@ -132,4 +323,6 @@
   .contextGroup { flex: 1 1 100%; }
   .contextGroup { margin-inline-start: 47px; }
   .databaseSelect { flex: 1 1 auto; width: auto; max-width: none; }
+  .runSettings { grid-template-columns: 1fr; }
+  .runSettingsHeading { grid-column: 1; }
 }

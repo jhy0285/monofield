@@ -9,13 +9,19 @@ export const geminiAgentDef = {
     versionProbeTimeoutMs: 20_000,
     fallbackModels: [
       DEFAULT_MODEL_OPTION,
-      // Gemini 3 (May 2026): top-tier reasoning + fast frontier-class.
-      // Both currently ship as previews via the Gemini CLI. Issue #981.
-      { id: 'gemini-3-pro-preview', label: 'gemini-3-pro-preview' },
+      // `auto` is Google's recommended Gemini CLI selection mode. BYOK mode
+      // discovers the account's current catalog through /v1beta/models; these
+      // fallbacks keep local CLI setup useful before authentication succeeds.
+      { id: 'auto', label: 'Auto' },
+      { id: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash' },
+      { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash' },
+      { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
+      { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite' },
+      { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview' },
+      { id: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite' },
       { id: 'gemini-3-flash-preview', label: 'gemini-3-flash-preview' },
       { id: 'gemini-2.5-pro', label: 'gemini-2.5-pro' },
       { id: 'gemini-2.5-flash', label: 'gemini-2.5-flash' },
-      // Cheapest 2.5 multimodal variant; useful for high-volume / low-latency work.
       { id: 'gemini-2.5-flash-lite', label: 'gemini-2.5-flash-lite' },
     ],
     // Gemini reads from stdin when `-p` is omitted and stdin is a pipe.

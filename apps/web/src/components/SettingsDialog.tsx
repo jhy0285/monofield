@@ -59,6 +59,11 @@ import { ExportDiagnosticsRow } from './ExportDiagnosticsButton';
 import { Icon } from './Icon';
 import { DictionaryLibrarySection } from './DictionaryLibrarySection';
 import {
+  EntryFeatureGuide,
+  shouldOpenEntryFeatureGuide,
+  type EntryFeatureGuideId,
+} from './EntryFeatureGuide';
+import {
   CUSTOM_MODEL_SENTINEL,
   SearchableModelSelect,
 } from './modelOptions';
@@ -205,6 +210,25 @@ export type SettingsSection =
   // navigate() call so openSettings only owns dialog-bound sections.
   | 'library'
   | 'about';
+
+function guideForSettingsSection(section: SettingsSection): EntryFeatureGuideId | null {
+  switch (section) {
+    case 'memory':
+      return 'settings-memory';
+    case 'media':
+      return 'settings-media';
+    case 'critiqueTheater':
+      return 'settings-review';
+    case 'pet':
+      return 'settings-pet';
+    case 'database':
+      return 'settings-database';
+    case 'dictionaries':
+      return 'settings-dictionaries';
+    default:
+      return null;
+  }
+}
 
 // One-shot focus hint when opening the dialog. `'amr'` scrolls the AMR agent
 // card into view on the execution section and plays a highlight (plus a
@@ -1176,6 +1200,7 @@ export function SettingsDialog({
   }, []);
   const [showApiKey, setShowApiKey] = useState(false);
   const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection);
+  const [settingsGuide, setSettingsGuide] = useState<EntryFeatureGuideId | null>(null);
   const [settingsSidebarCollapsed, setSettingsSidebarCollapsed] = useState(false);
   const [settingsFullscreen, setSettingsFullscreen] = useState(false);
   // Scroll the right-hand content pane back to the top whenever the user
@@ -1184,6 +1209,16 @@ export function SettingsDialog({
   // (About) keeps the previous scrollTop, so the new section's header
   // can land out of view and the panel reads as half-loaded. Issue #634.
   const settingsContentRef = useRef<HTMLDivElement | null>(null);
+
+  const selectSettingsSection = useCallback((section: SettingsSection, revealGuide = true) => {
+    setActiveSection(section);
+    const feature = guideForSettingsSection(section);
+    if (revealGuide && feature && shouldOpenEntryFeatureGuide(feature)) setSettingsGuide(feature);
+  }, []);
+
+  const reopenSettingsGuide = useCallback(() => {
+    setSettingsGuide(guideForSettingsSection(activeSection) ?? 'settings-overview');
+  }, [activeSection]);
   // AMR-card focus, driven by the failed-run nudge (`initialHighlight==='amr'`).
   const amrCardRef = useRef<HTMLDivElement | null>(null);
   // Card pulse: a brief attention flash that auto-clears after a few seconds.
@@ -1382,7 +1417,6 @@ export function SettingsDialog({
       if (
         initial.mode !== 'api' ||
         protocol === 'azure' ||
-        protocol === 'ollama' ||
         missingByokModelFetchFields(initial, protocol).length > 0 ||
         !isValidApiBaseUrl(initial.baseUrl)
       ) {
@@ -2050,21 +2084,6 @@ export function SettingsDialog({
       }
       return;
     }
-    if (apiProtocol === 'ollama') {
-      trackModelsFetchResult({
-        result: 'failed',
-        error_code: 'unsupported_ollama',
-        error_kind: 'unsupported_ollama',
-        duration_ms: 0,
-      });
-      if (!options.silent) {
-        setByokPreconditionNotice({
-          action: 'test',
-          message: t('settings.fetchModelsUnsupportedOllama'),
-        });
-      }
-      return;
-    }
     const modelFetchBlockingIssues = blockingByokDraftIssues(
       byokModelFetchDraftValidation,
     );
@@ -2727,7 +2746,7 @@ export function SettingsDialog({
   useEffect(() => {
     if (cfg.mode !== 'api') return;
     if (visualStabilityMode) return;
-    if (apiProtocol === 'azure' || apiProtocol === 'ollama') return;
+    if (apiProtocol === 'azure') return;
     if (byokFirstPartyBaseUrl?.hostTypo) return;
     if (blockingByokDraftIssues(byokModelFetchDraftValidation).length > 0) return;
     // AIHubMix needs no key and prefills its base URL, so there's nothing to
@@ -3216,6 +3235,16 @@ export function SettingsDialog({
           </div>
           <button
             type="button"
+            className="settings-chrome-btn settings-guide-toggle"
+            onClick={reopenSettingsGuide}
+            aria-label={t('entry.featureGuide')}
+            title={t('entry.featureGuide')}
+            data-testid="settings-feature-guide-button"
+          >
+            <Icon name="help-circle" size={15} strokeWidth={2} />
+          </button>
+          <button
+            type="button"
             className="settings-chrome-btn settings-fullscreen-toggle"
             onClick={() => setSettingsFullscreen((current) => !current)}
             aria-label={settingsFullscreenLabel}
@@ -3303,7 +3332,7 @@ export function SettingsDialog({
             <button
               type="button"
               className={`settings-nav-item${activeSection === 'memory' ? ' active' : ''}`}
-              onClick={() => setActiveSection('memory')}
+              onClick={(event) => selectSettingsSection('memory', event.detail > 0)}
             >
               <Icon name="history" size={18} />
               <span>
@@ -3314,7 +3343,7 @@ export function SettingsDialog({
             <button
               type="button"
               className={`settings-nav-item${activeSection === 'media' ? ' active' : ''}`}
-              onClick={() => setActiveSection('media')}
+              onClick={(event) => selectSettingsSection('media', event.detail > 0)}
             >
               <Icon name="image" size={18} />
               <span>
@@ -3391,7 +3420,7 @@ export function SettingsDialog({
             <button
               type="button"
               className={`settings-nav-item${activeSection === 'critiqueTheater' ? ' active' : ''}`}
-              onClick={() => setActiveSection('critiqueTheater')}
+              onClick={(event) => selectSettingsSection('critiqueTheater', event.detail > 0)}
             >
               <Icon name="comment" size={18} />
               <span>
@@ -3413,7 +3442,7 @@ export function SettingsDialog({
             <button
               type="button"
               className={`settings-nav-item${activeSection === 'pet' ? ' active' : ''}`}
-              onClick={() => setActiveSection('pet')}
+              onClick={(event) => selectSettingsSection('pet', event.detail > 0)}
             >
               <Icon name="sparkles" size={18} />
               <span>
@@ -3457,7 +3486,7 @@ export function SettingsDialog({
             <button
               type="button"
               className={`settings-nav-item${activeSection === 'database' ? ' active' : ''}`}
-              onClick={() => setActiveSection('database')}
+              onClick={(event) => selectSettingsSection('database', event.detail > 0)}
             >
               <Icon name="settings" size={18} />
               <span>
@@ -3468,7 +3497,7 @@ export function SettingsDialog({
             <button
               type="button"
               className={`settings-nav-item${activeSection === 'dictionaries' ? ' active' : ''}`}
-              onClick={() => setActiveSection('dictionaries')}
+              onClick={(event) => selectSettingsSection('dictionaries', event.detail > 0)}
             >
               <Icon name="file-text" size={18} />
               <span>
@@ -4544,7 +4573,7 @@ export function SettingsDialog({
                 }
                 providerModelsFailureMessage={providerModelsFailureMessage}
                 showAzureModelFetchHint={apiProtocol === 'azure'}
-                showFetchModelsUnsupportedHint={apiProtocol === 'ollama'}
+                showFetchModelsUnsupportedHint={false}
                 showSuggestedModelsHint={apiProtocol !== 'azure' && !selectedProvider}
                 azureModelFetchHint={t('settings.azureModelFetchHint')}
                 onCustomModelChange={(value) => updateApiConfig({ model: value })}
@@ -4704,22 +4733,24 @@ export function SettingsDialog({
           ) : null}
 
           {activeSection === 'media' ? (
-            <MediaProvidersSection
-              cfg={cfg}
-              setCfg={setCfg}
-              mediaProvidersNotice={mediaProvidersNotice}
-              onReloadMediaProviders={onReloadMediaProviders}
-              pendingLocalProviderIds={pendingMediaProviderEditIds}
-              onChange={(providerId) => {
-                mediaProvidersChangeVersionRef.current += 1;
-                setPendingMediaProviderEditIds((current) => {
-                  if (current.has(providerId)) return current;
-                  const next = new Set(current);
-                  next.add(providerId);
-                  return next;
-                });
-              }}
-            />
+            <div data-settings-guide-target="media">
+              <MediaProvidersSection
+                cfg={cfg}
+                setCfg={setCfg}
+                mediaProvidersNotice={mediaProvidersNotice}
+                onReloadMediaProviders={onReloadMediaProviders}
+                pendingLocalProviderIds={pendingMediaProviderEditIds}
+                onChange={(providerId) => {
+                  mediaProvidersChangeVersionRef.current += 1;
+                  setPendingMediaProviderEditIds((current) => {
+                    if (current.has(providerId)) return current;
+                    const next = new Set(current);
+                    next.add(providerId);
+                    return next;
+                  });
+                }}
+              />
+            </div>
           ) : null}
           {activeSection === 'integrations' ? <IntegrationsSection /> : null}
 
@@ -4812,7 +4843,9 @@ export function SettingsDialog({
           ) : null}
 
           {activeSection === 'critiqueTheater' ? (
-            <CritiqueTheaterSection />
+            <div data-settings-guide-target="critiqueTheater">
+              <CritiqueTheaterSection />
+            </div>
           ) : null}
 
           {activeSection === 'notifications' ? (
@@ -4820,7 +4853,9 @@ export function SettingsDialog({
           ) : null}
 
           {activeSection === 'pet' ? (
-            <PetSettings cfg={cfg} setCfg={setCfg} />
+            <div data-settings-guide-target="pet">
+              <PetSettings cfg={cfg} setCfg={setCfg} />
+            </div>
           ) : null}
 
           {activeSection === 'skills' ? (
@@ -4874,20 +4909,30 @@ export function SettingsDialog({
           ) : null}
 
           {activeSection === 'memory' ? (
-            <MemorySection
-              onOpenConnectors={() => setActiveSection('composio')}
-              chatAgentId={cfg.mode === 'daemon' ? cfg.agentId ?? null : null}
-              chatModel={selectedMemoryChatModel}
-            />
+            <div data-settings-guide-target="memory">
+              <MemorySection
+                onOpenConnectors={() => setActiveSection('composio')}
+                chatAgentId={cfg.mode === 'daemon' ? cfg.agentId ?? null : null}
+                chatModel={selectedMemoryChatModel}
+              />
+            </div>
           ) : null}
 
           {activeSection === 'privacy' ? (
             <PrivacySection cfg={cfg} setCfg={setCfg} />
           ) : null}
 
-          {activeSection === 'database' ? <DatabaseConnectionsSection /> : null}
+          {activeSection === 'database' ? (
+            <div data-settings-guide-target="database">
+              <DatabaseConnectionsSection />
+            </div>
+          ) : null}
 
-          {activeSection === 'dictionaries' ? <DictionaryLibrarySection /> : null}
+          {activeSection === 'dictionaries' ? (
+            <div data-settings-guide-target="dictionaries">
+              <DictionaryLibrarySection />
+            </div>
+          ) : null}
 
           {activeSection === 'about' ? (
             <section className="settings-section">
@@ -4978,6 +5023,10 @@ export function SettingsDialog({
           </div>
         </div>
       </div>
+      <EntryFeatureGuide
+        feature={settingsGuide}
+        onClose={() => setSettingsGuide(null)}
+      />
     </div>
   );
 }

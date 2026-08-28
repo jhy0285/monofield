@@ -1204,7 +1204,7 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
         url: `${trimmedBase}/api/chat`,
         headers: {
           'content-type': 'application/json',
-          authorization: `Bearer ${apiKey}`,
+          ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}),
         },
         body: {
           model,

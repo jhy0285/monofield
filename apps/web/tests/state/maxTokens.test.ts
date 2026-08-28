@@ -10,6 +10,11 @@ import {
 } from '../../src/state/maxTokens';
 
 describe('modelMaxTokensDefault', () => {
+  it('recognizes current first-party frontier output caps', () => {
+    expect(modelMaxTokensDefault('gpt-5.6-sol')).toBe(128000);
+    expect(modelMaxTokensDefault('claude-sonnet-5')).toBe(128000);
+  });
+
   it('falls through to LiteLLM data for canonical Anthropic ids', () => {
     // 64k for the 4.5 line is the upstream value; this guards against the
     // sync script silently dropping or rewriting these entries.

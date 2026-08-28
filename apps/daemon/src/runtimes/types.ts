@@ -57,6 +57,11 @@ export type RuntimeContext = {
   // also persists) and the daemon seeds it with the full transcript.
   resumeSessionId?: string | null;
   newSessionId?: string;
+  // Managed scratch projects can live beneath the MonoField source/data
+  // tree in development. Prevent a coding CLI from inheriting unrelated
+  // parent AGENTS.md files in that case; real user-selected repositories
+  // leave this false so their own project instructions still apply.
+  ignoreProjectInstructions?: boolean;
 };
 
 // Marker on a RuntimeAgentDef declaring that the adapter's CLI maintains
@@ -185,6 +190,11 @@ export type RuntimeAgentDef = {
   // RuntimeContext.hasPriorAssistantTurn comment for why double-context
   // is the discovery-form loop's root cause.
   resumesSessionViaCli?: boolean;
+  // Some CLIs choose their own session id and expose it in the structured
+  // event stream (Codex `thread.started`) instead of accepting a create-time
+  // id. The daemon captures that id and persists it only after a successful
+  // turn, then supplies it through `resumeSessionId` on the next spawn.
+  sessionIdFromStream?: boolean;
   // Optional name of a daemon-process environment variable that overrides
   // the default model id when the chat run reaches the spawn layer with
   // null or the synthetic 'default'. Used by adapters whose CLI rejects
@@ -244,6 +254,7 @@ export type DetectedAgent = Omit<
   // def directly, the registry payload stays unchanged.
   | 'inactivityTimeoutMs'
   | 'authProbe'
+  | 'sessionIdFromStream'
 > & {
   models: RuntimeModelOption[];
   modelsSource: RuntimeModelSource;

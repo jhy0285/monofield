@@ -10,6 +10,7 @@ export async function runDatabaseCli(args: string[], helpers: {
     console.log(`Usage:
   monofield database list [--json] [--daemon-url <url>]
   monofield database schemas [connection-id] [--json] [--daemon-url <url>]
+  monofield database table [connection-id] <schema> <table> [--limit <1-20>] [--json] [--daemon-url <url>]
   monofield database describe [connection-id] <schema> <table> [--json] [--daemon-url <url>]
   monofield database sample [connection-id] <schema> <table> [--limit <1-20>] [--json] [--daemon-url <url>]
   monofield database inspect [connection-id] --tables-file <path> [--limit <1-20>] [--concurrency <8|16|32>] [--json] [--daemon-url <url>]
@@ -39,7 +40,7 @@ at 100 rows. DDL and arbitrary SQL are never accepted.`);
   )?.trim() ?? "";
   const usesDefault = Boolean(defaultConnectionId) && (
     (subcommand === 'schemas' && values.length === 0)
-    || ((subcommand === 'describe' || subcommand === 'sample') && values.length === 2)
+    || ((subcommand === 'table' || subcommand === 'describe' || subcommand === 'sample') && values.length === 2)
     || ((subcommand === 'inspect' || subcommand === 'mutate') && values.length === 0)
   );
   const connectionId = usesDefault ? defaultConnectionId : (values[0] ?? "");
@@ -51,6 +52,17 @@ at 100 rows. DDL and arbitrary SQL are never accepted.`);
     path = `/api/projects/${encodeURIComponent(values[0])}/database/candidates${schema}`;
   }
   else if (subcommand === "schemas" && connectionId) path = `/api/database/connections/${encodeURIComponent(connectionId)}/schemas`;
+  else if (subcommand === "table" && connectionId && schema && table) {
+    path = `/api/database/connections/${encodeURIComponent(connectionId)}/inspect`;
+    init = {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        tables: [{ schema, table }],
+        limit: flags.limit == null ? 5 : Number(flags.limit),
+      }),
+    };
+  }
   else if (subcommand === "describe" && connectionId && schema && table) path = `/api/database/connections/${encodeURIComponent(connectionId)}/tables/${encodeURIComponent(schema)}/${encodeURIComponent(table)}`;
   else if (subcommand === "sample" && connectionId && schema && table) {
     const limit = flags.limit == null ? "" : `?limit=${encodeURIComponent(String(flags.limit))}`;

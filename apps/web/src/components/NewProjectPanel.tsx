@@ -818,7 +818,7 @@ export function NewProjectPanel({
         >
           <Icon name="chevron-left" size={16} strokeWidth={2} />
         </button>
-        <div className="newproj-tabs" role="tablist" ref={tabsRef}>
+        <div className="newproj-tabs" role="tablist" ref={tabsRef} data-testid="new-project-tabs">
           {(Object.keys(TAB_LABEL_KEYS) as CreateTab[]).map((entry) => (
             <button
               key={entry}
@@ -853,12 +853,49 @@ export function NewProjectPanel({
         </button>
       </div>
       ) : null}
-      <div className="newproj-body">
+      <div className={`newproj-body newproj-body--${workMode}`}>
         <h3 className="newproj-title">
           <span className="newproj-title-text">
             {workMode === 'development' ? t('workMode.development') : titleForTab(tab, mediaSurface, t)}
           </span>
         </h3>
+
+        {workMode === 'development' ? (
+          <section className="newproj-development" data-testid="development-project-surface">
+            <div className="newproj-development__intro">
+              <span>{t('development.guide')}</span>
+              <p>{t('development.folderRequired')}</p>
+              <div className="newproj-development__capabilities" aria-hidden="true">
+                <small>{t('gitChanges.title')}</small>
+                <small>{t('development.database')}</small>
+                <small>{t('development.localApp')}</small>
+              </div>
+            </div>
+            <ol className="newproj-development__flow">
+              <li>
+                <Icon name="folder" size={16} />
+                <span>
+                  <strong>{t('workingDirPicker.replace')}</strong>
+                  <small>{t('workMode.developmentFolderRequired')}</small>
+                </span>
+              </li>
+              <li>
+                <Icon name="play" size={16} />
+                <span>
+                  <strong>{t('development.guideConfigTitle')}</strong>
+                  <small>{t('development.guideRunBody')}</small>
+                </span>
+              </li>
+              <li>
+                <Icon name="eye" size={16} />
+                <span>
+                  <strong>{t('development.guideVerifyTitle')}</strong>
+                  <small>{t('development.guideVerifyBody')}</small>
+                </span>
+              </li>
+            </ol>
+          </section>
+        ) : null}
 
         <div className="newproj-name-row">
           <input
@@ -885,7 +922,9 @@ export function NewProjectPanel({
                 ? t('workingDirPicker.processing')
                 : workingDir
                   ? displayFolderName(workingDir)
-                  : t('workingDirPicker.select')}
+                  : workMode === 'development'
+                    ? t('workingDirPicker.replace')
+                    : t('workingDirPicker.select')}
             </span>
           </button>
           {workingDir ? (
@@ -903,7 +942,7 @@ export function NewProjectPanel({
           ) : null}
         </div>
 
-        {showDesignSystemPicker ? (
+        {workMode === 'creation' && showDesignSystemPicker ? (
           <DesignSystemPicker
             designSystems={selectableDesignSystems}
             defaultDesignSystemId={defaultDesignSystemId}
@@ -955,11 +994,11 @@ export function NewProjectPanel({
           />
         ) : null}
 
-        {tab === 'prototype' || tab === 'live-artifact' || tab === 'template' || tab === 'other' ? (
+        {workMode === 'creation' && (tab === 'prototype' || tab === 'live-artifact' || tab === 'template' || tab === 'other') ? (
           <PlatformPicker value={platformTargets} onChange={setPlatformTargets} />
         ) : null}
 
-        {tab === 'prototype' || tab === 'live-artifact' || tab === 'template' || tab === 'other' ? (
+        {workMode === 'creation' && (tab === 'prototype' || tab === 'live-artifact' || tab === 'template' || tab === 'other') ? (
           <SurfaceOptions
             includeLandingPage={includeLandingPage}
             includeOsWidgets={includeOsWidgets}
@@ -1064,16 +1103,18 @@ export function NewProjectPanel({
               : undefined
           }
         >
-          <Icon name="plus" size={13} />
+          <Icon name={workMode === 'development' ? 'folder' : 'plus'} size={13} />
           <span>
-            {tab === 'template'
+            {workMode === 'development'
+              ? t('workMode.development')
+              : tab === 'template'
               ? t('newproj.createFromTemplate')
               : tab === 'live-artifact'
                 ? t('newproj.createLiveArtifact')
               : t('newproj.create')}
           </span>
         </button>
-        {onImportClaudeDesign ? (
+        {workMode === 'creation' && onImportClaudeDesign ? (
           <>
             <input
               ref={importInputRef}
@@ -1098,7 +1139,7 @@ export function NewProjectPanel({
             </button>
           </>
         ) : null}
-        {folderImport.available ? (
+        {workMode === 'creation' && folderImport.available ? (
           <div className="newproj-open-folder">
             <button
               type="button"

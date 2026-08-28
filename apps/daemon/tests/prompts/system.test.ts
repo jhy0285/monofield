@@ -101,6 +101,25 @@ describe('composeSystemPrompt', () => {
     expect(prompt.length).toBeLessThan(8_000);
   });
 
+  it('keeps a connected-database development turn below the live prompt budget', () => {
+    const prompt = composeSystemPrompt({
+      agentId: 'codex',
+      sessionMode: 'chat',
+      streamFormat: 'jsonl',
+      locale: 'ko',
+      metadata: {
+        kind: 'other',
+        workMode: 'development',
+        databaseContext: { connectionId: 'db-development', useForDevelopment: true },
+      } as any,
+    });
+
+    expect(prompt).toContain('database table <schema> <table> --limit 5 --json');
+    expect(prompt).not.toContain('RULE 1 — turn 1 must emit');
+    expect(prompt).not.toContain('# Slide deck — fixed framework');
+    expect(prompt.length).toBeLessThan(6_000);
+  });
+
   it('injects Chinese quick brief guidance when the UI locale is zh-CN', () => {
     const prompt = composeSystemPrompt({ locale: 'zh-CN' });
 

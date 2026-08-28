@@ -32,6 +32,7 @@ describe('media-config OpenAI auth-file fallback', () => {
   const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
   const originalDataDir = process.env.OD_DATA_DIR;
   const originalSandboxMode = process.env.OD_SANDBOX_MODE;
+  const originalCodexHome = process.env.CODEX_HOME;
   let homedirSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(async () => {
@@ -45,6 +46,7 @@ describe('media-config OpenAI auth-file fallback', () => {
     delete process.env.OD_MEDIA_CONFIG_DIR;
     delete process.env.OD_DATA_DIR;
     delete process.env.OD_SANDBOX_MODE;
+    delete process.env.CODEX_HOME;
   });
 
   afterEach(async () => {
@@ -74,6 +76,11 @@ describe('media-config OpenAI auth-file fallback', () => {
       delete process.env.OD_SANDBOX_MODE;
     } else {
       process.env.OD_SANDBOX_MODE = originalSandboxMode;
+    }
+    if (originalCodexHome == null) {
+      delete process.env.CODEX_HOME;
+    } else {
+      process.env.CODEX_HOME = originalCodexHome;
     }
     homedirSpy.mockRestore();
     await rm(homeDir, { recursive: true, force: true });

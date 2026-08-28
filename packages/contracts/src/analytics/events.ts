@@ -473,15 +473,16 @@ export type TrackingChatPanelPageViewSource =
 // --- Onboarding page_view (welcome flow) ---
 //
 // CSV row "Onboarding / page_view". Fires once per step exposure inside the
-// welcome flow. The current first-run flow is Connect → About you →
-// Newsletter → Design system CTA. The legacy brand-extraction literal remains
-// in the contract for historical rows only.
+// welcome flow. The current first-run flow is Connect → About you → Design
+// system CTA. Newsletter and brand-extraction literals remain in the contract
+// for historical rows only.
 // Each step's `step_index` / `step_name` must match the enum pairs below.
 // `onboarding_session_id` is generated once per session so dashboards can
 // stitch the funnel.
 export type TrackingOnboardingArea =
   | 'runtime'
   | 'about_you'
+  /** @deprecated newsletter signup was removed from onboarding. */
   | 'newsletter'
   | 'design_system'
   /** @deprecated legacy onboarding final-step area; use `design_system`. */
@@ -495,6 +496,7 @@ export type TrackingOnboardingStepIndex = '1' | '2' | '3' | '4' | 'progress';
 export type TrackingOnboardingStepName =
   | 'connect'
   | 'about_you'
+  /** @deprecated newsletter signup was removed from onboarding. */
   | 'newsletter'
   | 'design_system'
   /** @deprecated legacy onboarding final-step name; use `design_system`. */
@@ -598,7 +600,7 @@ export type TrackingOnboardingClickElement =
   | 'organization_size'
   | 'use_case'
   | 'hear_about_us'
-  // Optional newsletter email captured on the About-you step
+  /** @deprecated newsletter signup was removed from onboarding. */
   | 'newsletter_email'
   // Fires once on Finish-setup, carrying the full survey snapshot
   // (role + organization_size + use_case + discovery_source) so the
@@ -623,6 +625,7 @@ export type TrackingOnboardingClickAction =
   | 'add_source'
   | 'upload_source'
   | 'show_access_methods'
+  /** @deprecated newsletter signup was removed from onboarding. */
   | 'subscribe';
 
 // All optional except the discriminators (area/element/action/step/
@@ -654,8 +657,7 @@ export interface OnboardingClickProps {
   source_type?: TrackingOnboardingSourceType;
   has_brand_description?: boolean;
   source_count?: number;
-  // True when the user left a (valid) newsletter email on the About-you
-  // step. Boolean only — the email address itself is never sent here.
+  /** @deprecated newsletter signup was removed from onboarding. */
   newsletter_opt_in?: boolean;
 }
 

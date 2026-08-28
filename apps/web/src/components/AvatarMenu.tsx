@@ -215,10 +215,10 @@ export function AvatarMenu({
   useEffect(() => {
     if (!open || config.mode !== 'api') return;
     if (fetchedByokModels.length > 0) return;
-    if (apiProtocol === 'azure' || apiProtocol === 'ollama') return;
+    if (apiProtocol === 'azure') return;
     const baseUrl = config.baseUrl?.trim() ?? '';
     const apiKey = config.apiKey?.trim() ?? '';
-    if (!baseUrl || !apiKey) return;
+    if (!baseUrl || (byokProvider?.requiresApiKey !== false && !apiKey)) return;
     let cancelled = false;
     void fetchProviderModels({
       protocol: apiProtocol,
@@ -238,6 +238,7 @@ export function AvatarMenu({
     open,
     config.mode,
     apiProtocol,
+    byokProvider?.requiresApiKey,
     config.baseUrl,
     config.apiKey,
     byokProviderModelsKey,

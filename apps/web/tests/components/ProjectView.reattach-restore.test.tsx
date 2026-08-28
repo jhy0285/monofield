@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ProjectView,
   computeProducedFiles,
+  preTurnFileNamesForWorkMode,
   findSameTurnHtmlWriteForRecoveredArtifact,
   mergeRecoveredArtifact,
 } from '../../src/components/ProjectView';
@@ -179,6 +180,24 @@ describe('computeProducedFiles', () => {
 
   it('returns undefined when no baseline is provided', () => {
     expect(computeProducedFiles(undefined, [] as never)).toBeUndefined();
+  });
+});
+
+describe('preTurnFileNamesForWorkMode', () => {
+  const files = [
+    { name: 'src/app.ts' },
+    { name: 'README.md' },
+  ] as never;
+
+  it('does not create a produced-file baseline for development projects', () => {
+    expect(preTurnFileNamesForWorkMode('development', files)).toBeUndefined();
+  });
+
+  it('keeps the document artifact baseline for document/design work', () => {
+    expect(preTurnFileNamesForWorkMode('document', files)).toEqual([
+      'src/app.ts',
+      'README.md',
+    ]);
   });
 });
 

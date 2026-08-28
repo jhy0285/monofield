@@ -23,6 +23,7 @@
   <img alt="Local-first desktop" src="https://img.shields.io/badge/runtime-local--first-f4f4f2?style=flat-square&labelColor=111111" />
   <img alt="Node 24" src="https://img.shields.io/badge/Node-24-f4f4f2?style=flat-square&labelColor=111111" />
   <img alt="Windows desktop" src="https://img.shields.io/badge/Desktop-Windows-f4f4f2?style=flat-square&labelColor=111111" />
+  <a href="https://github.com/jhy0285/monofield/stargazers"><img alt="GitHub Stars" src="https://img.shields.io/github/stars/jhy0285/monofield?style=flat-square&label=GitHub%20Stars&color=f4f4f2&labelColor=111111" /></a>
 </p>
 
 <p align="center">
@@ -50,6 +51,17 @@ brand · rules · references      test · create · validate      HTML · PPTX
 > 원하는 AI 모델을 하나의 프로젝트에 연결합니다. 소프트웨어 개발부터 화면·
 > 인터페이스 명세, 프로토타입, 슬라이드와 문서 export까지 같은 맥락에서 만들고
 > diff·빌드·브라우저·산출물 검증으로 결과를 확인합니다.
+
+## Support MonoField
+
+If MonoField has been useful—or the idea of bringing code, design, and documents
+into one local workspace left an impression—please consider giving the
+[repository a star](https://github.com/jhy0285/monofield). It helps more people
+discover the project and gives us momentum to keep improving it.
+
+MonoField를 유용하게 사용했거나 프로젝트의 방향이 인상 깊었다면
+[GitHub Star](https://github.com/jhy0285/monofield)로 응원해 주세요. 더 많은
+사람이 프로젝트를 발견하고, 꾸준히 개선해 나가는 데 큰 힘이 됩니다.
 
 ## Why MonoField
 

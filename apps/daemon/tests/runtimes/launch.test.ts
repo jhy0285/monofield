@@ -191,10 +191,10 @@ fsTest('resolveAgentLaunch resolves a Codex npm wrapper to the native packaged b
       const wrapperLinkPath = join(wrapperLinkDir, 'codex');
       const nativePkgDir = join(wrapperPkgDir, 'node_modules', '@openai', `codex-${process.platform}-${process.arch}`);
       const nativePathDir = join(nativePkgDir, 'vendor', codexNativeTargetTriple(), 'path');
-      const nativeBin = join(nativePkgDir, 'vendor', codexNativeTargetTriple(), 'codex', 'codex');
+      const nativeBin = join(nativePkgDir, 'vendor', codexNativeTargetTriple(), 'bin', 'codex');
       mkdirSync(join(wrapperPkgDir, 'bin'), { recursive: true });
       mkdirSync(wrapperLinkDir, { recursive: true });
-      mkdirSync(join(nativePkgDir, 'vendor', codexNativeTargetTriple(), 'codex'), { recursive: true });
+      mkdirSync(join(nativePkgDir, 'vendor', codexNativeTargetTriple(), 'bin'), { recursive: true });
       mkdirSync(nativePathDir, { recursive: true });
       writeFileSync(wrapperRealPath, '#!/usr/bin/env node\nrequire("@openai/codex");\n');
       writeFileSync(nativeBin, '#!/bin/sh\nexit 0\n');
@@ -210,6 +210,43 @@ fsTest('resolveAgentLaunch resolves a Codex npm wrapper to the native packaged b
       assert.equal(launch.launchPath, realpathSync(nativeBin));
       assert.equal(launch.launchKind, 'codex-native');
       assert.deepEqual(launch.childPathPrepend, [wrapperLinkDir, realpathSync(nativePathDir)]);
+      assert.equal(launch.diagnostic, null);
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+winTest('resolveAgentLaunch resolves the current nested Windows Codex package layout', () => {
+  const root = mkdtempSync(join(tmpdir(), 'monofield-launch-codex-windows-'));
+  try {
+    return withEnvSnapshot(['PATH', 'PATHEXT', 'OD_AGENT_HOME'], () => {
+      const wrapperPath = join(root, 'codex.CMD');
+      const nativePkgDir = join(
+        root,
+        'node_modules',
+        '@openai',
+        'codex',
+        'node_modules',
+        '@openai',
+        `codex-${process.platform}-${process.arch}`,
+      );
+      const nativePathDir = join(nativePkgDir, 'vendor', codexNativeTargetTriple(), 'path');
+      const nativeBin = join(nativePkgDir, 'vendor', codexNativeTargetTriple(), 'bin', 'codex.exe');
+      mkdirSync(join(nativePkgDir, 'vendor', codexNativeTargetTriple(), 'bin'), { recursive: true });
+      mkdirSync(nativePathDir, { recursive: true });
+      writeFileSync(wrapperPath, '@echo off\r\nnode "%~dp0node_modules\\@openai\\codex\\bin\\codex.js" %*\r\n');
+      writeFileSync(nativeBin, 'fixture');
+      process.env.PATH = root;
+      process.env.PATHEXT = '.CMD;.EXE';
+      process.env.OD_AGENT_HOME = root;
+
+      const launch = resolveAgentLaunch(codex);
+
+      assert.equal(launch.selectedPath, wrapperPath);
+      assert.equal(launch.launchPath, nativeBin);
+      assert.equal(launch.launchKind, 'codex-native');
+      assert.deepEqual(launch.childPathPrepend, [root, nativePathDir]);
       assert.equal(launch.diagnostic, null);
     });
   } finally {

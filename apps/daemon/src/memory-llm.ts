@@ -876,10 +876,11 @@ async function callLocalCli(provider, system, user, options) {
   // Falling back to process.cwd() there meant a bun-based agent (OpenCode) ran
   // its startup `bun install` in whatever directory the daemon was launched from
   // — clobbering a pnpm workspace (dev checkout). Use a neutral temp cwd.
-  const cwd =
-    typeof options?.projectRoot === 'string' && options.projectRoot.trim()
-      ? options.projectRoot
-      : os.tmpdir();
+  // Memory extraction is deliberately tool-less and must not load the active
+  // repository's AGENTS.md/project instructions. Running from the repository
+  // root added tens of thousands of unrelated input tokens to a background
+  // request that only needs the user turn and saved memory snapshot.
+  const cwd = os.tmpdir();
   const prompt = [
     system,
     '',
@@ -901,8 +902,8 @@ async function callLocalCli(provider, system, user, options) {
       '',
       [],
       [],
-      { model: provider.model },
-      { cwd },
+      { model: provider.model, reasoning: 'low' },
+      { cwd, ignoreProjectInstructions: true },
     );
     parseStdout = (raw) => extractJsonEventText(def.eventParser || def.id, raw, def.name);
   } else if (provider.agentId === 'opencode') {

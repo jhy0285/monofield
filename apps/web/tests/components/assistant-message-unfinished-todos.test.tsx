@@ -142,7 +142,7 @@ describe('AssistantMessage unfinished todo state', () => {
     );
 
     expect(screen.getByText(/32s/)).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Usage: Measured' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Model usage: Measured' })).toBeTruthy();
     expect(screen.getAllByText('1,439').length).toBeGreaterThan(0);
   });
 
@@ -163,7 +163,7 @@ describe('AssistantMessage unfinished todo state', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: 'Usage: Measured' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Model usage: Measured' })).toBeTruthy();
     expect(screen.getByText('$0.00')).toBeTruthy();
   });
 
@@ -184,7 +184,7 @@ describe('AssistantMessage unfinished todo state', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: 'Usage: Measured' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Model usage: Measured' })).toBeTruthy();
     expect(screen.getByText('$0.000010')).toBeTruthy();
   });
 
@@ -225,7 +225,7 @@ describe('AssistantMessage unfinished todo state', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: 'Usage: Measured' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Model usage: Measured' })).toBeTruthy();
     expect(screen.queryByText(/\d+m \d{2}s/)).toBeNull();
   });
 

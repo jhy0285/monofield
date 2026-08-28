@@ -58,7 +58,7 @@ export interface LauncherAction {
   run: (ctx: LauncherContext) => void;
 }
 
-const ENABLE_TERMINAL_WORKSPACE_ENTRYPOINT = false;
+const ENABLE_TERMINAL_WORKSPACE_ENTRYPOINT = true;
 
 /**
  * Build the list of "create new" actions for the current context.

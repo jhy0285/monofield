@@ -672,7 +672,7 @@ describe('FileWorkspace launcher tab creation', () => {
     });
   });
 
-  it('hides terminal creation while keeping browser creation available', () => {
+  it('offers terminal and browser creation in the workspace launcher', () => {
     render(
       <FileWorkspace
         projectId="project-1"
@@ -688,7 +688,7 @@ describe('FileWorkspace launcher tab creation', () => {
 
     fireEvent.click(screen.getByTestId('workspace-add-tab'));
 
-    expect(screen.queryByRole('button', { name: /New Terminal/i })).toBeNull();
+    expect(screen.getByRole('button', { name: /New Terminal/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /New Browser/i })).toBeTruthy();
     expect(screen.getByText('Create new')).toBeTruthy();
   });
@@ -1602,7 +1602,7 @@ describe('FileWorkspace sketch save', () => {
 });
 
 describe('FileWorkspace add-module menu', () => {
-  it('opens the add-module menu with Browser available and Terminal hidden', () => {
+  it('opens the add-module menu with Browser and Terminal available', () => {
     render(
       <FileWorkspace
         projectId="project-1"
@@ -1627,7 +1627,7 @@ describe('FileWorkspace add-module menu', () => {
     const browserItem = screen.getByRole('button', { name: /New Browser/ });
     const menu = browserItem.closest('[data-testid="tab-launcher-menu"]');
     expect(menu).not.toBeNull();
-    expect(screen.queryByRole('button', { name: /New Terminal/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /New Terminal/ })).toBeTruthy();
 
     // The tab strip is a horizontal scroll container that also clips
     // vertically, so the "+" button lives outside it in `.ws-add-tab`

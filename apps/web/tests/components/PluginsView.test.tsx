@@ -493,13 +493,13 @@ describe('PluginsView', () => {
       target: { value: '1.1.0' },
     });
     expect(within(dialog).getByTestId('plugins-available-install-command').textContent)
-      .toContain('od plugin install remote-plugin@1.1.0');
+      .toContain('monofield plugin install remote-plugin@1.1.0');
     expect(within(dialog).getByTestId('plugins-available-provenance').textContent)
       .toContain('github:owner/repo@v1.1.0 · sha256:previous');
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Copy install command' }));
     await waitFor(() =>
-      expect(writeText).toHaveBeenCalledWith('od plugin install remote-plugin@1.1.0'),
+      expect(writeText).toHaveBeenCalledWith('monofield plugin install remote-plugin@1.1.0'),
     );
 
     fireEvent.click(within(dialog).getByTestId('plugins-available-details-install-remote-plugin'));
@@ -713,7 +713,7 @@ describe('PluginsView', () => {
       url: 'https://packages.company.example/open-docs-marketplace.json',
       trust: 'trusted',
       visibility: 'enterprise',
-      authEnv: 'OD_MARKETPLACE_TOKEN',
+      authEnv: 'MONOFIELD_MARKETPLACE_TOKEN',
       policy: expect.objectContaining({
         allowedVisibilities: ['enterprise', 'private'],
         allowedHosts: ['packages.company.example'],

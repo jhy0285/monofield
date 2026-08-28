@@ -1,6 +1,6 @@
 .root {
-  display: grid;
-  grid-template-rows: auto auto 1fr;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   height: 100%;
   background: var(--bg-panel);
@@ -18,17 +18,34 @@
 
 .titleGroup { display: flex; align-items: center; min-width: 0; gap: 8px; }
 .titleGroup h2 { margin: 0; font: 650 13px/1 var(--sans); }
-.branch {
+.headerActions { display: inline-flex; align-items: center; gap: 6px; }
+.branchPicker {
+  display: inline-flex;
+  align-items: center;
   overflow: hidden;
-  max-width: 240px;
-  padding: 3px 7px;
+  max-width: 280px;
+  min-height: 26px;
+  padding-left: 7px;
   border: 1px solid var(--control-border);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
+  background: var(--control-bg);
   color: var(--text-muted);
+}
+.branchPicker:hover { border-color: var(--control-border-hover); background: var(--control-hover); }
+.branchPicker select {
+  overflow: hidden;
+  max-width: 250px;
+  height: 24px;
+  padding: 0 22px 0 5px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
   font: 600 10px/1 var(--mono);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.branchPicker:focus-within { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 
 .refresh,
 .diffHeader button {
@@ -52,6 +69,57 @@
 .scope button:focus-visible,
 .files button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 .refresh:disabled { color: var(--text-disabled); cursor: wait; }
+
+.branchManager,
+.dirtyPrompt {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(190px, 260px) auto minmax(180px, 240px) auto;
+  align-items: end;
+  gap: 7px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-subtle);
+}
+.branchManagerTitle { align-self: center; display: grid; min-width: 0; gap: 3px; }
+.branchManagerTitle strong { overflow: hidden; color: var(--text); font: 650 11px/1.2 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.branchManagerTitle span { color: var(--text-muted); font-size: 10px; }
+.branchManager label { display: grid; min-width: 0; gap: 3px; }
+.branchManager label > span { color: var(--text-muted); font-size: 9px; font-weight: 700; }
+.branchManager select,
+.branchManager input,
+.branchManager button,
+.dirtyPrompt button {
+  height: 28px;
+  min-width: 0;
+  padding: 0 8px;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-sm);
+  outline: 0;
+  background: var(--control-bg);
+  color: var(--text);
+  font: 600 10px/1 var(--sans);
+}
+.branchManager input,
+.branchManager select { font-family: var(--mono); }
+.branchManager button,
+.dirtyPrompt button { cursor: pointer; white-space: nowrap; }
+.branchManager button:hover,
+.dirtyPrompt button:hover,
+.branchManager input:hover,
+.branchManager select:hover { border-color: var(--control-border-hover); background: var(--control-hover); }
+.branchManager button:focus-visible,
+.dirtyPrompt button:focus-visible,
+.branchManager input:focus-visible,
+.branchManager select:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.branchManager button:disabled,
+.dirtyPrompt button:disabled,
+.branchManager select:disabled { color: var(--text-disabled); cursor: not-allowed; }
+.dirtyPrompt { grid-template-columns: minmax(260px, 1fr) auto auto auto; align-items: center; background: color-mix(in srgb, var(--orange) 8%, var(--bg-subtle)); }
+.dirtyPrompt > div { display: grid; gap: 3px; }
+.dirtyPrompt strong { color: var(--text); font-size: 11px; }
+.dirtyPrompt span { color: var(--text-muted); font-size: 10px; }
+.dirtyPrompt .primaryAction { border-color: var(--accent); background: var(--accent); color: var(--accent-contrast); }
+.notice { padding: 7px 12px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--green) 8%, var(--bg-panel)); color: var(--text); font-size: 11px; }
 
 .scope {
   display: flex;
@@ -77,7 +145,7 @@
 .scope .selectedScope { background: var(--selected); color: var(--selected-contrast); }
 .scope .selectedScope span { color: var(--selected-contrast); opacity: .72; }
 
-.content { display: grid; grid-template-columns: minmax(180px, 27%) 1fr; min-height: 0; }
+.content { display: grid; grid-template-columns: minmax(180px, 27%) 1fr; flex: 1 1 auto; min-height: 0; }
 .files { overflow: auto; border-right: 1px solid var(--border); background: var(--bg-subtle); }
 .files button {
   display: grid;
@@ -147,9 +215,7 @@
 .diffHeader button:focus-visible { outline-offset: 1px; }
 
 .splitPatch {
-  display: grid;
-  grid-template-columns: minmax(540px, max-content) minmax(540px, max-content);
-  align-content: start;
+  display: block;
   min-width: 0;
   min-height: 0;
   overflow: auto;
@@ -159,11 +225,18 @@
   color: var(--text-muted);
   font: 11.5px/1.55 var(--mono);
 }
+.splitCanvas {
+  display: grid;
+  grid-template-columns: minmax(540px, max-content) minmax(540px, max-content);
+  align-content: start;
+  width: max-content;
+  min-width: max(1080px, 100%);
+}
 .splitPatch:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
-.splitPatch::after {
+.splitCanvas::after {
   content: '';
   grid-column: 1 / -1;
   height: 28px;
@@ -192,7 +265,6 @@
   grid-column: 1 / -1;
   position: sticky;
   left: 0;
-  min-width: 1080px;
   padding: 3px 12px;
   border-top: 1px solid color-mix(in srgb, var(--blue) 24%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--blue) 18%, transparent);
@@ -259,7 +331,11 @@
 
 @media (max-width: 760px) {
   .content { grid-template-columns: 150px 1fr; }
-  .branch { max-width: 100px; }
+  .branchPicker { max-width: 150px; }
+  .branchPicker select { max-width: 120px; }
   .diffHeader { align-items: flex-start; min-height: 65px; padding-top: 8px; }
   .diffActions { align-items: flex-end; flex-direction: column-reverse; gap: 4px; }
+  .branchManager { grid-template-columns: 1fr auto; align-items: end; }
+  .branchManagerTitle { grid-column: 1 / -1; }
+  .dirtyPrompt { grid-template-columns: 1fr; align-items: stretch; }
 }

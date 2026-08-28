@@ -180,7 +180,10 @@ export async function readMemoryConfig(dataDir) {
     const parsed = JSON.parse(raw);
     return {
       enabled: parsed?.enabled !== false,
-      chatExtractionEnabled: parsed?.chatExtractionEnabled !== false,
+      // Automatic chat extraction launches a second model request after every
+      // completed turn. Keep it explicit opt-in so a greeting or one-off
+      // coding task never silently doubles CLI token usage.
+      chatExtractionEnabled: parsed?.chatExtractionEnabled === true,
       // Two-loop memory per-hook flags. All default-ON (`!== false`) so a
       // config written before these existed still injects the profile,
       // rewrites short queries, and self-verifies output.
@@ -190,12 +193,11 @@ export async function readMemoryConfig(dataDir) {
       extraction: normalizeExtractionPatch(parsed?.extraction),
     };
   } catch {
-    // Default-on. The whole point of the feature is to surface user
-    // context across runs; making it opt-in would mean the first 3
-    // chats happen with no memory and no warning.
+    // Saved memory remains available by default, but model-backed extraction
+    // is opt-in because it has a real latency/token cost on every chat turn.
     return {
       enabled: true,
-      chatExtractionEnabled: true,
+      chatExtractionEnabled: false,
       profileEnabled: true,
       rewriteEnabled: true,
       verifyEnabled: true,
@@ -244,7 +246,7 @@ export async function writeMemoryConfig(dataDir, patch) {
   }
   if (typeof next.enabled !== 'boolean') next.enabled = true;
   if (typeof next.chatExtractionEnabled !== 'boolean') {
-    next.chatExtractionEnabled = true;
+    next.chatExtractionEnabled = false;
   }
   // Default-on if a prior config or a malformed patch left these undefined.
   if (typeof next.profileEnabled !== 'boolean') next.profileEnabled = true;

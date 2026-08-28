@@ -253,14 +253,9 @@ describe('onboarding -> home AMR selection (end to end)', () => {
     });
     fireEvent.click(runtimeContinue);
 
-    // About-you step is no longer the final step: advance past it to the
-    // newsletter step, then the brand step that hosts Finish setup.
+    // Advance from About you directly to the final setup screen.
     const aboutYouContinue = await screen.findByRole('button', { name: /^Continue$/i });
     fireEvent.click(aboutYouContinue);
-
-    // Newsletter step -> Brand step -> finish.
-    const newsletterContinue = await screen.findByRole('button', { name: /^Continue$/i });
-    fireEvent.click(newsletterContinue);
 
     const finishToHome = await screen.findByRole('button', { name: /Go to home/i });
     fireEvent.click(finishToHome);

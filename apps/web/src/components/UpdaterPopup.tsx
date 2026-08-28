@@ -21,11 +21,47 @@ import {
   trackUpdateInstallResult,
   trackUpdatePromptSurfaceView,
 } from '../analytics/events';
+import {
+  fetchAppVersionInfo,
+  fetchLatestGithubReleaseInfo,
+  openExternalUrl,
+  type LatestGithubReleaseInfo,
+} from '../providers/registry';
 
 const INSTALL_HANDOFF_WATCHDOG_MS = 10_000;
+const RELEASE_CHECK_DELAY_MS = 1_500;
+const UPDATE_DISMISSED_STORAGE_KEY = 'monofield:update-dismissed:v1';
 
 type InstallState = 'idle' | 'opening' | 'handoff' | 'recoverable';
 type Translator = (key: keyof Dict, vars?: Record<string, string | number>) => string;
+type ManualRelease = LatestGithubReleaseInfo & {
+  currentVersion: string;
+  version: string;
+};
+
+function numericVersionParts(raw: string): number[] {
+  return raw.split('.').map((part) => {
+    const value = Number.parseInt(part, 10);
+    return Number.isFinite(value) ? value : 0;
+  });
+}
+
+export function isNewerRelease(currentVersion: string, candidateVersion: string): boolean {
+  const [currentCore, currentPrerelease] = currentVersion.replace(/^v/i, '').split('-', 2);
+  const [candidateCore, candidatePrerelease] = candidateVersion.replace(/^v/i, '').split('-', 2);
+  const current = numericVersionParts(currentCore ?? '0');
+  const candidate = numericVersionParts(candidateCore ?? '0');
+  const length = Math.max(current.length, candidate.length);
+  for (let index = 0; index < length; index += 1) {
+    const left = candidate[index] ?? 0;
+    const right = current[index] ?? 0;
+    if (left !== right) return left > right;
+  }
+  if (!currentPrerelease && candidatePrerelease) return false;
+  if (currentPrerelease && !candidatePrerelease) return true;
+  if (!currentPrerelease || !candidatePrerelease) return false;
+  return candidatePrerelease.localeCompare(currentPrerelease, undefined, { numeric: true }) > 0;
+}
 
 function versionText(t: Translator, model: UpdaterModel): string {
   const version = model.availableVersion;
@@ -76,6 +112,7 @@ export function UpdaterPopup() {
   const [model, setModel] = useState<UpdaterModel>(() => deriveUpdaterModel(null));
   const [panelOpen, setPanelOpen] = useState(false);
   const [installState, setInstallState] = useState<InstallState>('idle');
+  const [manualRelease, setManualRelease] = useState<ManualRelease | null>(null);
 
   const clearHandoffWatchdog = useCallback(() => {
     if (handoffWatchdogRef.current == null) return;
@@ -120,20 +157,60 @@ export function UpdaterPopup() {
     };
   }, []);
 
-  const ready = model.environment === 'desktop' && model.shouldShowControl;
+  useEffect(() => {
+    let mounted = true;
+    const timer = window.setTimeout(() => {
+      void Promise.all([fetchAppVersionInfo(), fetchLatestGithubReleaseInfo()]).then(
+        ([current, latest]) => {
+          if (!mounted || !current?.packaged || !latest || latest.stale) return;
+          const version = latest.tagName.replace(/^v/i, '');
+          if (!version || !isNewerRelease(current.version, version)) return;
+          const release = { ...latest, currentVersion: current.version, version };
+          setManualRelease(release);
+          try {
+            if (window.localStorage.getItem(UPDATE_DISMISSED_STORAGE_KEY) !== version) {
+              setPanelOpen(true);
+            }
+          } catch {
+            setPanelOpen(true);
+          }
+        },
+      );
+    }, RELEASE_CHECK_DELAY_MS);
+    return () => {
+      mounted = false;
+      window.clearTimeout(timer);
+    };
+  }, []);
+
+  const nativeReady = model.environment === 'desktop' && model.shouldShowControl;
+  const manualReady = manualRelease != null && !nativeReady;
+  const ready = nativeReady || manualReady;
+  const displayModel = manualReady
+    ? {
+        ...model,
+        availableVersion: manualRelease.version,
+        currentVersion: manualRelease.currentVersion,
+        updateKind: 'unknown' as const,
+      }
+    : model;
   const installBusy = installState === 'opening' || installState === 'handoff';
   const canStartInstall = ready || installState === 'recoverable';
   const showControl = ready || installState !== 'idle';
-  const controlLabel = model.updateKind === 'payload' ? t('updater.installRestart') : t('updater.openInstaller');
-  const channelLabel = channelLabelFor(model.status?.channel);
+  const controlLabel = manualReady
+    ? t('updater.download')
+    : model.updateKind === 'payload'
+      ? t('updater.installRestart')
+      : t('updater.openInstaller');
+  const channelLabel = channelLabelFor(displayModel.status?.channel);
   const analytics = useAnalytics();
   const appVersionBefore = useAppVersion();
   const versionProps = useMemo(
-    () => updateVersionProps(model, appVersionBefore),
-    [appVersionBefore, model.availableVersion],
+    () => updateVersionProps(displayModel, manualRelease?.currentVersion ?? appVersionBefore),
+    [appVersionBefore, displayModel.availableVersion, manualRelease?.currentVersion],
   );
 
-  const indicatorSurfaceKey = `${model.currentVersion ?? 'unknown'}->${model.availableVersion ?? 'unknown'}:${model.status?.downloadPath ?? 'unknown'}`;
+  const indicatorSurfaceKey = `${displayModel.currentVersion ?? 'unknown'}->${displayModel.availableVersion ?? 'unknown'}:${displayModel.status?.downloadPath ?? manualRelease?.htmlUrl ?? 'unknown'}`;
   const lastIndicatorSurfaceKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (!ready) {
@@ -174,8 +251,15 @@ export function UpdaterPopup() {
       action: 'dismiss',
       ...versionProps,
     });
+    if (manualRelease) {
+      try {
+        window.localStorage.setItem(UPDATE_DISMISSED_STORAGE_KEY, manualRelease.version);
+      } catch {
+        // A dismissed prompt stays closed for this session even without storage.
+      }
+    }
     setPanelOpen(false);
-  }, [analytics.track, installBusy, versionProps]);
+  }, [analytics.track, installBusy, manualRelease, versionProps]);
 
   useEffect(() => {
     if (!panelOpen) return;
@@ -208,6 +292,13 @@ export function UpdaterPopup() {
       action: 'install',
       ...versionProps,
     });
+    if (manualReady && manualRelease) {
+      const opened = await openExternalUrl(manualRelease.htmlUrl);
+      actionInFlightRef.current = false;
+      setInstallState('idle');
+      if (opened) setPanelOpen(false);
+      return;
+    }
     try {
       const result = await openUpdaterInstaller({ payload: { source: 'updater-prompt' } });
       if (!result.ok) {
@@ -313,8 +404,14 @@ export function UpdaterPopup() {
               <Icon name="arrow-up" size={20} strokeWidth={2.2} />
             </div>
             <div className="updater-popup__body">
-              <h2 id="updater-popup-title">{t('updater.ready')}</h2>
-              <p>{versionText(t, model)}</p>
+              <h2 id="updater-popup-title">
+                {manualReady ? t('updater.available') : t('updater.ready')}
+              </h2>
+              <p>
+                {manualReady && manualRelease
+                  ? t('updater.availableBody', { version: manualRelease.version })
+                  : versionText(t, displayModel)}
+              </p>
               {channelLabel != null ? <span className="updater-popup__badge">{channelLabel}</span> : null}
             </div>
             <div className="updater-popup__actions">
@@ -330,7 +427,9 @@ export function UpdaterPopup() {
                   void installAndQuit();
                 }}
               >
-                {installActionText(t, model, installBusy)}
+                {manualReady
+                  ? t('updater.download')
+                  : installActionText(t, displayModel, installBusy)}
               </button>
             </div>
           </motion.section>

@@ -88,7 +88,10 @@ const PROMPT_SAFE_HTTP_STATUS_LABELS: Record<string, string> = {
   '504': 'Gateway Timeout',
 };
 
-function renderUiLocalePrompt(locale: string | undefined): string {
+function renderUiLocalePrompt(
+  locale: string | undefined,
+  options: { lean?: boolean } = {},
+): string {
   const normalized = locale?.trim();
   if (!normalized || normalized.toLowerCase() === 'en') return '';
   const languageName = normalized === 'zh-CN'
@@ -96,6 +99,9 @@ function renderUiLocalePrompt(locale: string | undefined): string {
     : normalized === 'zh-TW'
       ? 'Traditional Chinese'
       : normalized;
+  if (options.lean) {
+    return `# Response language\n\nUse the MonoField UI locale \`${normalized}\` (${languageName}) for user-visible prose. Keep code, commands, paths, schema/table names, and identifiers unchanged.`;
+  }
   const lines = [
     '# UI locale override',
     '',
@@ -153,6 +159,7 @@ function formatElevenLabsVoiceOptionsErrorForPrompt(
 
 type ProjectMetadata = {
   kind?: string;
+  workMode?: 'development' | 'creation' | string | null;
   intent?: string | null;
   fidelity?: string | null;
   speakerNotes?: boolean | null;
@@ -349,6 +356,14 @@ When you write or edit an HTML file in the project folder through the native fil
 - Do not duplicate file contents in assistant text after writing them to disk.
 - After the final self-check, briefly name the written file and summarize the result instead.
 - A filesystem run that emits a source-code \`<artifact>\` is treated as an unexpected fallback by the host.`;
+
+const LEAN_FILESYSTEM_WORKFLOW = `
+
+---
+
+## Development filesystem workflow
+
+The selected Working folder is the only implementation root. Read and edit it with native CLI tools; do not use MonoField artifact or project-file wrappers for ordinary source files. Keep commands direct, batch related reads, and verify only what the change requires. If the working folder or a command is inaccessible, report the exact error and stop—never switch projects, copy the repository to a temporary folder, or claim a UNC/network limitation without an actual path error.`;
 
 export function buildExamplePromptOverride(
   title?: string | null,
@@ -668,7 +683,7 @@ export function composeSystemPrompt({
     parts.push('\n\n---\n\n');
   }
 
-  const localePrompt = renderUiLocalePrompt(locale);
+  const localePrompt = renderUiLocalePrompt(locale, { lean: isLeanChatMode });
   if (localePrompt) {
     parts.push(localePrompt);
     parts.push('\n\n---\n\n');
@@ -839,13 +854,15 @@ export function composeSystemPrompt({
     }
   }
 
-  const metaBlock = renderMetadataBlock(
-    metadata,
-    template,
-    audioVoiceOptions,
-    audioVoiceOptionsError,
-    mediaExecution,
-  );
+  const metaBlock = isLeanChatMode
+    ? renderLeanProjectContext(metadata)
+    : renderMetadataBlock(
+        metadata,
+        template,
+        audioVoiceOptions,
+        audioVoiceOptionsError,
+        mediaExecution,
+      );
   if (metaBlock) parts.push(metaBlock);
 
   // Decks have a load-bearing framework (nav, counter, scroll JS, print
@@ -937,7 +954,7 @@ export function composeSystemPrompt({
   }
 
   if (resolvedExecutionProfile === 'filesystem') {
-    parts.push(FILESYSTEM_HANDOFF_OVERRIDE);
+    parts.push(isLeanChatMode ? LEAN_FILESYSTEM_WORKFLOW : FILESYSTEM_HANDOFF_OVERRIDE);
   }
 
   // Mid-conversation clarification reuses the same `<question-form>` flow as
@@ -1173,6 +1190,17 @@ an image, surface the actual failure message and ask the user for one-time
 confirmation before falling back to the existing OpenAI/Azure API-key provider
 path via \`"$MONOFIELD_NODE_BIN" "$MONOFIELD_BIN" media generate --surface image --model ${imageModel}\`.
 Do not silently fall back.`;
+}
+
+function renderLeanProjectContext(metadata: ProjectMetadata | undefined): string {
+  if (!metadata) return '';
+  const fields = [
+    metadata.kind ? `kind=${metadata.kind}` : null,
+    metadata.workMode ? `workMode=${metadata.workMode}` : null,
+    metadata.databaseContext?.connectionId ? 'database=connected' : null,
+  ].filter((field): field is string => Boolean(field));
+  if (fields.length === 0) return '';
+  return `\n\n## Project context\n\n${fields.join(' · ')}. This is routing context only; do not turn it into a discovery questionnaire.`;
 }
 
 function renderMetadataBlock(

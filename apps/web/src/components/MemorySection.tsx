@@ -187,7 +187,7 @@ async function fetchMemoryList(): Promise<MemoryListResponse> {
   if (!resp.ok) {
     return {
       enabled: true,
-      chatExtractionEnabled: true,
+      chatExtractionEnabled: false,
       profileEnabled: true,
       rewriteEnabled: true,
       verifyEnabled: true,
@@ -723,7 +723,7 @@ export function MemorySection({
   const t = useT();
   const logoTheme = useResolvedTheme();
   const [enabled, setEnabled] = useState(true);
-  const [chatExtractionEnabled, setChatExtractionEnabled] = useState(true);
+  const [chatExtractionEnabled, setChatExtractionEnabled] = useState(false);
   // The three new per-hook flags (default-on). They live alongside the
   // existing chat-extraction flag and are surfaced through MemoryHooksPanel.
   const [profileEnabled, setProfileEnabled] = useState(true);
@@ -854,7 +854,7 @@ export function MemorySection({
       fetchMemoryTree(),
     ]);
     setEnabled(list.enabled);
-    setChatExtractionEnabled(list.chatExtractionEnabled !== false);
+    setChatExtractionEnabled(list.chatExtractionEnabled === true);
     setProfileEnabled(list.profileEnabled !== false);
     setRewriteEnabled(list.rewriteEnabled !== false);
     setVerifyEnabled(list.verifyEnabled !== false);

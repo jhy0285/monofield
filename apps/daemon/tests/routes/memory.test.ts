@@ -117,6 +117,15 @@ async function readSseEventByType(
   }
 }
 
+async function enableChatExtraction(): Promise<void> {
+  const response = await fetch(`${baseUrl}/api/memory/config`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ chatExtractionEnabled: true }),
+  });
+  expect(response.status).toBe(200);
+}
+
 describe('memory routes', () => {
   it('lists the default memory state when the store is empty', async () => {
     const res = await fetch(`${baseUrl}/api/memory`);
@@ -131,7 +140,7 @@ describe('memory routes', () => {
       extraction: unknown;
     };
     expect(json.enabled).toBe(true);
-    expect(json.chatExtractionEnabled).toBe(true);
+    expect(json.chatExtractionEnabled).toBe(false);
     expect(json.rootDir).toBe(memoryDir(dataDir));
     expect(json.index).toContain('# Memory');
     expect(json.entries).toEqual([]);
@@ -285,6 +294,7 @@ describe('memory routes', () => {
   });
 
   it('extracts heuristic memories from a user message and reports the changed entries', async () => {
+    await enableChatExtraction();
     const res = await fetch(`${baseUrl}/api/memory/extract`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -350,6 +360,7 @@ describe('memory routes', () => {
   });
 
   it('reports attemptedLLM for post-turn extraction requests without triggering a real provider call', async () => {
+    await enableChatExtraction();
     const res = await fetch(`${baseUrl}/api/memory/extract`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

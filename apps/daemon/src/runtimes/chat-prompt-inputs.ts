@@ -846,7 +846,7 @@ export function formatDesignFilesWorkspaceHint(
     '',
     '## Working folder',
     `Root: \`${cwd}\`. Read and write project-relative paths here. Inspect with native file/search tools before editing; the short snapshot below is only a hint, not the full workspace.`,
-    `Snapshot: ${totalFolders} folder${totalFolders === 1 ? '' : 's'}, ${totalFiles} file${totalFiles === 1 ? '' : 's'}.`,
+    `Root snapshot: ${totalFolders} folder${totalFolders === 1 ? '' : 's'}, ${totalFiles} file${totalFiles === 1 ? '' : 's'}.`,
   ];
 
   if (folderLines.length > 0) {

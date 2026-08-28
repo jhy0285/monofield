@@ -382,6 +382,25 @@ beforeEach(() => {
   });
 });
 
+describe('SettingsDialog feature guides', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('reopens the guide for the active settings section', () => {
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      { initialSection: 'media' },
+    );
+
+    fireEvent.click(screen.getByTestId('settings-feature-guide-button'));
+
+    const guide = screen.getByTestId('entry-feature-guide');
+    expect(guide.getAttribute('data-feature')).toBe('settings-media');
+    expect(within(guide).getByText(en['settings.mediaProvidersHint'])).toBeTruthy();
+  });
+});
+
 describe('SettingsDialog execution settings BYOK interactions', () => {
   afterEach(() => {
     cleanup();

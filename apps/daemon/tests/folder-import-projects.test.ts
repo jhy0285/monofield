@@ -8,6 +8,8 @@ import {
   assertSandboxProjectRootAvailable,
   detectEntryFile,
   listFiles,
+  listProjectWorkspaceHint,
+  resolveDevelopmentCwd,
   resolveProjectDir,
   SandboxImportedProjectError,
 } from '../src/projects.js';
@@ -121,6 +123,35 @@ describe('resolveProjectDir', () => {
   });
 });
 
+describe('resolveDevelopmentCwd', () => {
+  let workspace = '';
+
+  beforeEach(async () => {
+    workspace = mkdtempSync(path.join(tmpdir(), 'monofield-development-cwd-'));
+    await mkdir(path.join(workspace, 'services', 'api'), { recursive: true });
+  });
+
+  afterEach(() => {
+    if (workspace) rmSync(workspace, { recursive: true, force: true });
+  });
+
+  it('uses the active module as the CLI cwd while keeping it inside the workspace', async () => {
+    expect(await resolveDevelopmentCwd(workspace, {
+      kind: 'other',
+      workMode: 'development',
+      development: { activeProjectPath: 'services/api' },
+    })).toBe(await import('node:fs/promises').then(({ realpath }) => realpath(path.join(workspace, 'services', 'api'))));
+  });
+
+  it('rejects traversal outside the workspace', async () => {
+    await expect(resolveDevelopmentCwd(workspace, {
+      kind: 'other',
+      workMode: 'development',
+      development: { activeProjectPath: '../outside' },
+    })).rejects.toThrow(/invalid active development project path/i);
+  });
+});
+
 describe('detectEntryFile', () => {
   let dir = '';
 
@@ -196,6 +227,15 @@ describe('listFiles with metadata.baseDir', () => {
     expect(paths).toContain('index.html');
     expect(paths).toContain('app.css');
     expect(paths).toContain('src/app.ts');
+  });
+
+  it('builds the chat workspace hint from root entries without descending', async () => {
+    const hint = await listProjectWorkspaceHint('/unused/projects', 'unused-id', {
+      metadata: { kind: 'prototype', baseDir },
+    });
+    expect(hint.files.map((file) => file.path)).toEqual(['app.css', 'index.html']);
+    expect(hint.folders.map((folder) => folder.path)).toEqual(['Rust', 'src']);
+    expect(hint.files.some((file) => file.path === 'src/app.ts')).toBe(false);
   });
 
   // Regression: callers that pass the metadata object directly as opts

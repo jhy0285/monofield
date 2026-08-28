@@ -2335,7 +2335,11 @@ export function FileWorkspace({
             hiddenPluginActionPaths={hiddenPluginActionPaths}
           />
         ) : activeTab === GIT_CHANGES_TAB ? (
-          <GitChangesPanel projectId={projectId} onOpenFile={openFile} />
+          <GitChangesPanel
+            projectId={projectId}
+            projectPath={projectMetadata?.development?.activeProjectPath}
+            onOpenFile={openFile}
+          />
         ) : isBrowserTabId(activeTab) ? (
           null
         ) : isActiveSketch && activeSketch && activeFile ? (

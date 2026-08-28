@@ -60,7 +60,10 @@ const PROMPT_SAFE_HTTP_STATUS_LABELS: Record<string, string> = {
   '504': 'Gateway Timeout',
 };
 
-function renderUiLocalePrompt(locale: string | undefined): string {
+function renderUiLocalePrompt(
+  locale: string | undefined,
+  options: { lean?: boolean } = {},
+): string {
   const normalized = locale?.trim();
   if (!normalized || normalized.toLowerCase() === 'en') return '';
   const languageName = normalized === 'zh-CN'
@@ -68,6 +71,9 @@ function renderUiLocalePrompt(locale: string | undefined): string {
     : normalized === 'zh-TW'
       ? 'Traditional Chinese'
       : normalized;
+  if (options.lean) {
+    return `# Response language\n\nUse the MonoField UI locale \`${normalized}\` (${languageName}) for user-visible prose. Keep code, commands, paths, schema/table names, and identifiers unchanged.`;
+  }
   const lines = [
     '# UI locale override',
     '',
@@ -338,7 +344,7 @@ export function composeSystemPrompt({
     parts.push('\n\n---\n\n');
   }
 
-  const localePrompt = renderUiLocalePrompt(locale);
+  const localePrompt = renderUiLocalePrompt(locale, { lean: isLeanChatMode });
   if (localePrompt) {
     parts.push(localePrompt);
     parts.push('\n\n---\n\n');
@@ -442,7 +448,9 @@ export function composeSystemPrompt({
     }
   }
 
-  const metaBlock = renderMetadataBlock(metadata, template, audioVoiceOptions, audioVoiceOptionsError);
+  const metaBlock = isLeanChatMode
+    ? renderLeanProjectContext(metadata)
+    : renderMetadataBlock(metadata, template, audioVoiceOptions, audioVoiceOptionsError);
   if (metaBlock) parts.push(metaBlock);
 
   // Decks have a load-bearing framework (nav, counter, scroll JS, print
@@ -541,6 +549,17 @@ This conversation is in MonoField Docs mode. Use the document and specification 
 If the user asks how to do something, asks what a document/specification is, asks for an explanation, meaning, comparison, guide, or general usage instructions, answer directly in clear prose. Do not emit a discovery or artifact-options \`<question-form>\`, do not inspect files, do not call collection tools, and do not create an artifact for that explanatory turn.
 
 For an explicit interface-spec generation request, first determine its source mode. An explicit no-codebase/manual/new-design request does not require a Working folder: do not inspect files or call database tools, and use the Interface Spec Collector's \`interface-spec-manual-draft\` form. An explicit codebase-reading request still requires a selected, validated Working folder before \`interface-spec-options\`; never replace it with the managed project directory, a database-only sample, or guessed context. If the request is genuinely ambiguous and no valid source folder is linked, emit only the collector's \`interface-spec-source-mode\` choice form instead of forcing folder selection or guessing.`;
+
+function renderLeanProjectContext(metadata: ProjectMetadata | undefined): string {
+  if (!metadata) return '';
+  const fields = [
+    metadata.kind ? `kind=${metadata.kind}` : null,
+    metadata.workMode ? `workMode=${metadata.workMode}` : null,
+    metadata.databaseContext?.connectionId ? 'database=connected' : null,
+  ].filter((field): field is string => Boolean(field));
+  if (fields.length === 0) return '';
+  return `\n\n## Project context\n\n${fields.join(' · ')}. This is routing context only; do not turn it into a discovery questionnaire.`;
+}
 
 function renderMetadataBlock(
   metadata: ProjectMetadata | undefined,

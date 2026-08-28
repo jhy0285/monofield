@@ -27,7 +27,7 @@ import {
 } from '../runtime/design-toolbox';
 import type { Dict } from '../i18n/types';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
-import { projectRawUrl } from '../providers/registry';
+import { openExternalUrl, projectRawUrl } from '../providers/registry';
 import { takeComposerSeedFor } from '../state/libraryHandoff';
 import type { TodoItem } from '../runtime/todos';
 import type { AppliedPluginSnapshot, ChatSessionMode, WorkspaceContextItem } from '@open-design/contracts';
@@ -68,11 +68,10 @@ import type { PlaceholderScenario } from './home-hero/placeholderScenarios';
 import { listDesignArtifactCandidates } from './design-files/designArtifacts';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { Icon, type IconName } from './Icon';
-import { TokenUsageDisclosure } from './TokenUsageDisclosure';
-import { usageForConversation } from '../runtime/token-usage';
 import { repoConnectCopy } from './design-system-github-evidence';
 import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 import type { SettingsSection } from './SettingsDialog';
+import { GITHUB_REPO_URL } from './useGithubStars';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
@@ -674,6 +673,41 @@ interface QueuedSendUpdate {
 
 // Gap left above the anchored user message when it is pinned to the top.
 const ANCHOR_TOP_PADDING = 12;
+const COMMUNITY_SUPPORT_STORAGE_KEY = 'monofield:community-support:v1';
+const COMMUNITY_SUPPORT_SUCCESS_THRESHOLD = 5;
+
+type CommunitySupportStoredState = {
+  completedCount: number;
+  prompted: boolean;
+  seenMessageIds: string[];
+};
+
+function readCommunitySupportState(): CommunitySupportStoredState {
+  const fallback = { completedCount: 0, prompted: false, seenMessageIds: [] };
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(COMMUNITY_SUPPORT_STORAGE_KEY) ?? 'null');
+    if (!parsed || typeof parsed !== 'object') return fallback;
+    return {
+      completedCount: Number.isFinite(parsed.completedCount)
+        ? Math.max(0, Math.floor(parsed.completedCount))
+        : 0,
+      prompted: parsed.prompted === true,
+      seenMessageIds: Array.isArray(parsed.seenMessageIds)
+        ? parsed.seenMessageIds.filter((id: unknown): id is string => typeof id === 'string').slice(-100)
+        : [],
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function writeCommunitySupportState(state: CommunitySupportStoredState): void {
+  try {
+    window.localStorage.setItem(COMMUNITY_SUPPORT_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // Local-only convenience. Storage restrictions must never affect chat.
+  }
+}
 
 export function ChatPane({
   messages,
@@ -786,10 +820,6 @@ export function ChatPane({
   const t = useT();
   const analytics = useAnalytics();
   const displayMessages = messages;
-  const conversationUsage = useMemo(
-    () => usageForConversation(displayMessages),
-    [displayMessages],
-  );
   const amrProfile = config?.agentCliEnv?.amr?.[AMR_PROFILE_ENV_KEY] ?? null;
   const [inlineAmrLoginStatus, setInlineAmrLoginStatus] =
     useState<VelaLoginStatus | null>(null);
@@ -958,6 +988,7 @@ export function ChatPane({
   } | null>(null);
   const [composerSlotHeight, setComposerSlotHeight] = useState(0);
   const [editingQueuedSendId, setEditingQueuedSendId] = useState<string | null>(null);
+  const [communityPromptStage, setCommunityPromptStage] = useState<'check-in' | 'star' | null>(null);
   // Reverse scan (no array copy) + memo so this and the maps below don't
   // recompute on every non-`messages` render (scroll, hover, toggles).
   const lastAssistantId = useMemo(() => {
@@ -969,6 +1000,24 @@ export function ChatPane({
   const hasActiveRunMessage = displayMessages.some(
     (m) => m.role === 'assistant' && isActiveRunStatus(m.runStatus),
   );
+  useEffect(() => {
+    const succeededIds = displayMessages
+      .filter((message) => message.role === 'assistant' && message.runStatus === 'succeeded')
+      .map((message) => message.id);
+    if (succeededIds.length === 0) return;
+    const state = readCommunitySupportState();
+    const seen = new Set(state.seenMessageIds);
+    const unseenIds = succeededIds.filter((id) => !seen.has(id));
+    if (unseenIds.length === 0 || state.prompted) return;
+    const nextCount = state.completedCount + unseenIds.length;
+    const shouldPrompt = nextCount >= COMMUNITY_SUPPORT_SUCCESS_THRESHOLD;
+    writeCommunitySupportState({
+      completedCount: nextCount,
+      prompted: shouldPrompt,
+      seenMessageIds: [...state.seenMessageIds, ...unseenIds].slice(-100),
+    });
+    if (shouldPrompt) setCommunityPromptStage('check-in');
+  }, [displayMessages]);
   const retryAssistant = retryableAssistantMessage(displayMessages, lastAssistantId, streaming);
   // The failed run's error event lives on the (persisted) assistant message, so
   // the error card + AMR card survive a reload — unlike the ephemeral global
@@ -2022,14 +2071,6 @@ export function ChatPane({
             </div>
           ) : null}
         </div>
-        {conversationUsage.assistantResponseCount > 0 ? (
-          <TokenUsageDisclosure
-            metrics={conversationUsage.metrics}
-            variant="conversation"
-            measuredResponses={conversationUsage.measuredResponseCount}
-            totalResponses={conversationUsage.assistantResponseCount}
-          />
-        ) : null}
       </div>
       {tab === 'chat' ? (
         <>
@@ -2491,6 +2532,58 @@ export function ChatPane({
               )
             : null}
         </>
+      ) : null}
+      {communityPromptStage ? (
+        <section
+          aria-labelledby="community-support-title"
+          className="community-support-prompt"
+          role="dialog"
+        >
+          <button
+            type="button"
+            className="community-support-prompt__close"
+            aria-label={t('updater.later')}
+            onClick={() => setCommunityPromptStage(null)}
+          >
+            <Icon name="close" size={14} />
+          </button>
+          <span className="community-support-prompt__mark" aria-hidden>
+            M
+          </span>
+          <div>
+            <h2 id="community-support-title">
+              {communityPromptStage === 'check-in'
+                ? t('community.checkInTitle')
+                : t('community.starTitle')}
+            </h2>
+            <p>
+              {communityPromptStage === 'check-in'
+                ? t('community.checkInBody')
+                : t('community.starBody')}
+            </p>
+          </div>
+          <div className="community-support-prompt__actions">
+            <button type="button" onClick={() => setCommunityPromptStage(null)}>
+              {t('community.later')}
+            </button>
+            <button
+              type="button"
+              className="primary"
+              onClick={() => {
+                if (communityPromptStage === 'check-in') {
+                  setCommunityPromptStage('star');
+                  return;
+                }
+                void openExternalUrl(GITHUB_REPO_URL);
+                setCommunityPromptStage(null);
+              }}
+            >
+              {communityPromptStage === 'check-in'
+                ? t('community.worksWell')
+                : t('community.starAction')}
+            </button>
+          </div>
+        </section>
       ) : null}
     </div>
   );

@@ -16,7 +16,10 @@ export function ProjectWorkModeToggle({ value, onChange, compact = false }: Prop
     : t('workMode.creationHint');
 
   return (
-    <div className={`${styles.root}${compact ? ` ${styles.compact}` : ''}`}>
+    <div
+      className={`${styles.root}${compact ? ` ${styles.compact}` : ''}`}
+      data-testid="work-mode-toggle"
+    >
       <div className={styles.header}>{t('workMode.label')}</div>
       <div className={styles.options} role="radiogroup" aria-label={t('workMode.label')}>
         <button

@@ -101,6 +101,12 @@ export interface ProjectMetadata {
   /** Preferred detected run configuration and post-edit verification behavior. */
   development?: {
     runConfigId?: string;
+    /** Optional Spring profile override when no detected profile configuration matches. */
+    runProfile?: string;
+    /** Additional application arguments appended to the detected run configuration. */
+    runArguments?: string;
+    /** Active runnable module inside a multi-project workspace, relative to baseDir. */
+    activeProjectPath?: string;
     autoVerify?: boolean;
   };
   intent?: 'live-artifact';

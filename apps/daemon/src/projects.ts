@@ -106,6 +106,26 @@ export function resolveProjectDir(projectsRoot, projectId, metadata?, opts = {})
   return path.join(projectsRoot, projectId);
 }
 
+export async function resolveDevelopmentCwd(workspaceRoot, metadata?) {
+  const configured = metadata?.workMode === 'development'
+    && typeof metadata?.development?.activeProjectPath === 'string'
+    ? metadata.development.activeProjectPath.trim().replace(/\\/g, '/')
+    : '';
+  if (!configured || configured === '.') return workspaceRoot;
+  if (path.posix.isAbsolute(configured) || configured.split('/').includes('..')) {
+    throw new Error('invalid active development project path');
+  }
+  const realRoot = await realpath(workspaceRoot);
+  const candidate = await realpath(path.resolve(workspaceRoot, configured));
+  const relative = path.relative(realRoot, candidate);
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('active development project must stay inside the workspace');
+  }
+  const info = await stat(candidate);
+  if (!info.isDirectory()) throw new Error('active development project is not a directory');
+  return candidate;
+}
+
 export async function ensureProject(projectsRoot, projectId, metadata?) {
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   // Git-linked folders already exist; skip mkdir to avoid side-effects.
@@ -139,6 +159,55 @@ export async function listProjectFolders(projectsRoot, projectId, opts = {}) {
   await collectFolders(dir, '', out, isIgnoredProjectDirName);
   out.sort((a, b) => a.name.localeCompare(b.name));
   return out;
+}
+
+// Chat prompts need only a small orientation hint. Reusing listFiles() and
+// listProjectFolders() here used to recursively traverse the entire workspace
+// before every agent process could start, even though the prompt displays at
+// most a handful of entries. Keep this deliberately shallow and bounded;
+// agents can inspect the working tree with their native search tools when the
+// request actually needs it.
+export async function listProjectWorkspaceHint(projectsRoot, projectId, opts = {}) {
+  const metadata = opts?.metadata;
+  const dir = resolveProjectDir(projectsRoot, projectId, metadata);
+  const entryLimit = Number.isFinite(Number(opts?.limit))
+    ? Math.max(1, Math.min(128, Math.floor(Number(opts.limit))))
+    : 32;
+  let entries = [];
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return { files: [], folders: [] };
+    throw err;
+  }
+
+  const visible = entries
+    .filter((entry) => !entry.name.startsWith('.'))
+    .filter((entry) => !entry.isDirectory() || !isIgnoredProjectDirName(entry.name))
+    .filter((entry) => !entry.isFile() || !entry.name.endsWith('.artifact.json'))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(0, entryLimit);
+  const folders = visible
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => ({
+      name: entry.name,
+      path: entry.name,
+      type: 'dir',
+      size: 0,
+      mtime: 0,
+    }));
+  const files = visible
+    .filter((entry) => entry.isFile())
+    .map((entry) => ({
+      name: entry.name,
+      path: entry.name,
+      type: 'file',
+      size: 0,
+      mtime: 0,
+      kind: kindFor(entry.name),
+      mime: mimeFor(entry.name),
+    }));
+  return { files, folders };
 }
 
 async function collectFolders(dir, relDir, out, shouldSkipDir?: (name: string) => boolean) {
@@ -242,37 +311,73 @@ export async function detectEntryFile(dir: string): Promise<string | null> {
 }
 
 async function collectFiles(dir, relDir, out, shouldSkipDir?: (name: string) => boolean, projectRoot = dir) {
-  let entries = [];
-  try {
-    entries = await readdir(dir, { withFileTypes: true });
-  } catch (err) {
-    if (err && err.code === 'ENOENT') return;
-    throw err;
-  }
-  for (const e of entries) {
-    if (e.name.startsWith('.')) continue;
-    const rel = relDir ? `${relDir}/${e.name}` : e.name;
-    const full = path.join(dir, e.name);
-    if (e.isDirectory()) {
-      if (shouldSkipDir?.(e.name)) continue;
-      await collectFiles(full, rel, out, shouldSkipDir, projectRoot);
-      continue;
+  const directories = [{ dir, relDir }];
+  const files = [];
+  // Directory reads are the dominant cost on a newly selected codebase.
+  // Walk a small batch at a time instead of awaiting every folder serially;
+  // ignored dependency/build trees are still pruned before they enter the
+  // queue, so this remains bounded for normal monorepos.
+  while (directories.length > 0) {
+    const batch = directories.splice(0, 16);
+    const scanned = await Promise.all(batch.map(async (current) => {
+      try {
+        return { ...current, entries: await readdir(current.dir, { withFileTypes: true }) };
+      } catch (err) {
+        if (err && err.code === 'ENOENT') return { ...current, entries: [] };
+        throw err;
+      }
+    }));
+    for (const current of scanned) {
+      for (const entry of current.entries) {
+        if (entry.name.startsWith('.')) continue;
+        const rel = current.relDir ? `${current.relDir}/${entry.name}` : entry.name;
+        const full = path.join(current.dir, entry.name);
+        if (entry.isDirectory()) {
+          if (!shouldSkipDir?.(entry.name)) directories.push({ dir: full, relDir: rel });
+          continue;
+        }
+        if (entry.isFile()) files.push({ full, rel });
+      }
     }
-    if (!e.isFile()) continue;
-    if (e.name.endsWith('.artifact.json')) continue;
-    const st = await stat(full);
-    const manifest = await readManifestForPath(projectRoot, rel);
-    out.push({
-      name: rel,
-      path: rel,
-      type: 'file',
-      size: st.size,
-      mtime: st.mtimeMs,
-      kind: kindFor(rel),
-      mime: mimeFor(rel),
-      artifactKind: manifest?.kind,
-      artifactManifest: manifest,
-    });
+  }
+
+  const manifestFiles = new Set(files
+    .filter((file) => file.rel.endsWith('.artifact.json'))
+    .map((file) => file.rel));
+  const visibleFiles = files.filter((file) => !file.rel.endsWith('.artifact.json'));
+  // Stat files in bounded parallel batches. For ordinary source files there
+  // is no manifest sidecar, so infer the lightweight display metadata in
+  // memory instead of issuing an ENOENT read for every file in the project.
+  for (let offset = 0; offset < visibleFiles.length; offset += 48) {
+    const batch = visibleFiles.slice(offset, offset + 48);
+    const rows = await Promise.all(batch.map(async ({ full, rel }) => {
+      try {
+        const st = await stat(full);
+        const needsManifestRead = manifestFiles.has(artifactManifestNameFor(rel))
+          || /(^|\/)index\.html?$/i.test(rel);
+        const manifest = needsManifestRead
+          ? await readManifestForPath(projectRoot, rel)
+          : inferLegacyManifest(rel);
+        return {
+          name: rel,
+          path: rel,
+          type: 'file',
+          size: st.size,
+          mtime: st.mtimeMs,
+          kind: kindFor(rel),
+          mime: mimeFor(rel),
+          artifactKind: manifest?.kind,
+          artifactManifest: manifest,
+        };
+      } catch (err) {
+        // Editors frequently save via atomic rename. If a file disappears
+        // between readdir and stat, omit that transient entry and let the
+        // watcher-triggered refresh pick up its replacement.
+        if (err && err.code === 'ENOENT') return null;
+        throw err;
+      }
+    }));
+    for (const row of rows) if (row) out.push(row);
   }
 }
 

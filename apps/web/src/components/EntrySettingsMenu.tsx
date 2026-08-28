@@ -49,6 +49,7 @@ interface Props {
   config: AppConfig;
   onThemeChange: (theme: AppTheme) => void;
   onOpenSettings: (section?: EntrySettingsSection) => void;
+  onOpenGuide?: () => void;
   // Fired when the gear trigger is clicked. Used by the in-project header to
   // emit the `artifact_header` / `settings` ui_click; the home/entry shell
   // leaves it undefined so that context is not mislabelled as `artifact`.
@@ -62,6 +63,7 @@ export function EntrySettingsMenu({
   config,
   onThemeChange,
   onOpenSettings,
+  onOpenGuide,
   onTrackTriggerClick,
   trackingPageName,
 }: Props) {
@@ -318,6 +320,27 @@ export function EntrySettingsMenu({
           </section>
 
           <div className="entry-settings-menu__divider" aria-hidden />
+
+          {onOpenGuide ? (
+            <button
+              type="button"
+              className="entry-settings-menu__item"
+              data-testid="entry-settings-open-guide"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onOpenGuide();
+              }}
+            >
+              <span className="entry-settings-menu__item-icon" aria-hidden>
+                <Icon name="help-circle" size={14} />
+              </span>
+              <span>{t('productTutorial.reopen')}</span>
+              <span className="entry-settings-menu__item-meta">
+                {t('productTutorial.reopenMeta')}
+              </span>
+            </button>
+          ) : null}
 
           <button
             type="button"

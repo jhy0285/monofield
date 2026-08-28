@@ -4,8 +4,11 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
+  codexTurnUsageFromCumulative,
   codexSessionIdFromRunEvents,
+  extractCodexCumulativeUsage,
   extractCodexLastTurnFirstCallUsage,
+  readCodexRolloutCumulativeUsage,
   readCodexRolloutFirstCall,
 } from '../src/codex-rollout-usage.js';
 
@@ -16,7 +19,16 @@ import {
 function taskStarted(): string {
   return JSON.stringify({ type: 'event_msg', payload: { type: 'task_started' } });
 }
-function tokenCount(input: number | null, cached: number | null): string {
+function tokenCount(
+  input: number | null,
+  cached: number | null,
+  total?: {
+    input_tokens: number;
+    cached_input_tokens: number;
+    output_tokens: number;
+    reasoning_output_tokens: number;
+  },
+): string {
   return JSON.stringify({
     type: 'event_msg',
     payload: {
@@ -24,7 +36,10 @@ function tokenCount(input: number | null, cached: number | null): string {
       info:
         input === null
           ? { last_token_usage: null }
-          : { last_token_usage: { input_tokens: input, cached_input_tokens: cached } },
+          : {
+              last_token_usage: { input_tokens: input, cached_input_tokens: cached },
+              ...(total ? { total_token_usage: total } : {}),
+            },
     },
   });
 }
@@ -88,6 +103,66 @@ describe('extractCodexLastTurnFirstCallUsage', () => {
     const rollout = ['', 'not json', taskStarted(), '   ', tokenCount(13342, 12672)].join('\n');
     const result = extractCodexLastTurnFirstCallUsage(rollout);
     expect(result?.first_call_cache_hit_ratio).toBeCloseTo(12672 / 13342);
+  });
+});
+
+describe('Codex cumulative usage normalization', () => {
+  it('extracts the latest whole-session total', () => {
+    const rollout = [
+      taskStarted(),
+      tokenCount(17145, 9984, {
+        input_tokens: 17145,
+        cached_input_tokens: 9984,
+        output_tokens: 68,
+        reasoning_output_tokens: 52,
+      }),
+      taskStarted(),
+      tokenCount(17375, 9984, {
+        input_tokens: 34520,
+        cached_input_tokens: 19968,
+        output_tokens: 119,
+        reasoning_output_tokens: 88,
+      }),
+    ].join('\n');
+
+    expect(extractCodexCumulativeUsage(rollout)).toEqual({
+      input_tokens: 34520,
+      cached_input_tokens: 19968,
+      output_tokens: 119,
+      reasoning_output_tokens: 88,
+    });
+  });
+
+  it('subtracts the resume baseline so one response stores one turn', () => {
+    expect(codexTurnUsageFromCumulative(
+      {
+        input_tokens: 34520,
+        cached_read_tokens: 19968,
+        output_tokens: 119,
+        thought_tokens: 88,
+      },
+      {
+        input_tokens: 17145,
+        cached_input_tokens: 9984,
+        output_tokens: 68,
+        reasoning_output_tokens: 52,
+      },
+    )).toEqual({
+      input_tokens: 17375,
+      cached_read_tokens: 9984,
+      output_tokens: 51,
+      thought_tokens: 36,
+    });
+  });
+
+  it('keeps a fresh-session report intact when it is below the baseline', () => {
+    const current = { input_tokens: 100, output_tokens: 5 };
+    expect(codexTurnUsageFromCumulative(current, {
+      input_tokens: 500,
+      cached_input_tokens: 100,
+      output_tokens: 20,
+      reasoning_output_tokens: 0,
+    })).toEqual(current);
   });
 });
 
@@ -165,5 +240,27 @@ describe('readCodexRolloutFirstCall', () => {
     await expect(
       readCodexRolloutFirstCall({ codexHome: '/nonexistent', sessionId: null }),
     ).resolves.toBeNull();
+  });
+
+  it('reads the latest cumulative session usage', async () => {
+    const sid = '019eef4f-7409-7c82-bebe-30504eed3959';
+    const home = plantRollout(sid, [
+      taskStarted(),
+      tokenCount(17, 8, {
+        input_tokens: 34,
+        cached_input_tokens: 16,
+        output_tokens: 11,
+        reasoning_output_tokens: 4,
+      }),
+    ]);
+    await expect(readCodexRolloutCumulativeUsage({
+      codexHome: home,
+      sessionId: sid,
+    })).resolves.toEqual({
+      input_tokens: 34,
+      cached_input_tokens: 16,
+      output_tokens: 11,
+      reasoning_output_tokens: 4,
+    });
   });
 });

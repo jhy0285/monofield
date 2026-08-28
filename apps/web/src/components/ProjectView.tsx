@@ -1051,6 +1051,11 @@ export function ProjectView({
   // True while a working-dir replace is reindexing the new folder. Surfaced
   // to the Design Files panel so the file list shows a loading state instead
   // of silently sitting on the old tree for the few seconds the scan takes.
+  const [workspaceReloading, setWorkspaceReloading] = useState(false);
+  const workspaceReloadCountRef = useRef(0);
+  const refreshedWorkspaceDirRef = useRef(
+    typeof project.metadata?.baseDir === 'string' ? project.metadata.baseDir : null,
+  );
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
   const projectFilesRef = useRef<ProjectFile[]>([]);
   const [liveArtifacts, setLiveArtifacts] = useState<LiveArtifactSummary[]>([]);
@@ -1935,6 +1940,35 @@ export function ProjectView({
     const [nextFiles] = await Promise.all([refreshProjectFiles(), refreshLiveArtifacts()]);
     return nextFiles;
   }, [refreshLiveArtifacts, refreshProjectFiles]);
+
+  const refreshWorkspaceItemsVisible = useCallback(async (refreshProjectDetail = false): Promise<ProjectFile[]> => {
+    workspaceReloadCountRef.current += 1;
+    setWorkspaceReloading(true);
+    try {
+      const [nextFiles] = await Promise.all([
+        refreshWorkspaceItems(),
+        refreshProjectDetail ? projectDetail.refresh() : Promise.resolve(),
+      ]);
+      return nextFiles;
+    } finally {
+      workspaceReloadCountRef.current = Math.max(0, workspaceReloadCountRef.current - 1);
+      if (workspaceReloadCountRef.current === 0) setWorkspaceReloading(false);
+    }
+  }, [projectDetail.refresh, refreshWorkspaceItems]);
+
+  useEffect(() => {
+    const baseDir = typeof currentProject.metadata?.baseDir === 'string'
+      ? currentProject.metadata.baseDir
+      : null;
+    if (!baseDir || refreshedWorkspaceDirRef.current === baseDir) return;
+    refreshedWorkspaceDirRef.current = baseDir;
+    htmlContentCacheRef.current.clear();
+    void refreshWorkspaceItemsVisible(true).catch(() => {
+      // The normal project/file error surfaces remain authoritative. The
+      // loading overlay still settles in finally so a failed folder scan can
+      // never leave the workspace permanently blocked.
+    });
+  }, [currentProject.metadata?.baseDir, refreshWorkspaceItemsVisible]);
 
   useEffect(() => {
     if (!tabsLoadedRef.current) return;
@@ -3841,7 +3875,16 @@ export function ProjectView({
               effectiveSelectedAgentChoice?.model,
             )
           : apiProtocolModelLabel(config.apiProtocol, config.model);
-      const preTurnFileNames = projectFiles.map((f) => f.name);
+      // Development workspaces expose edits through Git changes. Treating an
+      // asynchronously-loaded source tree as a document-artifact baseline is
+      // both redundant and dangerous: if the first file fetch has not settled,
+      // an empty baseline makes every existing source file look "created by
+      // this turn". Document/design projects keep the per-turn artifact diff;
+      // development projects leave it unset and rely on the Changes view.
+      const preTurnFileNames = preTurnFileNamesForWorkMode(
+        project.metadata?.workMode,
+        projectFiles,
+      );
       const assistantId = randomUUID();
       const assistantMsg: ChatMessage = {
         id: assistantId,
@@ -3853,7 +3896,7 @@ export function ProjectView({
         createdAt: startedAt,
         runStatus: config.mode === 'daemon' ? 'running' : undefined,
         startedAt,
-        preTurnFileNames,
+        ...(preTurnFileNames ? { preTurnFileNames } : {}),
       };
       let latestAssistantMsg: ChatMessage = assistantMsg;
       const updateConversationLatestRun = (
@@ -3999,7 +4042,9 @@ export function ProjectView({
       // Snapshot the file list at turn-start so we can diff after the
       // agent finishes and surface anything new (e.g. a generated .pptx)
       // as download chips on the assistant message.
-      const beforeFileNames = new Set(preTurnFileNames);
+      const beforeFileNames = preTurnFileNames
+        ? new Set(preTurnFileNames)
+        : undefined;
 
       const parser = createArtifactParser();
       let parsedArtifact: Artifact | null = null;
@@ -6784,13 +6829,13 @@ export function ProjectView({
               ? baseDir.split(/[/\\]/).filter(Boolean).pop()
               : undefined;
           })()}
-          reloading={false}
+          reloading={workspaceReloading}
           resolvedDir={projectDetail.resolvedDir}
           files={projectFiles}
           liveArtifacts={liveArtifacts}
           filesRefreshKey={filesRefresh}
           onRefreshFiles={() => {
-            return refreshWorkspaceItems().then(() => undefined);
+            return refreshWorkspaceItemsVisible().then(() => undefined);
           }}
           isDeck={isDeck}
           streaming={currentConversationActionDisabled}
@@ -7423,6 +7468,15 @@ export function computeProducedFiles(
   if (!beforeNames) return undefined;
   const set = beforeNames instanceof Set ? beforeNames : new Set(beforeNames);
   return filterImplicitProducedFiles(next.filter((f) => !set.has(f.name)));
+}
+
+export function preTurnFileNamesForWorkMode(
+  workMode: string | null | undefined,
+  files: readonly ProjectFile[],
+): string[] | undefined {
+  return workMode === 'development'
+    ? undefined
+    : files.map((file) => file.name);
 }
 
 // Reattach with a recovered (on-disk) artifact must still include any

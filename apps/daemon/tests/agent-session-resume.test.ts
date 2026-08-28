@@ -15,6 +15,7 @@ import {
   computeIncludeStable,
   hashStableInstructions,
   isClaudeResumeFailure,
+  isCodexResumeFailure,
   persistCapturedAgentSession,
   resolveAgentResumeContext,
 } from '../src/agent-session-resume.js';
@@ -240,5 +241,17 @@ describe('isClaudeResumeFailure', () => {
       session_id: 'live-session',
     });
     expect(isClaudeResumeFailure(success)).toBe(false);
+  });
+});
+
+describe('isCodexResumeFailure', () => {
+  it('matches the installed CLI missing-rollout error and ignores unrelated failures', () => {
+    expect(
+      isCodexResumeFailure(
+        'thread/resume failed: no rollout found for thread id 11111111-1111-4111-8111-111111111111',
+      ),
+    ).toBe(true);
+    expect(isCodexResumeFailure('rate limit exceeded')).toBe(false);
+    expect(isCodexResumeFailure('')).toBe(false);
   });
 });

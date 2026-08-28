@@ -174,6 +174,26 @@ function extractGoogleModels(data: unknown): ProviderModelOption[] {
   );
 }
 
+function extractOllamaModels(data: unknown): ProviderModelOption[] {
+  const items = (data as { models?: unknown }).models;
+  if (!Array.isArray(items)) return [];
+  return uniqueModels(
+    items
+      .map((item) => {
+        const obj = item && typeof item === 'object'
+          ? item as { model?: unknown; name?: unknown }
+          : null;
+        const id = typeof obj?.model === 'string'
+          ? obj.model
+          : typeof obj?.name === 'string'
+            ? obj.name
+            : '';
+        return id ? { id, label: id } : null;
+      })
+      .filter((item): item is ProviderModelOption => item != null),
+  );
+}
+
 function providerModelsUrl(protocol: ConnectionTestProtocol, baseUrl: string, apiKey: string): string {
   if (protocol === 'aihubmix') {
     // AIHubMix exposes its chat catalogue on a dedicated endpoint
@@ -190,6 +210,11 @@ function providerModelsUrl(protocol: ConnectionTestProtocol, baseUrl: string, ap
   }
   if (protocol === 'google') {
     return googleProviderModelsUrl(baseUrl, apiKey);
+  }
+  if (protocol === 'ollama') {
+    const url = new URL(baseUrl);
+    url.pathname = `${url.pathname.replace(/\/api\/?$/, '').replace(/\/+$/, '')}/api/tags`;
+    return url.toString();
   }
   throw new Error(`Unsupported protocol: ${protocol}`);
 }
@@ -213,6 +238,9 @@ function providerModelsHeaders(
       'anthropic-version': '2023-06-01',
     };
   }
+  if (protocol === 'ollama') {
+    return apiKey.trim() ? { authorization: `Bearer ${apiKey}` } : {};
+  }
   return {};
 }
 
@@ -227,6 +255,7 @@ function extractModels(protocol: ConnectionTestProtocol, data: unknown): Provide
   if (protocol === 'openai' || protocol === 'senseaudio') return extractOpenAiModels(data);
   if (protocol === 'anthropic') return extractAnthropicModels(data);
   if (protocol === 'google') return extractGoogleModels(data);
+  if (protocol === 'ollama') return extractOllamaModels(data);
   return [];
 }
 

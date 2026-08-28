@@ -1042,6 +1042,7 @@ function AppInner() {
           pet: { ...prev.pet, custom: upgraded },
         };
         saveConfig(next);
+        void syncConfigToDaemon(next);
         return next;
       });
     })();
@@ -2035,6 +2036,7 @@ function AppInner() {
       const prev = curr.pet ?? DEFAULT_PET;
       const next: AppConfig = { ...curr, pet: { ...prev, enabled } };
       saveConfig(next);
+      void syncConfigToDaemon(next);
       return next;
     });
   }, []);
@@ -2053,6 +2055,7 @@ function AppInner() {
         pet: { ...prev, enabled: !prev.enabled },
       };
       saveConfig(next);
+      void syncConfigToDaemon(next);
       return next;
     });
   }, []);
@@ -2068,6 +2071,7 @@ function AppInner() {
         pet: { ...prev, adopted: true, enabled: true, petId },
       };
       saveConfig(next);
+      void syncConfigToDaemon(next);
       return next;
     });
   }, []);

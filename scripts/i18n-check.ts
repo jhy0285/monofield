@@ -47,12 +47,19 @@ async function pathExists(filePath: string): Promise<boolean> {
 }
 
 function extractDictKeys(indexSource: string): string[] {
-  const match = indexSource.match(/const DICTS:\s*Record<Locale, Dict>\s*=\s*{([\s\S]*?)};/);
-  if (!match?.[1]) return [];
+  const keys = new Set<string>();
+  const loaded = indexSource.match(/const LOADED_DICTS\s*=\s*new Map<Locale, Dict>\(\[([\s\S]*?)\]\);/);
+  for (const entry of loaded?.[1]?.matchAll(/\[\s*["']([^"']+)["']\s*,/g) ?? []) {
+    if (entry[1]) keys.add(entry[1]);
+  }
 
-  return Array.from(match[1].matchAll(/["']([^"']+)["']\s*:/g))
-    .map((entry) => entry[1])
-    .filter((entry): entry is string => entry != null && entry.length > 0);
+  const loaders = indexSource.match(/const DICT_LOADERS[^\n]*=\s*{([\s\S]*?)};/);
+  for (const entry of loaders?.[1]?.matchAll(/(?:["']([^"']+)["']|([A-Za-z][A-Za-z0-9-]*))\s*:/g) ?? []) {
+    const key = entry[1] ?? entry[2];
+    if (key) keys.add(key);
+  }
+
+  return Array.from(keys);
 }
 
 async function checkUiLocaleRegistration(): Promise<CheckResult> {
@@ -204,6 +211,7 @@ async function checkReadmeSwitchers(): Promise<CheckResult> {
   const canonicalEntries = extractReadmeSwitcher(canonicalSource);
 
   if (!canonicalEntries) {
+    if (readmes.length === 1) return { name: "root README language switchers", errors };
     return { name: "root README language switchers", errors: [`${canonicalName} has no root README language switcher.`] };
   }
 

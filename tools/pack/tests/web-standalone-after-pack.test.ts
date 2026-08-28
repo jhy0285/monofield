@@ -76,6 +76,14 @@ async function writeStandaloneFixture(
     }
   }
 
+  if (options.includeWebNext) {
+    await writeFile(
+      join(sourceWebRoot, "node_modules", "next", "README.md"),
+      "runtime-only documentation\n",
+      "utf8",
+    );
+  }
+
   await mkdir(join(sourceWebRoot, ".next", "static"), { recursive: true });
   await writeFile(join(sourceWebRoot, "server.js"), "module.exports = {};\n", "utf8");
   await writeFile(join(sourceWebRoot, ".next", "BUILD_ID"), "fixture\n", "utf8");
@@ -196,9 +204,11 @@ describe("web standalone afterPack hook", () => {
       expect(await pathExists(join(fixture.destinationRoot, "node_modules", "next"))).toBe(false);
       expect(await pathExists(join(fixture.destinationRoot, "node_modules", ".pnpm", "node_modules", "next"))).toBe(false);
       expect(await pathExists(join(fixture.destinationRoot, "apps", "web", "node_modules", "next", "package.json"))).toBe(true);
+      expect(await pathExists(join(fixture.destinationRoot, "apps", "web", "node_modules", "next", "README.md"))).toBe(false);
 
       const report = JSON.parse(await readFile(fixture.auditReportPath, "utf8")) as {
         copiedAudit: { resolvedModules: Record<string, string>; brokenSymlinks: string[] };
+        copiedRuntimeDocumentationPrune: Array<{ bytes: number; count: number; reason: string }>;
         copiedNextDedupe: { removedPaths: Array<{ reason: string }>; retainedPath: string };
         copiedNextDedupeAudit: { resolvedNextPackagePath: string; remainingPaths: string[] };
       };
@@ -216,6 +226,12 @@ describe("web standalone afterPack hook", () => {
         /open-design-web-standalone\/apps\/web\/node_modules\/next\/package\.json$/,
       );
       expect(report.copiedAudit.brokenSymlinks).toEqual([]);
+      expect(report.copiedRuntimeDocumentationPrune).toEqual([
+        expect.objectContaining({
+          count: 1,
+          reason: "copied standalone runtime documentation residue",
+        }),
+      ]);
       expect(report.copiedAudit.resolvedModules["next/package.json"].split(path.sep).join("/")).toMatch(
         /open-design-web-standalone\/apps\/web\/node_modules\/next\/package\.json$/,
       );

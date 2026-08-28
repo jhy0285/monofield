@@ -97,6 +97,7 @@ import {
   selectPromptImagePaths,
   validateCodexGeneratedImagesDir,
 } from './runtimes/chat-prompt-inputs.js';
+import { canUseLocalGreetingFastPath } from './runtimes/local-chat-fast-path.js';
 import {
   applyClaudeStreamJsonRunBookkeeping,
   assertValidRuntimeDefInactivityTimeoutMs,
@@ -460,12 +461,14 @@ import {
   isSafeId,
   listFiles,
   listProjectFolders,
+  listProjectWorkspaceHint,
   mimeFor,
   parseByteRange,
   projectDir,
   readProjectFile,
   renameProjectFile,
   removeProjectDir,
+  resolveDevelopmentCwd,
   resolveProjectDir,
   SandboxImportedProjectError,
   sanitizeName,
@@ -532,9 +535,14 @@ import {
   computeIncludeStable,
   hashStableInstructions,
   isClaudeResumeFailure,
+  isCodexResumeFailure,
   persistCapturedAgentSession,
   resolveAgentResumeContext,
 } from './agent-session-resume.js';
+import {
+  codexTurnUsageFromCumulative,
+  readCodexRolloutCumulativeUsage,
+} from './codex-rollout-usage.js';
 import {
   createLiveArtifact,
   deleteLiveArtifact,
@@ -2417,6 +2425,45 @@ function formAnswerTransitionForCurrentPrompt(currentPrompt) {
   return lines.join('\n');
 }
 
+const MAX_BOOTSTRAP_TRANSCRIPT_CHARS = 32_000;
+const BOOTSTRAP_TRANSCRIPT_HEAD_CHARS = 4_000;
+const BOOTSTRAP_TRANSCRIPT_OMISSION =
+  '[Earlier conversation omitted by MonoField to bound first-turn context. The recent turns below are authoritative.]';
+
+function compactBootstrapTranscript(message, currentPrompt) {
+  if (typeof message !== 'string' || message.length <= MAX_BOOTSTRAP_TRANSCRIPT_CHARS) {
+    return message;
+  }
+
+  const latest = typeof currentPrompt === 'string' ? currentPrompt.trim() : '';
+  const latestBlock = latest && !message.slice(-MAX_BOOTSTRAP_TRANSCRIPT_CHARS).includes(latest)
+    ? `\n\n## Latest user turn\n${latest}`
+    : '';
+  const marker = `\n\n${BOOTSTRAP_TRANSCRIPT_OMISSION}\n\n`;
+
+  // A very large current turn is more important than stale conversation
+  // history. Do not duplicate the historic transcript just to preserve a
+  // fixed-size head in that case.
+  if (latestBlock.length + marker.length >= MAX_BOOTSTRAP_TRANSCRIPT_CHARS) {
+    return `${BOOTSTRAP_TRANSCRIPT_OMISSION}\n\n${latest || message.slice(-MAX_BOOTSTRAP_TRANSCRIPT_CHARS)}`;
+  }
+
+  const head = message.slice(0, BOOTSTRAP_TRANSCRIPT_HEAD_CHARS).trimEnd();
+  const tailBudget = Math.max(
+    0,
+    MAX_BOOTSTRAP_TRANSCRIPT_CHARS - head.length - marker.length - latestBlock.length,
+  );
+  const rawTailStart = Math.max(0, message.length - tailBudget);
+  const nearbyTurnBoundary = message.indexOf('\n## ', rawTailStart);
+  const tailStart =
+    nearbyTurnBoundary >= rawTailStart && nearbyTurnBoundary - rawTailStart <= 2_000
+      ? nearbyTurnBoundary + 1
+      : rawTailStart;
+  const tail = message.slice(tailStart).trimStart();
+
+  return `${head}${marker}${tail}${latestBlock}`;
+}
+
 export function composeChatUserRequestForAgent(
   message,
   currentPrompt,
@@ -2431,7 +2478,9 @@ export function composeChatUserRequestForAgent(
   // session memory provides the rest. See
   // `RuntimeAgentDef.resumesSessionViaCli`.
   const skip = options.skipTranscript === true;
-  const bodySource = skip ? currentPrompt : message;
+  const bodySource = skip
+    ? currentPrompt
+    : compactBootstrapTranscript(message, currentPrompt);
   const body =
     typeof bodySource === 'string' && bodySource.trim()
       ? bodySource
@@ -3813,8 +3862,11 @@ export async function startServer({
     hydrateMediaTask(row);
   }
 
-  if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') {
-    console.log('[monofield] Codex plugins disabled via OD_CODEX_DISABLE_PLUGINS=1');
+  if (
+    process.env.MONOFIELD_CODEX_ENABLE_EXTERNAL_PLUGINS !== '1'
+    && process.env.OD_CODEX_DISABLE_PLUGINS !== '0'
+  ) {
+    console.log('[monofield] Codex external plugin catalog disabled; MonoField-selected workflows remain available');
   }
 
   let bundledMarketplaceEntries = [];
@@ -5896,6 +5948,40 @@ export async function startServer({
     ) {
       return design.runs.fail(run, 'BAD_REQUEST', 'message required');
     }
+    const localGreetingResponse = canUseLocalGreetingFastPath({
+      prompt:
+        typeof currentPrompt === 'string' && currentPrompt.trim().length > 0
+          ? currentPrompt
+          : message,
+      locale,
+      imagePaths,
+      attachments,
+      commentAttachments: safeCommentAttachments,
+      skillIds,
+      appliedPluginSnapshotId: run?.appliedPluginSnapshotId,
+      research,
+      browserVerification,
+    });
+    if (localGreetingResponse) {
+      const payload = {
+        type: 'text_delta',
+        delta: localGreetingResponse,
+      };
+      // A standalone greeting needs neither model reasoning nor project
+      // context. Persist and stream it locally so opening a coding project and
+      // saying hello does not pay the CLI's full first-session context cost.
+      // Deliberately emit no usage event: no provider was called and zero
+      // model tokens were consumed.
+      persistRunEventToAssistantMessage(db, run, 'agent', payload);
+      design.runs.emit(run, 'agent', payload);
+      run.localResponse = true;
+      run.analyticsTelemetry = {
+        ...(run.analyticsTelemetry ?? {}),
+        promptBuildEndAt: Date.now(),
+        localFastPath: 'greeting',
+      };
+      return design.runs.finish(run, 'succeeded', 0, null);
+    }
     const normalizedBrowserVerification = (() => {
       if (!browserVerification || typeof browserVerification !== 'object' || Array.isArray(browserVerification)) return null;
       const sessionId = typeof browserVerification.sessionId === 'string' ? browserVerification.sessionId.trim() : '';
@@ -5962,16 +6048,23 @@ export async function startServer({
         // folders with no managed copy in sandbox mode), so we pass chatMeta
         // through instead of branching on baseDir here.
         assertSandboxProjectRootAvailable(chatMeta);
-        cwd = await ensureProject(PROJECTS_DIR, projectId, chatMeta);
-        existingProjectFiles = await listFiles(PROJECTS_DIR, projectId, { metadata: chatMeta });
-        existingProjectFolders = await listProjectFolders(PROJECTS_DIR, projectId, { metadata: chatMeta });
+        const workspaceRoot = await ensureProject(PROJECTS_DIR, projectId, chatMeta);
+        cwd = await resolveDevelopmentCwd(workspaceRoot, chatMeta);
+        const workspaceHint = await listProjectWorkspaceHint(PROJECTS_DIR, projectId, {
+          metadata: chatMeta,
+        });
+        existingProjectFiles = workspaceHint.files;
+        existingProjectFolders = workspaceHint.folders;
       } catch (err) {
         if (err instanceof SandboxImportedProjectError) {
           return design.runs.fail(run, 'BAD_REQUEST', err.message);
         }
-        cwd = null;
-        existingProjectFiles = [];
-        existingProjectFolders = [];
+        const detail = err instanceof Error ? err.message : String(err);
+        return design.runs.fail(
+          run,
+          'BAD_REQUEST',
+          `Working folder is unavailable: ${detail}. Re-select the project folder and retry. MonoField did not fall back to another project or its internal data directory.`,
+        );
       }
     }
     if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
@@ -6279,7 +6372,11 @@ export async function startServer({
     // for ANY agent (not just claude_code). Only for real project runs: a
     // null `cwd` means a no-project run rooted at PROJECT_ROOT, whose churn is
     // not the user's artifacts — those fall back to the tool-stream count.
-    if (run?.id && cwd) {
+    // Development projects already expose their changes through Git and do
+    // not need a synchronous whole-tree artifact fingerprint before every
+    // CLI spawn. Keep the snapshot for document/design projects where
+    // generated HTML, images, decks, and specs drive artifact telemetry.
+    if (run?.id && cwd && projectRecord?.metadata?.workMode !== 'development') {
       try {
         runArtifactBaselines.remember(run.id, cwd, snapshotProjectArtifacts(cwd));
       } catch {
@@ -6332,6 +6429,7 @@ export async function startServer({
             agentId: def.id,
           })
         : { resumeSessionId: null as string | null, newSessionId: undefined as string | undefined, isResuming: false, storedStablePromptHash: null as string | null };
+    let capturedAgentSessionId: string | null = null;
     const userRequestPrompt = composeChatUserRequestForAgent(
       message,
       currentPrompt,
@@ -6376,7 +6474,8 @@ export async function startServer({
           '1. Run the relevant build, typecheck, or focused tests.',
           `2. Reload the bound page using \`monofield browser navigate --session ${normalizedBrowserVerification.sessionId} --url ${normalizedBrowserVerification.url}\`.`,
           `3. Inspect both DOM state and a screenshot with \`monofield browser snapshot --session ${normalizedBrowserVerification.sessionId}\` and \`monofield browser screenshot --session ${normalizedBrowserVerification.sessionId} --out .monofield/verification/latest.png\`.`,
-          '4. Exercise the affected interaction when safe, and report exact evidence. Never claim browser verification if a command failed or the page was not reachable.',
+          '4. Exercise the affected interaction when safe. Browser click, hover, upload, and drag commands use the approved tab and pointer-backed native Electron input; do not launch a separate browser.',
+          '5. Report exact evidence. Never claim browser verification if a command failed, the page was not reachable, or the affected interaction was not exercised.',
         ].join('\n')
       : '';
     const titleGenerationRequested =
@@ -6834,7 +6933,7 @@ export async function startServer({
       );
       const liveSessionId = agentResumeCtx.isResuming
         ? agentResumeCtx.resumeSessionId
-        : agentResumeCtx.newSessionId;
+        : capturedAgentSessionId ?? agentResumeCtx.newSessionId;
       const resumableFailure =
         result === 'failed' &&
         def.resumesSessionViaCli === true &&
@@ -7267,6 +7366,7 @@ export async function startServer({
           promptFilePath: promptFile?.path,
           resumeSessionId: agentResumeCtx.resumeSessionId,
           newSessionId: agentResumeCtx.newSessionId,
+          ignoreProjectInstructions: cwd != null && projectBaseDir == null,
         },
       );
     } catch (err) {
@@ -7336,11 +7436,14 @@ export async function startServer({
       persistDeliveredAgentSessionState = () => {
         if (persisted) return;
         persisted = true;
-        if (!agentResumeCtx.isResuming && agentResumeCtx.newSessionId) {
-          upsertAgentSession(db, {
+        if (!agentResumeCtx.isResuming) {
+          const createdSessionId = def.sessionIdFromStream === true
+            ? capturedAgentSessionId
+            : agentResumeCtx.newSessionId;
+          persistCapturedAgentSession(db, {
             conversationId: run.conversationId,
             agentId: def.id,
-            sessionId: agentResumeCtx.newSessionId,
+            sessionId: createdSessionId,
             stablePromptHash: currentStableHash,
           });
           return;
@@ -7593,6 +7696,16 @@ export async function startServer({
       undefined,
       { resolvedBin: agentLaunch.selectedPath },
     );
+    // Codex reports whole-session cumulative usage on resumed turns. Capture
+    // the previous rollout total before spawning so the stream event can be
+    // converted to this turn's delta before it reaches persistence or the UI.
+    const codexUsageBaseline =
+      def.id === 'codex' && agentResumeCtx.isResuming
+        ? await readCodexRolloutCumulativeUsage({
+            codexHome: agentSpawnEnv.CODEX_HOME,
+            sessionId: agentResumeCtx.resumeSessionId,
+          })
+        : null;
     if (def.id === 'amr') {
       const loginStatus = readVelaLoginStatus(agentSpawnEnv, configuredAgentEnv);
       if (!loginStatus.loggedIn) {
@@ -7840,7 +7953,7 @@ export async function startServer({
     // close handler) trims further; we only need enough to ground the
     // model. Multiple `on('data')` listeners coexist — the wrapper-stream
     // handlers below also subscribe and that's fine.
-    const MEMORY_BUFFER_CAP = 32 * 1024;
+    const MEMORY_BUFFER_CAP = 4 * 1024;
     let memoryAssistantBuffer = '';
     child.stdout.on('data', (chunk) => {
       if (memoryAssistantBuffer.length >= MEMORY_BUFFER_CAP) return;
@@ -7851,7 +7964,15 @@ export async function startServer({
     });
     child.on('close', () => {
       const captured = memoryAssistantBuffer;
-      const userMsg = typeof message === 'string' ? message : '';
+      // `message` can be the fully rendered conversation transcript. Feeding
+      // that into a second background model call replayed the entire chat yet
+      // again. Memory extraction only needs the latest user turn.
+      const userMsg =
+        typeof currentPrompt === 'string' && currentPrompt.trim()
+          ? currentPrompt
+          : typeof message === 'string'
+            ? message.slice(-8_000)
+            : '';
       // Forward the chat agent id so memory-llm.pickProvider can
       // constrain its auto-pick to the chat protocol's family — keeps
       // a Claude Code (anthropic) chat from triggering OpenAI/gpt-4o-
@@ -8308,6 +8429,20 @@ export async function startServer({
     // follows the result that triggered it in the stream. (PR #3375 review:
     // Copilot and ACP bypassed the guard by calling send('agent', …) directly.)
     function emitAgentEvent(ev: any) {
+      if (
+        def.sessionIdFromStream === true
+        && ev?.type === 'status'
+        && typeof ev.sessionId === 'string'
+        && ev.sessionId.trim().length > 0
+      ) {
+        capturedAgentSessionId = ev.sessionId.trim();
+      }
+      if (def.id === 'codex' && ev?.type === 'usage' && ev.usage && codexUsageBaseline) {
+        ev = {
+          ...ev,
+          usage: codexTurnUsageFromCumulative(ev.usage, codexUsageBaseline),
+        };
+      }
       send('agent', ev);
       observeToolEventForLoop(ev);
     }
@@ -8720,13 +8855,19 @@ export async function startServer({
           return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
         }
       }
+      const resumeTargetMissing =
+        def.id === 'claude'
+          ? isClaudeResumeFailure(`${agentStderrTail}\n${agentStdoutTail}`)
+          : def.id === 'codex'
+            ? isCodexResumeFailure(`${agentStderrTail}\n${agentStdoutTail}`)
+            : false;
       if (
         code !== 0 &&
         !run.cancelRequested &&
         def.resumesSessionViaCli === true &&
         agentResumeCtx.isResuming &&
         run.conversationId &&
-        isClaudeResumeFailure(`${agentStderrTail}\n${agentStdoutTail}`)
+        resumeTargetMissing
       ) {
         // The stored session id no longer resolves (pruned / machine moved
         // / ~/.claude cleared). Drop it so the next turn starts a fresh
@@ -8735,7 +8876,7 @@ export async function startServer({
         clearAgentSession(db, run.conversationId, def.id);
         send('error', createSseErrorPayload(
           'AGENT_EXECUTION_FAILED',
-          'The previous Claude session could not be resumed (it may have expired). Resend your message to continue with a fresh session.',
+          `The previous ${def.name} session could not be resumed (it may have expired). Resend your message to continue with a fresh session.`,
           { retryable: true },
         ));
         return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);

@@ -203,9 +203,6 @@ export interface Dict {
   'settings.onboardingStepConnect': string;
   'settings.onboardingStepDesignSystem': string;
   'settings.onboardingStepProfile': string;
-  'settings.onboardingStepNewsletter': string;
-  'settings.onboardingNewsletterTitle': string;
-  'settings.onboardingNewsletterBody': string;
   'settings.onboardingConnectTitle': string;
   'settings.onboardingConnectBody': string;
   'settings.onboardingCloudTitle': string;
@@ -944,8 +941,14 @@ export interface Dict {
   'updater.upToDate': string;
 
   // Newsletter email field on the onboarding About-you step.
-  'newsletter.label': string;
-  'newsletter.placeholder': string;
+  'community.checkInTitle': string;
+  'community.checkInBody': string;
+  'community.worksWell': string;
+  'community.later': string;
+  'community.starTitle': string;
+  'community.starBody': string;
+  'community.starAction': string;
+  'community.onboardingBody': string;
 
   // Entry view / tabs
   'entry.tabDesigns': string;
@@ -977,6 +980,7 @@ export interface Dict {
   'entry.navDesignSystems': string;
   'entry.navBrands': string;
   'entry.navIntegrations': string;
+  'entry.featureGuide': string;
   'workspaceTabs.project': string;
   'workspaceTabs.pluginDetails': string;
   'workspaceTabs.marketplace': string;
@@ -3918,6 +3922,38 @@ export interface Dict {
   'screenSpec.relationLabelPlaceholder': string;
   'screenSpec.markerSize': string;
   'screenSpec.lineWidth': string;
+  // First-run product tutorial
+  'productTutorial.eyebrow': string;
+  'productTutorial.title': string;
+  'productTutorial.body': string;
+  'productTutorial.promptLabel': string;
+  'productTutorial.developmentPrompt': string;
+  'productTutorial.creationPrompt': string;
+  'productTutorial.progressLabel': string;
+  'productTutorial.stepOf': string;
+  'productTutorial.stepChooseTitle': string;
+  'productTutorial.stepChooseBody': string;
+  'productTutorial.stepConnectTitle': string;
+  'productTutorial.stepConnectBody': string;
+  'productTutorial.stepAskTitle': string;
+  'productTutorial.stepAskBody': string;
+  'productTutorial.stepReviewTitle': string;
+  'productTutorial.stepReviewBody': string;
+  'productTutorial.creationChooseTitle': string;
+  'productTutorial.creationChooseBody': string;
+  'productTutorial.creationFormatTitle': string;
+  'productTutorial.creationFormatBody': string;
+  'productTutorial.creationStyleTitle': string;
+  'productTutorial.creationStyleBody': string;
+  'productTutorial.creationComposeTitle': string;
+  'productTutorial.creationComposeBody': string;
+  'productTutorial.close': string;
+  'productTutorial.download': string;
+  'productTutorial.previous': string;
+  'productTutorial.next': string;
+  'productTutorial.finish': string;
+  'productTutorial.reopen': string;
+  'productTutorial.reopenMeta': string;
   // Project work mode and development workspace
   'workMode.label': string;
   'workMode.development': string;
@@ -3925,6 +3961,19 @@ export interface Dict {
   'workMode.developmentHint': string;
   'workMode.creationHint': string;
   'workMode.developmentFolderRequired': string;
+  'development.guide': string;
+  'development.guideMeta': string;
+  'development.guideFinish': string;
+  'development.guideConfigTitle': string;
+  'development.guideConfigBody': string;
+  'development.guideRunTitle': string;
+  'development.guideRunBody': string;
+  'development.guideDatabaseTitle': string;
+  'development.guideDatabaseBody': string;
+  'development.guideChangesTitle': string;
+  'development.guideChangesBody': string;
+  'development.guideVerifyTitle': string;
+  'development.guideVerifyBody': string;
   'development.detectFailed': string;
   'development.startFailed': string;
   'development.stopFailed': string;
@@ -3944,8 +3993,33 @@ export interface Dict {
   'development.autoVerifyHint': string;
   'development.autoVerify': string;
   'development.localApp': string;
+  'development.configureRun': string;
+  'development.runSettingsHint': string;
+  'development.springProfile': string;
+  'development.springProfilePlaceholder': string;
+  'development.additionalArguments': string;
+  'development.invalidArguments': string;
   'gitChanges.title': string;
   'gitChanges.description': string;
+  'gitChanges.branch': string;
+  'gitChanges.currentBranch': string;
+  'gitChanges.compareBranch': string;
+  'gitChanges.branchHint': string;
+  'gitChanges.manageBranches': string;
+  'gitChanges.workingBranch': string;
+  'gitChanges.workingBranchHint': string;
+  'gitChanges.switchBranch': string;
+  'gitChanges.remoteBranch': string;
+  'gitChanges.switchAction': string;
+  'gitChanges.newBranch': string;
+  'gitChanges.createAndSwitch': string;
+  'gitChanges.uncommittedTitle': string;
+  'gitChanges.uncommittedHint': string;
+  'gitChanges.keepAndSwitch': string;
+  'gitChanges.stashAndSwitch': string;
+  'gitChanges.branchCreated': string;
+  'gitChanges.branchSwitched': string;
+  'gitChanges.branchActionFailed': string;
   'gitChanges.refresh': string;
   'gitChanges.working': string;
   'gitChanges.staged': string;

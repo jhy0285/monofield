@@ -200,8 +200,11 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
 
       const entryFile = await detectEntryFile(normalizedPath);
       const existingMeta = existing.metadata ?? {};
-      const { orchestratorWorkspace: _existingOrchestratorWorkspace, ...preservedMeta } =
-        existingMeta;
+      const {
+        orchestratorWorkspace: _existingOrchestratorWorkspace,
+        development: existingDevelopment,
+        ...preservedMeta
+      } = existingMeta;
       const nextMeta = {
         ...preservedMeta,
         kind: existingMeta.kind ?? 'prototype',
@@ -212,11 +215,27 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
           ? { orchestratorWorkspace: normalizedOrchestratorWorkspace }
           : {}),
         ...(trustedPickerImport ? { fromTrustedPicker: true as const } : {}),
+        // A run configuration and active module belong to the previous
+        // workspace. Keep only the user's verification preference so the new
+        // folder is detected from a clean project root.
+        ...(existingDevelopment
+          ? { development: { autoVerify: existingDevelopment.autoVerify !== false } }
+          : {}),
       };
       const updated = updateProject(db, projectId, { metadata: nextMeta });
       if (!updated) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
+      // A CLI session is bound to the repository context it was created in.
+      // Reusing it after the user replaces the Working folder can make the
+      // upstream agent retain the previous repository's cwd/history. Clear
+      // every stored agent session for this project before the next run.
+      db.prepare(
+        `DELETE FROM agent_sessions
+          WHERE conversation_id IN (
+            SELECT id FROM conversations WHERE project_id = ?
+          )`,
+      ).run(projectId);
       // Folder imports should land on Design Files so users can choose from
       // the imported folder's artifacts. Persist an empty saved tab state so
       // ProjectView does not auto-open the detected primary file on hydration.

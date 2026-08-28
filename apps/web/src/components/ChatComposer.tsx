@@ -1787,12 +1787,17 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       entryFile: string | null,
       metadata: ProjectMetadata | undefined,
     ) {
+      const previous = projectMetadata ?? { kind: 'prototype' as const };
+      const { development: previousDevelopment, ...previousWithoutDevelopment } = previous;
       const next = metadata ?? {
-        ...(projectMetadata ?? { kind: 'prototype' as const }),
+        ...previousWithoutDevelopment,
         baseDir,
         importedFrom: 'folder',
         ...(entryFile ? { entryFile } : {}),
         fromTrustedPicker: true as const,
+        ...(previousDevelopment
+          ? { development: { autoVerify: previousDevelopment.autoVerify !== false } }
+          : {}),
       };
       onProjectMetadataChange?.(next);
       setWorkingDirRequired(false);

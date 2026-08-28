@@ -33,7 +33,7 @@ export const claudeAgentDef = {
     versionProbeTimeoutMs: 20_000,
     authProbe: {
       args: ['auth', 'status'],
-      timeoutMs: 5000,
+      timeoutMs: 15_000,
     },
     helpArgs: ['-p', '--help'],
     capabilityFlags: {

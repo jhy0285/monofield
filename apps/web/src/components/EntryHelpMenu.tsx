@@ -30,7 +30,7 @@ const LATEST_RELEASE_URL = `${REPO}/releases/latest`;
 
 const ext = { target: '_blank', rel: 'noreferrer noopener' } as const;
 
-export function EntryHelpMenu() {
+export function EntryHelpMenu({ onOpenFeatureGuide }: { onOpenFeatureGuide?: () => void }) {
   const t = useT();
   const analytics = useAnalytics();
   const [open, setOpen] = useState(false);
@@ -104,6 +104,24 @@ export function EntryHelpMenu() {
           animate="visible"
           exit="exit"
         >
+          {onOpenFeatureGuide ? (
+            <button
+              type="button"
+              className="entry-help-popover__item"
+              role="menuitem"
+              data-testid="entry-help-feature-guide"
+              onClick={() => {
+                setOpen(false);
+                onOpenFeatureGuide();
+              }}
+            >
+              <span className="entry-help-popover__icon" aria-hidden>
+                <Icon name="help-circle" size={14} />
+              </span>
+              <span>{t('entry.featureGuide')}</span>
+            </button>
+          ) : null}
+          {onOpenFeatureGuide ? <div className="entry-help-popover__divider" aria-hidden /> : null}
           <a
             className="entry-help-popover__item"
             href={ISSUES_URL}

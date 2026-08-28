@@ -495,6 +495,15 @@ async function pruneSourceBuildResidue(root, reason) {
   return await pruneMatchingFilesSummary(root, isSourceBuildResidue, reason);
 }
 
+function isRuntimeDocumentationResidue(relativePath) {
+  const normalized = relativePath.split(path.sep).join("/").toLowerCase();
+  return normalized.endsWith(".md") || normalized.endsWith(".markdown");
+}
+
+async function pruneRuntimeDocumentationResidue(root, reason) {
+  return await pruneMatchingFilesSummary(root, isRuntimeDocumentationResidue, reason);
+}
+
 function isForbiddenCopiedEntry(relativePath, platformName) {
   const normalized = relativePath.split(path.sep).join("/");
   const withRootSlash = `/${normalized}`;
@@ -897,6 +906,15 @@ async function runWebStandaloneAfterPack(context) {
   const copiedBuildResiduePrune = context.electronPlatformName === "win32"
     ? await pruneSourceBuildResidue(installResult.destinationRoot, "copied standalone source/build residue")
     : [];
+  // The standalone tree is copied after electron-builder applies its `files`
+  // exclusions, so dependency READMEs and framework docs would otherwise leak
+  // back into the packaged app. Keep licenses and MonoField's functional
+  // skill/plugin/design-system Markdown in the separate resource tree; only
+  // prune documentation from this executable web runtime closure.
+  const copiedRuntimeDocumentationPrune = await pruneRuntimeDocumentationResidue(
+    installResult.destinationRoot,
+    "copied standalone runtime documentation residue",
+  );
   const brokenSymlinkPrune = await pruneBrokenSymlinks(
     installResult.destinationRoot,
     installResult.destinationRoot,
@@ -940,6 +958,7 @@ async function runWebStandaloneAfterPack(context) {
     brokenSymlinkPrune,
     copiedAudit,
     copiedBuildResiduePrune,
+    copiedRuntimeDocumentationPrune,
     copiedNextDedupe,
     copiedNextDedupeAudit,
     copiedPrune,

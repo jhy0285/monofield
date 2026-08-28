@@ -35,7 +35,6 @@ import type {
 import { openValidatedDirectory } from "./open-path.js";
 import { exportArtifact as exportArtifactFromHtml } from "./artifact-export.js";
 import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf } from "./pdf-export.js";
-import { SPLASH_VIDEO_DATA_URL } from "./splash-video.js";
 import type { PrintReadyPdfOptions } from "./pdf-export.js";
 import type { DesktopUpdater } from "./updater.js";
 import type { DatabaseBroker } from "./database-broker.js";
@@ -241,11 +240,9 @@ export function signDesktopImportToken(
 const PENDING_POLL_MS = 120;
 const RUNNING_POLL_MS = 2000;
 // Minimum time the light splash window stays on screen before we reveal the main
-// window. It is sized to outlast the ~1.7s clip so the brand animation always
-// plays through. The splash is shown immediately and in parallel with the
-// daemon/web boot (see the packaged entry), so this time overlaps startup rather
-// than adding to it; the <video> holds on its final frame (it does not loop)
-// while the runtime finishes coming up. See `createSplashWindow`.
+// window. It is sized to let the short MonoField lockup transition settle. The
+// splash is shown immediately and in parallel with daemon/web boot (see the
+// packaged entry), so this time overlaps startup rather than adding to it.
 const MIN_SPLASH_MS = 2000;
 // While the splash is up, the real web app loads in a hidden main window. We
 // reveal it only once the web bundle reports it has actually mounted (it sets
@@ -824,10 +821,10 @@ const MAC_WINDOW_CHROME_CSS = `
   }
 `;
 
-// Light-background startup splash shown while the web runtime boots. It plays
-// the brand intro clip once and then holds on its final settled logo frame until
-// the main window is ready. The clip is embedded as a base64 data URL so it
-// renders identically in dev and in packaged builds (see `splash-video.ts`).
+// Light-background startup splash shown while the web runtime boots. Keep the
+// MonoField lockup as HTML/CSS instead of a pre-rendered brand video: the name
+// cannot drift back to a legacy wordmark, it remains sharp at every scale, and
+// it adds no media decode to a cold start.
 function createPendingHtml(): string {
   const start = splashStagePayload("starting");
   const initialPct = Math.max(0, Math.min(100, Math.round((start.step / start.total) * 100)));
@@ -847,14 +844,55 @@ function createPendingHtml(): string {
       body {
         align-items: center;
         display: flex;
+        flex-direction: column;
         justify-content: center;
       }
-      video {
-        background: #f2f4f5;
-        height: auto;
-        max-height: 100%;
-        max-width: 100%;
-        width: auto;
+      .brand-lockup {
+        align-items: center;
+        animation: brand-enter 620ms cubic-bezier(0.23, 1, 0.32, 1) both;
+        display: flex;
+        gap: 18px;
+        transform-origin: center;
+      }
+      .brand-mark {
+        align-items: center;
+        background: #101112;
+        border-radius: 16px;
+        color: #fff;
+        display: flex;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        font-size: 29px;
+        font-weight: 750;
+        height: 64px;
+        justify-content: center;
+        letter-spacing: -0.08em;
+        line-height: 1;
+        padding-right: 2px;
+        width: 64px;
+      }
+      .brand-copy {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+      .brand-name {
+        color: #101112;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        font-size: 42px;
+        font-weight: 720;
+        letter-spacing: -0.045em;
+        line-height: 1;
+      }
+      .brand-scope {
+        color: #7a838a;
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        font-size: 12px;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+      }
+      @keyframes brand-enter {
+        from { opacity: 0; transform: translateY(10px) scale(0.985); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
       }
       .boot-stage {
         bottom: 56px;
@@ -908,14 +946,13 @@ function createPendingHtml(): string {
     </style>
   </head>
   <body>
-    <video
-      id="splash"
-      autoplay
-      muted
-      playsinline
-      disablepictureinpicture
-      src="${SPLASH_VIDEO_DATA_URL}"
-    ></video>
+    <div class="brand-lockup" role="img" aria-label="MonoField">
+      <div class="brand-mark" aria-hidden="true">M</div>
+      <div class="brand-copy">
+        <div class="brand-name">MonoField</div>
+        <div class="brand-scope">code / design / documents</div>
+      </div>
+    </div>
     <div class="boot-progress" aria-hidden="true">
       <div class="boot-progress-fill" id="boot-progress-fill" data-pct="${initialPct}" style="width: ${initialPct}%;"></div>
     </div>
@@ -923,17 +960,6 @@ function createPendingHtml(): string {
       <span class="boot-stage-step" id="boot-stage-step">${start.step}/${start.total}</span><span id="boot-stage-text">${start.label}</span><span class="boot-dots" aria-hidden="true"><span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>
     </div>
     <script>
-      (function () {
-        var video = document.getElementById("splash");
-        if (!video) return;
-        var play = function () {
-          var attempt = video.play();
-          if (attempt && typeof attempt.catch === "function") attempt.catch(function () {});
-        };
-        video.addEventListener("loadedmetadata", function () { video.currentTime = 0; });
-        video.addEventListener("loadeddata", play);
-        play();
-      })();
       // Accepts the structured { step, total, label } payload (and tolerates a
       // bare label string for back-compat). The step counter + progress bar give
       // a slow cold boot a sense of how far along it is; the bar only ever grows
@@ -2457,9 +2483,16 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     setSplashStage(splash, "workspace");
     const deadline = Date.now() + WEB_MOUNT_REVEAL_TIMEOUT_MS;
     while (!stopped && !window.isDestroyed() && Date.now() < deadline) {
-      const mounted = await window.webContents
-        .executeJavaScript(`document.documentElement.getAttribute("data-od-app-mounted") === "1"`, true)
-        .catch(() => false);
+      // A renderer-side redirect can destroy the execution context after
+      // executeJavaScript was dispatched without settling Electron's promise.
+      // Never let that one navigation strand the main window behind the
+      // splash forever; time out this read and retry against the new document.
+      const mounted = await Promise.race([
+        window.webContents
+          .executeJavaScript(`document.documentElement.getAttribute("data-od-app-mounted") === "1"`, true)
+          .catch(() => false),
+        delay(500).then(() => false),
+      ]);
       if (mounted === true) break;
       await delay(WEB_MOUNT_POLL_MS);
     }

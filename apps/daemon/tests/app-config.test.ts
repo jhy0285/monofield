@@ -205,6 +205,44 @@ describe('app-config', () => {
         templateSkillId: 'orbit-general',
       });
     });
+
+    it('restores a bounded Desktop pet selection across origin changes', async () => {
+      await writeFile(
+        path.join(dataDir, 'app-config.json'),
+        JSON.stringify({
+          pet: {
+            adopted: true,
+            enabled: true,
+            petId: 'tater',
+            custom: {
+              name: 'Tater',
+              glyph: '🐶',
+              accent: '#7698FD',
+              greeting: 'Ready to help.',
+              imageUrl: 'https://remote.example/pet.png',
+              frames: 999,
+              fps: 0,
+            },
+          },
+        }),
+      );
+
+      const cfg = await readAppConfig(dataDir);
+
+      expect(cfg.pet).toEqual({
+        adopted: true,
+        enabled: true,
+        petId: 'tater',
+        custom: {
+          name: 'Tater',
+          glyph: '🐶',
+          accent: '#7698fd',
+          greeting: 'Ready to help.',
+          frames: 128,
+          fps: 1,
+        },
+      });
+    });
   });
 
   describe('writeAppConfig', () => {
@@ -247,6 +285,35 @@ describe('app-config', () => {
       const cfg = await readAppConfig(dataDir);
       expect(cfg.agentId).toBe('claude');
       expect(cfg.skillId).toBe('coder');
+    });
+
+    it('persists validated pet state while rejecting arbitrary image URLs', async () => {
+      await writeAppConfig(dataDir, {
+        pet: {
+          adopted: true,
+          enabled: false,
+          petId: 'mochi',
+          custom: {
+            name: 'Mochi',
+            glyph: '🐱',
+            accent: '#C96442',
+            greeting: 'Hello',
+            imageUrl: 'javascript:alert(1)',
+          },
+        },
+      });
+
+      expect((await readAppConfig(dataDir)).pet).toEqual({
+        adopted: true,
+        enabled: false,
+        petId: 'mochi',
+        custom: {
+          name: 'Mochi',
+          glyph: '🐱',
+          accent: '#c96442',
+          greeting: 'Hello',
+        },
+      });
     });
 
     it('clears a key when null is sent', async () => {
@@ -329,6 +396,11 @@ describe('app-config', () => {
           'trae-cli': {
             TRAE_CLI_BIN: '  ~/bin/traecli-public  ',
           },
+          amp: { AMP_BIN: '  ~/bin/amp  ' },
+          antigravity: { ANTIGRAVITY_BIN: '  ~/bin/agy  ' },
+          codebuddy: { CODEBUDDY_BIN: '  ~/bin/codebuddy  ' },
+          'grok-build': { GROK_BIN: '  ~/bin/grok  ' },
+          reasonix: { REASONIX_BIN: '  ~/bin/reasonix  ' },
           gemini: {
             GEMINI_API_KEY: 'should-not-persist',
           },
@@ -350,6 +422,11 @@ describe('app-config', () => {
           OPENCODE_TEST_HOME: '~/.open-design-amr-opencode',
         },
         'trae-cli': { TRAE_CLI_BIN: '~/bin/traecli-public' },
+        amp: { AMP_BIN: '~/bin/amp' },
+        antigravity: { ANTIGRAVITY_BIN: '~/bin/agy' },
+        codebuddy: { CODEBUDDY_BIN: '~/bin/codebuddy' },
+        'grok-build': { GROK_BIN: '~/bin/grok' },
+        reasonix: { REASONIX_BIN: '~/bin/reasonix' },
       });
     });
 

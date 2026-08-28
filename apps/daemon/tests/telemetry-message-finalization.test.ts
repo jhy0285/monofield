@@ -231,6 +231,27 @@ describe('Langfuse message finalization gate', () => {
     expect(kept).toBe(transcript);
   });
 
+  it('bounds the one-time bootstrap transcript while preserving the project brief and latest turn', () => {
+    const currentPrompt = '연결된 DB에서 abtdb.tbpcl250 테이블만 조회해';
+    const transcript = [
+      '## user',
+      '프로젝트 목표: 주문 조회 API를 안전하게 구현한다.',
+      '',
+      '## assistant',
+      'x'.repeat(90_000),
+      '',
+      '## user',
+      currentPrompt,
+    ].join('\n');
+
+    const prompt = composeChatUserRequestForAgent(transcript, currentPrompt);
+
+    expect(prompt.length).toBeLessThanOrEqual(32_000);
+    expect(prompt).toContain('프로젝트 목표: 주문 조회 API를 안전하게 구현한다.');
+    expect(prompt).toContain('Earlier conversation omitted by MonoField');
+    expect(prompt).toContain(currentPrompt);
+  });
+
   it('invokes Langfuse reporting once when the final message write is marked', () => {
     const run = {
       id: 'run-1',

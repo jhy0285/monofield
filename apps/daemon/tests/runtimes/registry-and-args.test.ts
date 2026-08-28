@@ -1,10 +1,23 @@
 import { test } from 'vitest';
 import {
-  AGENT_DEFS, amp, assert, chmodSync, claude, codex, cursorAgent, detectAgents, grokBuild, join, mkdtempSync, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
+  AGENT_DEFS, amp, assert, chmodSync, claude, codex, copilot, cursorAgent, detectAgents, gemini, grokBuild, join, mkdtempSync, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
+import { parseCopilotHelpModels } from '../../src/runtimes/defs/copilot.js';
 import { codexNeedsDangerFullAccessSandbox } from '../../src/runtimes/defs/codex.js';
 import { mergeLiveModelsWithFallbacks } from '../../src/runtimes/detection.js';
 import { readLocalAgentProfileDefs } from '../../src/runtimes/registry.js';
+
+function writeAgentFixture(
+  dir: string,
+  name: string,
+  posixBody: string,
+  windowsBody: string,
+): string {
+  const filePath = join(dir, process.platform === 'win32' ? `${name}.CMD` : name);
+  writeFileSync(filePath, process.platform === 'win32' ? windowsBody : posixBody);
+  if (process.platform !== 'win32') chmodSync(filePath, 0o755);
+  return filePath;
+}
 
 test('AGENT_DEFS ids are unique', () => {
   const ids = AGENT_DEFS.map((a) => a.id);
@@ -265,8 +278,24 @@ test('codex args keep workspace-write sandbox on Windows by default', () => {
   });
 });
 
-test('codex args keep plugins enabled when OD_CODEX_DISABLE_PLUGINS is unset', () => {
-  withEnvSnapshot(['OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX'], () => {
+test('codex args disable external plugins by default to avoid duplicate prompt context', () => {
+  withEnvSnapshot(['MONOFIELD_CODEX_ENABLE_EXTERNAL_PLUGINS', 'OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX'], () => {
+    delete process.env.MONOFIELD_CODEX_ENABLE_EXTERNAL_PLUGINS;
+    delete process.env.OD_CODEX_DISABLE_PLUGINS;
+    delete process.env.OD_CODEX_SANDBOX;
+
+    withPlatform('darwin', () => {
+      const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
+
+      assert.equal(args.includes('--disable'), true);
+      assert.equal(args.includes('plugins'), true);
+    });
+  });
+});
+
+test('codex args allow an explicit external-plugin opt in', () => {
+  withEnvSnapshot(['MONOFIELD_CODEX_ENABLE_EXTERNAL_PLUGINS', 'OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX'], () => {
+    process.env.MONOFIELD_CODEX_ENABLE_EXTERNAL_PLUGINS = '1';
     delete process.env.OD_CODEX_DISABLE_PLUGINS;
     delete process.env.OD_CODEX_SANDBOX;
 
@@ -279,17 +308,42 @@ test('codex args keep plugins enabled when OD_CODEX_DISABLE_PLUGINS is unset', (
   });
 });
 
-test('codex args keep plugins enabled when OD_CODEX_DISABLE_PLUGINS is not 1', () => {
-  withEnvSnapshot(['OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX'], () => {
-    process.env.OD_CODEX_DISABLE_PLUGINS = 'true';
+test('codex args resume the captured CLI session without replaying cwd setup', () => {
+  withEnvSnapshot(['MONOFIELD_CODEX_ENABLE_EXTERNAL_PLUGINS', 'OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX'], () => {
+    delete process.env.MONOFIELD_CODEX_ENABLE_EXTERNAL_PLUGINS;
+    delete process.env.OD_CODEX_DISABLE_PLUGINS;
     delete process.env.OD_CODEX_SANDBOX;
 
-    withPlatform('darwin', () => {
-      const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
-
-      assert.equal(args.includes('--disable'), false);
-      assert.equal(args.includes('plugins'), false);
+    const args = codex.buildArgs('', [], ['/tmp/generated'], { reasoning: 'low' }, {
+      cwd: '/tmp/od-project',
+      resumeSessionId: '11111111-1111-4111-8111-111111111111',
     });
+
+    assert.deepEqual(args.slice(0, 4), ['exec', 'resume', '--json', '--skip-git-repo-check']);
+    assert.equal(args.includes('-C'), false);
+    assert.equal(args.includes('--add-dir'), false);
+    assert.equal(args.includes('--disable'), true);
+    assert.equal(args.at(-1), '11111111-1111-4111-8111-111111111111');
+  });
+});
+
+test('codex args suppress parent project docs only for managed scratch workspaces', () => {
+  withEnvSnapshot(['MONOFIELD_CODEX_ENABLE_EXTERNAL_PLUGINS', 'OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX'], () => {
+    delete process.env.MONOFIELD_CODEX_ENABLE_EXTERNAL_PLUGINS;
+    delete process.env.OD_CODEX_DISABLE_PLUGINS;
+    delete process.env.OD_CODEX_SANDBOX;
+
+    const managedArgs = codex.buildArgs('', [], [], {}, {
+      cwd: '/tmp/monofield/projects/scratch',
+      ignoreProjectInstructions: true,
+    });
+    const externalArgs = codex.buildArgs('', [], [], {}, {
+      cwd: '/work/user-repository',
+      ignoreProjectInstructions: false,
+    });
+
+    assert.equal(managedArgs.includes('project_doc_max_bytes=0'), true);
+    assert.equal(externalArgs.includes('project_doc_max_bytes=0'), false);
   });
 });
 
@@ -322,6 +376,7 @@ test('codex model picker includes current OpenAI choices in priority order', asy
     'high',
     'xhigh',
     'max',
+    'ultra',
   ]);
 
   const args = codex.buildArgs(
@@ -369,23 +424,37 @@ test('codex model picker includes current OpenAI choices in priority order', asy
 test('claude probes auth status so rescans reflect CLI auth changes', async () => {
   assert.deepEqual(claude.authProbe, {
     args: ['auth', 'status'],
-    timeoutMs: 5000,
+    timeoutMs: 15_000,
   });
 
   const dir = mkdtempSync(join(tmpdir(), 'od-agents-claude-auth-'));
   try {
     await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CLAUDE_BIN'], async () => {
-      const claudeBin = join(dir, 'claude');
-      writeFileSync(
-        claudeBin,
+      writeAgentFixture(
+        dir,
+        'claude',
         `#!/bin/sh
 if [ "$1" = "--version" ]; then echo "2.1.168 (Claude Code)"; exit 0; fi
 if [ "$1" = "-p" ] && [ "$2" = "--help" ]; then echo "--include-partial-messages --add-dir"; exit 0; fi
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then echo '{"authenticated":true,"source":"claude.ai"}'; exit 0; fi
 exit 0
 `,
+        `@echo off
+if "%~1"=="--version" (
+  echo 2.1.168 ^(Claude Code^)
+  exit /b 0
+)
+if "%~1"=="-p" if "%~2"=="--help" (
+  echo --include-partial-messages --add-dir
+  exit /b 0
+)
+if "%~1"=="auth" if "%~2"=="status" (
+  echo {"authenticated":true,"source":"claude.ai"}
+  exit /b 0
+)
+exit /b 0
+`,
       );
-      chmodSync(claudeBin, 0o755);
       process.env.OD_AGENT_HOME = dir;
       process.env.PATH = dir;
       delete process.env.CLAUDE_BIN;
@@ -406,17 +475,31 @@ test('claude API key env satisfies auth probe without requiring local login', as
   const dir = mkdtempSync(join(tmpdir(), 'od-agents-claude-api-key-auth-'));
   try {
     await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CLAUDE_BIN', 'ANTHROPIC_API_KEY'], async () => {
-      const claudeBin = join(dir, 'claude');
-      writeFileSync(
-        claudeBin,
+      writeAgentFixture(
+        dir,
+        'claude',
         `#!/bin/sh
 if [ "$1" = "--version" ]; then echo "2.1.168 (Claude Code)"; exit 0; fi
 if [ "$1" = "-p" ] && [ "$2" = "--help" ]; then echo "--include-partial-messages --add-dir"; exit 0; fi
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then echo '{"authenticated":false}'; exit 1; fi
 exit 0
 `,
+        `@echo off
+if "%~1"=="--version" (
+  echo 2.1.168 ^(Claude Code^)
+  exit /b 0
+)
+if "%~1"=="-p" if "%~2"=="--help" (
+  echo --include-partial-messages --add-dir
+  exit /b 0
+)
+if "%~1"=="auth" if "%~2"=="status" (
+  echo {"authenticated":false}
+  exit /b 1
+)
+exit /b 0
+`,
       );
-      chmodSync(claudeBin, 0o755);
       process.env.OD_AGENT_HOME = dir;
       process.env.PATH = dir;
       process.env.ANTHROPIC_API_KEY = 'sk-anthropic';
@@ -437,22 +520,32 @@ exit 0
 test('codex probes login status so rescans reflect CLI auth changes', async () => {
   assert.deepEqual(codex.authProbe, {
     args: ['login', 'status'],
-    timeoutMs: 5000,
+    timeoutMs: 15_000,
   });
 
   const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-auth-'));
   try {
     await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CODEX_BIN'], async () => {
-      const codexBin = join(dir, 'codex');
-      writeFileSync(
-        codexBin,
+      writeAgentFixture(
+        dir,
+        'codex',
         `#!/bin/sh
 if [ "$1" = "--version" ]; then echo "codex-cli 9.9.9"; exit 0; fi
 if [ "$1" = "login" ] && [ "$2" = "status" ]; then echo "Logged in using ChatGPT"; exit 0; fi
 exit 0
 `,
+        `@echo off
+if "%~1"=="--version" (
+  echo codex-cli 9.9.9
+  exit /b 0
+)
+if "%~1"=="login" if "%~2"=="status" (
+  echo Logged in using ChatGPT
+  exit /b 0
+)
+exit /b 0
+`,
       );
-      chmodSync(codexBin, 0o755);
       process.env.OD_AGENT_HOME = dir;
       process.env.PATH = dir;
       delete process.env.CODEX_BIN;
@@ -473,17 +566,31 @@ test('codex API key env satisfies auth probe without requiring local login', asy
   const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-api-key-auth-'));
   try {
     await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CODEX_BIN', 'CODEX_API_KEY'], async () => {
-      const codexBin = join(dir, 'codex');
-      writeFileSync(
-        codexBin,
+      writeAgentFixture(
+        dir,
+        'codex',
         `#!/bin/sh
 if [ "$1" = "--version" ]; then echo "codex-cli 9.9.9"; exit 0; fi
 if [ "$1" = "debug" ] && [ "$2" = "models" ]; then echo '{"models":[]}'; exit 0; fi
 if [ "$1" = "login" ] && [ "$2" = "status" ]; then echo "Not logged in"; exit 1; fi
 exit 0
 `,
+        `@echo off
+if "%~1"=="--version" (
+  echo codex-cli 9.9.9
+  exit /b 0
+)
+if "%~1"=="debug" if "%~2"=="models" (
+  echo {"models":[]}
+  exit /b 0
+)
+if "%~1"=="login" if "%~2"=="status" (
+  echo Not logged in
+  exit /b 1
+)
+exit /b 0
+`,
       );
-      chmodSync(codexBin, 0o755);
       process.env.OD_AGENT_HOME = dir;
       process.env.PATH = dir;
       process.env.CODEX_API_KEY = 'sk-codex';
@@ -558,6 +665,45 @@ test('codex combines future live models with reviewed recommendations', () => {
       'o4-mini',
     ],
   );
+});
+
+test('copilot reads current model ids from help and retains reviewed fallbacks', () => {
+  assert.ok(copilot.listModels);
+  assert.equal(copilot.augmentLiveModelsWithFallbacks, true);
+  assert.deepEqual(
+    parseCopilotHelpModels(`
+      --model <model>  Model to use. Choices: claude-sonnet-4.6, gpt-5.4,
+      gpt-5.3-codex, gemini-3.1-pro-preview, gemini-3.6-flash,
+      gemini-3.7-flash, mai-code-1-flash
+    `)?.map((model) => model.id),
+    [
+      'default',
+      'auto',
+      'claude-sonnet-4.6',
+      'gpt-5.4',
+      'gpt-5.3-codex',
+      'gemini-3.1-pro-preview',
+      'gemini-3.6-flash',
+      'gemini-3.7-flash',
+      'mai-code-1-flash',
+    ],
+  );
+  assert.equal(parseCopilotHelpModels('Usage: copilot [options]'), null);
+});
+
+test('gemini fallback catalog favors auto and current model ids', () => {
+  const ids = gemini.fallbackModels.map((model) => model.id);
+  assert.deepEqual(ids.slice(0, 8), [
+    'default',
+    'auto',
+    'gemini-3.7-flash',
+    'gemini-3.6-flash',
+    'gemini-3.5-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-3.1-pro-preview',
+    'gemini-3.1-flash-lite',
+  ]);
+  assert.equal(ids.includes('gemini-3-pro-preview'), false);
 });
 
 test('codex picker includes gpt-5.1 model family', () => {

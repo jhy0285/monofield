@@ -25,6 +25,18 @@ function mainAppWindowOptions(): string {
 }
 
 describe("desktop BrowserWindow chrome options", () => {
+  test("renders the MonoField startup lockup without a legacy brand video", () => {
+    expect(runtimeSource).toContain('<div class="brand-name">MonoField</div>');
+    expect(runtimeSource).toContain('code / design / documents');
+    expect(runtimeSource).not.toContain('SPLASH_VIDEO_DATA_URL');
+    expect(runtimeSource).not.toContain('Open Design');
+  });
+
+  test("does not strand the main window when a mount probe crosses navigation", () => {
+    expect(runtimeSource).toContain('const mounted = await Promise.race([');
+    expect(runtimeSource).toContain('delay(500).then(() => false)');
+  });
+
   test("hides Electron's native menu bar in the Windows/Linux app window", () => {
     expect(mainAppWindowOptions()).toContain("autoHideMenuBar: true");
   });

@@ -359,6 +359,58 @@ describe("desktop updater", () => {
     }
   });
 
+  it("accepts a GitHub latest release as stable Windows update metadata", async () => {
+    const root = makeRoot();
+    const metadataUrl = "https://api.github.com/repos/jhy0285/monofield/releases/latest";
+    const digest = "a".repeat(64);
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      tag_name: "v1.2.3",
+      assets: [
+        {
+          browser_download_url: "https://github.com/jhy0285/monofield/releases/download/v1.2.3/MonoField-default-setup.exe",
+          digest: `sha256:${digest}`,
+          name: "MonoField-default-setup.exe",
+          size: 1234,
+        },
+        {
+          browser_download_url: "https://github.com/jhy0285/monofield/releases/download/v1.2.3/MonoField-default-payload.7z",
+          digest: `sha256:${"b".repeat(64)}`,
+          name: "MonoField-default-payload.7z",
+          size: 1000,
+        },
+      ],
+    })));
+    try {
+      const updater = createDesktopUpdater(
+        {
+          arch: "x64",
+          currentVersion: "1.2.2",
+          downloadRoot: root,
+          env: {
+            [DESKTOP_UPDATE_ENV.METADATA_URL]: metadataUrl,
+            [DESKTOP_UPDATE_ENV.PLATFORM]: "win32",
+          },
+          source: SIDECAR_SOURCES.PACKAGED,
+        },
+        { fetch: fetchMock as typeof globalThis.fetch },
+      );
+
+      const status = await updater.checkForUpdates({ autoDownload: false });
+      expect(status.state).toBe(DESKTOP_UPDATE_STATES.AVAILABLE);
+      expect(status.availableVersion).toBe("1.2.3");
+      expect(status.artifact).toMatchObject({
+        name: "MonoField-default-setup.exe",
+        type: "installer",
+      });
+      expect(status.checksum).toMatchObject({ algorithm: "sha256", value: digest });
+      expect(fetchMock).toHaveBeenCalledWith(metadataUrl, {
+        headers: { accept: "application/vnd.github+json" },
+      });
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   it("adds session and source context to lifecycle logs", async () => {
     const root = makeRoot();
     const fixture = await createUpdaterFixture();

@@ -1,10 +1,47 @@
 import { test } from 'vitest';
 import { relative, resolve } from 'node:path';
+import { AGENT_DEFS } from '../../src/runtimes/registry.js';
+import { agentBinEnvKey } from '../../src/runtimes/executables.js';
 import {
   assert, chmodSync, claude, deepseek, gemini, join, minimalAgentDef, mkdirSync, mkdtempSync, resolveAgentExecutable, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
 
 const fsTest = process.platform === 'win32' ? test.skip : test;
+
+test('every built-in CLI adapter supports an explicit executable override', () => {
+  const expectedKeys: Record<string, string> = {
+    aider: 'AIDER_BIN',
+    amp: 'AMP_BIN',
+    antigravity: 'ANTIGRAVITY_BIN',
+    claude: 'CLAUDE_BIN',
+    codebuddy: 'CODEBUDDY_BIN',
+    codex: 'CODEX_BIN',
+    copilot: 'COPILOT_BIN',
+    'cursor-agent': 'CURSOR_AGENT_BIN',
+    deepseek: 'DEEPSEEK_BIN',
+    devin: 'DEVIN_BIN',
+    gemini: 'GEMINI_BIN',
+    'grok-build': 'GROK_BIN',
+    hermes: 'HERMES_BIN',
+    kimi: 'KIMI_BIN',
+    kiro: 'KIRO_BIN',
+    kilo: 'KILO_BIN',
+    mimo: 'MIMO_BIN',
+    opencode: 'OPENCODE_BIN',
+    pi: 'PI_BIN',
+    qoder: 'QODER_BIN',
+    qwen: 'QWEN_BIN',
+    reasonix: 'REASONIX_BIN',
+    'trae-cli': 'TRAE_CLI_BIN',
+    vibe: 'VIBE_BIN',
+  };
+
+  assert.deepEqual(
+    Object.fromEntries(AGENT_DEFS.map((def) => [def.id, agentBinEnvKey(def.id)])),
+    expectedKeys,
+  );
+  assert.equal(agentBinEnvKey('amr'), 'VELA_BIN');
+});
 
 // ---- OpenClaude fallback (issue #235) -------------------------------------
 // OpenClaude (https://github.com/Gitlawb/openclaude) is a Claude Code fork

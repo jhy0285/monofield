@@ -154,6 +154,36 @@ describe('syncConfigToDaemon', () => {
       telemetry: { metrics: true, content: true, artifactManifest: false },
     });
   });
+
+  it('syncs the adopted Desktop pet to daemon-backed config', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await syncConfigToDaemon({
+      ...DEFAULT_CONFIG,
+      pet: {
+        adopted: true,
+        enabled: true,
+        petId: 'tater',
+        custom: {
+          name: 'Tater',
+          glyph: '🐶',
+          accent: '#7698fd',
+          greeting: 'Ready.',
+        },
+      },
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      pet: {
+        adopted: true,
+        enabled: true,
+        petId: 'tater',
+        custom: { name: 'Tater', glyph: '🐶' },
+      },
+    });
+  });
 });
 
 describe('syncMediaProvidersToDaemon', () => {
@@ -172,6 +202,27 @@ describe('syncMediaProvidersToDaemon', () => {
 });
 
 describe('mergeDaemonConfig', () => {
+  it('restores the daemon pet over a fresh browser origin default', () => {
+    const merged = mergeDaemonConfig(
+      DEFAULT_CONFIG,
+      {
+        pet: {
+          adopted: true,
+          enabled: true,
+          petId: 'tater',
+          custom: {
+            name: 'Tater',
+            glyph: '🐶',
+            accent: '#7698fd',
+            greeting: 'Ready.',
+          },
+        },
+      },
+    );
+
+    expect(merged.pet).toMatchObject({ adopted: true, enabled: true, petId: 'tater' });
+  });
+
   it('clears stale local CLI env prefs when the daemon has none', () => {
     const merged = mergeDaemonConfig(
       {
@@ -251,19 +302,15 @@ describe('mergeDaemonConfig', () => {
     expect(typeof merged.privacyDecisionAt).toBe('number');
   });
 
-  it('defaults reporting on and mints an installationId when the install never opted out', () => {
-    // Brand-new install: the daemon has no privacy state at all. The product
-    // default telemetry channels (metrics + content) are on and an anonymous
-    // id is assigned so events have a stable distinct id. This mirrors the
-    // first-run banner's "I get it" opt-in payload; artifactManifest stays
-    // off, matching that surface.
+  it('keeps reporting off and does not mint an installationId before opt-in', () => {
+    // Brand-new install: local-first telemetry stays off until the user makes
+    // an explicit privacy choice. No anonymous id is needed before opt-in.
     const merged = mergeDaemonConfig(DEFAULT_CONFIG, {});
 
-    expect(merged.telemetry?.metrics).toBe(true);
-    expect(merged.telemetry?.content).toBe(true);
+    expect(merged.telemetry?.metrics).toBe(false);
+    expect(merged.telemetry?.content).toBe(false);
     expect(merged.telemetry?.artifactManifest).toBe(false);
-    expect(typeof merged.installationId).toBe('string');
-    expect(merged.installationId).toBeTruthy();
+    expect(merged.installationId == null).toBe(true);
   });
 
   it('mints an installationId for a reporting install that somehow has none', () => {

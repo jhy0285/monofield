@@ -72,20 +72,31 @@ const IGNORED_DIR_NAMES: ReadonlySet<string> = new Set([
   '.next',
   '.cache',
   '.turbo',
+  '.gradle',
+  '.idea',
+  '.vscode',
+  'coverage',
+  'logs',
+  'out',
+  'target',
+  'tmp',
+  'vendor',
 ]);
 
 // Safety cap: a pathological project tree must not turn run-finish bookkeeping
 // into an unbounded walk. Snapshots are best-effort; truncation only risks a
 // minor undercount, never a hang.
 const MAX_FILES = 5000;
+const MAX_VISITED_ENTRIES = 10000;
 
 // Walk `rootDir` and fingerprint every artifact file (HTML + image/video/audio,
 // per `run-artifacts.ts`). Best-effort: unreadable dirs/files are skipped, never
 // thrown. Returns an empty snapshot when the root does not exist.
 export function snapshotProjectArtifacts(rootDir: string): ArtifactSnapshot {
   const snapshot: ArtifactSnapshot = new Map();
+  let visitedEntries = 0;
   const walk = (dir: string): void => {
-    if (snapshot.size >= MAX_FILES) return;
+    if (snapshot.size >= MAX_FILES || visitedEntries >= MAX_VISITED_ENTRIES) return;
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -93,7 +104,8 @@ export function snapshotProjectArtifacts(rootDir: string): ArtifactSnapshot {
       return;
     }
     for (const entry of entries) {
-      if (snapshot.size >= MAX_FILES) return;
+      visitedEntries += 1;
+      if (snapshot.size >= MAX_FILES || visitedEntries >= MAX_VISITED_ENTRIES) return;
       if (entry.isDirectory()) {
         if (IGNORED_DIR_NAMES.has(entry.name) || entry.name.startsWith('.')) continue;
         walk(path.join(dir, entry.name));

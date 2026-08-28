@@ -153,3 +153,12 @@ export function isClaudeResumeFailure(text: string): boolean {
   if (CLAUDE_RESUME_FAILURE_PATTERNS.some((re) => re.test(text))) return true;
   return hasClaudeResumeFailureResultEvent(text);
 }
+
+/** True when Codex cannot find the rollout backing `exec resume <thread-id>`. */
+export function isCodexResumeFailure(text: string): boolean {
+  if (!text) return false;
+  return (
+    /thread\/resume failed:\s*no rollout found for thread id/i.test(text)
+    || /no rollout found for thread id/i.test(text)
+  );
+}

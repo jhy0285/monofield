@@ -69,7 +69,7 @@ export function IntegrationsView({
     typeof window !== 'undefined' ? window.location.origin : undefined;
 
   return (
-    <section className="integrations-view" aria-labelledby="integrations-title">
+    <section className="integrations-view" aria-labelledby="integrations-title" data-testid="integrations-view">
       <header className="integrations-view__hero">
         <div>
           <p className="integrations-view__kicker">{t('integrations.kicker')}</p>

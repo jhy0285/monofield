@@ -12,6 +12,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import type { ConnectorDetail } from '@open-design/contracts';
 import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import { modalOverlay, modalContent } from '../motion';
+import { useT } from '../i18n';
 import type {
   DesignSystemSummary,
   MediaProviderCredentials,
@@ -46,6 +47,7 @@ interface Props {
   onImportFolder?: (baseDir: string) => Promise<void> | void;
   onImportFolderResponse?: (response: OpenDesignHostProjectImportSuccess) => Promise<void> | void;
   onOpenConnectorsTab?: () => void;
+  onOpenGuide?: () => void;
   onClose: () => void;
   initialTab?: CreateTab;
 }
@@ -81,9 +83,11 @@ function NewProjectModalBody({
   onImportFolder,
   onImportFolderResponse,
   onOpenConnectorsTab,
+  onOpenGuide,
   onClose,
   initialTab,
 }: Omit<Props, 'open'>) {
+  const t = useT();
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -131,7 +135,7 @@ function NewProjectModalBody({
       className="new-project-modal-backdrop"
       role="dialog"
       aria-modal="true"
-      aria-label="New project"
+      aria-label={t('entry.navNewProject')}
       data-testid="new-project-modal"
       onClick={(e) => {
         if (e.target === e.currentTarget && !creating) onClose();
@@ -149,18 +153,33 @@ function NewProjectModalBody({
         exit="exit"
       >
         <header className="new-project-modal__head">
-          <h2 className="new-project-modal__title">New project</h2>
-          <button
-            ref={closeRef}
-            type="button"
-            className="new-project-modal__close"
-            onClick={onClose}
-            disabled={creating}
-            aria-label="Close"
-            title="Close (Esc)"
-          >
-            <Icon name="close" size={14} />
-          </button>
+          <h2 className="new-project-modal__title">{t('entry.navNewProject')}</h2>
+          <div className="new-project-modal__head-actions">
+            {onOpenGuide ? (
+              <button
+                type="button"
+                className="new-project-modal__close"
+                onClick={onOpenGuide}
+                disabled={creating}
+                aria-label={t('entry.featureGuide')}
+                title={t('entry.featureGuide')}
+                data-testid="new-project-guide"
+              >
+                <Icon name="help-circle" size={14} />
+              </button>
+            ) : null}
+            <button
+              ref={closeRef}
+              type="button"
+              className="new-project-modal__close"
+              onClick={onClose}
+              disabled={creating}
+              aria-label={t('common.close')}
+              title={`${t('common.close')} (Esc)`}
+            >
+              <Icon name="close" size={14} />
+            </button>
+          </div>
         </header>
         <div className="new-project-modal__body">
           <NewProjectPanel

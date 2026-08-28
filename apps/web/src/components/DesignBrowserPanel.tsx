@@ -918,6 +918,7 @@ export function DesignBrowserPanel({
   const navigationIndexRef = useRef(initialState.navigationIndex);
   const pendingLoadTargetRef = useRef<string | null>(null);
   const automationSessionRef = useRef<OpenDesignHostBrowserAutomationSession | null>(null);
+  const autoVerifyApprovalPromptedOriginRef = useRef<string | null>(null);
   const linkedParentSessionRef = useRef<string | null>(null);
   const canGoBack = navigationIndex > 0;
   const canGoForward = navigationIndex >= 0 && navigationIndex < navigationStack.length - 1;
@@ -961,6 +962,54 @@ export function DesignBrowserPanel({
     setBrowserAccessMode('view');
     setStatusMessage(browserAccessText.status.originChanged);
   }, [automationSession, browserAccessText.status.originChanged, currentUrl]);
+
+  // Auto verification needs a real, approved browser capability. The project
+  // checkbox expresses intent but must never silently grant page control, so
+  // open the existing origin-scoped approval surface once the first page is
+  // ready. Cancelling is respected for the rest of that origin/session; the
+  // user can still reopen Automate manually at any time.
+  useEffect(() => {
+    if (!autoVerify) {
+      autoVerifyApprovalPromptedOriginRef.current = null;
+      return undefined;
+    }
+    const node = webviewNode;
+    if (
+      !node
+      || loadUrl === EMPTY_URL
+      || automationParentSessionId
+      || automationSession
+      || automationStarting
+      || !desktopHostAvailable
+      || !automationBackendConnected
+    ) {
+      return undefined;
+    }
+    const offerApproval = () => {
+      const origin = browserOrigin(node.getURL?.() || currentUrl);
+      if (!origin || !node.getWebContentsId?.()) return;
+      if (autoVerifyApprovalPromptedOriginRef.current === origin) return;
+      autoVerifyApprovalPromptedOriginRef.current = origin;
+      setBrowserAccessOpen(false);
+      setBrowserUseOpen(false);
+      setMenuOpen(false);
+      setSuggestionsOpen(false);
+      setAutomationApprovalOpen(true);
+    };
+    node.addEventListener('dom-ready', offerApproval);
+    offerApproval();
+    return () => node.removeEventListener('dom-ready', offerApproval);
+  }, [
+    autoVerify,
+    automationBackendConnected,
+    automationParentSessionId,
+    automationSession,
+    automationStarting,
+    currentUrl,
+    desktopHostAvailable,
+    loadUrl,
+    webviewNode,
+  ]);
 
   // A same-origin target=_blank/window.open tab may inherit the already
   // approved parent capability without another dialog. The privileged desktop

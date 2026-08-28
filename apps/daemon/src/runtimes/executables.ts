@@ -16,6 +16,8 @@ const RUNTIME_PROJECT_ROOT = path.resolve(
 const AGENT_BIN_ENV_KEYS = new Map<string, string>([
   ['amr', 'VELA_BIN'],
   ['aider', 'AIDER_BIN'],
+  ['amp', 'AMP_BIN'],
+  ['antigravity', 'ANTIGRAVITY_BIN'],
   ['claude', 'CLAUDE_BIN'],
   ['codebuddy', 'CODEBUDDY_BIN'],
   ['codex', 'CODEX_BIN'],
@@ -24,6 +26,7 @@ const AGENT_BIN_ENV_KEYS = new Map<string, string>([
   ['deepseek', 'DEEPSEEK_BIN'],
   ['devin', 'DEVIN_BIN'],
   ['gemini', 'GEMINI_BIN'],
+  ['grok-build', 'GROK_BIN'],
   ['hermes', 'HERMES_BIN'],
   ['kimi', 'KIMI_BIN'],
   ['kiro', 'KIRO_BIN'],

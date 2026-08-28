@@ -21,6 +21,11 @@ import type { ApiProtocol } from '../types';
 // the user types in the model field is what's variable, not the API.
 export const SUGGESTED_MODELS_BY_PROTOCOL: Record<ApiProtocol, readonly string[]> = {
   anthropic: [
+    'claude-sonnet-5',
+    'claude-opus-5',
+    'claude-fable-5',
+    'claude-opus-4-8',
+    'claude-sonnet-4-6',
     'claude-opus-4-5',
     'claude-sonnet-4-5',
     'claude-haiku-4-5',
@@ -38,6 +43,11 @@ export const SUGGESTED_MODELS_BY_PROTOCOL: Record<ApiProtocol, readonly string[]
     'mimo-v2.5-pro',
   ],
   openai: [
+    'gpt-5.6-sol',
+    'gpt-5.6-terra',
+    'gpt-5.6-luna',
+    'gpt-5.5',
+    'gpt-5.4',
     'gpt-4o',
     'gpt-4o-mini',
     'o3',
@@ -60,7 +70,10 @@ export const SUGGESTED_MODELS_BY_PROTOCOL: Record<ApiProtocol, readonly string[]
     'gpt-4o-mini',
   ],
   google: [
+    'gemini-3.7-flash',
+    'gemini-3.6-flash',
     'gemini-3.5-flash',
+    'gemini-3.5-flash-lite',
     'gemini-3.1-pro-preview',
     'gemini-3-flash-preview',
     'gemini-3.1-flash-lite',
@@ -151,9 +164,9 @@ export const SUGGESTED_MODELS_BY_PROTOCOL: Record<ApiProtocol, readonly string[]
 // that prioritises latency + cost over reasoning depth.
 export const FAST_MODEL_BY_PROTOCOL: Record<ApiProtocol, string> = {
   anthropic: 'claude-haiku-4-5',
-  openai: 'gpt-4o-mini',
+  openai: 'gpt-5.6-luna',
   azure: 'gpt-4o-mini',
-  google: 'gemini-3.5-flash',
+  google: 'gemini-3.7-flash',
   // Ollama Cloud doesn't have a clean "fast small model" default that
   // works for the LLM memory extractor — the catalog skews to large
   // open-weight checkpoints. Fall back to a small Gemma so the auto-

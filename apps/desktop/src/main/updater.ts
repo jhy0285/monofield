@@ -1024,12 +1024,88 @@ function selectUpdateCandidateWithFallback(
   return selectUpdateCandidate(metadata, config);
 }
 
+function githubAssetDigest(asset: Record<string, unknown>): string | null {
+  const digest = stringField(asset, "digest");
+  if (digest == null) return null;
+  const match = /^sha256:([0-9a-f]{64})$/i.exec(digest.trim());
+  return match?.[1]?.toLowerCase() ?? null;
+}
+
+function githubAssetRecord(asset: Record<string, unknown>): Record<string, unknown> | null {
+  const name = stringField(asset, "name");
+  const url = stringField(asset, "browser_download_url");
+  if (name == null || url == null) return null;
+  const sha256 = githubAssetDigest(asset);
+  return {
+    name,
+    url,
+    ...(numberField(asset, "size") == null ? {} : { size: numberField(asset, "size") }),
+    ...(sha256 == null ? {} : { sha256 }),
+  };
+}
+
+/** Convert GitHub's public latest-release response into MonoField's updater contract. */
+export function normalizeGitHubReleaseMetadata(body: Record<string, unknown>): Record<string, unknown> {
+  const tagName = stringField(body, "tag_name");
+  const assets = body.assets;
+  if (tagName == null || !Array.isArray(assets)) return body;
+  const releaseVersion = tagName.replace(/^v/i, "");
+  if (!/^\d+\.\d+\.\d+$/.test(releaseVersion)) return body;
+
+  const records = assets.filter(isRecord);
+  const findAsset = (predicate: (name: string) => boolean): Record<string, unknown> | null => {
+    const asset = records.find((candidate) => {
+      const name = stringField(candidate, "name");
+      return name != null && predicate(name.toLowerCase());
+    });
+    return asset == null ? null : githubAssetRecord(asset);
+  };
+  const winInstaller = findAsset((name) => name.endsWith("setup.exe"));
+  const winPayload = findAsset((name) => name.includes("payload") && name.endsWith(".7z"));
+  const macDmg = findAsset((name) => name.endsWith(".dmg"));
+  const macPayload = findAsset((name) => name.includes("payload") && !name.endsWith(".7z"));
+  const platforms: Record<string, unknown> = {};
+
+  if (winInstaller != null || winPayload != null) {
+    platforms.win = {
+      arch: "x64",
+      enabled: true,
+      artifacts: {
+        ...(winInstaller == null ? {} : { installer: winInstaller }),
+        ...(winPayload == null ? {} : { payload: winPayload }),
+      },
+    };
+  }
+  if (macDmg != null || macPayload != null) {
+    platforms.mac = {
+      arch: "arm64",
+      enabled: true,
+      artifacts: {
+        ...(macDmg == null ? {} : { dmg: macDmg }),
+        ...(macPayload == null ? {} : { payload: macPayload }),
+      },
+    };
+  }
+
+  return {
+    baseVersion: releaseVersion,
+    channel: DESKTOP_UPDATE_CHANNELS.STABLE,
+    platforms,
+    releaseVersion,
+    stableVersion: releaseVersion,
+    source: "github-releases",
+    version: 1,
+  };
+}
+
 async function fetchJson(fetchImpl: typeof globalThis.fetch, url: string): Promise<Record<string, unknown>> {
-  const response = await fetchImpl(url);
+  const response = url.startsWith("https://api.github.com/")
+    ? await fetchImpl(url, { headers: { accept: "application/vnd.github+json" } })
+    : await fetchImpl(url);
   if (!response.ok) throw new Error(`metadata request returned HTTP ${response.status}`);
   const body = await response.json();
   if (!isRecord(body)) throw new Error("metadata response was not a JSON object");
-  return body;
+  return normalizeGitHubReleaseMetadata(body);
 }
 
 async function hasValidLauncherPayloadContext(config: DesktopUpdaterConfig): Promise<boolean> {

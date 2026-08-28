@@ -285,12 +285,16 @@ afterEach(() => {
   vi.useRealTimers();
   analyticsMocks.track.mockReset();
   window.sessionStorage.clear();
+  window.localStorage.removeItem('monofield:product-tutorial:v1');
+  window.localStorage.removeItem('monofield:entry-feature-guides:v1');
 });
 
 beforeEach(() => {
   globalThis.fetch = originalFetch;
   globalThis.ResizeObserver = ResizeObserverMock as typeof ResizeObserver;
   analyticsMocks.track.mockReset();
+  window.localStorage.removeItem('monofield:product-tutorial:v1');
+  window.localStorage.removeItem('monofield:entry-feature-guides:v1');
 });
 
 describe('EntryShell settings menu', () => {
@@ -382,6 +386,27 @@ describe('EntryShell new project rail', () => {
         ([input, init]) => input === '/api/projects' && init?.method === 'POST',
       ),
     ).toBeUndefined();
+  });
+
+  it('opens each destination guide once and lets the user reopen it from Help', async () => {
+    window.localStorage.setItem('od.entry.railOpen', 'true');
+    globalThis.fetch = vi.fn(async () => jsonResponse({})) as typeof fetch;
+    renderHome();
+
+    fireEvent.click(screen.getByTestId('entry-nav-projects'));
+    const firstGuide = await screen.findByTestId('entry-feature-guide');
+    expect(firstGuide.getAttribute('data-feature')).toBe('projects');
+    expect(screen.getByRole('heading', { name: 'Projects', level: 1 })).toBeTruthy();
+
+    const closeButtons = screen.getAllByRole('button', { name: 'Close' });
+    fireEvent.click(closeButtons[closeButtons.length - 1]!);
+    await waitFor(() => expect(screen.queryByTestId('entry-feature-guide')).toBeNull());
+    expect(JSON.parse(window.localStorage.getItem('monofield:entry-feature-guides:v1') ?? '{}')).toMatchObject({ projects: true });
+
+    fireEvent.click(screen.getByTestId('entry-help-trigger'));
+    fireEvent.click(await screen.findByTestId('entry-help-feature-guide'));
+    const reopened = await screen.findByTestId('entry-feature-guide');
+    expect(reopened.getAttribute('data-feature')).toBe('projects');
   });
 });
 
@@ -717,10 +742,6 @@ describe('EntryShell onboarding local runtime', () => {
 
     await clickLocalCliContinue();
     fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Stay in the loop' })).toBeTruthy();
-    });
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Create once, build everywhere' })).toBeTruthy();
@@ -749,13 +770,6 @@ describe('EntryShell onboarding local runtime', () => {
     chooseOnboardingOption('Where did you hear about us?', /Search/i);
     fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Stay in the loop' })).toBeTruthy();
-    });
-    await waitFor(() => {
-      expect(document.querySelector('.onboarding-view__email-input')).toBeTruthy();
-    });
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
-    await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Create once, build everywhere' })).toBeTruthy();
     });
     fireEvent.click(screen.getByRole('button', { name: 'Build a document style' }));
@@ -781,14 +795,8 @@ describe('EntryShell onboarding local runtime', () => {
         }),
         expect.objectContaining({
           page_name: 'onboarding',
-          area: 'newsletter',
-          step_index: '3',
-          step_name: 'newsletter',
-        }),
-        expect.objectContaining({
-          page_name: 'onboarding',
           area: 'design_system',
-          step_index: '4',
+          step_index: '3',
           step_name: 'design_system',
         }),
       ]),
@@ -823,80 +831,23 @@ describe('EntryShell onboarding local runtime', () => {
     });
   });
 
-  it('skips the optional newsletter request when no endpoint is configured', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      void init;
-      const url = String(input);
-      if (url.endsWith('/api/integrations/vela/status')) {
-        return jsonResponse({
-          loggedIn: true,
-          profile: 'prod',
-          configPath: '/x',
-          user: { id: 'u', email: 'user@example.com' },
-        });
-      }
-      if (url.endsWith('/subscribe')) {
-        return jsonResponse({ ok: true });
-      }
-      throw new Error(`unexpected fetch: ${url}`);
-    });
-    globalThis.fetch = fetchMock as typeof fetch;
-    renderOnboarding();
-
-    // Connect -> About you -> Newsletter -> Brand
-    await clickLocalCliContinue();
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Stay in the loop' })).toBeTruthy();
-    });
-    await waitFor(() => {
-      expect(document.querySelector('.onboarding-view__email-input')).toBeTruthy();
-    });
-
-    const emailInput = document.querySelector('.onboarding-view__email-input');
-    expect(emailInput).toBeInstanceOf(HTMLInputElement);
-    expect((emailInput as HTMLInputElement).placeholder).toBe('you@studio.com');
-
-    fireEvent.change(emailInput as HTMLInputElement, {
-      target: { value: '  Tester@Studio.com  ' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Create once, build everywhere' })).toBeTruthy();
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Build a document style' }));
-
-    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/subscribe'))).toBe(false);
-  });
-
-  it('skips the newsletter request when the email field is left blank', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.endsWith('/api/integrations/vela/status')) {
-        return jsonResponse({
-          loggedIn: true,
-          profile: 'prod',
-          configPath: '/x',
-          user: { id: 'u', email: 'user@example.com' },
-        });
-      }
-      throw new Error(`unexpected fetch: ${url}`);
-    });
-    globalThis.fetch = fetchMock as typeof fetch;
+  it('goes directly from the work profile to the final setup screen without newsletter signup', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({
+        loggedIn: true,
+        profile: 'prod',
+        configPath: '/x',
+        user: { id: 'u', email: 'user@example.com' },
+      }),
+    ) as typeof fetch;
     renderOnboarding();
 
     await clickLocalCliContinue();
     fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
-    await waitFor(() => {
-      expect(document.querySelector('.onboarding-view__email-input')).toBeTruthy();
-    });
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Create once, build everywhere' })).toBeTruthy();
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Build a document style' }));
 
-    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/subscribe'))).toBe(false);
+    expect(await screen.findByRole('heading', { name: 'Create once, build everywhere' })).toBeTruthy();
+    expect(screen.queryByText('Stay in the loop')).toBeNull();
+    expect(document.querySelector('.onboarding-view__email-input')).toBeNull();
   });
 
   it('persists about-you selections to the work profile memory', async () => {
@@ -955,7 +906,7 @@ describe('EntryShell onboarding local runtime', () => {
     expect(payload.body).not.toContain('user@example.com');
   });
 
-  it('reports about_you_submit exactly once when advancing to the newsletter step', async () => {
+  it('reports about_you_submit exactly once when advancing to the final setup step', async () => {
     globalThis.fetch = vi.fn(async () =>
       jsonResponse({
         loggedIn: true,
@@ -969,13 +920,8 @@ describe('EntryShell onboarding local runtime', () => {
     await clickLocalCliContinue();
     chooseOnboardingOption('Role', 'Engineering / architecture');
 
-    // Advance to the newsletter step via Continue (the stepper no longer
-    // allows forward jumps past the current step). The survey snapshot must
-    // still fire exactly once — on the final Finish — not zero times.
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Stay in the loop' })).toBeTruthy();
-    });
+    // Advance directly to the final setup step. The survey snapshot must still
+    // fire exactly once on Finish, not once per navigation.
     fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Create once, build everywhere' })).toBeTruthy();
@@ -1003,21 +949,17 @@ describe('EntryShell onboarding local runtime', () => {
     await clickLocalCliContinue();
     chooseOnboardingOption('Role', 'Engineering / architecture');
 
-    // About you -> Newsletter
+    // About you -> final setup
     fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Stay in the loop' })).toBeTruthy();
+      expect(screen.getByRole('heading', { name: 'Create once, build everywhere' })).toBeTruthy();
     });
     // Back -> About you
     fireEvent.click(screen.getByRole('button', { name: /^Back$/i }));
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Document profile' })).toBeTruthy();
     });
-    // Continue -> Newsletter again, then Brand and finish.
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Stay in the loop' })).toBeTruthy();
-    });
+    // Continue -> final setup again, then finish.
     fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Create once, build everywhere' })).toBeTruthy();
@@ -1078,10 +1020,6 @@ describe('EntryShell onboarding local runtime', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Document profile' })).toBeTruthy();
-    });
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
-    await waitFor(() => {
-      expect(document.querySelector('.onboarding-view__email-input')).toBeTruthy();
     });
     fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
     await waitFor(() => {

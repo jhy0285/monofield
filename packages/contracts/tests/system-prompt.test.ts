@@ -67,6 +67,24 @@ describe('DISCOVERY_AND_PHILOSOPHY (contracts copy) — TodoWrite plan item coun
     expect(prompt).toContain('explicit no-codebase/manual/new-design interface specification must not inspect');
   });
 
+  it('keeps a connected-database development turn on the compact prompt path', () => {
+    const prompt = composeSystemPrompt({
+      sessionMode: 'chat',
+      streamFormat: 'jsonl',
+      locale: 'ko',
+      metadata: {
+        kind: 'other',
+        workMode: 'development',
+        databaseContext: { connectionId: 'db-development', useForDevelopment: true },
+      },
+    });
+
+    expect(prompt).toContain('database table <schema> <table> --limit 5 --json');
+    expect(prompt).not.toContain('RULE 1 — turn 1 must emit');
+    expect(prompt).not.toContain('# Slide deck — fixed framework');
+    expect(prompt.length).toBeLessThan(3_500);
+  });
+
   it('does not advertise database CLI tools to plain API runs', () => {
     const prompt = composeSystemPrompt({
       streamFormat: 'plain',

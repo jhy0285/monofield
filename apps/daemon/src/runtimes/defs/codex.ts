@@ -56,6 +56,18 @@ export function codexNeedsDangerFullAccessSandbox(
   return env.OD_CODEX_SANDBOX?.trim() === 'danger-full-access';
 }
 
+export function codexShouldDisableExternalPlugins(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  // MonoField already supplies the selected skills/plugins in its compact
+  // run prompt. Loading Codex's separate global plugin catalog duplicates
+  // tens of thousands of prompt characters on every model call. Keep it off
+  // by default; advanced users can explicitly opt back in.
+  if (env.MONOFIELD_CODEX_ENABLE_EXTERNAL_PLUGINS?.trim() === '1') return false;
+  if (env.OD_CODEX_DISABLE_PLUGINS?.trim() === '0') return false;
+  return true;
+}
+
 export const codexAgentDef = {
     id: 'codex',
     name: 'Codex CLI',
@@ -82,7 +94,7 @@ export const codexAgentDef = {
     augmentLiveModelsWithFallbacks: true,
     authProbe: {
       args: ['login', 'status'],
-      timeoutMs: 5000,
+      timeoutMs: 15_000,
     },
     fallbackModels: [
       DEFAULT_MODEL_OPTION,
@@ -109,6 +121,7 @@ export const codexAgentDef = {
       { id: 'high', label: 'High' },
       { id: 'xhigh', label: 'XHigh' },
       { id: 'max', label: 'Max' },
+      { id: 'ultra', label: 'Ultra' },
     ],
     // Prompt is delivered via stdin pipe (gated by `promptViaStdin: true`
     // below) to avoid Windows `spawn ENAMETOOLONG` while keeping Codex on
@@ -124,13 +137,29 @@ export const codexAgentDef = {
       options = {},
       runtimeContext = {},
     ) => {
+      const resumeSessionId = runtimeContext.resumeSessionId?.trim() || null;
       // Workspace-write is the secure default on every platform. The only
       // escape hatch is the explicit administrator-controlled
       // OD_CODEX_SANDBOX=danger-full-access compatibility setting above.
       const needsDangerFullAccess = codexNeedsDangerFullAccessSandbox();
-      const args = needsDangerFullAccess
-        ? ['exec', '--json', '--skip-git-repo-check', '--sandbox', 'danger-full-access']
-        : [
+      const args = resumeSessionId
+        ? [
+            'exec',
+            'resume',
+            '--json',
+            '--skip-git-repo-check',
+            ...(needsDangerFullAccess
+              ? ['--dangerously-bypass-approvals-and-sandbox']
+              : [
+                  '-c',
+                  'sandbox_mode="workspace-write"',
+                  '-c',
+                  'sandbox_workspace_write.network_access=true',
+                ]),
+          ]
+        : needsDangerFullAccess
+          ? ['exec', '--json', '--skip-git-repo-check', '--sandbox', 'danger-full-access']
+          : [
             'exec',
             '--json',
             '--skip-git-repo-check',
@@ -139,16 +168,19 @@ export const codexAgentDef = {
             '-c',
             'sandbox_workspace_write.network_access=true',
           ];
-      if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') {
+      if (codexShouldDisableExternalPlugins()) {
         args.push('--disable', 'plugins');
       }
-      if (runtimeContext.cwd) {
+      if (runtimeContext.ignoreProjectInstructions === true) {
+        args.push('-c', 'project_doc_max_bytes=0');
+      }
+      if (!resumeSessionId && runtimeContext.cwd) {
         args.push('-C', runtimeContext.cwd);
       }
       const dirs = (extraAllowedDirs || []).filter(
         (d) => typeof d === 'string' && d.length > 0,
       );
-      for (const d of dirs) {
+      for (const d of resumeSessionId ? [] : dirs) {
         args.push('--add-dir', d);
       }
       if (options.model && options.model !== 'default') {
@@ -160,9 +192,12 @@ export const codexAgentDef = {
         // is exposed as `model_reasoning_effort`.
         args.push('-c', `model_reasoning_effort="${effort}"`);
       }
+      if (resumeSessionId) args.push(resumeSessionId);
       return args;
     },
     promptViaStdin: true,
     streamFormat: 'json-event-stream',
     eventParser: 'codex',
+    resumesSessionViaCli: true,
+    sessionIdFromStream: true,
 } satisfies RuntimeAgentDef;

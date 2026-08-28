@@ -13,6 +13,7 @@ import { releaseChannelFromVersion, releaseNamespace } from "@open-design/releas
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export const WORKSPACE_ROOT = resolve(__dirname, "../../..");
+const DEFAULT_STABLE_UPDATE_METADATA_URL = "https://api.github.com/repos/jhy0285/monofield/releases/latest";
 
 export type ToolPackPlatform = "mac" | "win" | "linux";
 export type ToolPackBuildOutput = "all" | "app" | "appimage" | "dir" | "dmg" | "nsis" | "store" | "zip";
@@ -181,12 +182,18 @@ function resolveToolPackUpdateMetadataUrl(value: string | undefined): string | u
   try {
     parsed = new URL(normalized);
   } catch {
-    throw new Error(`OD_UPDATE_METADATA_URL must be an absolute URL: ${value}`);
+    throw new Error(`MONOFIELD_UPDATE_METADATA_URL must be an absolute URL: ${value}`);
   }
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-    throw new Error(`OD_UPDATE_METADATA_URL must use http(s): ${value}`);
+    throw new Error(`MONOFIELD_UPDATE_METADATA_URL must use http(s): ${value}`);
   }
   return normalized;
+}
+
+function defaultUpdateMetadataUrl(appVersion: string | undefined, to: ToolPackBuildOutput): string | undefined {
+  if (to === "store") return undefined;
+  const channel = releaseChannelFromVersion(appVersion);
+  return channel == null || channel === "stable" ? DEFAULT_STABLE_UPDATE_METADATA_URL : undefined;
 }
 
 function resolveElectronVersion(workspaceRoot: string): string {
@@ -265,7 +272,10 @@ export function resolveToolPackConfig(
     silent: options.silent !== false,
     signed: options.signed === true,
     amrProfile: resolveToolPackAmrProfile(process.env.OPEN_DESIGN_AMR_PROFILE),
-    updateMetadataUrl: resolveToolPackUpdateMetadataUrl(process.env.OD_UPDATE_METADATA_URL),
+    updateMetadataUrl:
+      resolveToolPackUpdateMetadataUrl(
+        process.env.MONOFIELD_UPDATE_METADATA_URL ?? process.env.OD_UPDATE_METADATA_URL,
+      ) ?? defaultUpdateMetadataUrl(appVersion, to),
     to,
     webOutputMode: resolveToolPackWebOutputMode(platform, process.env.OD_WEB_OUTPUT_MODE),
     windowsStoreIdentity: resolveWindowsStoreIdentity(platform, to),

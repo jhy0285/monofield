@@ -26,6 +26,37 @@ export interface ProjectLocationPrefs {
   path: string;
 }
 
+export interface PetAtlasRowPrefs {
+  index: number;
+  id: string;
+  frames: number;
+  fps: number;
+}
+
+export interface PetAtlasPrefs {
+  cols: number;
+  rows: number;
+  rowsDef: PetAtlasRowPrefs[];
+}
+
+export interface PetCustomPrefs {
+  name: string;
+  glyph: string;
+  accent: string;
+  greeting: string;
+  imageUrl?: string;
+  frames?: number;
+  fps?: number;
+  atlas?: PetAtlasPrefs;
+}
+
+export interface PetConfigPrefs {
+  adopted: boolean;
+  enabled: boolean;
+  petId: string;
+  custom: PetCustomPrefs;
+}
+
 export interface AppConfigPrefs {
   onboardingCompleted?: boolean;
   agentId?: string | null;
@@ -60,6 +91,8 @@ export interface AppConfigPrefs {
    * most-recent-first and capped by the daemon.
    */
   recentLinkedDirs?: string[];
+  /** Desktop companion selection. Sprite data is bounded and validated by the daemon. */
+  pet?: PetConfigPrefs;
 }
 
 export interface AppConfigResponse {

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GitChangesPanel } from '../../src/components/GitChangesPanel';
@@ -30,10 +30,20 @@ const DIFF = {
   maxPatchBytes: 100_000,
 };
 
+const BRANCHES = {
+  repository: true,
+  current: 'feature_test_yj',
+  branches: [
+    { name: 'feature_test_yj', fullName: 'refs/heads/feature_test_yj', current: true, remote: false, upstream: null },
+    { name: 'main', fullName: 'refs/heads/main', current: false, remote: false, upstream: null },
+  ],
+  generatedAt: '2026-08-25T00:00:00.000Z',
+};
+
 beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
-    const payload = url.includes('/git/diff') ? DIFF : STATUS;
+    const payload = url.includes('/git/diff') ? DIFF : url.includes('/git/branches') ? BRANCHES : STATUS;
     return new Response(JSON.stringify(payload), {
       status: 200,
       headers: { 'content-type': 'application/json' },
@@ -62,9 +72,68 @@ describe('GitChangesPanel', () => {
     const splitPatch = screen.getByRole('table', { name: 'Git diff' });
     expect(splitPatch.getAttribute('tabindex')).toBe('0');
     expect(splitPatch.getAttribute('data-scroll-axis')).toBe('both');
+    expect(screen.getByTestId('git-split-canvas')).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: '브랜치 보기' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: '통합 보기' }));
     await waitFor(() => expect(screen.queryByRole('columnheader', { name: '변경 전' })).toBeNull());
     expect(screen.getByLabelText('Git diff').textContent).toContain('-  port: 8081');
+  });
+
+  it('compares another branch without checking it out', async () => {
+    render(
+      <I18nProvider initial="ko">
+        <GitChangesPanel projectId="project-1" onOpenFile={vi.fn()} />
+      </I18nProvider>,
+    );
+
+    const picker = await screen.findByRole('combobox', { name: '브랜치 보기' });
+    fireEvent.change(picker, { target: { value: 'refs/heads/main' } });
+
+    await waitFor(() => expect(screen.getByRole('tab', { name: /커밋 비교 · main/ })).toBeTruthy());
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      expect.stringContaining('branch=refs%2Fheads%2Fmain'),
+      expect.objectContaining({ cache: 'no-store' }),
+    );
+  });
+
+  it('switches the real working branch with an explicit dirty-tree strategy', async () => {
+    let switched = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (url.includes('/git/switch') && method === 'POST') {
+        switched = true;
+        return new Response(JSON.stringify({ previousBranch: 'feature_test_yj', currentBranch: 'main', created: false, stashed: true, stashRef: 'abc123' }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url.includes('/git/branches')) {
+        return new Response(JSON.stringify(switched ? {
+          ...BRANCHES,
+          current: 'main',
+          branches: BRANCHES.branches.map((branch) => ({ ...branch, current: branch.name === 'main' })),
+        } : BRANCHES), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url.includes('/git/dirty')) return new Response(JSON.stringify({ repository: true, dirty: !switched, changeCount: switched ? 0 : 1 }), { status: 200, headers: { 'content-type': 'application/json' } });
+      if (url.includes('/git/diff')) return new Response(JSON.stringify(DIFF), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(JSON.stringify(switched ? { ...STATUS, branch: 'main', files: [] } : STATUS), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <I18nProvider initial="ko">
+        <GitChangesPanel projectId="project-1" onOpenFile={vi.fn()} />
+      </I18nProvider>,
+    );
+
+    fireEvent.click(await screen.findByTestId('git-branch-manager'));
+    const manager = screen.getByTestId('git-branch-manager-panel');
+    fireEvent.click(within(manager).getByRole('button', { name: '전환' }));
+    const prompt = await screen.findByRole('alertdialog', { name: '미커밋 변경사항' });
+    expect(prompt.textContent).toContain('1');
+    fireEvent.click(within(prompt).getByRole('button', { name: '임시 보관 후 전환' }));
+
+    await waitFor(() => expect(screen.getByText('작업 브랜치를 전환했습니다.')).toBeTruthy());
+    const switchCall = fetchMock.mock.calls.find(([input, init]) => String(input).includes('/git/switch') && init?.method === 'POST');
+    expect(JSON.parse(String(switchCall?.[1]?.body))).toMatchObject({ branch: 'refs/heads/main', strategy: 'stash' });
   });
 });

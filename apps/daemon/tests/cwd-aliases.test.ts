@@ -9,7 +9,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { realpath } from 'node:fs/promises';
+import { cp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -129,6 +129,27 @@ describe('stageActiveSkill', () => {
     await stageActiveSkill(cwd, 'blog-post', sourceDir);
 
     expect(() => readFileSync(stale)).toThrow();
+  });
+
+  it('reuses an unchanged verified stage instead of copying it every turn', async () => {
+    const fs = fresh();
+    const cwd = path.join(fs, 'project');
+    const sourceDir = writeSampleSkill(path.join(fs, 'skills'), 'blog-post');
+    mkdirSync(cwd);
+    let copies = 0;
+    const countingCopy = async (
+      source: string,
+      destination: string,
+      options: { recursive: boolean; dereference: boolean; preserveTimestamps: boolean },
+    ) => {
+      copies += 1;
+      await cp(source, destination, options);
+    };
+
+    await stageActiveSkill(cwd, 'blog-post', sourceDir, () => {}, countingCopy);
+    await stageActiveSkill(cwd, 'blog-post', sourceDir, () => {}, countingCopy);
+
+    expect(copies).toBe(1);
   });
 
   it('follows a symlinked source root via stat() instead of skipping it', async () => {
@@ -325,7 +346,9 @@ describe('stageActiveSkill', () => {
     expect(result.staged).toBe(true);
     const stagedScript = path.join(result.stagedPath!, 'scripts', 'run.sh');
     // Exec bit survives on the helper script…
-    expect(statSync(stagedScript).mode & 0o111).not.toBe(0);
+    if (process.platform !== 'win32') {
+      expect(statSync(stagedScript).mode & 0o111).not.toBe(0);
+    }
     // …while a non-executable sibling is not made executable.
     expect(statSync(path.join(result.stagedPath!, 'SKILL.md')).mode & 0o111).toBe(
       0,

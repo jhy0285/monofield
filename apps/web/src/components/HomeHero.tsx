@@ -1098,6 +1098,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         className={`home-hero__input-card${
           authoringLayoutActive ? ' home-hero__input-card--compact-authoring' : ''
         }${dragActive ? ' is-drag-active' : ''}`}
+        data-testid="home-hero-input-card"
         style={inputCardStyle}
         onDragEnter={(event) => {
           if (event.dataTransfer.types.includes('Files')) setDragActive(true);

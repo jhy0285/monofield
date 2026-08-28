@@ -42,6 +42,11 @@
   font-weight: 600;
   color: var(--text-strong);
 }
+.new-project-modal__head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
 .new-project-modal__close {
   appearance: none;
   width: 32px;

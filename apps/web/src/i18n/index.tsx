@@ -6,28 +6,13 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
-import { de } from './locales/de';
 import { en } from './locales/en';
-import { id } from './locales/id';
-import { esES } from './locales/es-ES';
-import { fa } from './locales/fa';
-import { ar } from './locales/ar';
-import { ja } from './locales/ja';
 import { ko } from './locales/ko';
-import { ptBR } from './locales/pt-BR';
-import { ru } from './locales/ru';
 import { zhCN } from './locales/zh-CN';
-import { zhTW } from './locales/zh-TW';
-import { pl } from './locales/pl';
-import { hu } from './locales/hu';
-import { fr } from './locales/fr';
-import { uk } from './locales/uk';
-import { tr } from './locales/tr';
-import { th } from './locales/th';
-import { it } from './locales/it';
 import { getOpenDesignHost } from '@open-design/host';
 import { LOCALES, type Dict, type Locale } from './types';
 
@@ -36,27 +21,58 @@ export type { Locale } from './types';
 
 type DictKey = keyof Dict;
 
-const DICTS: Record<Locale, Dict> = {
-  'en': en,
-  'id': id,
-  'de': de,
-  'zh-CN': zhCN,
-  'zh-TW': zhTW,
-  'pt-BR': ptBR,
-  'es-ES': esES,
-  'ru': ru,
-  'fa': fa,
-  'ar': ar,
-  'ja': ja,
-  'ko': ko,
-  'pl': pl,
-  'hu': hu,
-  'fr': fr,
-  'uk': uk,
-  'tr': tr,
-  'th': th,
-  'it': it,
+// Keep the most common bundled locales synchronous so first paint never
+// flashes another language for English/Korean/Chinese users. The other
+// dictionaries are large (~250 KB source each), so loading all 19 before the
+// home screen made the initial locale chunk roughly 5 MB. Dynamic imports keep
+// every locale available while moving uncommon dictionaries off the startup
+// path.
+const LOADED_DICTS = new Map<Locale, Dict>([
+  ['en', en],
+  ['ko', ko],
+  ['zh-CN', zhCN],
+]);
+
+const DICT_LOADERS: Partial<Record<Locale, () => Promise<Dict>>> = {
+  id: () => import('./locales/id').then((module) => module.id),
+  de: () => import('./locales/de').then((module) => module.de),
+  'zh-TW': () => import('./locales/zh-TW').then((module) => module.zhTW),
+  'pt-BR': () => import('./locales/pt-BR').then((module) => module.ptBR),
+  'es-ES': () => import('./locales/es-ES').then((module) => module.esES),
+  ru: () => import('./locales/ru').then((module) => module.ru),
+  fa: () => import('./locales/fa').then((module) => module.fa),
+  ar: () => import('./locales/ar').then((module) => module.ar),
+  ja: () => import('./locales/ja').then((module) => module.ja),
+  pl: () => import('./locales/pl').then((module) => module.pl),
+  hu: () => import('./locales/hu').then((module) => module.hu),
+  fr: () => import('./locales/fr').then((module) => module.fr),
+  uk: () => import('./locales/uk').then((module) => module.uk),
+  tr: () => import('./locales/tr').then((module) => module.tr),
+  th: () => import('./locales/th').then((module) => module.th),
+  it: () => import('./locales/it').then((module) => module.it),
 };
+const DICT_LOAD_PROMISES = new Map<Locale, Promise<Dict>>();
+
+function loadLocaleDict(locale: Locale): Promise<Dict> {
+  const loaded = LOADED_DICTS.get(locale);
+  if (loaded) return Promise.resolve(loaded);
+  const pending = DICT_LOAD_PROMISES.get(locale);
+  if (pending) return pending;
+  const loader = DICT_LOADERS[locale];
+  if (!loader) return Promise.resolve(en);
+  const promise = loader()
+    .then((dict) => {
+      LOADED_DICTS.set(locale, dict);
+      DICT_LOAD_PROMISES.delete(locale);
+      return dict;
+    })
+    .catch((error) => {
+      DICT_LOAD_PROMISES.delete(locale);
+      throw error;
+    });
+  DICT_LOAD_PROMISES.set(locale, promise);
+  return promise;
+}
 
 const LS_KEY = 'open-design:locale';
 // Marker that says "the value in LS_KEY came from a deliberate user
@@ -156,6 +172,25 @@ const RTL_LOCALES: Locale[] = ['ar', 'fa'];
 
 export function I18nProvider({ initial, children }: ProviderProps) {
   const [locale, setLocaleState] = useState<Locale>(() => initial ?? detectInitialLocale());
+  const [dictRevision, setDictRevision] = useState(0);
+  const requestedLocaleRef = useRef(locale);
+
+  useEffect(() => {
+    requestedLocaleRef.current = locale;
+    if (LOADED_DICTS.has(locale)) return;
+    let active = true;
+    void loadLocaleDict(locale)
+      .then(() => {
+        if (active) setDictRevision((revision) => revision + 1);
+      })
+      .catch(() => {
+        // English remains the safe fallback if a split locale chunk cannot
+        // be loaded. A later explicit language selection retries the import.
+      });
+    return () => {
+      active = false;
+    };
+  }, [locale]);
 
   // Keep <html lang="…" dir="…"> in sync so screen readers and CSS hooks
   // pick the right language token and direction without each component
@@ -169,7 +204,7 @@ export function I18nProvider({ initial, children }: ProviderProps) {
   }, [locale]);
 
   const setLocale = useCallback((next: Locale) => {
-    setLocaleState(next);
+    requestedLocaleRef.current = next;
     try {
       window.localStorage.setItem(LS_KEY, next);
       // Marker so detectInitialLocale knows this came from a deliberate
@@ -178,11 +213,22 @@ export function I18nProvider({ initial, children }: ProviderProps) {
     } catch {
       /* ignore */
     }
+    if (LOADED_DICTS.has(next)) {
+      setLocaleState(next);
+      return;
+    }
+    void loadLocaleDict(next)
+      .then(() => {
+        if (requestedLocaleRef.current === next) setLocaleState(next);
+      })
+      .catch(() => {
+        if (requestedLocaleRef.current === next) setLocaleState(next);
+      });
   }, []);
 
   const t = useCallback(
     (key: DictKey, vars?: Record<string, string | number>): string => {
-      const dict = DICTS[locale] ?? en;
+      const dict = LOADED_DICTS.get(locale) ?? en;
       const raw = dict[key] ?? en[key] ?? key;
       if (!vars) return raw;
       return raw.replace(/\{(\w+)\}/g, (_, name: string) => {
@@ -190,7 +236,7 @@ export function I18nProvider({ initial, children }: ProviderProps) {
         return v == null ? `{${name}}` : String(v);
       });
     },
-    [locale],
+    [dictRevision, locale],
   );
 
   const value = useMemo<I18nContextValue>(

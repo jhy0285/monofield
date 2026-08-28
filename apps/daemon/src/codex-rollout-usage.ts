@@ -21,6 +21,21 @@ interface CodexFirstCallUsage {
   first_call_cache_hit_ratio: number;
 }
 
+export interface CodexCumulativeUsage {
+  input_tokens: number;
+  cached_input_tokens: number;
+  output_tokens: number;
+  reasoning_output_tokens: number;
+}
+
+export interface CodexStreamUsage {
+  input_tokens?: number;
+  cached_read_tokens?: number;
+  output_tokens?: number;
+  thought_tokens?: number;
+  [key: string]: unknown;
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -104,6 +119,80 @@ export function extractCodexLastTurnFirstCallUsage(
   return firstCall;
 }
 
+/**
+ * Return the latest whole-session total recorded in a Codex rollout. Codex
+ * emits this cumulative value on `turn.completed`; when a session is resumed
+ * the daemon uses the value captured before spawning the next turn as a
+ * baseline, so the UI stores only the new turn's delta.
+ */
+export function extractCodexCumulativeUsage(
+  rolloutJsonl: string,
+): CodexCumulativeUsage | null {
+  let cumulative: CodexCumulativeUsage | null = null;
+
+  for (const line of rolloutJsonl.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      continue;
+    }
+    const record = asRecord(parsed);
+    const payload = asRecord(record?.payload);
+    if (payload?.type !== 'token_count') continue;
+    const info = asRecord(payload.info);
+    const total = asRecord(info?.total_token_usage);
+    if (!total) continue;
+    const input = finiteNumber(total.input_tokens);
+    const output = finiteNumber(total.output_tokens);
+    if (input === undefined || output === undefined) continue;
+    cumulative = {
+      input_tokens: input,
+      cached_input_tokens: finiteNumber(total.cached_input_tokens) ?? 0,
+      output_tokens: output,
+      reasoning_output_tokens: finiteNumber(total.reasoning_output_tokens) ?? 0,
+    };
+  }
+
+  return cumulative;
+}
+
+/** Convert Codex's resumed-session cumulative stream report to one-turn usage. */
+export function codexTurnUsageFromCumulative(
+  current: CodexStreamUsage,
+  baseline: CodexCumulativeUsage | null | undefined,
+): CodexStreamUsage {
+  if (!baseline) return current;
+
+  const pairs: Array<[keyof CodexStreamUsage, keyof CodexCumulativeUsage]> = [
+    ['input_tokens', 'input_tokens'],
+    ['cached_read_tokens', 'cached_input_tokens'],
+    ['output_tokens', 'output_tokens'],
+    ['thought_tokens', 'reasoning_output_tokens'],
+  ];
+
+  // If Codex started a fresh rollout instead of resuming, its totals can be
+  // lower than the previous baseline. Leave that report intact rather than
+  // turning it into zeros or negative values.
+  if (pairs.some(([currentKey, baselineKey]) => {
+    const value = finiteNumber(current[currentKey]);
+    return value !== undefined && value < baseline[baselineKey];
+  })) {
+    return current;
+  }
+
+  const normalized: CodexStreamUsage = { ...current };
+  for (const [currentKey, baselineKey] of pairs) {
+    const value = finiteNumber(current[currentKey]);
+    if (value !== undefined) {
+      normalized[currentKey] = Math.max(0, value - baseline[baselineKey]);
+    }
+  }
+  return normalized;
+}
+
 // codex names each rollout `rollout-<timestamp>-<thread_id>.jsonl` under
 // `$CODEX_HOME/sessions/<year>/<month>/<day>/`. We match on the thread id
 // suffix (captured from the run's `thread.started`) so concurrent runs can't
@@ -172,6 +261,24 @@ export async function readCodexRolloutFirstCall(opts: {
     if (!rolloutPath) return null;
     const contents = await readFile(rolloutPath, 'utf8');
     return extractCodexLastTurnFirstCallUsage(contents);
+  } catch {
+    return null;
+  }
+}
+
+/** Read the latest whole-session usage total for a captured Codex session. */
+export async function readCodexRolloutCumulativeUsage(opts: {
+  codexHome: string | null | undefined;
+  sessionId: string | null | undefined;
+}): Promise<CodexCumulativeUsage | null> {
+  const codexHome = opts.codexHome?.trim() || path.join(os.homedir(), '.codex');
+  const sessionId = opts.sessionId?.trim();
+  if (!sessionId) return null;
+  try {
+    const rolloutPath = await findCodexRolloutPath(codexHome, sessionId);
+    if (!rolloutPath) return null;
+    const contents = await readFile(rolloutPath, 'utf8');
+    return extractCodexCumulativeUsage(contents);
   } catch {
     return null;
   }

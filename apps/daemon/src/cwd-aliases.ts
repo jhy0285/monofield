@@ -30,7 +30,7 @@
 
 import { createReadStream, createWriteStream } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { chmod, cp, lstat, mkdir, readdir, rm, stat, utimes } from 'node:fs/promises';
+import { chmod, cp, lstat, mkdir, readFile, readdir, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 
@@ -60,6 +60,47 @@ export function skillCwdAliasSegment(dir: string): string {
 // ZFS/overlay bind mount surfaces EPERM). Node doesn't fall back to a
 // userspace copy on any of them, so we do.
 const RECOVERABLE_COPY_CODES = new Set(['EPERM', 'EXDEV', 'ENOTSUP', 'EOPNOTSUPP']);
+const STAGE_MANIFEST_NAME = '.monofield-stage.json';
+
+async function treeMetadataSignature(root: string): Promise<string> {
+  const entriesForDigest: string[] = [];
+  const walk = async (dir: string, relDir: string): Promise<void> => {
+    const entries = await readdir(dir, { withFileTypes: true });
+    entries.sort((left, right) => left.name.localeCompare(right.name));
+    for (const entry of entries) {
+      if (!relDir && entry.name === STAGE_MANIFEST_NAME) continue;
+      const rel = relDir ? `${relDir}/${entry.name}` : entry.name;
+      const entryStat = await stat(path.join(dir, entry.name));
+      if (entryStat.isDirectory()) {
+        await walk(path.join(dir, entry.name), rel);
+      } else if (entryStat.isFile()) {
+        entriesForDigest.push(`${rel}\0${entryStat.size}\0${Math.floor(entryStat.mtimeMs)}`);
+      }
+    }
+  };
+  await walk(root, '');
+  return createHash('sha256').update(entriesForDigest.join('\n')).digest('hex');
+}
+
+async function isCurrentStage(sourceDir: string, stagedPath: string): Promise<boolean> {
+  try {
+    const manifest = JSON.parse(
+      await readFile(path.join(stagedPath, STAGE_MANIFEST_NAME), 'utf8'),
+    ) as { sourceSignature?: unknown; stagedSignature?: unknown };
+    if (
+      typeof manifest.sourceSignature !== 'string'
+      || typeof manifest.stagedSignature !== 'string'
+    ) return false;
+    const [sourceSignature, stagedSignature] = await Promise.all([
+      treeMetadataSignature(sourceDir),
+      treeMetadataSignature(stagedPath),
+    ]);
+    return sourceSignature === manifest.sourceSignature
+      && stagedSignature === manifest.stagedSignature;
+  } catch {
+    return false;
+  }
+}
 
 type SkillCopyFn = (
   source: string,
@@ -101,9 +142,10 @@ async function copyTreeDereferenced(srcDir: string, destDir: string): Promise<vo
  * caller falls back to absolute-path delivery (`--add-dir` for
  * Claude/Copilot, embedded absolute path in the preamble for others).
  *
- * The previous-turn copy is replaced wholesale on every call, which is
- * the simplest correct way to handle skill-source updates (e.g. the
- * user just edited a `references/*.md` mid-session).
+ * Unchanged verified copies are reused. Source or staged-tree metadata
+ * changes invalidate the cache and replace the copy wholesale, so edits to
+ * `references/*.md` are picked up while agent-side tampering never survives
+ * into a later turn.
  */
 export async function stageActiveSkill(
   cwd: string | null | undefined,
@@ -165,6 +207,10 @@ export async function stageActiveSkill(
     // does not exist — created by `cp` below
   }
 
+  if (await isCurrentStage(sourceDir, stagedPath)) {
+    return { staged: true, stagedPath };
+  }
+
   try {
     // Wipe a stale per-skill copy first so a removed source file is
     // reflected and a partially-failed previous run cannot leave junk
@@ -189,6 +235,21 @@ export async function stageActiveSkill(
       );
       await rm(stagedPath, { recursive: true, force: true });
       await copyTreeDereferenced(sourceDir, stagedPath);
+    }
+    try {
+      const [sourceSignature, stagedSignature] = await Promise.all([
+        treeMetadataSignature(sourceDir),
+        treeMetadataSignature(stagedPath),
+      ]);
+      await writeFile(
+        path.join(stagedPath, STAGE_MANIFEST_NAME),
+        JSON.stringify({ sourceSignature, stagedSignature }),
+        'utf8',
+      );
+    } catch (err) {
+      // The staged copy is still usable. Without a manifest the next turn
+      // simply refreshes it again, preserving the old fail-safe behavior.
+      log(`[monofield] skill-stage cache manifest failed: ${(err as Error).message}`);
     }
     return { staged: true, stagedPath };
   } catch (err) {

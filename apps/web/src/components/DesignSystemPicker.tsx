@@ -350,6 +350,7 @@ export function DesignSystemPicker({
                 <button
                   type="button"
                   className={`project-ds-picker-option${selectedId == null ? ' active' : ''}`}
+                  data-testid="project-ds-picker-option-none"
                   role="option"
                   aria-selected={selectedId == null}
                   onMouseEnter={() => {

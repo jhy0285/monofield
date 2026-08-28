@@ -1,6 +1,30 @@
 import { DEFAULT_MODEL_OPTION } from './shared.js';
 import type { RuntimeAgentDef } from '../types.js';
 
+const COPILOT_MODEL_ID = /\b(?:claude|gemini|gpt|kimi|mai|raptor)-[a-z0-9][a-z0-9._:-]*\b/gi;
+
+/**
+ * Copilot CLI does not expose a non-interactive `models` command, but its
+ * current `copilot help` output documents the values accepted by `--model`.
+ * Extract only provider-shaped ids so flags, prose, and examples never leak
+ * into the picker. An empty result lets detection fall back to the reviewed
+ * list below on older CLI builds.
+ */
+export function parseCopilotHelpModels(stdout: string) {
+  const text = String(stdout || '');
+  const ids = Array.from(text.matchAll(COPILOT_MODEL_ID), (match) => match[0].toLowerCase());
+  if (ids.length === 0) return null;
+
+  const seen = new Set<string>();
+  const models = [DEFAULT_MODEL_OPTION, { id: 'auto', label: 'Auto' }];
+  for (const id of ids) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    models.push({ id, label: id });
+  }
+  return models;
+}
+
 export const copilotAgentDef = {
     id: 'copilot',
     name: 'GitHub Copilot CLI',
@@ -40,15 +64,27 @@ export const copilotAgentDef = {
     // Copilot's path-level sandbox to skill seeds + design-system
     // specs outside the project cwd.
     //
-    // No `models` subcommand; the CLI accepts whatever the user's
-    // Copilot subscription exposes. Ship a small evidence-based hint
-    // list — the default we observed in the JSON stream and the
-    // example from `copilot --help`. Users can paste any other id via
-    // Settings.
+    // `copilot help` includes the models accepted by --model. Read that live
+    // catalog so a CLI update can surface newer ids without a MonoField
+    // release, while retaining reviewed fallbacks for older installations.
+    listModels: {
+      args: ['help'],
+      parse: parseCopilotHelpModels,
+      timeoutMs: 15_000,
+    },
+    augmentLiveModelsWithFallbacks: true,
     fallbackModels: [
       DEFAULT_MODEL_OPTION,
+      { id: 'auto', label: 'Auto' },
       { id: 'claude-sonnet-4.6', label: 'Claude Sonnet 4.6' },
-      { id: 'gpt-5.2', label: 'GPT-5.2' },
+      { id: 'gpt-5.4', label: 'GPT-5.4' },
+      { id: 'claude-haiku-4.5', label: 'Claude Haiku 4.5' },
+      { id: 'gpt-5.3-codex', label: 'GPT-5.3 Codex' },
+      { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview' },
+      { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
+      { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash' },
+      { id: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash' },
+      { id: 'mai-code-1-flash', label: 'MAI Code 1 Flash' },
     ],
     buildArgs: (_prompt, _imagePaths, extraAllowedDirs = [], options = {}) => {
       const args = [

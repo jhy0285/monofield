@@ -32,6 +32,7 @@ import {
 } from '../integrations/aihubmix.js';
 import { isSafeId as isSafeProjectId } from '../projects.js';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
+import { isLoopbackApiHost } from '@open-design/contracts/api/connectionTest';
 import { proxyDispatcherRequestInit, validateBaseUrlResolved } from '../connectionTest.js';
 import { googleStreamGenerateContentUrl } from '../integrations/google-models.js';
 import { createRoleMarkerGuard } from '../role-marker-guard.js';
@@ -85,6 +86,14 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       return true;
     }
     return false;
+  };
+  const isLocalOllamaEndpoint = (protocol: unknown, baseUrl: unknown): boolean => {
+    if (protocol !== 'ollama' || typeof baseUrl !== 'string') return false;
+    try {
+      return isLoopbackApiHost(new URL(baseUrl).hostname);
+    } catch {
+      return false;
+    }
   };
 
   // Run lifecycle routes live in `routes/runs.ts`; this file owns feedback,
@@ -189,10 +198,9 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio|aihubmix',
       );
     }
-    // AIHubMix's catalogue (GET /api/v1/models?type=llm) is public, so its
-    // model list loads without a key. Every other protocol needs the key to
-    // hit its /v1/models endpoint.
-    const apiKeyRequired = protocol !== 'aihubmix';
+    // AIHubMix's catalogue is public. Local Ollama exposes /api/tags without
+    // credentials; Ollama Cloud still requires its bearer key.
+    const apiKeyRequired = protocol !== 'aihubmix' && !isLocalOllamaEndpoint(protocol, body.baseUrl);
     if (
       typeof body.baseUrl !== 'string' ||
       typeof body.apiKey !== 'string' ||
@@ -267,19 +275,22 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio|aihubmix',
           );
         }
+        const apiKeyRequired = !isLocalOllamaEndpoint(protocol, body.baseUrl);
         if (
           typeof body.baseUrl !== 'string' ||
           typeof body.apiKey !== 'string' ||
           typeof body.model !== 'string' ||
           !body.baseUrl.trim() ||
-          !body.apiKey.trim() ||
+          (apiKeyRequired && !body.apiKey.trim()) ||
           !body.model.trim()
         ) {
           return sendApiError(
             res,
             400,
             'BAD_REQUEST',
-            'baseUrl, apiKey, and model are required',
+            apiKeyRequired
+              ? 'baseUrl, apiKey, and model are required'
+              : 'baseUrl and model are required',
           );
         }
         const reasoningDenial = authorizeReasoningEgress({
@@ -1318,11 +1329,16 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     const proxyBody = req.body || {};
     if (rejectProxyPluginContext(proxyBody, res)) return;
     const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } = proxyBody;
-    if (!apiKey || !model) {
-      return sendApiError(res, 400, 'BAD_REQUEST', 'apiKey and model are required');
-    }
-
     const effectiveBaseUrl = baseUrl || 'https://ollama.com';
+    const apiKeyRequired = !isLocalOllamaEndpoint('ollama', effectiveBaseUrl);
+    if (!model || (apiKeyRequired && !apiKey)) {
+      return sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        apiKeyRequired ? 'apiKey and model are required' : 'model is required',
+      );
+    }
     const validated = await validateExternalApiBaseUrl(effectiveBaseUrl);
     if (validated.error) {
       return sendApiError(
@@ -1363,7 +1379,10 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       const response = await fetch(url, {
         ...proxyDispatcher.requestInit,
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        },
         body: JSON.stringify(payload),
         redirect: 'error',
       });

@@ -126,7 +126,22 @@ function codexNativeCandidates(
   targetTriple: string,
 ): Array<{ path: string; childPathPrepend: string[] }> {
   const scoped = path.join(root, 'node_modules', '@openai');
-  const packageDirs = [path.join(scoped, `codex-${packageSuffix}`)];
+  const packageDirs = [
+    path.join(scoped, `codex-${packageSuffix}`),
+    // Current @openai/codex releases install the platform package as an
+    // optional dependency nested below the JS wrapper package. npm global
+    // installs on Windows therefore resolve to:
+    //   <prefix>/node_modules/@openai/codex/node_modules/@openai/
+    //     codex-win32-x64/vendor/<triple>/bin/codex.exe
+    // Keep the hoisted path above for pnpm/npm layouts that flatten it.
+    path.join(
+      scoped,
+      'codex',
+      'node_modules',
+      '@openai',
+      `codex-${packageSuffix}`,
+    ),
+  ];
   try {
     for (const entry of readdirSync(scoped, { encoding: 'utf8', withFileTypes: true })) {
       if (entry.isDirectory() && entry.name.startsWith('codex-')) packageDirs.push(path.join(scoped, entry.name));
@@ -138,6 +153,10 @@ function codexNativeCandidates(
     const vendorPathDir = path.join(dir, 'vendor', targetTriple, 'path');
     const childPathPrepend = [vendorPathDir];
     return [
+      // 0.149+ platform packages use vendor/<triple>/bin.
+      { path: path.join(dir, 'vendor', targetTriple, 'bin', 'codex'), childPathPrepend },
+      { path: path.join(dir, 'vendor', targetTriple, 'bin', 'codex.exe'), childPathPrepend },
+      // Older packages used vendor/<triple>/codex.
       { path: path.join(dir, 'vendor', targetTriple, 'codex', 'codex'), childPathPrepend },
       { path: path.join(dir, 'vendor', targetTriple, 'codex', 'codex.exe'), childPathPrepend },
       { path: path.join(dir, 'codex'), childPathPrepend },

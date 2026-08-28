@@ -15,6 +15,12 @@ import {
   type BrowserAutomationGuest,
 } from "../../src/main/browser-automation.js";
 
+function executeJavaScriptMock(
+  implementation: (code: string, userGesture?: boolean) => Promise<unknown>,
+): BrowserAutomationGuest["executeJavaScript"] {
+  return vi.fn(implementation) as unknown as BrowserAutomationGuest["executeJavaScript"];
+}
+
 function guest(overrides: Partial<BrowserAutomationGuest> = {}): BrowserAutomationGuest {
   return {
     capturePage: vi.fn(async () => ({
@@ -26,7 +32,7 @@ function guest(overrides: Partial<BrowserAutomationGuest> = {}): BrowserAutomati
     isDestroyed: () => false,
     loadURL: vi.fn(async () => undefined),
     sendInputEvent: vi.fn(),
-    executeJavaScript: vi.fn(async (code: string) => code.includes("candidates.slice")
+    executeJavaScript: executeJavaScriptMock(async (code: string) => code.includes("candidates.slice")
       ? { title: "Fixture", url: "http://127.0.0.1:5173/app", elements: [] }
       : {}),
     ...overrides,
@@ -93,7 +99,7 @@ describe("approved in-app browser automation", () => {
 
   it("turns a sensitive-field response into a rejected operation", async () => {
     const target = guest({
-      executeJavaScript: vi.fn(async () => ({ found: true, typed: false, blocked: true, reason: "sensitive-field" })),
+      executeJavaScript: executeJavaScriptMock(async () => ({ found: true, typed: false, blocked: true, reason: "sensitive-field" })),
     });
     const service = createBrowserAutomationService({
       emit: () => undefined,
@@ -141,7 +147,7 @@ describe("approved in-app browser automation", () => {
     const sendInputEvent = vi.fn();
     const target = guest({
       sendInputEvent,
-      executeJavaScript: vi.fn(async (code: string) => {
+      executeJavaScript: executeJavaScriptMock(async (code: string) => {
         if (code.includes("__open_agent_pointer_target__")) {
           return {
             found: true,
@@ -179,7 +185,7 @@ describe("approved in-app browser automation", () => {
     const sendInputEvent = vi.fn();
     const target = guest({
       sendInputEvent,
-      executeJavaScript: vi.fn(async (code: string) => code.includes("__open_agent_pointer_target__")
+      executeJavaScript: executeJavaScriptMock(async (code: string) => code.includes("__open_agent_pointer_target__")
         ? {
             found: true,
             height: 40,
@@ -217,7 +223,7 @@ describe("approved in-app browser automation", () => {
     const sendInputEvent = vi.fn();
     const target = guest({
       sendInputEvent,
-      executeJavaScript: vi.fn(async (code: string) => {
+      executeJavaScript: executeJavaScriptMock(async (code: string) => {
         if (code.includes("__open_agent_pointer_drag_targets__")) {
           return {
             found: true,
@@ -258,7 +264,7 @@ describe("approved in-app browser automation", () => {
     const filePath = join(projectDir, "fixture.txt");
     writeFileSync(filePath, "fixture", "utf8");
     try {
-      const target = guest({ executeJavaScript: vi.fn(async () => ({ found: true, uploaded: true })) });
+      const target = guest({ executeJavaScript: executeJavaScriptMock(async () => ({ found: true, uploaded: true })) });
       const service = createBrowserAutomationService({
         emit: () => undefined,
         getGuest: () => target,

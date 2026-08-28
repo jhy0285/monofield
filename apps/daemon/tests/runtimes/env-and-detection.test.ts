@@ -13,6 +13,16 @@ import { getRememberedLiveModels } from '../../src/runtimes/models.js';
 const fsTest = process.platform === 'win32' ? test.skip : test;
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
 
+function writeExecutableFixture(dir: string, name: string): string {
+  const filePath = join(dir, process.platform === 'win32' ? `${name}.CMD` : name);
+  writeFileSync(
+    filePath,
+    process.platform === 'win32' ? '@echo off\r\nexit /b 0\r\n' : '#!/bin/sh\nexit 0\n',
+  );
+  if (process.platform !== 'win32') chmodSync(filePath, 0o755);
+  return filePath;
+}
+
 // Claude Code owns its own auth resolution. Preserve credentials from the
 // inherited environment so users who run the local CLI with API-key auth get
 // the same behavior through Open Design.
@@ -380,9 +390,7 @@ test('resolveAgentExecutable prefers a configured CODEX_BIN override over PATH r
   const dir = mkdtempSync(join(tmpdir(), 'od-codex-bin-'));
   try {
     return withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], () => {
-      const configured = join(dir, 'codex-custom');
-      writeFileSync(configured, '#!/bin/sh\nexit 0\n');
-      chmodSync(configured, 0o755);
+      const configured = writeExecutableFixture(dir, 'codex-custom');
       process.env.PATH = '';
       process.env.OD_AGENT_HOME = dir;
 
@@ -402,12 +410,8 @@ test('inspectAgentExecutableResolution reports configured and PATH Codex binarie
   const dir = mkdtempSync(join(tmpdir(), 'od-codex-bin-inspect-'));
   try {
     return withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], () => {
-      const configured = join(dir, 'codex-custom');
-      const fallback = join(dir, 'codex');
-      writeFileSync(configured, '#!/bin/sh\nexit 0\n');
-      writeFileSync(fallback, '#!/bin/sh\nexit 0\n');
-      chmodSync(configured, 0o755);
-      chmodSync(fallback, 0o755);
+      const configured = writeExecutableFixture(dir, 'codex-custom');
+      const fallback = writeExecutableFixture(dir, 'codex');
       process.env.PATH = dir;
       process.env.OD_AGENT_HOME = dir;
 
@@ -447,9 +451,7 @@ test('resolveAgentExecutable supports configured binary overrides for non-Codex 
       process.env.OD_AGENT_HOME = dir;
 
       for (const [id, binName, envKey] of cases) {
-        const configured = join(dir, `${binName}-custom`);
-        writeFileSync(configured, '#!/bin/sh\nexit 0\n');
-        chmodSync(configured, 0o755);
+        const configured = writeExecutableFixture(dir, `${binName}-custom`);
 
         const resolved = resolveAgentExecutable(
           minimalAgentDef({ id, bin: binName }),
@@ -468,12 +470,8 @@ test('resolveAgentExecutable prefers opencode-cli before desktop opencode fallba
   const dir = mkdtempSync(join(tmpdir(), 'od-opencode-cli-'));
   try {
     return withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], () => {
-      const cli = join(dir, 'opencode-cli');
-      const desktop = join(dir, 'opencode');
-      writeFileSync(cli, '#!/bin/sh\nexit 0\n');
-      writeFileSync(desktop, '#!/bin/sh\nexit 0\n');
-      chmodSync(cli, 0o755);
-      chmodSync(desktop, 0o755);
+      const cli = writeExecutableFixture(dir, 'opencode-cli');
+      const desktop = writeExecutableFixture(dir, 'opencode');
       process.env.PATH = dir;
       process.env.OD_AGENT_HOME = dir;
 
@@ -495,14 +493,10 @@ test('detectAgents includes sanitized install and docs metadata from split runti
       process.env.OD_AGENT_HOME = dir;
 
       const agents = await detectAgents();
-      const amr = agents.find((agent) => agent.id === 'amr');
       const qoder = agents.find((agent) => agent.id === 'qoder');
       const deepseek = agents.find((agent) => agent.id === 'deepseek');
       const kimi = agents.find((agent) => agent.id === 'kimi');
 
-      assert.ok(amr);
-      assert.equal(amr.available, false);
-      assert.equal(amr.installUrl, 'https://open-design.ai/amr');
       assert.ok(qoder);
       assert.equal(qoder.available, false);
       assert.equal(qoder.installUrl, 'https://qoder.com/download');
@@ -987,7 +981,7 @@ test('detectAgents surfaces Cursor Agent model labels without putting labels in 
       if (process.platform === 'win32') {
         writeFileSync(
           bin,
-          '@echo off\r\nif "%~1"=="--version" echo 2026.05.16-test& exit /b 0\r\nif "%~1"=="models" (\r\n  echo Available models\r\n  echo auto - Auto\r\n  echo composer-2.5 - Composer 2.5 (current)\r\n  exit /b 0\r\n)\r\nif "%~1"=="status" echo Authenticated& exit /b 0\r\nexit /b 0\r\n',
+          '@echo off\r\nif "%~1"=="--version" echo 2026.05.16-test& exit /b 0\r\nif "%~1"=="models" (\r\n  echo Available models\r\n  echo auto - Auto\r\n  echo composer-2.5 - Composer 2.5 ^(current^)\r\n  exit /b 0\r\n)\r\nif "%~1"=="status" echo Authenticated& exit /b 0\r\nexit /b 0\r\n',
         );
       } else {
         writeFileSync(

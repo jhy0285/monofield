@@ -22,6 +22,18 @@ export const MAX_MAX_TOKENS = 200000;
 const LITELLM_MODELS = litellmData.models as Record<string, number>;
 
 const OVERRIDES: Record<string, number> = {
+  // Current first-party frontier families. Keep these explicit so a newly
+  // released model is not silently constrained by the conservative fallback
+  // before the vendored LiteLLM metadata is refreshed.
+  'gpt-5.6-sol': 128000,
+  'gpt-5.6-terra': 128000,
+  'gpt-5.6-luna': 128000,
+  'claude-fable-5': 128000,
+  'claude-opus-5': 128000,
+  'claude-opus-4-8': 128000,
+  'claude-sonnet-5': 128000,
+  'claude-sonnet-4-6': 128000,
+
   // LiteLLM lists MiMo via OpenRouter and Novita aliases (16k / 32k) but
   // not the canonical `mimo-v2.5-pro` id we hand to Xiaomi's direct API.
   // 32k matches what issue #29 reports as the working ceiling.
