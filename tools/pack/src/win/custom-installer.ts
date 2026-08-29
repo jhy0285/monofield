@@ -36,6 +36,25 @@ const WIN_NSIS_OVERLAY_RELATIVE_PATHS = [
 
 export const WIN_PAYLOAD_SEVEN_Z_CREATE_ARGS = ["-t7z", "-m0=LZMA2", "-mx=1", "-mf=off"] as const;
 const WIN_NSIS_PAYLOAD_SEVEN_Z_TIMEOUT_MS = 300_000;
+const WIN_NSIS_BASE_PAYLOAD_SEVEN_Z_MIN_TIMEOUT_MS = 15 * 60_000;
+const WIN_NSIS_BASE_PAYLOAD_SEVEN_Z_MAX_TIMEOUT_MS = 30 * 60_000;
+const WIN_NSIS_BASE_PAYLOAD_BYTES_PER_BUDGET_MINUTE = 128 * 1024 * 1024;
+const WIN_NSIS_BASE_PAYLOAD_FILES_PER_BUDGET_MINUTE = 10_000;
+
+export function resolveWinNsisBasePayloadSevenZipTimeoutMs(snapshot: { bytes: number; files: number }): number {
+  const budgetUnits = (value: number, unitsPerMinute: number): number => {
+    if (!Number.isFinite(value)) return value > 0 ? Number.POSITIVE_INFINITY : 0;
+    return Math.ceil(Math.max(0, value) / unitsPerMinute);
+  };
+  const workloadMinutes = Math.max(
+    budgetUnits(snapshot.bytes, WIN_NSIS_BASE_PAYLOAD_BYTES_PER_BUDGET_MINUTE),
+    budgetUnits(snapshot.files, WIN_NSIS_BASE_PAYLOAD_FILES_PER_BUDGET_MINUTE),
+  );
+  return Math.min(
+    WIN_NSIS_BASE_PAYLOAD_SEVEN_Z_MAX_TIMEOUT_MS,
+    WIN_NSIS_BASE_PAYLOAD_SEVEN_Z_MIN_TIMEOUT_MS + workloadMinutes * 60_000,
+  );
+}
 
 function escapeNsisString(value: string): string {
   return value.replace(/\$/g, "$$").replace(/"/g, '$\\"').replace(/\r?\n/g, "$\\r$\\n");
@@ -1141,15 +1160,18 @@ async function buildWinNsisPayloadArchive(
     await rm(outputPath, { force: true });
   });
   const payloadSnapshotDetails: Record<string, unknown> = {};
+  let payloadTimeoutMs = WIN_NSIS_BASE_PAYLOAD_SEVEN_Z_MIN_TIMEOUT_MS;
   await runSegment(`${phasePrefix}:input-snapshot`, async () => {
-    Object.assign(payloadSnapshotDetails, await collectPathSnapshot(builtApp.unpackedRoot));
+    const snapshot = await collectPathSnapshot(builtApp.unpackedRoot);
+    payloadTimeoutMs = resolveWinNsisBasePayloadSevenZipTimeoutMs(snapshot);
+    Object.assign(payloadSnapshotDetails, snapshot, { timeoutMs: payloadTimeoutMs });
   }, payloadSnapshotDetails);
   await runSegment(phasePrefix, async () => {
     await runExecSegment(
       `${phasePrefix}:process`,
       winResources.sevenZipExe,
       archiveArgs,
-      { cwd: builtApp.unpackedRoot, outputPath, timeoutMs: WIN_NSIS_PAYLOAD_SEVEN_Z_TIMEOUT_MS },
+      { cwd: builtApp.unpackedRoot, outputPath, timeoutMs: payloadTimeoutMs },
     );
   });
   return timings;
@@ -1273,7 +1295,15 @@ export async function buildCustomWinNsisInstaller(
   return timings;
 }
 
-async function collectPathSnapshot(root: string): Promise<Record<string, unknown>> {
+async function collectPathSnapshot(root: string): Promise<{
+  bytes: number;
+  directories: number;
+  durationMs: number;
+  errors: string[];
+  files: number;
+  maxPathLength: number;
+  root: string;
+}> {
   const startedAt = Date.now();
   let bytes = 0;
   let directories = 0;

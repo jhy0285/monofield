@@ -8,7 +8,10 @@ import { NtExecutable, NtExecutableResource, Resource } from "resedit";
 import { describe, expect, it } from "vitest";
 
 import { materializeCachedUnpackedForInstaller } from "../src/win/builder.js";
-import { createLauncherRuntimeSyncPowerShellScript } from "../src/win/custom-installer.js";
+import {
+  createLauncherRuntimeSyncPowerShellScript,
+  resolveWinNsisBasePayloadSevenZipTimeoutMs,
+} from "../src/win/custom-installer.js";
 import type { WinPaths } from "../src/win/types.js";
 import { readWinExecutableVersionSnapshot } from "../src/win/version-resource.js";
 
@@ -128,6 +131,16 @@ describe("materializeCachedUnpackedForInstaller", () => {
 });
 
 describe("Windows pack artifact boundaries", () => {
+  it("gives large NSIS base payload compression a workload-aware bounded timeout", () => {
+    expect(resolveWinNsisBasePayloadSevenZipTimeoutMs({ bytes: 0, files: 0 })).toBe(15 * 60_000);
+    expect(resolveWinNsisBasePayloadSevenZipTimeoutMs({ bytes: 384 * 1024 * 1024, files: 20_000 })).toBe(
+      18 * 60_000,
+    );
+    expect(
+      resolveWinNsisBasePayloadSevenZipTimeoutMs({ bytes: 100 * 1024 * 1024 * 1024, files: 1_000_000 }),
+    ).toBe(30 * 60_000);
+  });
+
   it("installs production dependencies without duplicate lifecycle scripts before Electron rebuild", async () => {
     const source = await readFile(new URL("../src/win/app.ts", import.meta.url), "utf8");
     expect(source).toContain('"--ignore-scripts", "--no-audit", "--no-fund"');
