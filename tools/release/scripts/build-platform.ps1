@@ -227,7 +227,20 @@ function Resolve-LocalUpdateVersion([string]$Channel, [string]$Version) {
 New-Item -ItemType Directory -Force -Path $WorkRoot, $ToolsPackDir, $CacheDir, $ReportRoot, (Split-Path -Parent $BuildJsonPath), (Split-Path -Parent $IndexPath), (Split-Path -Parent $OutputsPath) | Out-Null
 Remove-Item -LiteralPath $BuildJsonPath -Force -ErrorAction SilentlyContinue
 
+$externalUpdateMetadataUrl = [string]$env:OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL
+$externalUpdateArtifactPath = [string]$env:OD_PACKAGED_E2E_WIN_UPDATE_ARTIFACT_PATH
+$externalUpdateVersion = [string]$env:OD_PACKAGED_E2E_WIN_UPDATE_VERSION
+$hasExternalUpdateMetadata = -not [string]::IsNullOrWhiteSpace($externalUpdateMetadataUrl)
+$hasExternalUpdateArtifactPair = -not [string]::IsNullOrWhiteSpace($externalUpdateArtifactPath) -and -not [string]::IsNullOrWhiteSpace($externalUpdateVersion)
+$usesLocalUpdateFixture = $SmokeMode -eq "full" -and -not $hasExternalUpdateMetadata -and -not $hasExternalUpdateArtifactPair
+
 try {
+  if ($usesLocalUpdateFixture) {
+    Measure-Step "build tools-serve updater fixture" {
+      Invoke-CommandChecked -Arguments @("pnpm.cmd", "--filter", "@open-design/tools-serve", "build")
+    }
+  }
+
   Measure-Step "clean tools-pack win namespace" {
     Invoke-CommandChecked -Arguments @(
       "pnpm.cmd", "exec", "tools-pack", "win", "cleanup",
@@ -268,13 +281,8 @@ try {
 
   $localUpdateArtifactPath = $null
   $localUpdateVersion = $null
-  $externalUpdateMetadataUrl = [string]$env:OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL
-  $externalUpdateArtifactPath = [string]$env:OD_PACKAGED_E2E_WIN_UPDATE_ARTIFACT_PATH
-  $externalUpdateVersion = [string]$env:OD_PACKAGED_E2E_WIN_UPDATE_VERSION
-  $hasExternalUpdateMetadata = -not [string]::IsNullOrWhiteSpace($externalUpdateMetadataUrl)
-  $hasExternalUpdateArtifactPair = -not [string]::IsNullOrWhiteSpace($externalUpdateArtifactPath) -and -not [string]::IsNullOrWhiteSpace($externalUpdateVersion)
 
-  if ($SmokeMode -eq "full" -and -not $hasExternalUpdateMetadata -and -not $hasExternalUpdateArtifactPair) {
+  if ($usesLocalUpdateFixture) {
     $localUpdateVersion = Resolve-LocalUpdateVersion -Channel $ReleaseChannel -Version $ReleaseVersion
     $fixtureDir = Join-Path $WorkRoot "tools-pack-update-fixture"
     $fixtureJsonPath = Join-Path $WorkRoot "windows-tools-pack-update-build.json"

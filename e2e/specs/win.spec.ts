@@ -14,16 +14,20 @@ import {
   resolvePackagedUpdateScenario,
 } from '@/vitest/packaged-update-scenario';
 import { releaseAppVersionArgs, resolvePackagedWinInstallIdentity } from '@/vitest/packaged-win-identity';
-import { resolvePackagedSmokeNamespace } from '@/vitest/suite';
+import { resolvePackagedSmokeNamespace, resolvePackagedWinTestTimeoutMs } from '@/vitest/suite';
 import { startToolsServeUpdaterFixture, type ToolsServeUpdaterFixture } from '@/vitest/tools-serve-updater-fixture';
 
 const execFileAsync = promisify(execFile);
 const e2eRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspaceRoot = dirname(e2eRoot);
 const toolsPackDir = resolveFromWorkspace(process.env.OD_PACKAGED_E2E_TOOLS_PACK_DIR ?? '.tmp/tools-pack');
+if (process.env.OD_PACKAGED_E2E_WIN === '1') {
+  process.env.MONOFIELD_HEADLESS_SMOKE = '1';
+}
 const namespace = resolvePackagedSmokeNamespace('win');
 const toolsPackBin = join(workspaceRoot, 'tools', 'pack', 'bin', 'tools-pack.mjs');
 const maxInstallDurationMs = Number.parseInt(process.env.OD_PACKAGED_E2E_WIN_MAX_INSTALL_MS ?? '120000', 10);
+const winTestTimeoutMs = resolvePackagedWinTestTimeoutMs(process.env.OD_PACKAGED_E2E_WIN_TEST_TIMEOUT_MS);
 const smokeProfile = process.env.OD_PACKAGED_E2E_WIN_SMOKE_PROFILE ?? 'core';
 const verifyCoreOnly = smokeProfile === 'core';
 const verifyReinstallWhileRunning = !verifyCoreOnly && process.env.OD_PACKAGED_E2E_WIN_VERIFY_REINSTALL !== '0';
@@ -406,7 +410,7 @@ winDescribe('packaged windows runtime smoke', () => {
       expect(basename(install.startMenuShortcutPath)).toBe(`${installIdentity.displayName}.lnk`);
       expect(install.registryEntries.length).toBeGreaterThan(0);
       expect(JSON.stringify(install.registryEntries)).toContain(installIdentity.displayName);
-      expect(JSON.stringify(install.registryEntries)).toContain(`Open Design-${installIdentity.namespaceToken}`);
+      expect(JSON.stringify(install.registryEntries)).toContain(installIdentity.registryKeyName);
       expect(install.installPayload.fileCount).toBeGreaterThan(0);
       expect(install.installPayload.totalBytes).toBeGreaterThan(0);
       expect(install.installPayload.topLevel.length).toBeGreaterThan(0);
@@ -625,7 +629,7 @@ winDescribe('packaged windows runtime smoke', () => {
 
       printSmokeTimings(timings);
     }
-  }, 720_000);
+  }, winTestTimeoutMs);
 });
 
 winOnboardingDescribe('packaged windows onboarding AMR smoke', () => {
@@ -777,7 +781,7 @@ winOnboardingDescribe('packaged windows onboarding AMR smoke', () => {
       }
       printSmokeTimings(timings);
     }
-  }, 720_000);
+  }, winTestTimeoutMs);
 });
 
 async function measureSmokeStep<T>(timings: SmokeTiming[], step: string, run: () => Promise<T>): Promise<T> {

@@ -175,6 +175,29 @@ async function reserveFreePort(): Promise<number> {
 
 export type PackagedSmokePlatform = 'linux' | 'mac' | 'win';
 
+export const DEFAULT_PACKAGED_WIN_TEST_TIMEOUT_MS = 720_000;
+const MAX_NODE_TIMER_TIMEOUT_MS = 2_147_483_647;
+
+/**
+ * Keeps the checked-in/CI timeout at 12 minutes while allowing an explicitly
+ * slower local Windows host to extend the whole-test budget. Values that would
+ * shorten the default budget or overflow Node's timer range are ignored.
+ */
+export function resolvePackagedWinTestTimeoutMs(value: string | undefined): number {
+  const normalized = value?.trim();
+  if (normalized == null || !/^\d+$/.test(normalized)) return DEFAULT_PACKAGED_WIN_TEST_TIMEOUT_MS;
+
+  const parsed = Number(normalized);
+  if (
+    !Number.isSafeInteger(parsed)
+    || parsed < DEFAULT_PACKAGED_WIN_TEST_TIMEOUT_MS
+    || parsed > MAX_NODE_TIMER_TIMEOUT_MS
+  ) {
+    return DEFAULT_PACKAGED_WIN_TEST_TIMEOUT_MS;
+  }
+  return parsed;
+}
+
 export function resolvePackagedSmokeNamespace(
   platform: PackagedSmokePlatform,
   env: Record<string, string | undefined> = process.env,

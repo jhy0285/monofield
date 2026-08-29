@@ -121,6 +121,10 @@ describe("packaged smoke workflow", () => {
       'Test-JsonString $manifest.entry.executable "entry.executable" "payload/MonoField.exe"',
     );
     expect(buildPlatform).toContain('$SmokeMode -eq "full"');
+    expect(buildPlatform).toContain('Measure-Step "build tools-serve updater fixture"');
+    expect(buildPlatform).toContain('"pnpm.cmd", "--filter", "@open-design/tools-serve", "build"');
+    expect(buildPlatform.indexOf('Measure-Step "build tools-serve updater fixture"'))
+      .toBeLessThan(buildPlatform.indexOf('Measure-Step "tools-pack win build"'));
     expect(buildPlatform).toContain('"windows-tools-pack-update-build.json"');
     expect(buildPlatform).toContain('OD_PACKAGED_E2E_WIN_UPDATE_FIXTURE = "tools-serve"');
     expect(buildPlatform).toContain(

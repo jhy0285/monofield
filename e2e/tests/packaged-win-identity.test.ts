@@ -8,8 +8,9 @@ describe("packaged windows smoke identity", () => {
       namespace: "release-stable-win",
       releaseVersion: "0.8.0-prerelease.2",
     })).toEqual({
-      displayName: "Open Design Prerelease",
+      displayName: "MonoField Prerelease",
       namespaceToken: "release-stable-win",
+      registryKeyName: "MonoField-release-stable-win",
     });
     expect(releaseAppVersionArgs("0.8.0-prerelease.2")).toEqual(["--app-version", "0.8.0-prerelease.2"]);
   });
@@ -19,15 +20,17 @@ describe("packaged windows smoke identity", () => {
       namespace: "release-stable-win",
       releaseVersion: "0.8.0",
     })).toEqual({
-      displayName: "Open Design",
+      displayName: "MonoField",
       namespaceToken: "release-stable-win",
+      registryKeyName: "MonoField-release-stable-win",
     });
     expect(resolvePackagedWinInstallIdentity({
       namespace: "default",
       releaseVersion: undefined,
     })).toEqual({
-      displayName: "Open Design",
+      displayName: "MonoField",
       namespaceToken: "default",
+      registryKeyName: "MonoField-default",
     });
   });
 
@@ -35,11 +38,11 @@ describe("packaged windows smoke identity", () => {
     expect(resolvePackagedWinInstallIdentity({
       namespace: "release-stable-win",
       releaseVersion: "0.8.0-preview.1",
-    }).displayName).toBe("Open Design Preview");
+    }).displayName).toBe("MonoField Preview");
     expect(resolvePackagedWinInstallIdentity({
       namespace: "release-beta-win",
       releaseVersion: undefined,
-    }).displayName).toBe("Open Design Beta");
+    }).displayName).toBe("MonoField Beta");
   });
 
   it("[P2] keeps ad hoc namespaces isolated from release channel identities", () => {
@@ -47,8 +50,9 @@ describe("packaged windows smoke identity", () => {
       namespace: "beta-local-flow",
       releaseVersion: undefined,
     })).toEqual({
-      displayName: "Open Design beta-local-flow",
+      displayName: "MonoField beta-local-flow",
       namespaceToken: "beta-local-flow",
+      registryKeyName: "MonoField-beta-local-flow",
     });
     expect(releaseAppVersionArgs("   ")).toEqual([]);
   });
