@@ -385,6 +385,28 @@
   color: var(--red) !important;
 }
 
+.updater-popup__star {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  margin-top: 10px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.updater-popup__star:hover {
+  border-color: var(--text-muted);
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+
 .updater-popup__actions {
   grid-column: 1 / -1;
   display: flex;

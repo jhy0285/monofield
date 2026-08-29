@@ -47,6 +47,8 @@ describe('DISCOVERY_AND_PHILOSOPHY (contracts copy) — TodoWrite plan item coun
     expect(prompt).toContain('# Docs mode — distinguish guidance from generation');
     expect(prompt).toContain('answer directly in clear prose');
     expect(prompt).toContain('Do not emit a discovery or artifact-options');
+    expect(prompt).toContain('never invent current values, dates, events, citations, or recommendations');
+    expect(prompt).toContain('direct source URL and an as-of time');
     expect(prompt.indexOf('# Docs mode — distinguish guidance from generation')).toBeLessThan(
       prompt.indexOf(DISCOVERY_AND_PHILOSOPHY),
     );

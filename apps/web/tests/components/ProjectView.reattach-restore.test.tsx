@@ -5,9 +5,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ProjectView,
   computeProducedFiles,
+  computeTouchedProjectFiles,
   preTurnFileNamesForWorkMode,
   findSameTurnHtmlWriteForRecoveredArtifact,
   mergeRecoveredArtifact,
+  waitForArtifactWriteReceipt,
 } from '../../src/components/ProjectView';
 import { resolvePersistedArtifactHtml } from '../../src/artifacts/recover';
 import type { ChatMessage } from '../../src/types';
@@ -180,6 +182,30 @@ describe('computeProducedFiles', () => {
 
   it('returns undefined when no baseline is provided', () => {
     expect(computeProducedFiles(undefined, [] as never)).toBeUndefined();
+  });
+});
+
+describe('document delivery receipts', () => {
+  it('recognizes an in-place edit as a same-turn file receipt', () => {
+    const before = [{
+      name: 'deck.html', path: 'deck.html', size: 10, mtime: 1, kind: 'html', mime: 'text/html',
+    }];
+    const after = [{ ...before[0], size: 12, mtime: 2 }];
+    expect(computeTouchedProjectFiles(before as never, after as never)?.map((file) => file.name))
+      .toEqual(['deck.html']);
+  });
+
+  it('bounds a host write that never resolves', async () => {
+    let operationSignal: AbortSignal | undefined;
+    const receipt = await waitForArtifactWriteReceipt(
+      (signal) => {
+        operationSignal = signal;
+        return new Promise<never>(() => {});
+      },
+      5,
+    );
+    expect(receipt).toBeNull();
+    expect(operationSignal?.aborted).toBe(true);
   });
 });
 

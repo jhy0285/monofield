@@ -13,7 +13,11 @@ import { DESIGN_SYSTEMS_USAGE, isDesignSystemsHelpArg } from './design-systems-c
 import { BRAND_USAGE, isBrandHelpArg } from './brands-cli-help.js';
 import { parseDesignSystemRenameArgs } from './design-systems/rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
-import { splitResearchSubcommand } from './research/cli-args.js';
+import {
+  researchSearchEndpoint,
+  researchSearchHeaders,
+  splitResearchSubcommand,
+} from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { MONOFIELD_PLUGIN_MANIFEST, resolveExistingPluginManifest } from './plugins/manifest-file.js';
 import { requestJsonIpc } from '@open-design/sidecar';
@@ -863,12 +867,13 @@ async function runResearchSearch(rawArgs) {
   const daemonUrl = await cliDaemonUrl(flags);
   const maxSources =
     flags['max-sources'] == null ? undefined : Number(flags['max-sources']);
-  const url = `${daemonUrl.replace(/\/$/, '')}/api/research/search`;
+  const toolToken = process.env.MONOFIELD_TOOL_TOKEN || process.env.OD_TOOL_TOKEN;
+  const url = `${daemonUrl.replace(/\/$/, '')}${researchSearchEndpoint(toolToken)}`;
   let resp;
   try {
     resp = await fetch(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: researchSearchHeaders(toolToken),
       body: JSON.stringify({
         query,
         ...(Number.isFinite(maxSources) ? { maxSources } : {}),

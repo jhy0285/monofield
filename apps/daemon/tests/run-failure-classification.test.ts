@@ -560,6 +560,21 @@ describe('classifyRunFailure', () => {
     });
   });
 
+  it('classifies Codex Windows sandbox logon denial as a non-retryable preflight failure', () => {
+    expect(
+      classify(
+        'CODEX_WINDOWS_SANDBOX_UNAVAILABLE',
+        'windows sandbox: CreateProcessWithLogonW failed: 1385',
+      ),
+    ).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'windows_sandbox_logon_denied',
+      failure_stage: 'preflight',
+      retryable: false,
+      user_action: 'fix_config',
+    });
+  });
+
   it('maps fabricated role marker termination to a retryable protocol guard detail', () => {
     expect(
       classify(

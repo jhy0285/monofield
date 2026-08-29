@@ -28,6 +28,7 @@ import { migrateCustomPetAtlas } from './components/pet/pets';
 import { ProjectView } from './components/ProjectView';
 import { TooltipLayer } from './components/TooltipLayer';
 import { openWorkspaceTab, WorkspaceTabsBar } from './components/WorkspaceTabsBar';
+import { UpdaterPopup } from './components/UpdaterPopup';
 import {
   DesignSystemCreationFlow,
   DesignSystemDetailView,
@@ -1343,6 +1344,10 @@ function AppInner() {
       setAgentsCatalogLoading(true);
       try {
         const next = await fetchAgentsStream({
+          // Passing options means the user explicitly requested a rescan from
+          // Settings. Automatic focus/poll refreshes call this without options
+          // and must not reopen a known Windows 1385 failure loop.
+          resetCodexSandboxCircuit: options != null,
           onAgent: (agent) => {
             if (!isCurrentAgentStreamRequest(agentRequestId)) return;
             setAgents((current) =>
@@ -2360,6 +2365,12 @@ function AppInner() {
           route={route}
           projects={projects}
           onboardingCompleted={config.onboardingCompleted === true}
+          actions={(
+            <UpdaterPopup
+              appVersionInfo={appVersionInfo}
+              desktopNotificationsEnabled={config.notifications?.desktopEnabled === true}
+            />
+          )}
         />
         <div className="workspace-shell__body">
           {appMain}

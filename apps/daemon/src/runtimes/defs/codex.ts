@@ -205,6 +205,19 @@ export const codexAgentDef = {
       if (codexShouldDisableExternalPlugins()) {
         args.push('--disable', 'plugins');
       }
+      if (runtimeContext.disableTools === true) {
+        // `text_artifact` recovery is a host-owned transport, not a second
+        // filesystem attempt. Disable both Codex shell implementations so a
+        // model-emitted tool call cannot reach CreateProcessWithLogonW again.
+        args.push(
+          '--disable',
+          'shell_tool',
+          '--disable',
+          'unified_exec',
+          '-c',
+          'mcp_servers={}',
+        );
+      }
       if (runtimeContext.ignoreProjectInstructions === true) {
         args.push('-c', 'project_doc_max_bytes=0');
       }

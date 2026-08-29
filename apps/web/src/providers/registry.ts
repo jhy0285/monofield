@@ -141,13 +141,17 @@ export async function fetchAgents(options?: { throwOnError?: boolean }): Promise
 export async function fetchAgentsStream(args: {
   onAgent: (agent: AgentInfo) => void;
   signal?: AbortSignal;
+  resetCodexSandboxCircuit?: boolean;
 }): Promise<AgentInfo[]> {
-  const { onAgent, signal } = args;
-  const resp = await fetch('/api/agents?stream=1', {
+  const { onAgent, signal, resetCodexSandboxCircuit = false } = args;
+  const resp = await fetch(
+    `/api/agents?stream=1${resetCodexSandboxCircuit ? '&refresh=1' : ''}`,
+    {
     cache: 'no-store',
     headers: { Accept: 'text/event-stream' },
     ...(signal ? { signal } : {}),
-  });
+    },
+  );
   if (!resp.ok || !resp.body) {
     throw new Error(`agents stream ${resp.status}`);
   }
@@ -1450,18 +1454,25 @@ function invalidateProjectListings(projectId: string): void {
   projectFoldersInflight.delete(projectId);
 }
 
-export async function fetchProjectFiles(projectId: string): Promise<ProjectFile[]> {
+export async function fetchProjectFiles(
+  projectId: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<ProjectFile[]> {
   const now = Date.now();
-  const cached = projectFilesCache.get(projectId);
+  // Receipt checks pass a signal and must observe the post-write server state,
+  // not a one-second cache entry or an older in-flight traversal.
+  const cached = options.signal ? undefined : projectFilesCache.get(projectId);
   if (cached && cached.expiresAt > now) return cached.value;
 
   const generation = currentProjectListGeneration(projectId);
-  const inflight = projectFilesInflight.get(projectId);
+  const inflight = options.signal ? undefined : projectFilesInflight.get(projectId);
   if (inflight?.generation === generation) return inflight.promise;
 
   const promise = (async () => {
     try {
-      const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files`);
+      const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files`, {
+        signal: options.signal,
+      });
       if (!resp.ok) return [];
       const json = (await resp.json()) as { files: ProjectFile[] };
       const files = json.files ?? [];
@@ -1472,16 +1483,19 @@ export async function fetchProjectFiles(projectId: string): Promise<ProjectFile[
         });
       }
       return files;
-    } catch {
+    } catch (err) {
+      if (options.signal?.aborted) throw err;
       return [];
     }
   })();
-  projectFilesInflight.set(projectId, { generation, promise });
-  void promise.finally(() => {
-    if (projectFilesInflight.get(projectId)?.promise === promise) {
-      projectFilesInflight.delete(projectId);
-    }
-  });
+  if (!options.signal) {
+    projectFilesInflight.set(projectId, { generation, promise });
+    void promise.finally(() => {
+      if (projectFilesInflight.get(projectId)?.promise === promise) {
+        projectFilesInflight.delete(projectId);
+      }
+    });
+  }
   return promise;
 }
 
@@ -1826,14 +1840,17 @@ export interface ProjectFilePreview {
 export async function fetchProjectFilePreview(
   projectId: string,
   name: string,
+  options: { signal?: AbortSignal } = {},
 ): Promise<ProjectFilePreview | null> {
   try {
     const resp = await fetch(
       `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(name)}/preview`,
+      { signal: options.signal },
     );
     if (!resp.ok) return null;
     return (await resp.json()) as ProjectFilePreview;
-  } catch {
+  } catch (err) {
+    if (options.signal?.aborted) throw err;
     return null;
   }
 }
@@ -1841,7 +1858,7 @@ export async function fetchProjectFilePreview(
 export async function fetchProjectFileText(
   projectId: string,
   name: string,
-  options?: { cache?: RequestCache; cacheBustKey?: string | number },
+  options?: { cache?: RequestCache; cacheBustKey?: string | number; signal?: AbortSignal },
 ): Promise<string | null> {
   const url = projectFileUrl(projectId, name);
   const cacheBustKey = options?.cacheBustKey;
@@ -1851,6 +1868,7 @@ export async function fetchProjectFileText(
       : `${url}${url.includes('?') ? '&' : '?'}cacheBust=${encodeURIComponent(String(cacheBustKey))}`;
   const init: RequestInit = {};
   if (options?.cache) init.cache = options.cache;
+  if (options?.signal) init.signal = options.signal;
 
   try {
     const resp = await fetch(requestUrl, init);
@@ -1866,6 +1884,7 @@ export async function fetchProjectFileText(
     }
     return await resp.text();
   } catch (err) {
+    if (options?.signal?.aborted) throw err;
     console.warn('[fetchProjectFileText] failed:', {
       error: err,
       name,
@@ -1957,7 +1976,11 @@ export async function writeProjectTextFile(
   projectId: string,
   name: string,
   content: string,
-  options?: { artifactManifest?: ArtifactManifest; expectedContentSha256?: string },
+  options?: {
+    artifactManifest?: ArtifactManifest;
+    expectedContentSha256?: string;
+    signal?: AbortSignal;
+  },
 ): Promise<ProjectFile | null> {
   const result = await writeProjectTextFileDetailed(projectId, name, content, options);
   return result.ok ? result.file : null;
@@ -1971,7 +1994,11 @@ export async function writeProjectTextFileDetailed(
   projectId: string,
   name: string,
   content: string,
-  options?: { artifactManifest?: ArtifactManifest; expectedContentSha256?: string },
+  options?: {
+    artifactManifest?: ArtifactManifest;
+    expectedContentSha256?: string;
+    signal?: AbortSignal;
+  },
 ): Promise<WriteProjectTextFileResult> {
   try {
     const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files`, {
@@ -1983,6 +2010,7 @@ export async function writeProjectTextFileDetailed(
         artifactManifest: options?.artifactManifest,
         expectedContentSha256: options?.expectedContentSha256,
       }),
+      signal: options?.signal,
     });
     if (!resp.ok) {
       const body = await readApiErrorBody(resp);
@@ -1996,7 +2024,8 @@ export async function writeProjectTextFileDetailed(
     const json = (await resp.json()) as { file: ProjectFile };
     invalidateProjectListings(projectId);
     return { ok: true, file: json.file };
-  } catch {
+  } catch (err) {
+    if (options?.signal?.aborted) throw err;
     return { ok: false, message: 'Network error while saving the file' };
   }
 }

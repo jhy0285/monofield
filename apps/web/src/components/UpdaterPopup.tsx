@@ -22,15 +22,19 @@ import {
   trackUpdatePromptSurfaceView,
 } from '../analytics/events';
 import {
-  fetchAppVersionInfo,
   fetchLatestGithubReleaseInfo,
   openExternalUrl,
   type LatestGithubReleaseInfo,
 } from '../providers/registry';
+import type { AppVersionInfo } from '../types';
+import { showCompletionNotification } from '../utils/notifications';
+import { GITHUB_REPO_URL } from './useGithubStars';
 
 const INSTALL_HANDOFF_WATCHDOG_MS = 10_000;
 const RELEASE_CHECK_DELAY_MS = 1_500;
 const UPDATE_DISMISSED_STORAGE_KEY = 'monofield:update-dismissed:v1';
+const UPDATE_NOTIFIED_STORAGE_KEY = 'monofield:update-notified:v1';
+const GITHUB_RELEASES_URL = `${GITHUB_REPO_URL}/releases`;
 
 type InstallState = 'idle' | 'opening' | 'handoff' | 'recoverable';
 type Translator = (key: keyof Dict, vars?: Record<string, string | number>) => string;
@@ -104,7 +108,13 @@ function updaterErrorCode(model: UpdaterModel): string | undefined {
   return model.status?.error?.code;
 }
 
-export function UpdaterPopup() {
+export function UpdaterPopup({
+  appVersionInfo = null,
+  desktopNotificationsEnabled = false,
+}: {
+  appVersionInfo?: AppVersionInfo | null;
+  desktopNotificationsEnabled?: boolean;
+}) {
   const t = useT();
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const actionInFlightRef = useRef(false);
@@ -113,6 +123,7 @@ export function UpdaterPopup() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [installState, setInstallState] = useState<InstallState>('idle');
   const [manualRelease, setManualRelease] = useState<ManualRelease | null>(null);
+  const lastAutoPromptVersionRef = useRef<string | null>(null);
 
   const clearHandoffWatchdog = useCallback(() => {
     if (handoffWatchdogRef.current == null) return;
@@ -158,38 +169,63 @@ export function UpdaterPopup() {
   }, []);
 
   useEffect(() => {
+    if (!appVersionInfo?.packaged || manualRelease != null) return;
+    // A provisioned Desktop updater owns the normal check/download flow. The
+    // public GitHub lookup below is only a safety net for packaged builds whose
+    // host updater is unavailable or explicitly disabled.
+    if (model.environment === 'desktop' && model.status == null) return;
+    if (
+      model.environment === 'desktop' &&
+      model.enabled &&
+      model.supported &&
+      model.errorMessage == null
+    ) return;
     let mounted = true;
     const timer = window.setTimeout(() => {
-      // Browser/dev sessions can never install a Desktop release. Resolve the
-      // local app state first and only contact GitHub for a packaged build.
-      // This removes an unnecessary startup request (and noisy 502s when the
-      // release endpoint is unavailable) from the normal web development path.
-      void fetchAppVersionInfo().then(async (current) => {
-        if (!mounted || !current?.packaged) return;
-        const latest = await fetchLatestGithubReleaseInfo();
+      void fetchLatestGithubReleaseInfo().then((latest) => {
         if (!mounted || !latest || latest.stale) return;
         const version = latest.tagName.replace(/^v/i, '');
-        if (!version || !isNewerRelease(current.version, version)) return;
-        const release = { ...latest, currentVersion: current.version, version };
-        setManualRelease(release);
-        try {
-          if (window.localStorage.getItem(UPDATE_DISMISSED_STORAGE_KEY) !== version) {
-            setPanelOpen(true);
-          }
-        } catch {
-          setPanelOpen(true);
-        }
+        if (!version || !isNewerRelease(appVersionInfo.version, version)) return;
+        setManualRelease({ ...latest, currentVersion: appVersionInfo.version, version });
       });
     }, RELEASE_CHECK_DELAY_MS);
     return () => {
       mounted = false;
       window.clearTimeout(timer);
     };
-  }, []);
+  }, [
+    appVersionInfo,
+    manualRelease,
+    model.enabled,
+    model.environment,
+    model.errorMessage,
+    model.status,
+    model.supported,
+  ]);
 
   const nativeReady = model.environment === 'desktop' && model.shouldShowControl;
   const manualReady = manualRelease != null && !nativeReady;
-  const ready = nativeReady || manualReady;
+  // A failed update check is not proof that an update exists. Only surface an
+  // automatic failure prompt when the native updater had already identified a
+  // version or downloaded artifact; otherwise the GitHub fallback may still
+  // discover a real newer release without turning a transient check error into
+  // a false update alert.
+  const nativeErrorHasUpdateEvidence = Boolean(
+    model.availableVersion != null ||
+    model.status?.downloadPath ||
+    model.status?.artifact,
+  );
+  const nativeErrorReady = Boolean(
+    appVersionInfo?.packaged &&
+    model.environment === 'desktop' &&
+    model.enabled &&
+    model.supported &&
+    model.errorMessage != null &&
+    nativeErrorHasUpdateEvidence &&
+    !nativeReady &&
+    !manualReady,
+  );
+  const ready = nativeReady || manualReady || nativeErrorReady;
   const displayModel = manualReady
     ? {
         ...model,
@@ -198,10 +234,15 @@ export function UpdaterPopup() {
         updateKind: 'unknown' as const,
       }
     : model;
+  const promptVersion = displayModel.availableVersion ?? (
+    nativeErrorReady
+      ? `error:${displayModel.currentVersion ?? appVersionInfo?.version ?? 'unknown'}:${updaterErrorCode(displayModel) ?? 'unknown'}`
+      : null
+  );
   const installBusy = installState === 'opening' || installState === 'handoff';
   const canStartInstall = ready || installState === 'recoverable';
   const showControl = ready || installState !== 'idle';
-  const controlLabel = manualReady
+  const controlLabel = manualReady || nativeErrorReady
     ? t('updater.openReleasePage')
     : model.updateKind === 'payload'
       ? t('updater.installRestart')
@@ -213,6 +254,52 @@ export function UpdaterPopup() {
     () => updateVersionProps(displayModel, manualRelease?.currentVersion ?? appVersionBefore),
     [appVersionBefore, displayModel.availableVersion, manualRelease?.currentVersion],
   );
+
+  useEffect(() => {
+    if (!ready || promptVersion == null) return;
+    try {
+      if (window.localStorage.getItem(UPDATE_DISMISSED_STORAGE_KEY) === promptVersion) return;
+    } catch {
+      // Storage restrictions should never suppress an update alert.
+    }
+    if (lastAutoPromptVersionRef.current === promptVersion) return;
+    lastAutoPromptVersionRef.current = promptVersion;
+    setPanelOpen(true);
+
+    if (!desktopNotificationsEnabled) return;
+    const isHidden = typeof document !== 'undefined' && document.hidden;
+    const isFocused = typeof document === 'undefined' ? true : document.hasFocus();
+    if (!isHidden && isFocused) return;
+    try {
+      if (window.localStorage.getItem(UPDATE_NOTIFIED_STORAGE_KEY) === promptVersion) return;
+    } catch {
+      // Continue with a best-effort native notification.
+    }
+    const title = nativeErrorReady
+      ? t('updater.failed')
+      : manualReady
+        ? t('updater.available')
+        : t('updater.ready');
+    const body = nativeErrorReady
+      ? t('updater.openFailedFallback')
+      : manualReady && manualRelease
+      ? t('updater.availableBody', { version: manualRelease.version })
+      : versionText(t, displayModel);
+    void showCompletionNotification({
+      status: 'succeeded',
+      title,
+      body,
+      tag: `monofield-update-${promptVersion}`,
+      onClick: () => setPanelOpen(true),
+    }).then((result) => {
+      if (result !== 'shown') return;
+      try {
+        window.localStorage.setItem(UPDATE_NOTIFIED_STORAGE_KEY, promptVersion);
+      } catch {
+        // In-app prompting remains available when persistence is blocked.
+      }
+    });
+  }, [desktopNotificationsEnabled, displayModel, manualReady, manualRelease, nativeErrorReady, promptVersion, ready, t]);
 
   const indicatorSurfaceKey = `${displayModel.currentVersion ?? 'unknown'}->${displayModel.availableVersion ?? 'unknown'}:${displayModel.status?.downloadPath ?? manualRelease?.htmlUrl ?? 'unknown'}`;
   const lastIndicatorSurfaceKeyRef = useRef<string | null>(null);
@@ -255,15 +342,15 @@ export function UpdaterPopup() {
       action: 'dismiss',
       ...versionProps,
     });
-    if (manualRelease) {
+    if (promptVersion != null) {
       try {
-        window.localStorage.setItem(UPDATE_DISMISSED_STORAGE_KEY, manualRelease.version);
+        window.localStorage.setItem(UPDATE_DISMISSED_STORAGE_KEY, promptVersion);
       } catch {
         // A dismissed prompt stays closed for this session even without storage.
       }
     }
     setPanelOpen(false);
-  }, [analytics.track, installBusy, manualRelease, versionProps]);
+  }, [analytics.track, installBusy, promptVersion, versionProps]);
 
   useEffect(() => {
     if (!panelOpen) return;
@@ -296,8 +383,16 @@ export function UpdaterPopup() {
       action: 'install',
       ...versionProps,
     });
-    if (manualReady && manualRelease) {
-      const opened = await openExternalUrl(manualRelease.htmlUrl);
+    if ((manualReady && manualRelease) || nativeErrorReady) {
+      const releaseUrl = manualRelease?.htmlUrl ?? GITHUB_RELEASES_URL;
+      try {
+        if (promptVersion != null) {
+          window.localStorage.setItem(UPDATE_DISMISSED_STORAGE_KEY, promptVersion);
+        }
+      } catch {
+        // Opening the release page is still a successful handoff without storage.
+      }
+      const opened = await openExternalUrl(releaseUrl);
       actionInFlightRef.current = false;
       setInstallState('idle');
       if (opened) setPanelOpen(false);
@@ -375,7 +470,7 @@ export function UpdaterPopup() {
         onClick={() => {
           if (installBusy) return;
           if (panelOpen) {
-            setPanelOpen(false);
+            close();
             return;
           }
           trackUpdateIndicatorClick(analytics.track, {
@@ -409,14 +504,31 @@ export function UpdaterPopup() {
             </div>
             <div className="updater-popup__body">
               <h2 id="updater-popup-title">
-                {manualReady ? t('updater.available') : t('updater.ready')}
+                {nativeErrorReady
+                  ? t('updater.failed')
+                  : manualReady
+                    ? t('updater.available')
+                    : t('updater.ready')}
               </h2>
               <p>
-                {manualReady && manualRelease
+                {nativeErrorReady
+                  ? t('updater.openFailedFallback')
+                  : manualReady && manualRelease
                   ? t('updater.availableBody', { version: manualRelease.version })
                   : versionText(t, displayModel)}
               </p>
               {channelLabel != null ? <span className="updater-popup__badge">{channelLabel}</span> : null}
+              <button
+                className="updater-popup__star"
+                data-testid="updater-star-button"
+                type="button"
+                onClick={() => {
+                  void openExternalUrl(GITHUB_REPO_URL);
+                }}
+              >
+                <Icon name="github-filled" size={14} aria-hidden />
+                {t('community.starAction')}
+              </button>
             </div>
             <div className="updater-popup__actions">
               <button className="updater-popup__button" disabled={installBusy} type="button" onClick={close}>
@@ -431,7 +543,7 @@ export function UpdaterPopup() {
                   void installAndQuit();
                 }}
               >
-                {manualReady
+                {manualReady || nativeErrorReady
                   ? t('updater.openReleasePage')
                   : installActionText(t, displayModel, installBusy)}
               </button>

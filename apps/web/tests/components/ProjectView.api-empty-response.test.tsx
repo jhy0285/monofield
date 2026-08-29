@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useEffect, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ProjectView } from '../../src/components/ProjectView';
 import { streamMessage } from '../../src/providers/anthropic';
 import type { StreamHandlers } from '../../src/providers/anthropic';
+import { streamViaDaemon } from '../../src/providers/daemon';
 import {
   fetchProjectFilePreview,
   fetchProjectFileText,
@@ -32,6 +33,8 @@ import type {
 const chatPaneMockState = vi.hoisted(() => ({
   attachments: [] as ChatAttachment[],
   commentAttachments: [] as ChatCommentAttachment[],
+  deferOpenRequestAck: false,
+  pendingOpenRequestAck: null as (() => void) | null,
 }));
 
 vi.mock('../../src/router', () => ({
@@ -119,9 +122,24 @@ vi.mock('../../src/components/AvatarMenu', () => ({
 }));
 
 vi.mock('../../src/components/FileWorkspace', () => ({
-  FileWorkspace: ({ openRequest }: { openRequest?: { name: string; nonce: number } | null }) => (
-    <div data-testid="file-workspace" data-open-request-name={openRequest?.name ?? ''} />
-  ),
+  FileWorkspace: ({
+    openRequest,
+    onOpenRequestApplied,
+  }: {
+    openRequest?: { name: string; nonce: number } | null;
+    onOpenRequestApplied?: (request: { name: string; nonce: number }) => void;
+  }) => {
+    useEffect(() => {
+      if (!openRequest) return;
+      const acknowledge = () => onOpenRequestApplied?.(openRequest);
+      if (chatPaneMockState.deferOpenRequestAck) {
+        chatPaneMockState.pendingOpenRequestAck = acknowledge;
+        return;
+      }
+      acknowledge();
+    }, [onOpenRequestApplied, openRequest]);
+    return <div data-testid="file-workspace" data-open-request-name={openRequest?.name ?? ''} />;
+  },
 }));
 
 vi.mock('../../src/components/Loading', () => ({
@@ -183,6 +201,7 @@ vi.mock('../../src/components/ChatPane', () => ({
 }));
 
 const mockedStreamMessage = vi.mocked(streamMessage);
+const mockedStreamViaDaemon = vi.mocked(streamViaDaemon);
 const mockedFetchProjectFilePreview = vi.mocked(fetchProjectFilePreview);
 const mockedFetchProjectFileText = vi.mocked(fetchProjectFileText);
 const mockedFetchProjectFiles = vi.mocked(fetchProjectFiles);
@@ -218,13 +237,24 @@ const project: Project = {
   updatedAt: 1,
 };
 
-function renderProjectView(renderProject: Project = project) {
+function renderProjectView(
+  renderProject: Project = project,
+  renderConfig: AppConfig = config,
+) {
   return render(
     <ProjectView
       project={renderProject}
       routeFileName={null}
-      config={config}
-      agents={[] as AgentInfo[]}
+      config={renderConfig}
+      agents={renderConfig.mode === 'daemon'
+        ? [{
+            id: renderConfig.agentId ?? 'codex',
+            name: 'Codex',
+            bin: 'codex',
+            available: true,
+            models: [],
+          } as AgentInfo]
+        : [] as AgentInfo[]}
       skills={[] as SkillSummary[]}
       designTemplates={[] as SkillSummary[]}
       designSystems={[] as DesignSystemSummary[]}
@@ -247,12 +277,15 @@ describe('ProjectView API empty response handling', () => {
   beforeEach(() => {
     chatPaneMockState.attachments = [];
     chatPaneMockState.commentAttachments = [];
+    chatPaneMockState.deferOpenRequestAck = false;
+    chatPaneMockState.pendingOpenRequestAck = null;
     mockedStreamMessage.mockReset();
+    mockedStreamViaDaemon.mockReset();
     mockedFetchProjectFilePreview.mockReset();
     mockedFetchProjectFileText.mockReset();
     mockedFetchProjectFiles.mockReset();
     mockedFetchProjectFilePreview.mockResolvedValue(null);
-    mockedFetchProjectFileText.mockResolvedValue(null);
+    mockedFetchProjectFileText.mockResolvedValue('<!doctype html><html><body>saved</body></html>');
     mockedFetchProjectFiles.mockResolvedValue([]);
     mockedWriteProjectTextFile.mockResolvedValue({
       name: 'landing-page.html',
@@ -557,6 +590,253 @@ describe('ProjectView API empty response handling', () => {
     await waitFor(() => expect(mockedWriteProjectTextFile).toHaveBeenCalled());
     expect(screen.queryByText(/provider ended the request/i)).toBeNull();
     expect(screen.queryByText('empty_response:deepseek-chat')).toBeNull();
+  });
+
+  it('does not finalize a saved artifact until the preview applies its open request', async () => {
+    const artifact =
+      '<artifact identifier="preview-ack" type="text/html" title="Preview Ack">' +
+      '<!doctype html><html><head><title>Preview Ack</title></head><body><main><h1>Preview acknowledgement</h1><p>The save receipt alone is not completion.</p></main></body></html>' +
+      '</artifact>';
+    chatPaneMockState.deferOpenRequestAck = true;
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
+      handlers.onDelta(artifact);
+      handlers.onDone('');
+    });
+    renderProjectView();
+
+    await sendTestPrompt();
+
+    await waitFor(() => expect(mockedWriteProjectTextFile).toHaveBeenCalled());
+    await waitFor(() => expect(chatPaneMockState.pendingOpenRequestAck).not.toBeNull());
+    expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(false);
+    act(() => {
+      chatPaneMockState.pendingOpenRequestAck?.();
+    });
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(true);
+    });
+  });
+
+  it('fails a saved artifact when the host cannot read it back for preview', async () => {
+    const artifact =
+      '<artifact identifier="readback-failure" type="text/html" title="Readback Failure">' +
+      '<!doctype html><html><head><title>Readback Failure</title></head><body><main><h1>Readback failure</h1><p>The host receipt exists but preview fetch fails.</p></main></body></html>' +
+      '</artifact>';
+    mockedFetchProjectFileText.mockResolvedValue(null);
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
+      handlers.onDelta(artifact);
+      handlers.onDone('');
+    });
+    renderProjectView();
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => (
+        message.runStatus === 'failed'
+        && message.events?.some(
+          (event) => event.kind === 'status'
+            && event.label === 'artifact_delivery_failed'
+            && event.detail?.includes('could not be opened and read back'),
+        ) === true
+      ))).toBe(true);
+    });
+    expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(false);
+  });
+
+  it('does not complete an artifact turn when the host returns no file receipt or preview target', async () => {
+    const artifact =
+      '<artifact identifier="landing-page" type="text/html" title="Landing Page">' +
+      '<!doctype html><html><head><title>Landing</title></head><body><main><h1>Landing page</h1><p>Complete document whose host persistence fails.</p></main></body></html>' +
+      '</artifact>';
+    mockedWriteProjectTextFile.mockResolvedValue(null);
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
+      handlers.onDelta(artifact);
+      handlers.onDone('');
+    });
+    renderProjectView();
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => (
+        message.runStatus === 'failed' &&
+        message.events?.some(
+          (event) => event.kind === 'status' && event.label === 'artifact_delivery_failed',
+        ) === true
+      ))).toBe(true);
+    });
+    expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(false);
+    expect(screen.getByText(/did not produce a saved project file/i)).toBeTruthy();
+    expect(screen.getByTestId('file-workspace').dataset.openRequestName).toBe('');
+  });
+
+  it('fails a Docs creation turn that returns prose without a same-turn file receipt', async () => {
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
+      handlers.onDelta('The requested dashboard is complete.');
+      handlers.onDone('The requested dashboard is complete.');
+    });
+    renderProjectView({
+      ...project,
+      metadata: { kind: 'prototype', workMode: 'creation' },
+    });
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => (
+        message.runStatus === 'failed'
+        && message.events?.some(
+          (event) => event.kind === 'status' && event.label === 'artifact_delivery_failed',
+        ) === true
+      ))).toBe(true);
+    });
+    expect(mockedWriteProjectTextFile).not.toHaveBeenCalled();
+  });
+
+  it('does not persist or complete an unterminated artifact envelope', async () => {
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
+      handlers.onDelta(
+        '<artifact identifier="partial" type="text/html"><!doctype html><html><body><h1>Partial',
+      );
+      handlers.onDone('');
+    });
+    renderProjectView({
+      ...project,
+      metadata: { kind: 'prototype', workMode: 'creation' },
+    });
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => message.runStatus === 'failed')).toBe(true);
+    });
+    expect(mockedWriteProjectTextFile).not.toHaveBeenCalled();
+  });
+
+  it('accepts an in-place file edit as the receipt for a Docs creation turn', async () => {
+    const before = {
+      name: 'dashboard.html',
+      path: 'dashboard.html',
+      kind: 'html',
+      mime: 'text/html',
+      size: 100,
+      mtime: 10,
+    };
+    const after = { ...before, size: 140, mtime: 20 };
+    mockedFetchProjectFiles.mockResolvedValueOnce([before] as never);
+    mockedFetchProjectFiles.mockResolvedValue([after] as never);
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
+      handlers.onDelta('Updated the existing dashboard.');
+      handlers.onDone('Updated the existing dashboard.');
+    });
+    renderProjectView({
+      ...project,
+      metadata: { kind: 'prototype', workMode: 'creation' },
+    });
+    await waitFor(() => expect(mockedFetchProjectFiles).toHaveBeenCalled());
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(true);
+    });
+    expect(mockedWriteProjectTextFile).not.toHaveBeenCalled();
+  });
+
+  it('preserves canceled when a partial artifact tail arrives after cancellation', async () => {
+    mockedStreamViaDaemon.mockImplementation(async (options) => {
+      options.handlers.onDelta(
+        '<artifact identifier="partial" type="text/html"><!doctype html><html><body>',
+      );
+      options.onRunStatus?.('canceled');
+      options.handlers.onDone('');
+    });
+    renderProjectView({
+      ...project,
+      metadata: { kind: 'prototype', workMode: 'creation' },
+    }, {
+      mode: 'daemon',
+      agentId: 'codex',
+      notifications: config.notifications,
+      agentModels: {},
+    } as AppConfig);
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => message.runStatus === 'canceled')).toBe(true);
+    });
+    expect(hasSavedAssistantMessage((message) => message.runStatus === 'failed')).toBe(false);
+    expect(mockedWriteProjectTextFile).not.toHaveBeenCalled();
+  });
+
+  it('flushes a fast daemon artifact before terminal success and reverses it when receipt persistence fails', async () => {
+    const artifact =
+      '<artifact identifier="daemon-page" type="text/html" title="Daemon Page">' +
+      '<!doctype html><html><head><title>Daemon</title></head><body><main><h1>Daemon page</h1><p>Single chunk artifact for terminal ordering.</p></main></body></html>' +
+      '</artifact>';
+    mockedWriteProjectTextFile.mockResolvedValue(null);
+    mockedStreamViaDaemon.mockImplementation(async (options) => {
+      options.handlers.onDelta(artifact);
+      options.onRunStatus?.('succeeded');
+      options.handlers.onDone('');
+    });
+    renderProjectView(project, {
+      mode: 'daemon',
+      agentId: 'codex',
+      notifications: config.notifications,
+      agentModels: {},
+    } as AppConfig);
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => (
+        message.runStatus === 'failed' &&
+        message.events?.some(
+          (event) => event.kind === 'status' && event.label === 'artifact_delivery_failed',
+        ) === true
+      ))).toBe(true);
+    });
+    expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(false);
+    expect(screen.getByTestId('file-workspace').dataset.openRequestName).toBe('');
   });
 
   it('opens the real HTML page instead of saving a pointer artifact as the preview entry', async () => {

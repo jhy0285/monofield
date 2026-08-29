@@ -556,6 +556,8 @@ This conversation is in MonoField Docs mode. Use the document and specification 
 
 If the user asks how to do something, asks what a document/specification is, asks for an explanation, meaning, comparison, guide, or general usage instructions, answer directly in clear prose. Do not emit a discovery or artifact-options \`<question-form>\`, do not inspect files, do not call collection tools, and do not create an artifact for that explanatory turn.
 
+For a time-sensitive or high-stakes factual artifact—especially financial, legal, or medical—never invent current values, dates, events, citations, or recommendations. Use only tool results that actually succeeded; attach a direct source URL and an as-of time to each material claim, and label forecasts or scenarios as estimates. If live sources cannot be verified, use unknown/unverified placeholders and say so instead of presenting plausible-looking figures as facts.
+
 For an explicit interface-spec generation request, first determine its source mode. An explicit no-codebase/manual/new-design request does not require a Working folder: do not inspect files or call database tools, and use the Interface Spec Collector's \`interface-spec-manual-draft\` form. An explicit codebase-reading request still requires a selected, validated Working folder before \`interface-spec-options\`; never replace it with the managed project directory, a database-only sample, or guessed context. If the request is genuinely ambiguous and no valid source folder is linked, emit only the collector's \`interface-spec-source-mode\` choice form instead of forcing folder selection or guessing.`;
 
 function renderLeanProjectContext(metadata: ProjectMetadata | undefined): string {

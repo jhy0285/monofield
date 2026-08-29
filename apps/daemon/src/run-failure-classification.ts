@@ -8,6 +8,10 @@ import type {
 import { classifyAmrAccountFailure } from './integrations/vela-errors.js';
 import { classifyAgentServiceFailure } from './runtimes/auth.js';
 import type { RunResult, RunStatusForAnalytics } from './run-result.js';
+import {
+  CODEX_WINDOWS_SANDBOX_UNAVAILABLE,
+  isCodexWindowsSandboxLogonFailureText,
+} from './codex-windows-sandbox.js';
 
 export interface RunEventForFailureClassification {
   event: string;
@@ -576,6 +580,19 @@ export function classifyRunFailure(
       'spawn',
       false,
       'install_cli',
+    );
+  }
+
+  if (
+    errorCode === CODEX_WINDOWS_SANDBOX_UNAVAILABLE ||
+    isCodexWindowsSandboxLogonFailureText(text)
+  ) {
+    return classification(
+      'process_exit',
+      'windows_sandbox_logon_denied',
+      'preflight',
+      false,
+      'fix_config',
     );
   }
 

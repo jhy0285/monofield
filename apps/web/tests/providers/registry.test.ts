@@ -272,6 +272,34 @@ describe('writeProjectTextFileDetailed', () => {
       }),
     }));
   });
+
+  it('forwards cancellation to an in-flight host write instead of accepting a late receipt', async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => (
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          const error = new Error('aborted');
+          error.name = 'AbortError';
+          reject(error);
+        }, { once: true });
+      })
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const write = writeProjectTextFileDetailed(
+      'project-1',
+      'preview.html',
+      '<html></html>',
+      { signal: controller.signal },
+    );
+    controller.abort();
+
+    await expect(write).rejects.toMatchObject({ name: 'AbortError' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/projects/project-1/files',
+      expect.objectContaining({ signal: controller.signal }),
+    );
+  });
 });
 
 describe('fetchSkillExample', () => {

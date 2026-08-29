@@ -29,8 +29,8 @@ type SendAgentEvent = (channel: string, payload: JsonRecord) => void;
 type TokenUsage = {
   input_tokens?: number;
   output_tokens?: number;
-  cached_read_tokens?: number;
-  cached_write_tokens?: number;
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
   total_tokens?: number;
 };
 
@@ -171,8 +171,10 @@ export function mapPiRpcEvent(
       const usage: TokenUsage = {};
       if (typeof u.input === 'number') usage.input_tokens = u.input;
       if (typeof u.output === 'number') usage.output_tokens = u.output;
-      if (typeof u.cacheRead === 'number') usage.cached_read_tokens = u.cacheRead;
-      if (typeof u.cacheWrite === 'number') usage.cached_write_tokens = u.cacheWrite;
+      // Pi's four counters are disjoint; preserve that fact for the shared
+      // normalizer instead of overloading Codex's cached-subset alias.
+      if (typeof u.cacheRead === 'number') usage.cache_read_input_tokens = u.cacheRead;
+      if (typeof u.cacheWrite === 'number') usage.cache_creation_input_tokens = u.cacheWrite;
       if (typeof u.totalTokens === 'number') usage.total_tokens = u.totalTokens;
       if (Object.keys(usage).length > 0) {
         const cost = getRecord(u.cost);

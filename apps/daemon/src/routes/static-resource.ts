@@ -3,7 +3,8 @@ import type Database from 'better-sqlite3';
 import path from 'node:path';
 import fs from 'node:fs';
 import type { DesignSystemTokenContractRebuildJobResponse } from '@open-design/contracts';
-import { detectAgents, detectAgentsStream } from '../agents.js';
+import { clearAgentDetectionCache, detectAgents, detectAgentsStream } from '../agents.js';
+import { resetCodexWindowsSandboxCircuit } from '../codex-windows-sandbox.js';
 import {
   SkillImportError,
   deleteUserSkill,
@@ -111,6 +112,12 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   app.get('/api/agents', async (req, res) => {
     const wantsStream =
       req.query.stream === '1' || req.query.stream === 'true';
+    const explicitRefresh =
+      req.query.refresh === '1' || req.query.refresh === 'true';
+    if (explicitRefresh) {
+      clearAgentDetectionCache();
+      resetCodexWindowsSandboxCircuit();
+    }
     let config;
     try {
       config = await readAppConfig(RUNTIME_DATA_DIR);

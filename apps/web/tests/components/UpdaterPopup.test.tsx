@@ -10,19 +10,38 @@ vi.mock('../../src/providers/registry', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/providers/registry')>();
   return {
     ...actual,
-    fetchAppVersionInfo: vi.fn(),
     fetchLatestGithubReleaseInfo: vi.fn(),
     openExternalUrl: vi.fn(),
   };
 });
 
+vi.mock('../../src/utils/notifications', () => ({
+  showCompletionNotification: vi.fn(),
+}));
+
 import { isNewerRelease, UpdaterPopup } from '../../src/components/UpdaterPopup';
 import { I18nProvider } from '../../src/i18n';
 import {
-  fetchAppVersionInfo,
   fetchLatestGithubReleaseInfo,
   openExternalUrl,
 } from '../../src/providers/registry';
+import type { AppVersionInfo } from '../../src/types';
+import { GITHUB_REPO_URL } from '../../src/components/useGithubStars';
+import { showCompletionNotification } from '../../src/utils/notifications';
+
+const PACKAGED_APP_VERSION: AppVersionInfo = {
+  version: '0.1.0',
+  channel: 'stable',
+  packaged: true,
+  platform: 'win32',
+  arch: 'x64',
+};
+
+const UNPACKAGED_APP_VERSION: AppVersionInfo = {
+  ...PACKAGED_APP_VERSION,
+  channel: 'development',
+  packaged: false,
+};
 
 function idleStatus(): OpenDesignHostUpdaterStatusSnapshot {
   return {
@@ -86,12 +105,12 @@ describe('UpdaterPopup', () => {
   let restoreHost: (() => void) | null = null;
 
   beforeEach(() => {
-    vi.mocked(fetchAppVersionInfo).mockReset();
-    vi.mocked(fetchAppVersionInfo).mockResolvedValue(null);
     vi.mocked(fetchLatestGithubReleaseInfo).mockReset();
     vi.mocked(fetchLatestGithubReleaseInfo).mockResolvedValue(null);
     vi.mocked(openExternalUrl).mockReset();
     vi.mocked(openExternalUrl).mockResolvedValue(true);
+    vi.mocked(showCompletionNotification).mockReset();
+    vi.mocked(showCompletionNotification).mockResolvedValue('shown');
     window.localStorage.clear();
   });
 
@@ -103,38 +122,23 @@ describe('UpdaterPopup', () => {
 
   it('does not contact GitHub for update metadata in an unpackaged web or dev session', async () => {
     vi.useFakeTimers();
-    vi.mocked(fetchAppVersionInfo).mockResolvedValue({
-      version: '0.1.0',
-      channel: 'development',
-      packaged: false,
-      platform: 'win32',
-      arch: 'x64',
-    });
 
     try {
-      render(<UpdaterPopup />);
+      render(<UpdaterPopup appVersionInfo={UNPACKAGED_APP_VERSION} />);
       await act(async () => {
         vi.advanceTimersByTime(1_500);
         await Promise.resolve();
         await Promise.resolve();
       });
 
-      expect(fetchAppVersionInfo).toHaveBeenCalledTimes(1);
       expect(fetchLatestGithubReleaseInfo).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('checks GitHub release metadata only after confirming a packaged app', async () => {
+  it('uses GitHub release metadata as a packaged-app fallback without a native updater', async () => {
     vi.useFakeTimers();
-    vi.mocked(fetchAppVersionInfo).mockResolvedValue({
-      version: '0.1.0',
-      channel: 'stable',
-      packaged: true,
-      platform: 'win32',
-      arch: 'x64',
-    });
     vi.mocked(fetchLatestGithubReleaseInfo).mockResolvedValue({
       tagName: 'v0.1.0',
       htmlUrl: 'https://github.com/jhy0285/monofield/releases/tag/v0.1.0',
@@ -142,18 +146,120 @@ describe('UpdaterPopup', () => {
     });
 
     try {
-      render(<UpdaterPopup />);
+      render(<UpdaterPopup appVersionInfo={PACKAGED_APP_VERSION} />);
       await act(async () => {
         vi.advanceTimersByTime(1_500);
         await Promise.resolve();
         await Promise.resolve();
       });
 
-      expect(fetchAppVersionInfo).toHaveBeenCalledTimes(1);
       expect(fetchLatestGithubReleaseInfo).toHaveBeenCalledTimes(1);
-      expect(vi.mocked(fetchAppVersionInfo).mock.invocationCallOrder[0]!).toBeLessThan(
-        vi.mocked(fetchLatestGithubReleaseInfo).mock.invocationCallOrder[0]!,
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not contact GitHub when the packaged native updater is provisioned', async () => {
+    vi.useFakeTimers();
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          status: vi.fn(async () => idleStatus()),
+        },
+      },
+    });
+
+    try {
+      render(<UpdaterPopup appVersionInfo={PACKAGED_APP_VERSION} />);
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      await act(async () => {
+        vi.advanceTimersByTime(1_500);
+        await Promise.resolve();
+      });
+
+      expect(fetchLatestGithubReleaseInfo).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps a safe release-page path visible when the provisioned updater fails', async () => {
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          status: vi.fn(async () => downloadedStatus({
+            downloadPath: undefined,
+            error: {
+              code: 'update-checksum-mismatch',
+              message: 'Downloaded update checksum did not match.',
+            },
+            state: 'error',
+          })),
+        },
+      },
+    });
+
+    render(
+      <I18nProvider initial="ko">
+        <UpdaterPopup appVersionInfo={PACKAGED_APP_VERSION} />
+      </I18nProvider>,
+    );
+
+    expect(await screen.findByRole('dialog', { name: '업데이트 실패' })).toBeTruthy();
+    expect(screen.getByText('설치 프로그램을 열 수 없습니다.')).toBeTruthy();
+    const action = screen.getByTestId('updater-install-button');
+    expect(action.textContent).toBe('릴리스 페이지 열기');
+    fireEvent.click(action);
+
+    await waitFor(() => {
+      expect(openExternalUrl).toHaveBeenCalledWith(`${GITHUB_REPO_URL}/releases`);
+    });
+  });
+
+  it('does not turn a generic native check failure into an update prompt', async () => {
+    vi.useFakeTimers();
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          status: vi.fn(async () => ({
+            ...idleStatus(),
+            error: {
+              code: 'update-check-network-failed',
+              message: 'The release feed could not be reached.',
+            },
+            state: 'error' as const,
+          })),
+        },
+      },
+    });
+
+    try {
+      render(
+        <I18nProvider initial="ko">
+          <UpdaterPopup
+            appVersionInfo={PACKAGED_APP_VERSION}
+            desktopNotificationsEnabled
+          />
+        </I18nProvider>,
       );
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      await act(async () => {
+        vi.advanceTimersByTime(1_500);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(fetchLatestGithubReleaseInfo).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId('entry-nav-updater')).toBeNull();
+      expect(screen.queryByTestId('updater-popup')).toBeNull();
+      expect(showCompletionNotification).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
@@ -200,7 +306,7 @@ describe('UpdaterPopup', () => {
     }
   });
 
-  it('shows only the ready indicator until the user opens the install prompt', async () => {
+  it('opens the install prompt automatically when a native update is ready', async () => {
     restoreHost = installMockOpenDesignHost({
       host: {
         updater: {
@@ -213,10 +319,6 @@ describe('UpdaterPopup', () => {
 
     const button = await screen.findByTestId('entry-nav-updater');
     expect(button.getAttribute('data-tooltip')).toBe('Install update');
-    expect(screen.queryByTestId('updater-popup')).toBeNull();
-
-    fireEvent.click(button);
-
     expect(await screen.findByRole('dialog', { name: 'Update ready' })).toBeTruthy();
     expect(screen.getByText('MonoField 1.2.3-beta.4 is ready. MonoField will close and open the installer.')).toBeTruthy();
     expect(screen.getByTestId('updater-install-button').textContent).toBe('Install update');
@@ -237,8 +339,6 @@ describe('UpdaterPopup', () => {
       </I18nProvider>,
     );
 
-    fireEvent.click(await screen.findByTestId('entry-nav-updater'));
-
     expect(await screen.findByRole('dialog', { name: '更新已就绪' })).toBeTruthy();
     expect(screen.getByTestId('updater-install-button').textContent).toBe('安装更新');
     expect(screen.getByText('MonoField 1.2.3-beta.4 已就绪。MonoField 会关闭并打开安装器。')).toBeTruthy();
@@ -247,13 +347,6 @@ describe('UpdaterPopup', () => {
 
   it('labels a manual update as a release-page action and opens that page', async () => {
     vi.useFakeTimers();
-    vi.mocked(fetchAppVersionInfo).mockResolvedValue({
-      version: '0.1.0',
-      channel: 'stable',
-      packaged: true,
-      platform: 'win32',
-      arch: 'x64',
-    });
     vi.mocked(fetchLatestGithubReleaseInfo).mockResolvedValue({
       tagName: 'v0.2.0',
       htmlUrl: 'https://github.com/jhy0285/monofield/releases/tag/v0.2.0',
@@ -263,7 +356,7 @@ describe('UpdaterPopup', () => {
     try {
       render(
         <I18nProvider initial="ko">
-          <UpdaterPopup />
+          <UpdaterPopup appVersionInfo={PACKAGED_APP_VERSION} />
         </I18nProvider>,
       );
 
@@ -305,8 +398,6 @@ describe('UpdaterPopup', () => {
 
     const button = await screen.findByTestId('entry-nav-updater');
     expect(button.getAttribute('data-tooltip')).toBe('安装并重启');
-    fireEvent.click(button);
-
     expect(await screen.findByRole('dialog', { name: '更新已就绪' })).toBeTruthy();
     expect(screen.getByTestId('updater-install-button').textContent).toBe('安装并重启');
     expect(screen.getByText('MonoField 1.2.3-beta.4 已就绪。MonoField 会关闭并自动重启。')).toBeTruthy();
@@ -323,14 +414,124 @@ describe('UpdaterPopup', () => {
 
     render(<UpdaterPopup />);
 
-    fireEvent.click(await screen.findByTestId('entry-nav-updater'));
     expect(await screen.findByRole('dialog', { name: 'Update ready' })).toBeTruthy();
     fireEvent.mouseDown(document.body);
     expect(screen.queryByTestId('updater-popup')).toBeNull();
+    expect(window.localStorage.getItem('monofield:update-dismissed:v1')).toBe('1.2.3-beta.4');
 
     fireEvent.click(screen.getByTestId('entry-nav-updater'));
     fireEvent.click(screen.getByRole('button', { name: 'Later' }));
     expect(screen.queryByTestId('updater-popup')).toBeNull();
+  });
+
+  it('remembers a dismissed version across remounts while keeping manual access available', async () => {
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          status: vi.fn(async () => downloadedStatus()),
+        },
+      },
+    });
+
+    const first = render(<UpdaterPopup />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Later' }));
+    expect(window.localStorage.getItem('monofield:update-dismissed:v1')).toBe('1.2.3-beta.4');
+    first.unmount();
+
+    render(<UpdaterPopup />);
+    const indicator = await screen.findByTestId('entry-nav-updater');
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.queryByTestId('updater-popup')).toBeNull();
+
+    fireEvent.click(indicator);
+    expect(await screen.findByRole('dialog', { name: 'Update ready' })).toBeTruthy();
+  });
+
+  it('does not reopen the same ready version automatically but opens the next version', async () => {
+    const listeners = new Set<OpenDesignHostUpdaterStatusListener>();
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          status: vi.fn(async () => idleStatus()),
+          subscribe: vi.fn((listener) => {
+            listeners.add(listener);
+            return () => listeners.delete(listener);
+          }),
+        },
+      },
+    });
+
+    render(<UpdaterPopup />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    act(() => {
+      for (const listener of listeners) listener(downloadedStatus());
+    });
+    expect(await screen.findByRole('dialog', { name: 'Update ready' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Later' }));
+
+    act(() => {
+      for (const listener of listeners) listener(downloadedStatus());
+    });
+    expect(screen.queryByTestId('updater-popup')).toBeNull();
+
+    act(() => {
+      for (const listener of listeners) {
+        listener(downloadedStatus({
+          availableVersion: '1.2.3-beta.5',
+          downloadPath: '/tmp/open-design-updater/Open Design Beta 5.dmg',
+        }));
+      }
+    });
+    expect(await screen.findByText('MonoField 1.2.3-beta.5 is ready. MonoField will close and open the installer.')).toBeTruthy();
+  });
+
+  it('opens the MonoField repository from the update Star action', async () => {
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          status: vi.fn(async () => downloadedStatus()),
+        },
+      },
+    });
+
+    render(<UpdaterPopup />);
+    fireEvent.click(await screen.findByTestId('updater-star-button'));
+
+    await waitFor(() => expect(openExternalUrl).toHaveBeenCalledWith(GITHUB_REPO_URL));
+  });
+
+  it('shows one version-specific desktop notification when the enabled app is in the background', async () => {
+    const hiddenSpy = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          status: vi.fn(async () => downloadedStatus()),
+        },
+      },
+    });
+
+    try {
+      render(<UpdaterPopup desktopNotificationsEnabled />);
+
+      await waitFor(() => expect(showCompletionNotification).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'succeeded',
+          title: 'Update ready',
+          body: 'MonoField 1.2.3-beta.4 is ready. MonoField will close and open the installer.',
+          tag: 'monofield-update-1.2.3-beta.4',
+        }),
+      ));
+      await waitFor(() => {
+        expect(window.localStorage.getItem('monofield:update-notified:v1')).toBe('1.2.3-beta.4');
+      });
+    } finally {
+      hiddenSpy.mockRestore();
+    }
   });
 
   it('keeps the prompt in handoff loading after opening the installer', async () => {
@@ -352,8 +553,7 @@ describe('UpdaterPopup', () => {
 
     render(<UpdaterPopup />);
 
-    fireEvent.click(await screen.findByTestId('entry-nav-updater'));
-    fireEvent.click(screen.getByTestId('updater-install-button'));
+    fireEvent.click(await screen.findByTestId('updater-install-button'));
     fireEvent.click(screen.getByTestId('updater-install-button'));
 
     expect(install).toHaveBeenCalledTimes(1);
@@ -400,11 +600,11 @@ describe('UpdaterPopup', () => {
     });
 
     render(<UpdaterPopup />);
+    const installButton = await screen.findByTestId('updater-install-button');
 
-    fireEvent.click(await screen.findByTestId('entry-nav-updater'));
     vi.useFakeTimers();
     try {
-      fireEvent.click(screen.getByTestId('updater-install-button'));
+      fireEvent.click(installButton);
 
       await act(async () => {
         await Promise.resolve();
@@ -453,8 +653,7 @@ describe('UpdaterPopup', () => {
 
     render(<UpdaterPopup />);
 
-    fireEvent.click(await screen.findByTestId('entry-nav-updater'));
-    fireEvent.click(screen.getByTestId('updater-install-button'));
+    fireEvent.click(await screen.findByTestId('updater-install-button'));
 
     await waitFor(() => expect(install).toHaveBeenCalledWith({ payload: { source: 'updater-prompt' } }));
     expect(screen.queryByText('fixture open failed')).toBeNull();
@@ -463,7 +662,7 @@ describe('UpdaterPopup', () => {
     expect(screen.getByTestId('updater-install-button').getAttribute('disabled')).toBeNull();
   });
 
-  it('reacts to updater subscription events by showing the ready indicator only', async () => {
+  it('reacts to updater subscription events by opening the ready prompt', async () => {
     const listeners = new Set<OpenDesignHostUpdaterStatusListener>();
     restoreHost = installMockOpenDesignHost({
       host: {
@@ -488,6 +687,6 @@ describe('UpdaterPopup', () => {
     });
 
     expect(await screen.findByTestId('entry-nav-updater')).toBeTruthy();
-    expect(screen.queryByTestId('updater-popup')).toBeNull();
+    expect(await screen.findByRole('dialog', { name: 'Update ready' })).toBeTruthy();
   });
 });

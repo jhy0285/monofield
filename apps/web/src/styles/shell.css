@@ -330,6 +330,28 @@
   z-index: 35;
   -webkit-app-region: no-drag;
 }
+.workspace-tabs-actions .entry-updater-menu {
+  position: relative;
+  flex: 0 0 auto;
+}
+.workspace-tabs-actions .entry-updater-menu .entry-updater-menu__button {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  border-radius: var(--radius);
+}
+.workspace-tabs-actions .entry-updater-menu .updater-popup {
+  position: fixed;
+  top: calc(var(--workspace-tabs-chrome-height, 38px) + 7px);
+  right: max(10px, env(safe-area-inset-right));
+  left: auto;
+  width: min(360px, calc(100vw - 24px));
+  z-index: 1100;
+}
+[dir='rtl'] .workspace-tabs-actions .entry-updater-menu .updater-popup {
+  right: auto;
+  left: max(10px, env(safe-area-inset-left));
+}
 .workspace-tabs-popover {
   /* Anchored to the viewport, not to .workspace-tabs-actions, because the
      actions group sits next to the tab strip on the left side of the chrome

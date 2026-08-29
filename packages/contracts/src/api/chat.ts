@@ -468,6 +468,15 @@ export type PersistedAgentEvent =
   | { kind: 'tool_use'; id: string; name: string; input: unknown }
   | { kind: 'tool_result'; toolUseId: string; content: string; isError: boolean }
   | {
+      kind: 'source_evidence';
+      evidenceKind: 'research';
+      trust: 'daemon_research';
+      query: string;
+      provider: string;
+      fetchedAt: number;
+      sources: Array<{ title: string; url: string; publishedAt?: string }>;
+    }
+  | {
       kind: 'plugin_candidate';
       candidateId: string;
       title: string;

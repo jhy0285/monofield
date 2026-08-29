@@ -50,6 +50,25 @@ describe('showCompletionNotification', () => {
     });
   });
 
+  it('uses a caller-provided tag to deduplicate version-specific update notifications', async () => {
+    vi.stubGlobal('Notification', MockNotification as unknown as typeof Notification);
+
+    const result = await showCompletionNotification({
+      status: 'succeeded',
+      title: 'Update ready',
+      body: 'MonoField 0.11.6 is ready.',
+      tag: 'monofield-update-0.11.6',
+    });
+
+    expect(result).toBe('shown');
+    expect(MockNotification.instances).toHaveLength(1);
+    expect(MockNotification.instances[0]!.options).toMatchObject({
+      body: 'MonoField 0.11.6 is ready.',
+      tag: 'monofield-update-0.11.6',
+      renotify: true,
+    });
+  });
+
   it('uses the service worker notification API when available', async () => {
     const showNotification = vi.fn().mockResolvedValue(undefined);
     const registration = { showNotification };

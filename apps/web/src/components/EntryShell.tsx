@@ -91,7 +91,6 @@ import { DesignSystemsTab } from './DesignSystemsTab';
 import { BrandsTab } from './BrandsTab';
 import { EntryNavRail, type EntryView as EntryViewKind } from './EntryNavRail';
 import { LibrarySection } from './LibrarySection';
-import { UpdaterPopup } from './UpdaterPopup';
 import { HomeView } from './HomeView';
 import {
   createPluginAuthoringHandoff,
@@ -820,7 +819,6 @@ export function EntryShell({
                 </span>
               </button>
             </div>
-            <UpdaterPopup />
             {avatarMenu}
           </div>
           <div

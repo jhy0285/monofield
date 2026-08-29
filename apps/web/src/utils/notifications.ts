@@ -177,6 +177,7 @@ export interface CompletionNotificationOpts {
   status: 'succeeded' | 'failed';
   title: string;
   body: string;
+  tag?: string;
   onClick?: () => void;
 }
 
@@ -189,7 +190,7 @@ export type CompletionNotificationResult =
 function notificationOptionsFor(
   opts: CompletionNotificationOpts,
 ): NotificationOptionsWithBrowserExtensions {
-  const tag = `od-task-${opts.status}`;
+  const tag = opts.tag ?? `od-task-${opts.status}`;
   return {
     body: opts.body,
     tag,

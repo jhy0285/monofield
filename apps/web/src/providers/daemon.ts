@@ -1273,6 +1273,17 @@ function translateAgentEvent(data: DaemonAgentPayload): AgentEvent | null {
       isError: Boolean(data.isError),
     };
   }
+  if (t === 'source_evidence') {
+    return {
+      kind: 'source_evidence',
+      evidenceKind: data.evidenceKind,
+      trust: data.trust,
+      query: data.query,
+      provider: data.provider,
+      fetchedAt: data.fetchedAt,
+      sources: data.sources,
+    };
+  }
   if (t === 'usage') {
     const usage = normalizeProviderTokenUsage(
       (data.usage ?? {}) as Record<string, unknown>,

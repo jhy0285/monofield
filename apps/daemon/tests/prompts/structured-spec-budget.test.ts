@@ -3,6 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { composeSystemPrompt } from '../../src/prompts/system.js';
 
 describe('structured specification prompt budget', () => {
+  it('requires direct grounding for time-sensitive high-stakes document facts', () => {
+    const prompt = composeSystemPrompt({ sessionMode: 'docs', locale: 'ko' });
+
+    expect(prompt).toContain('never invent current values, dates, events, citations, or recommendations');
+    expect(prompt).toContain('direct source URL and an as-of time');
+    expect(prompt).toContain('unknown/unverified placeholders');
+  });
+
   it.each(['interface-spec', 'screen-spec'] as const)(
     'keeps %s workflows task-scoped instead of loading the generic design charter',
     (kind) => {

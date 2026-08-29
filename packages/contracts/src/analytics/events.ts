@@ -298,6 +298,7 @@ export type TrackingRunFailureDetail =
   | 'spawn_enoexec'
   | 'spawn_ebadf'
   | 'spawn_eperm'
+  | 'windows_sandbox_logon_denied'
   | 'stdin_write_eof'
   | 'agent_protocol_error'
   | 'session_resume_expired'

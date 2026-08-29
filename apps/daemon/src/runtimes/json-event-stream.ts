@@ -1,3 +1,9 @@
+import {
+  CODEX_WINDOWS_SANDBOX_UNAVAILABLE,
+  codexWindowsSandboxUnavailableMessage,
+  isCodexWindowsSandboxLogonFailureText,
+} from '../codex-windows-sandbox.js';
+
 type JsonObject = Record<string, unknown>;
 type StreamEvent = Record<string, unknown>;
 type StreamEventHandler = (event: StreamEvent) => void;
@@ -22,6 +28,8 @@ type Usage = {
   output_tokens?: number;
   total_tokens?: number;
   thought_tokens?: number;
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
   cached_read_tokens?: number;
   cached_write_tokens?: number;
 };
@@ -143,8 +151,11 @@ function formatOpenCodeUsage(tokens: unknown): Usage | null {
   if (typeof tokens.total === 'number') usage.total_tokens = tokens.total;
   if (typeof tokens.reasoning === 'number') usage.thought_tokens = tokens.reasoning;
   if (isRecord(tokens.cache)) {
-    if (typeof tokens.cache.read === 'number') usage.cached_read_tokens = tokens.cache.read;
-    if (typeof tokens.cache.write === 'number') usage.cached_write_tokens = tokens.cache.write;
+    // OpenCode reports input, cache reads, and cache writes as disjoint
+    // buckets. Use the Anthropic-style aliases so the shared normalizer folds
+    // them into effective input without calling cache creation a cache hit.
+    if (typeof tokens.cache.read === 'number') usage.cache_read_input_tokens = tokens.cache.read;
+    if (typeof tokens.cache.write === 'number') usage.cache_creation_input_tokens = tokens.cache.write;
   }
   return Object.keys(usage).length > 0 ? usage : null;
 }
@@ -653,6 +664,25 @@ function handleCursorEvent(obj: unknown, onEvent: StreamEventHandler, state: Par
   return false;
 }
 
+function emitCodexTerminalError(
+  message: string,
+  onEvent: StreamEventHandler,
+  state: ParserState,
+): void {
+  if (state.codexErrorEmitted) return;
+  state.codexErrorEmitted = true;
+  if (isCodexWindowsSandboxLogonFailureText(message)) {
+    onEvent({
+      type: 'error',
+      code: CODEX_WINDOWS_SANDBOX_UNAVAILABLE,
+      message: codexWindowsSandboxUnavailableMessage(false),
+      raw: message,
+    });
+    return;
+  }
+  onEvent({ type: 'error', message });
+}
+
 function handleCodexEvent(obj: unknown, onEvent: StreamEventHandler, state: ParserState): boolean {
   if (!isRecord(obj)) return false;
 
@@ -663,21 +693,16 @@ function handleCodexEvent(obj: unknown, onEvent: StreamEventHandler, state: Pars
       onEvent({ type: 'status', label: message });
       return true;
     }
-    if (!state.codexErrorEmitted) {
-      state.codexErrorEmitted = true;
-      onEvent({ type: 'error', message });
-    }
+    emitCodexTerminalError(message, onEvent, state);
     return true;
   }
 
   if (obj.type === 'turn.failed') {
-    if (!state.codexErrorEmitted) {
-      state.codexErrorEmitted = true;
-      onEvent({
-        type: 'error',
-        message: extractErrorMessage(obj.error ?? obj.message, 'Codex turn failed'),
-      });
-    }
+    emitCodexTerminalError(
+      extractErrorMessage(obj.error ?? obj.message, 'Codex turn failed'),
+      onEvent,
+      state,
+    );
     return true;
   }
 
@@ -764,6 +789,24 @@ function handleCodexEvent(obj: unknown, onEvent: StreamEventHandler, state: Pars
         content,
         isError: typeof item.exit_code === 'number' ? item.exit_code !== 0 : item.status === 'failed',
       });
+      const commandFailed =
+        typeof item.exit_code === 'number'
+          ? item.exit_code !== 0
+          : item.status === 'failed';
+      if (
+        commandFailed &&
+        isCodexWindowsSandboxLogonFailureText(content) &&
+        !state.codexErrorEmitted
+      ) {
+        state.codexErrorEmitted = true;
+        onEvent({
+          type: 'error',
+          code: CODEX_WINDOWS_SANDBOX_UNAVAILABLE,
+          message: codexWindowsSandboxUnavailableMessage(false),
+          raw: content,
+        });
+        return true;
+      }
       const connectorToolError = connectorToolSelectionErrorMessage(content);
       if (connectorToolError && !state.codexErrorEmitted) {
         state.codexErrorEmitted = true;

@@ -100,6 +100,15 @@ export type DaemonAgentPayload =
   | { type: 'tool_input_delta'; id: string; name: string; delta: string }
   | { type: 'tool_result'; toolUseId: string; content: string; isError?: boolean }
   | {
+      type: 'source_evidence';
+      evidenceKind: 'research';
+      trust: 'daemon_research';
+      query: string;
+      provider: string;
+      fetchedAt: number;
+      sources: Array<{ title: string; url: string; publishedAt?: string }>;
+    }
+  | {
       type: 'usage';
       usage?: import('../api/token-usage.js').ProviderTokenUsagePayload;
       costUsd?: number;

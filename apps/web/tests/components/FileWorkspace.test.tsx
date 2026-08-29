@@ -1056,6 +1056,7 @@ describe('FileWorkspace launcher tab creation', () => {
 
   it('focuses an already-open file tab without adding a duplicate tab', async () => {
     const onTabsStateChange = vi.fn();
+    const onOpenRequestApplied = vi.fn();
 
     render(
       <FileWorkspace
@@ -1070,6 +1071,7 @@ describe('FileWorkspace launcher tab creation', () => {
           active: 'notes.html',
         }}
         openRequest={{ name: 'Web Prototype mutuals-v2.html', nonce: 1 }}
+        onOpenRequestApplied={onOpenRequestApplied}
         onTabsStateChange={onTabsStateChange}
       />,
     );
@@ -1078,6 +1080,12 @@ describe('FileWorkspace launcher tab creation', () => {
       expect(onTabsStateChange).toHaveBeenCalledWith({
         tabs: ['Web Prototype mutuals-v2.html'],
         active: 'Web Prototype mutuals-v2.html',
+      });
+    });
+    await waitFor(() => {
+      expect(onOpenRequestApplied).toHaveBeenCalledWith({
+        name: 'Web Prototype mutuals-v2.html',
+        nonce: 1,
       });
     });
   });

@@ -165,6 +165,24 @@ test('codex args disable plugins when OD_CODEX_DISABLE_PLUGINS is 1', () => {
   });
 });
 
+test('codex text artifact fallback disables native tools and MCP servers', () => {
+  withEnvSnapshot(['MONOFIELD_CODEX_ENABLE_EXTERNAL_PLUGINS', 'OD_CODEX_DISABLE_PLUGINS'], () => {
+    delete process.env.MONOFIELD_CODEX_ENABLE_EXTERNAL_PLUGINS;
+    delete process.env.OD_CODEX_DISABLE_PLUGINS;
+    const args = codex.buildArgs('', [], [], {}, {
+      cwd: '/tmp/monofield-text-artifact',
+      disableTools: true,
+      ignoreProjectInstructions: true,
+    });
+    assert.deepEqual(
+      args.filter((value, index) => args[index - 1] === '--disable'),
+      ['plugins', 'shell_tool', 'unified_exec'],
+    );
+    assert.equal(args.includes('mcp_servers={}'), true);
+    assert.equal(args.includes('project_doc_max_bytes=0'), true);
+  });
+});
+
 test('codex args use workspace-write sandbox on macOS and Linux', () => {
   withEnvSnapshot(['OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX', 'WSL_DISTRO_NAME'], () => {
     delete process.env.OD_CODEX_DISABLE_PLUGINS;

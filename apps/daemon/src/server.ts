@@ -360,6 +360,26 @@ import { renderDesignSystemShowcase } from './design-systems/showcase.js';
 import { createChatRunService } from './runtimes/runs.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { classifyRunFailure, isResumableFailure } from './run-failure-classification.js';
+import {
+  CODEX_WINDOWS_SANDBOX_UNAVAILABLE,
+  codexWindowsSandboxEnvironmentFingerprint,
+  codexWindowsSandboxUnavailableMessage,
+  currentCodexWindowsSandboxCircuit,
+  recordCodexWindowsSandboxLogonFailure,
+} from './codex-windows-sandbox.js';
+import {
+  executionProfileForArtifactDelivery,
+  isHostOwnedArtifactFallbackAttempt,
+  requiresHostOwnedArtifactDelivery,
+  shouldEnforceCodexNativeSandboxCircuit,
+  shouldRejectIncompleteHostOwnedArtifact,
+  shouldStartHostOwnedArtifactFallback,
+} from './artifact-delivery-fallback.js';
+import {
+  FINANCIAL_GROUNDING_REQUIRED,
+  requiresCurrentFinancialArtifactGrounding,
+} from './financial-source-evidence.js';
+import { codexNeedsDangerFullAccessSandbox } from './runtimes/defs/codex.js';
 import { decideSafeRunRetry } from './run-retry-policy.js';
 import {
   amrUserIdForRunAnalytics,
@@ -2227,6 +2247,22 @@ export function daemonAgentPayloadToPersistedAgentEvent(data) {
     return {
       kind: 'usage',
       ...normalized,
+    };
+  }
+  if (
+    type === 'source_evidence'
+    && data.evidenceKind === 'research'
+    && data.trust === 'daemon_research'
+    && Array.isArray(data.sources)
+  ) {
+    return {
+      kind: 'source_evidence',
+      evidenceKind: 'research',
+      trust: 'daemon_research',
+      query: typeof data.query === 'string' ? data.query : '',
+      provider: typeof data.provider === 'string' ? data.provider : '',
+      fetchedAt: typeof data.fetchedAt === 'number' ? data.fetchedAt : Date.now(),
+      sources: data.sources,
     };
   }
   if (type === 'diagnostic' && typeof data.name === 'string') {
@@ -4529,7 +4565,23 @@ export async function startServer({
   const appConfigDeps = { readAppConfig, writeAppConfig };
   const orbitDeps = { orbitService };
   const nativeDialogDeps = { openBrowser, openNativeFolderDialog };
-  const researchDeps = { searchResearch, ResearchError };
+  const researchDeps = {
+    searchResearch,
+    ResearchError,
+    emitSourceEvidence: (grant, evidence) => {
+      const evidenceRunId = grant?.runId;
+      if (!evidenceRunId || !activeChatAgentEventSinks.has(evidenceRunId)) return false;
+      const evidenceRun = design.runs.get(evidenceRunId);
+      if (!evidenceRun || design.runs.isTerminal(evidenceRun.status)) return false;
+      // This counter is deliberately server-private. Runtime/model output may
+      // resemble a source_evidence event, but only this authenticated,
+      // token-scoped research callback can attest the owning run.
+      evidenceRun.trustedResearchEvidenceCount =
+        (Number(evidenceRun.trustedResearchEvidenceCount) || 0) + 1;
+      emitChatAgentEvent(evidenceRunId, evidence);
+      return true;
+    },
+  };
   const liveArtifactDeps = {
     createLiveArtifact,
     listLiveArtifacts,
@@ -5319,6 +5371,7 @@ export async function startServer({
     appliedPluginSnapshotId,
     mediaExecution,
     structuredArtifactInstructions,
+    executionProfile,
   }) => {
     const project =
       typeof projectId === 'string' && projectId
@@ -5830,7 +5883,8 @@ export async function startServer({
       structuredArtifactInstructions,
       mediaExecution,
       streamFormat,
-      executionProfile: executionProfileFromStreamFormat(streamFormat),
+      executionProfile:
+        executionProfile ?? executionProfileFromStreamFormat(streamFormat),
       connectedExternalMcp: Array.isArray(connectedExternalMcp)
         ? connectedExternalMcp
         : undefined,
@@ -6234,6 +6288,19 @@ export async function startServer({
             projectRecord.metadata.kind,
           )
         : true;
+    const financialGroundingPromptText =
+      typeof message === 'string' && message.trim()
+        ? message
+        : typeof currentPrompt === 'string'
+          ? currentPrompt
+          : '';
+    const financialGroundingRequired = requiresCurrentFinancialArtifactGrounding({
+      workMode: projectRecord?.metadata?.workMode,
+      sessionMode: runSessionMode,
+      structuredArtifactInstructions,
+      prompt: financialGroundingPromptText,
+    });
+    run.financialGroundingRequired = financialGroundingRequired;
     const interfaceSpecGenerationRequested =
       projectRecord?.metadata?.kind === 'interface-spec' &&
       isInterfaceSpecGenerationRequest(interfaceSpecPromptText);
@@ -6320,6 +6387,20 @@ export async function startServer({
       databaseSampleRequested: interfaceSpecDatabaseSampleRequested,
     });
     const attachmentHint = formatProjectAttachmentHint(safeAttachments);
+    const artifactDeliveryRequired = requiresHostOwnedArtifactDelivery({
+      workMode: projectRecord?.metadata?.workMode,
+      sessionMode: runSessionMode,
+      structuredArtifactInstructions,
+    });
+    run.artifactDeliveryRequired = artifactDeliveryRequired;
+    const executionProfile = executionProfileForArtifactDelivery(
+      executionProfileFromStreamFormat(def.streamFormat),
+      run.artifactDeliveryFallbackAttempted,
+    );
+    const hostOwnedArtifactFallback = isHostOwnedArtifactFallbackAttempt({
+      executionProfile,
+      fallbackAttempted: run.artifactDeliveryFallbackAttempted,
+    });
     // Plan §3.A3 / spec §9: thread plugin context onto every tool token
     // so the connector execute route can re-validate the §5.3
     // capability gate without re-reading the SQLite snapshot row.
@@ -6340,7 +6421,8 @@ export async function startServer({
       CHAT_TOOL_ENDPOINTS,
       CHAT_TOOL_OPERATIONS,
     );
-    const toolTokenGrant = cwd && typeof projectId === 'string' && projectId
+    const toolTokenGrant = !hostOwnedArtifactFallback
+      && cwd && typeof projectId === 'string' && projectId
       ? toolTokenRegistry.mint({
           runId,
           projectId,
@@ -6364,7 +6446,7 @@ export async function startServer({
     // values further down at .mcp.json write time — see the spawn block
     // below — instead of re-reading.
     let externalMcpConfig = { servers: [] };
-    if (!SANDBOX_RUNTIME.enabled) {
+    if (!SANDBOX_RUNTIME.enabled && !hostOwnedArtifactFallback) {
       try {
         externalMcpConfig = await readMcpConfig(RUNTIME_DATA_DIR);
       } catch (err) {
@@ -6456,6 +6538,7 @@ export async function startServer({
         connectedExternalMcp,
         mediaExecution: run?.mediaExecution,
         structuredArtifactInstructions,
+        executionProfile,
         // Plan §3.M2 / §3.V1 — forward the run's snapshot id so the
         // prompt composer can splice in `## Active stage` blocks.
         // Default ON; set OD_BUNDLED_ATOM_PROMPTS=0 to opt out.
@@ -6495,7 +6578,7 @@ export async function startServer({
     // daemon and folded into the system prompt directly (see
     // `readDesignSystem`), so an agent never has to open them via the
     // filesystem.
-    if (cwd && activeSkillDirs.length > 0) {
+    if (!hostOwnedArtifactFallback && cwd && activeSkillDirs.length > 0) {
       for (const skillDir of activeSkillDirs) {
         const result = await stageActiveSkill(
           cwd,
@@ -6517,7 +6600,10 @@ export async function startServer({
     // absolute-path fallback in the skill preamble actually in-cwd for
     // no-project runs (packaged daemons / service launches do not start
     // their working directory from the workspace root).
-    const effectiveCwd = cwd ?? PROJECT_ROOT;
+    const effectiveCwd = hostOwnedArtifactFallback
+      ? path.join(RUNTIME_DATA_DIR, 'runtime', 'text-artifact', run.id)
+      : cwd ?? PROJECT_ROOT;
+    if (hostOwnedArtifactFallback) fs.mkdirSync(effectiveCwd, { recursive: true });
     // Baseline the project's artifact files before the agent runs, so the
     // run-finished handler can diff against them and report `artifact_count`
     // for ANY agent (not just claude_code). Only for real project runs: a
@@ -6527,7 +6613,7 @@ export async function startServer({
     // not need a synchronous whole-tree artifact fingerprint before every
     // CLI spawn. Keep the snapshot for document/design projects where
     // generated HTML, images, decks, and specs drive artifact telemetry.
-    if (run?.id && cwd && projectRecord?.metadata?.workMode !== 'development') {
+    if (!hostOwnedArtifactFallback && run?.id && cwd && projectRecord?.metadata?.workMode !== 'development') {
       try {
         runArtifactBaselines.remember(run.id, cwd, snapshotProjectArtifacts(cwd));
       } catch {
@@ -6549,7 +6635,7 @@ export async function startServer({
         },
       );
     }
-    const extraAllowedDirs = resolveChatExtraAllowedDirs({
+    const extraAllowedDirs = hostOwnedArtifactFallback ? [] : resolveChatExtraAllowedDirs({
       agentId,
       skillsDir: SKILLS_DIR,
       designSystemsDir: DESIGN_SYSTEMS_DIR,
@@ -6565,9 +6651,29 @@ export async function startServer({
       mediaExecution: run?.mediaExecution,
     });
     const researchCommandContract = resolveResearchCommandContract(
-      research,
+      financialGroundingRequired
+        ? {
+            enabled: true,
+            query: financialGroundingPromptText,
+            maxSources:
+              typeof research?.maxSources === 'number'
+                ? research.maxSources
+                : undefined,
+          }
+        : research,
       message,
     );
+    const financialGroundingPrompt = financialGroundingRequired
+      ? [
+          '## Required current-market source grounding',
+          '',
+          'This artifact requests time-sensitive financial market facts or forecasts.',
+          'Before writing any current value, event date, recommendation, or forecast, run the MonoField research command above.',
+          'Only a successful run-scoped research response recorded by the daemon counts as source evidence. Model memory, hand-written URLs, copied prose, and printed JSON do not count.',
+          'Cite the returned direct URLs and include an as-of time. Separate observed facts from estimates or scenarios.',
+          'If research is unavailable or returns no public sources, do not invent values and do not emit or save the artifact. Report the actual research error and ask the user to configure Tavily or explicitly request a mock/unverified-placeholder document.',
+        ].join('\n')
+      : '';
     // Resume-capable adapters continue their own upstream session so they
     // keep working memory across turns. Decide once per run; reuse for the
     // prompt-composition skipTranscript choice, the buildArgs flags, and the
@@ -6645,8 +6751,8 @@ export async function startServer({
         ].join('\n')
       : '';
     const clientInstructionParts = includeStableInstructions
-      ? [researchCommandContract, runContextPrompt, browserUsePromptGuard, automaticBrowserVerificationPrompt, titleGenerationPrompt, interfaceSpecCollectionResetPrompt, interfaceSpecSourceRequiredPrompt, systemPrompt]
-      : [researchCommandContract, runContextPrompt, browserUsePromptGuard, automaticBrowserVerificationPrompt, titleGenerationPrompt, interfaceSpecCollectionResetPrompt, interfaceSpecSourceRequiredPrompt];
+      ? [researchCommandContract, financialGroundingPrompt, runContextPrompt, browserUsePromptGuard, automaticBrowserVerificationPrompt, titleGenerationPrompt, interfaceSpecCollectionResetPrompt, interfaceSpecSourceRequiredPrompt, systemPrompt]
+      : [researchCommandContract, financialGroundingPrompt, runContextPrompt, browserUsePromptGuard, automaticBrowserVerificationPrompt, titleGenerationPrompt, interfaceSpecCollectionResetPrompt, interfaceSpecSourceRequiredPrompt];
     const clientInstructionPrompt = clientInstructionParts
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
       .filter(Boolean)
@@ -6697,6 +6803,7 @@ export async function startServer({
         { kind: 'daemonSystemPrompt', content: daemonSystemPrompt },
         { kind: 'runtimeToolPrompt', content: runtimeToolPrompt },
         { kind: 'researchCommandContract', content: researchCommandContract },
+        { kind: 'financialGroundingPrompt', content: financialGroundingPrompt },
         { kind: 'runContextPrompt', content: runContextPrompt },
         { kind: 'browserUsePromptGuard', content: browserUsePromptGuard },
         { kind: 'clientSystemPrompt', content: clientInstructionPrompt },
@@ -6772,7 +6879,6 @@ export async function startServer({
         ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
         : null;
     const agentOptions = { model: safeModel, reasoning: safeReasoning };
-    const executionProfile = executionProfileFromStreamFormat(def.streamFormat);
     // Accumulates the agent's visible text this run so the close handler can
     // tell whether the turn ended on a clarifying question form. The
     // `od-plugin-authoring` plugin's turn-1 flow is to emit a
@@ -6803,6 +6909,33 @@ export async function startServer({
         : event === 'error'
           ? redactAgentValue(data)
           : data;
+      if (
+        event === 'error'
+        && shouldStartHostOwnedArtifactFallback({
+          workMode: projectRecord?.metadata?.workMode,
+          sessionMode: runSessionMode,
+          structuredArtifactInstructions,
+          executionProfile,
+          errorCode: exposedData?.code,
+          fallbackAttempted: run.artifactDeliveryFallbackAttempted,
+          cancelRequested: run.cancelRequested,
+        }, CODEX_WINDOWS_SANDBOX_UNAVAILABLE)
+      ) {
+        // The native attempt is about to be stopped by the runtime error
+        // handler. Do not persist a terminal error yet: its close handler will
+        // make exactly one no-tools retry whose artifact is saved by the host.
+        // The failed tool_result remains in diagnostics, but the chat does not
+        // end before the handoff has had a chance to produce a file receipt.
+        run.artifactDeliveryFallbackRequested = true;
+        const diagnostic = {
+          type: 'artifact_delivery_fallback_requested',
+          reason: CODEX_WINDOWS_SANDBOX_UNAVAILABLE,
+          delivery: 'host_owned_project_api',
+        };
+        persistRunEventToAssistantMessage(db, run, 'diagnostic', diagnostic);
+        design.runs.emit(run, 'diagnostic', diagnostic);
+        return;
+      }
       if (
         event === 'agent' &&
         exposedData &&
@@ -7279,6 +7412,12 @@ export async function startServer({
 
     const agentLaunch = resolveAgentLaunch(def, configuredAgentEnv);
     const resolvedBin = agentLaunch.selectedPath;
+    const codexWindowsSandboxFingerprint =
+      def.id === 'codex'
+        ? codexWindowsSandboxEnvironmentFingerprint({
+            binaryPath: agentLaunch.launchPath ?? resolvedBin,
+          })
+        : '';
 
     // Hoisted above the AMR catalog preflight: the empty-catalog branch
     // below calls `sendAmrAccountFailure(...)` to surface AMR_AUTH_REQUIRED
@@ -7506,12 +7645,14 @@ export async function startServer({
         agentOptions,
         {
           cwd: effectiveCwd,
-          hasPriorAssistantTurn,
+          hasPriorAssistantTurn: hostOwnedArtifactFallback ? false : hasPriorAssistantTurn,
           agentLogFilePath,
           promptFilePath: promptFile?.path,
-          resumeSessionId: agentResumeCtx.resumeSessionId,
+          resumeSessionId: hostOwnedArtifactFallback ? null : agentResumeCtx.resumeSessionId,
           newSessionId: agentResumeCtx.newSessionId,
-          ignoreProjectInstructions: cwd != null && projectBaseDir == null,
+          ignoreProjectInstructions:
+            hostOwnedArtifactFallback || (cwd != null && projectBaseDir == null),
+          disableTools: hostOwnedArtifactFallback,
         },
       );
     } catch (err) {
@@ -7822,7 +7963,61 @@ export async function startServer({
       ));
       return design.runs.finish(run, 'failed', 1, null);
     }
-    const browserUseRuntimeEnv = run.browserUse
+    const codexWindowsSandboxCircuit = shouldEnforceCodexNativeSandboxCircuit(
+      def.id,
+      executionProfile,
+    )
+      ? currentCodexWindowsSandboxCircuit({
+          environmentFingerprint: codexWindowsSandboxFingerprint,
+          dangerFullAccessExplicitlyEnabled: codexNeedsDangerFullAccessSandbox(),
+        })
+      : null;
+    if (
+      codexWindowsSandboxCircuit
+      && shouldStartHostOwnedArtifactFallback({
+        workMode: projectRecord?.metadata?.workMode,
+        sessionMode: runSessionMode,
+        structuredArtifactInstructions,
+        executionProfile,
+        errorCode: CODEX_WINDOWS_SANDBOX_UNAVAILABLE,
+        fallbackAttempted: run.artifactDeliveryFallbackAttempted,
+        cancelRequested: run.cancelRequested,
+      }, CODEX_WINDOWS_SANDBOX_UNAVAILABLE)
+    ) {
+      cleanupPromptFile();
+      revokeToolToken('child_exit');
+      unregisterChatAgentEventSink();
+      run.artifactDeliveryFallbackAttempted = true;
+      const diagnostic = {
+        type: 'artifact_delivery_fallback_started',
+        reason: CODEX_WINDOWS_SANDBOX_UNAVAILABLE,
+        executionProfile: 'text_artifact',
+        delivery: 'host_owned_project_api',
+        circuitOpen: true,
+      };
+      persistRunEventToAssistantMessage(db, run, 'diagnostic', diagnostic);
+      design.runs.emit(run, 'diagnostic', diagnostic);
+      scheduleRetryRestart(0);
+      return;
+    }
+    if (codexWindowsSandboxCircuit) {
+      cleanupPromptFile();
+      revokeToolToken('child_exit');
+      unregisterChatAgentEventSink();
+      send('error', createSseErrorPayload(
+        CODEX_WINDOWS_SANDBOX_UNAVAILABLE,
+        codexWindowsSandboxUnavailableMessage(true),
+        {
+          retryable: false,
+          details: {
+            observedAt: codexWindowsSandboxCircuit.observedAt,
+            recovery: 'refresh_agent_after_cli_or_windows_session_change',
+          },
+        },
+      ));
+      return design.runs.finish(run, 'failed', 1, null);
+    }
+    const browserUseRuntimeEnv = run.browserUse && !hostOwnedArtifactFallback
       ? {
           OD_BROWSER_USE_REQUESTED: run.browserUse.requested ? '1' : '0',
           OD_BROWSER_USE_AVAILABLE: run.browserUse.available ? '1' : '0',
@@ -7873,7 +8068,7 @@ export async function startServer({
       OD_BIN,
       OD_NODE_BIN,
       OD_DAEMON_URL: daemonUrl,
-      ...(typeof projectId === 'string' && projectId && cwd
+      ...(!hostOwnedArtifactFallback && typeof projectId === 'string' && projectId && cwd
         ? {
             MONOFIELD_PROJECT_ID: projectId,
             MONOFIELD_PROJECT_DIR: cwd,
@@ -7881,13 +8076,13 @@ export async function startServer({
             OD_PROJECT_DIR: cwd,
           }
         : {}),
-      ...(projectRecord?.metadata?.workMode
+      ...(!hostOwnedArtifactFallback && projectRecord?.metadata?.workMode
         ? {
             MONOFIELD_PROJECT_WORK_MODE: projectRecord.metadata.workMode,
             OD_PROJECT_WORK_MODE: projectRecord.metadata.workMode,
           }
         : {}),
-      ...(interfaceSpecDatabaseAllowed
+      ...(!hostOwnedArtifactFallback && interfaceSpecDatabaseAllowed
         && activeDatabaseContext?.useForDevelopment === true
         && typeof activeDatabaseContext.connectionId === 'string'
         && activeDatabaseContext.connectionId.trim()
@@ -8611,6 +8806,25 @@ export async function startServer({
           failureText,
         );
         clearInactivityWatchdog();
+        if (ev.code === CODEX_WINDOWS_SANDBOX_UNAVAILABLE) {
+          recordCodexWindowsSandboxLogonFailure({
+            environmentFingerprint: codexWindowsSandboxFingerprint,
+          });
+          send('error', createSseErrorPayload(
+            CODEX_WINDOWS_SANDBOX_UNAVAILABLE,
+            agentStreamError,
+            {
+              retryable: false,
+              details: ev.raw ? { raw: ev.raw } : undefined,
+            },
+          ));
+          // This OS policy failure cannot recover inside the current Codex
+          // process. Stop immediately instead of allowing the model to keep
+          // explaining and retrying commands while consuming more tokens.
+          if (child && !child.killed) design.runs.signalChild(run, 'SIGTERM');
+          scheduleForcedChildShutdown();
+          return;
+        }
         const authFailure = classifyAgentAuthFailure(agentId, failureText);
         if (authFailure?.status === 'missing') {
           send('error', createSseErrorPayload(
@@ -9187,6 +9401,66 @@ export async function startServer({
           runArtifactSideEffects.artifactWriteSeen ||
           runArtifactSideEffects.liveArtifactSeen,
       });
+      if (
+        status === 'failed'
+        && run.artifactDeliveryFallbackRequested === true
+        && run.artifactDeliveryFallbackAttempted !== true
+        && !run.cancelRequested
+        && !design.runs.isTerminal(run.status)
+      ) {
+        run.artifactDeliveryFallbackRequested = false;
+        run.artifactDeliveryFallbackAttempted = true;
+        const diagnostic = {
+          type: 'artifact_delivery_fallback_started',
+          reason: CODEX_WINDOWS_SANDBOX_UNAVAILABLE,
+          executionProfile: 'text_artifact',
+          delivery: 'host_owned_project_api',
+        };
+        persistRunEventToAssistantMessage(db, run, 'diagnostic', diagnostic);
+        design.runs.emit(run, 'diagnostic', diagnostic);
+        // Restart the same logical run once. executionProfileForArtifactDelivery
+        // changes the next prompt to the no-tools <artifact> contract. The
+        // attempted flag is one-way, so another failure cannot loop here.
+        scheduleRetryRestart(0);
+        return;
+      }
+      if (
+        status === 'succeeded'
+        && run.financialGroundingRequired === true
+        && !emittedRenderableQuestionForm(visibleAssistantText)
+        && !(Number(run.trustedResearchEvidenceCount) > 0)
+        && !design.runs.isTerminal(run.status)
+      ) {
+        send('error', createSseErrorPayload(
+          FINANCIAL_GROUNDING_REQUIRED,
+          'This current-market financial document did not obtain trusted source evidence. No successful run-scoped research result was recorded, so MonoField did not mark the artifact as complete. Configure Tavily Search and retry, or explicitly request a mock document with unverified placeholders.',
+          { retryable: true },
+        ));
+        finishWithRetryDecision('failed', 1, null);
+        return;
+      }
+      if (
+        status === 'succeeded'
+        && shouldRejectIncompleteHostOwnedArtifact({
+          deliveryRequired: run.artifactDeliveryRequired === true,
+          executionProfile,
+          assistantText: visibleAssistantText,
+          askedQuestion: emittedRenderableQuestionForm(visibleAssistantText),
+        })
+        && !design.runs.isTerminal(run.status)
+      ) {
+        // The native-shell recovery contract is file delivery, not a prose
+        // claim that the document was completed. Refuse prose-only and partial
+        // envelopes here; a complete envelope still has to earn the separate
+        // host save receipt in ProjectView before the UI exposes success.
+        send('error', createSseErrorPayload(
+          'ARTIFACT_DELIVERY_REQUIRED',
+          'The document run ended without a complete artifact. No project file was saved.',
+          { retryable: true },
+        ));
+        finishWithRetryDecision('failed', 1, null);
+        return;
+      }
       // Skip the close-handler failure emit when the run is already
       // terminal: the inactivity watchdog (failForInactivity) finishes the
       // run — sending its error and clearing run.clients/eventsLogStream —

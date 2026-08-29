@@ -13,6 +13,7 @@ import {
 import { isSandboxModeEnabled } from '../sandbox-mode.js';
 import type { ToolTokenGrant } from '../tool-tokens.js';
 import { maskAgentCliCredentials } from '../app-config.js';
+import { trustedResearchEvidenceFromFindings } from '../financial-source-evidence.js';
 
 const LONG_MEDIA_PROXY_TIMEOUT_MS = 10 * 60 * 1000;
 const PET_IMAGE_ROUTE = '/api/app-config/pet-image';
@@ -143,7 +144,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
   const { openBrowser, openNativeFolderDialog } = ctx.nativeDialogs;
   const { getProject } = ctx.projectStore;
   const { insertConversation, upsertMessage } = ctx.conversations;
-  const { searchResearch, ResearchError } = ctx.research;
+  const { searchResearch, ResearchError, emitSourceEvidence } = ctx.research;
   const getResolvedPort = () => resolvedPortRef.current;
 
   const mediaPolicyForGrant = (grant: ToolTokenGrant | null):
@@ -628,14 +629,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     }
   });
 
-  app.post('/api/research/search', async (req, res) => {
-    if (!isLocalSameOrigin(req, getResolvedPort())) {
-      return res.status(403).json({
-        error:
-          'cross-origin request rejected: research search is restricted to the local UI / CLI',
-      });
-    }
-
+  const handleResearchSearch = async (req: any, res: any, grant: ToolTokenGrant | null) => {
     try {
       const proxyDispatcher = proxyDispatcherRequestInit(process.env);
       try {
@@ -651,6 +645,10 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
             : undefined,
           requestInit: proxyDispatcher.requestInit,
         });
+        if (grant?.runId) {
+          const evidence = trustedResearchEvidenceFromFindings(result);
+          if (evidence) emitSourceEvidence?.(grant, evidence);
+        }
         res.json(result);
       } finally {
         await proxyDispatcher.close();
@@ -668,6 +666,22 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         },
       });
     }
+  };
+
+  app.post('/api/tools/research/search', async (req, res) => {
+    const grant = authorizeToolRequest(req, res, 'research:search');
+    if (!grant) return;
+    await handleResearchSearch(req, res, grant);
+  });
+
+  app.post('/api/research/search', async (req, res) => {
+    if (!isLocalSameOrigin(req, getResolvedPort())) {
+      return res.status(403).json({
+        error:
+          'cross-origin request rejected: research search is restricted to the local UI / CLI',
+      });
+    }
+    await handleResearchSearch(req, res, null);
   });
 
   app.post('/api/media/tasks/:id/wait', async (req, res) => {

@@ -82,22 +82,26 @@ export function normalizeProviderTokenUsage(
     usage.cache_read_tokens,
     usage.prompt_tokens_details?.cached_tokens,
   );
-  const normalizedCacheWrite = firstNumber(
-    usage.cached_write_tokens,
-    usage.cache_write_tokens,
-  );
-  const cachedInputTokens =
-    anthropicCacheRead !== undefined || anthropicCacheWrite !== undefined
-      ? (anthropicCacheRead ?? 0) + (anthropicCacheWrite ?? 0)
-      : normalizedCacheRead !== undefined || normalizedCacheWrite !== undefined
-        ? (normalizedCacheRead ?? 0) + (normalizedCacheWrite ?? 0)
-        : undefined;
+  // Cache *reads* are the reused subset the UI should show. Cache creation /
+  // writes are newly processed input, not a cache hit. Anthropic reports all
+  // three buckets separately (`input_tokens`, cache read, cache creation), so
+  // the write bucket belongs in effective input below but must not be
+  // subtracted when the UI derives "new input". Generic/OpenAI-compatible
+  // reports already include cached reads in prompt/input tokens.
+  const rawCachedInputTokens = anthropicCacheRead ?? normalizedCacheRead;
   const inputTokens =
     providerInputTokens !== undefined
       ? anthropicCacheRead !== undefined || anthropicCacheWrite !== undefined
         ? providerInputTokens + (anthropicCacheRead ?? 0) + (anthropicCacheWrite ?? 0)
         : providerInputTokens
       : undefined;
+  // A provider bug or an alias with different semantics must not make the
+  // cached *subset* larger than the effective input shown beside it.
+  const cachedInputTokens = rawCachedInputTokens === undefined
+    ? undefined
+    : inputTokens === undefined
+      ? rawCachedInputTokens
+      : Math.min(rawCachedInputTokens, inputTokens);
   const providerTotal = firstNumber(usage.total_tokens, usage.totalTokens);
   const totalTokens =
     providerTotal ??
@@ -162,7 +166,15 @@ export function summarizeTokenUsage(
         ? 'provider_usage'
         : 'unavailable';
   const inputTokens = sum('inputTokens');
-  const cachedInputTokens = sum('cachedInputTokens');
+  const rawCachedInputTokens = sum('cachedInputTokens');
+  // Preserve the subset invariant for legacy persisted events too. Older
+  // builds could fold cache creation into cachedInputTokens, leaving a cached
+  // value larger than input after conversation aggregation.
+  const cachedInputTokens = rawCachedInputTokens === undefined
+    ? undefined
+    : inputTokens === undefined
+      ? rawCachedInputTokens
+      : Math.min(rawCachedInputTokens, inputTokens);
   const outputTokens = sum('outputTokens');
   const reasoningTokens = sum('reasoningTokens');
   const reportedTotalTokens = sum('totalTokens');

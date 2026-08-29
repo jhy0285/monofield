@@ -64,7 +64,9 @@ trading-analysis-dashboard-template/
    - Keyboard command palette (`/`)
 5. Keep output single-file HTML (inline CSS + inline JS, no framework dependency).
 6. Keep placeholders honest (`—` or neutral labels) where real numbers are unknown.
-7. Validate against `references/checklist.md` before emitting.
+7. For current prices, filings, earnings, event dates, and material news, keep a compact evidence record with the direct source URL, publisher, observed/as-of time, unit/currency, and verification status. Facts require a successful source lookup; forecasts and buy/sell scenarios must be visibly labeled as analysis rather than sourced fact.
+8. If a current source cannot be verified, show `—` / `unverified` in the dashboard. Never substitute a plausible number, unnamed citation, or remembered date.
+9. Validate against `references/checklist.md` before emitting.
 
 ## Output contract
 

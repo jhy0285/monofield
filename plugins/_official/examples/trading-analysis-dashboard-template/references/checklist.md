@@ -15,6 +15,9 @@
 - [ ] Risk cockpit panel shows exposure-style metrics (VaR/Beta/DD or equivalent).
 - [ ] Trading workflow panel exists (`Signal -> Risk -> Order -> Fill` semantics).
 - [ ] Placeholder values are honest (`—` if unknown), no fabricated marketing claims.
+- [ ] Every material current fact has a direct clickable source URL, publisher, as-of time, and explicit unit/currency.
+- [ ] Forecasts, target ranges, and buy/sell opinions are labeled as analysis/scenarios and are visually separated from verified facts.
+- [ ] Failed or unavailable source lookups remain `—` / `unverified`; no remembered or plausible-looking figure is presented as verified.
 
 ## P1 (quality bar)
 

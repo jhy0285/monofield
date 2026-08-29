@@ -13,7 +13,7 @@ describe('renderResearchCommandContract', () => {
       'the first tool action must be the research command with this canonical query',
     );
     expect(prompt).toContain(
-      'If the OD command fails because Tavily is not configured or unavailable',
+      'If the MonoField command fails because Tavily is not configured or unavailable',
     );
     expect(prompt).toContain(
       'use your own search capability as fallback and label the fallback clearly',
@@ -25,13 +25,13 @@ describe('renderResearchCommandContract', () => {
     expect(prompt).toContain('Mention the report path in the final answer');
     expect(prompt).toContain('EV market 2025 trends');
     expect(prompt).toContain(
-      '"$OD_NODE_BIN" "$OD_BIN" research search --query "<search query>" --max-sources 15',
+      '"$MONOFIELD_NODE_BIN" "$MONOFIELD_BIN" research search --query "<search query>" --max-sources 15',
     );
     expect(prompt).toContain(
-      '& $env:OD_NODE_BIN $env:OD_BIN research search --query "<search query>" --max-sources 15',
+      '& $env:MONOFIELD_NODE_BIN $env:MONOFIELD_BIN research search --query "<search query>" --max-sources 15',
     );
     expect(prompt).toContain(
-      '"%OD_NODE_BIN%" "%OD_BIN%" research search --query "<search query>" --max-sources 15',
+      '"%MONOFIELD_NODE_BIN%" "%MONOFIELD_BIN%" research search --query "<search query>" --max-sources 15',
     );
   });
 

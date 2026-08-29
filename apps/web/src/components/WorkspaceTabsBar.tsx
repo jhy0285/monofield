@@ -1,4 +1,4 @@
-import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { type DragEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useT } from '../i18n';
 import { navigate, type EntryHomeView, type Route } from '../router';
@@ -58,6 +58,7 @@ interface Props {
   // paths navigate straight to a new project/design-system and leave the entry
   // tab showing Welcome in the background. This flips it back to Home.
   onboardingCompleted?: boolean;
+  actions?: ReactNode;
 }
 
 const STORAGE_KEY = 'open-design:workspace-tabs:v1';
@@ -407,7 +408,12 @@ interface HoverPreviewState {
 
 const HOVER_PREVIEW_DELAY_MS = 380;
 
-export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false }: Props) {
+export function WorkspaceTabsBar({
+  route,
+  projects,
+  onboardingCompleted = false,
+  actions,
+}: Props) {
   const t = useT();
   const [state, setState] = useState<WorkspaceTabsState>(() => initialTabsState(route));
   const [tabsMenuOpen, setTabsMenuOpen] = useState(false);
@@ -998,6 +1004,7 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
         </button>
       </div>
       <div className="workspace-tabs-actions" ref={menuRef}>
+        {actions}
         {onboardingActive ? null : (
         <button
           type="button"

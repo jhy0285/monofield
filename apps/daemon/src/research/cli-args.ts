@@ -13,3 +13,17 @@ export function splitResearchSubcommand(args: string[]): ResearchSubcommandArgs 
     subArgs: [...args.slice(0, idx), ...args.slice(idx + 1)],
   };
 }
+
+export function researchSearchEndpoint(toolToken: unknown): string {
+  return typeof toolToken === 'string' && toolToken.trim()
+    ? '/api/tools/research/search'
+    : '/api/research/search';
+}
+
+export function researchSearchHeaders(toolToken: unknown): Record<string, string> {
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  if (typeof toolToken === 'string' && toolToken.trim()) {
+    headers.authorization = `Bearer ${toolToken.trim()}`;
+  }
+  return headers;
+}

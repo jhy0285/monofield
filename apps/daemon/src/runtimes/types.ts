@@ -62,6 +62,10 @@ export type RuntimeContext = {
   // parent AGENTS.md files in that case; real user-selected repositories
   // leave this false so their own project instructions still apply.
   ignoreProjectInstructions?: boolean;
+  // Host-owned text artifact recovery must not expose native CLI tools. The
+  // adapter should remove shell/browser/tool surfaces and start a fresh,
+  // project-instruction-free session. Ordinary filesystem runs leave unset.
+  disableTools?: boolean;
 };
 
 // Marker on a RuntimeAgentDef declaring that the adapter's CLI maintains

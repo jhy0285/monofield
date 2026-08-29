@@ -237,8 +237,8 @@ test('pi RPC: usage extracted from turn_end', () => {
   assert.deepEqual(eventAt(events, 2).usage, {
     input_tokens: 100,
     output_tokens: 50,
-    cached_read_tokens: 20,
-    cached_write_tokens: 5,
+    cache_read_input_tokens: 20,
+    cache_creation_input_tokens: 5,
     total_tokens: 175,
   });
 });
@@ -381,7 +381,7 @@ test('pi RPC: full multi-turn session with tools and usage', () => {
   const usageEvents = events.filter((e) => e.type === 'usage');
   assert.equal(usageEvents.length, 2);
   assert.equal(usageOf(eventAt(usageEvents, 0)).input_tokens, 200);
-  assert.equal(usageOf(eventAt(usageEvents, 1)).cached_read_tokens, 100);
+  assert.equal(usageOf(eventAt(usageEvents, 1)).cache_read_input_tokens, 100);
 });
 
 test('pi RPC: tool_use arrives before tool_result in event order', () => {

@@ -110,6 +110,12 @@ download with the release's `SHA256SUMS.txt`. See
 [the user guide](https://monofield.vercel.app/downloads/monofield-user-guide-ko.pdf)
 for illustrated setup and real workflows.
 
+Installed Desktop builds check the public release feed in the background. When
+a newer version is available, MonoField shows a once-per-version update notice
+with the release notes, direct download, and an optional GitHub Star link. If
+Desktop notifications are enabled, the same notice can appear through Windows
+while MonoField is in the background.
+
 ### Run from source
 
 Requirements: Node.js 24, pnpm 10.33.x, and at least one supported local CLI

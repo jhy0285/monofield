@@ -222,6 +222,7 @@ describe('server route inventory', () => {
       'POST /api/dialog/open-folder',
       'POST /api/projects/:id/media/generate',
       'POST /api/tools/media/generate',
+      'POST /api/tools/research/search',
       'POST /api/research/search',
       'POST /api/media/tasks/:id/wait',
       'GET /api/projects/:id/media/tasks',
@@ -569,10 +570,12 @@ describe('static SPA fallback classification', () => {
 });
 
 describe('daemon data dir resolver', () => {
-  it('requires explicit OD_DATA_DIR in sandbox mode and resolves project-relative dirs', () => {
-    expect(() => resolveDataDir('', '/tmp/open-design-test', { requireExplicit: true })).toThrow(
-      /OD_DATA_DIR is required/,
+  it('requires explicit MONOFIELD_DATA_DIR in sandbox mode and resolves project-relative dirs', () => {
+    expect(() => resolveDataDir('', '/tmp/monofield-test', { requireExplicit: true })).toThrow(
+      /MONOFIELD_DATA_DIR is required/,
     );
-    expect(resolveDataDir('relative-data', '/tmp/open-design-test')).toBe('/tmp/open-design-test/relative-data');
+    expect(resolveDataDir('relative-data', '/tmp/monofield-test')).toBe(
+      path.resolve('/tmp/monofield-test', 'relative-data'),
+    );
   });
 });

@@ -155,6 +155,28 @@ describe('Codex cumulative usage normalization', () => {
     });
   });
 
+  it('turns a multi-million cumulative session total into only the resumed-turn delta', () => {
+    expect(codexTurnUsageFromCumulative(
+      {
+        input_tokens: 7_120_000,
+        cached_read_tokens: 7_000_000,
+        output_tokens: 22_000,
+        thought_tokens: 8_000,
+      },
+      {
+        input_tokens: 6_950_000,
+        cached_input_tokens: 6_840_000,
+        output_tokens: 20_000,
+        reasoning_output_tokens: 7_500,
+      },
+    )).toEqual({
+      input_tokens: 170_000,
+      cached_read_tokens: 160_000,
+      output_tokens: 2_000,
+      thought_tokens: 500,
+    });
+  });
+
   it('keeps a fresh-session report intact when it is below the baseline', () => {
     const current = { input_tokens: 100, output_tokens: 5 };
     expect(codexTurnUsageFromCumulative(current, {

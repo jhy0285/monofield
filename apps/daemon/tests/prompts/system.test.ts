@@ -397,6 +397,18 @@ describe('composeSystemPrompt', () => {
       expect(prompt).not.toContain('## Filesystem handoff');
     });
 
+    it('pins the no-tools override when a structured CLI is handed off to host-owned artifact delivery', () => {
+      const prompt = composeSystemPrompt({
+        agentId: 'codex',
+        streamFormat: 'json-event-stream',
+        executionProfile: 'text_artifact',
+      });
+
+      expect(prompt).toContain('# API mode — no tools available');
+      expect(prompt).toContain('## Text-artifact handoff');
+      expect(prompt).not.toContain('## Filesystem handoff');
+    });
+
     it('adds encrypted database context only for connected filesystem projects', () => {
       const disconnectedPrompt = composeSystemPrompt({ agentId: 'codex', streamFormat: 'jsonl' });
       const filesystemPrompt = composeSystemPrompt({

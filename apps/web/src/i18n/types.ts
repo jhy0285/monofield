@@ -3364,6 +3364,7 @@ export interface Dict {
   'assistant.outTokens': string;
   'assistant.usage': string;
   'assistant.usageConversation': string;
+  'assistant.usageInputTotal': string;
   'assistant.usageInput': string;
   'assistant.usageCached': string;
   'assistant.usageOutput': string;

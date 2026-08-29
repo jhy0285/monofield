@@ -4,6 +4,27 @@ MonoField uses semantic versions for source and Desktop releases. Historical
 upstream development remains available in Git history; this file records the
 independent MonoField product line.
 
+## 0.11.6 — 2026-08-30
+
+- Added a global, once-per-version Desktop update notice with release notes,
+  background Windows notification support, a safe release-page fallback, and
+  an optional GitHub Star action.
+- Detected the Codex Windows sandbox logon failure `1385` across command,
+  top-level, and turn-failure events, stopped retry loops immediately, and kept
+  the filesystem security boundary intact.
+- Added a one-time host-owned fallback for document creation when the Windows
+  sandbox cannot start, while leaving software-development file execution on
+  the existing secured native path.
+- Made document generation succeed only after a saved-file receipt or a
+  same-turn file change; prose-only, partial, timed-out, and unsaved artifacts
+  now fail instead of being reported as complete.
+- Clarified usage reporting across Codex, Anthropic, OpenCode, and Pi: full
+  input, newly processed input, cache reuse, output, reasoning, and cumulative
+  totals are separated without treating cache creation as cache reuse.
+- Added source-grounding requirements for current financial and market
+  artifacts so prices, schedules, recommendations, and citations cannot be
+  completed from unsupported model claims.
+
 ## 0.11.5 — 2026-08-29
 
 - Isolated development-server state by project, module, working directory, and

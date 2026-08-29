@@ -16,6 +16,18 @@ describe('chat token usage summaries', () => {
     });
   });
 
+  it('keeps cached input as a subset when summing many calls', () => {
+    expect(usageForEvents([
+      { kind: 'usage', inputTokens: 3_500_000, cachedInputTokens: 3_450_000, outputTokens: 1_000, totalTokens: 3_501_000, measurementSource: 'provider_usage' },
+      { kind: 'usage', inputTokens: 3_620_000, cachedInputTokens: 3_550_000, outputTokens: 1_000, totalTokens: 3_621_000, measurementSource: 'provider_usage' },
+    ])).toMatchObject({
+      inputTokens: 7_120_000,
+      cachedInputTokens: 7_000_000,
+      outputTokens: 2_000,
+      totalTokens: 7_122_000,
+    });
+  });
+
   it('reports conversation coverage without pretending missing responses are zero', () => {
     const messages: ChatMessage[] = [
       { id: 'u1', role: 'user', content: 'hello' },

@@ -28,8 +28,8 @@ test('opencode json stream emits text and usage events', () => {
         input_tokens: 11,
         output_tokens: 7,
         thought_tokens: 3,
-        cached_read_tokens: 5,
-        cached_write_tokens: 2,
+        cache_read_input_tokens: 5,
+        cache_creation_input_tokens: 2,
       },
       costUsd: 0,
     },
@@ -1241,6 +1241,40 @@ test('codex json stream emits structured errors once', () => {
   ]);
 });
 
+test('codex json stream promotes top-level Windows sandbox error 1385', () => {
+  const { events, handler } = collectEvents('codex');
+  const sandboxFailure =
+    'windows sandbox: CreateProcessWithLogonW failed: 1385';
+
+  handler.feed(JSON.stringify({
+    type: 'error',
+    message: sandboxFailure,
+  }) + '\n');
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0]?.type, 'error');
+  assert.equal(events[0]?.code, 'CODEX_WINDOWS_SANDBOX_UNAVAILABLE');
+  assert.equal(events[0]?.raw, sandboxFailure);
+  assert.match(String(events[0]?.message), /Windows error 1385/);
+});
+
+test('codex json stream promotes turn.failed Windows sandbox error 1385', () => {
+  const { events, handler } = collectEvents('codex');
+  const sandboxFailure =
+    'execution error: windows sandbox: CreateProcessWithLogonW failed: 1385';
+
+  handler.feed(JSON.stringify({
+    type: 'turn.failed',
+    error: { message: sandboxFailure },
+  }) + '\n');
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0]?.type, 'error');
+  assert.equal(events[0]?.code, 'CODEX_WINDOWS_SANDBOX_UNAVAILABLE');
+  assert.equal(events[0]?.raw, sandboxFailure);
+  assert.match(String(events[0]?.message), /Windows error 1385/);
+});
+
 test('codex json stream emits command execution tool events', () => {
   const { events, handler } = collectEvents('codex');
 
@@ -1285,6 +1319,59 @@ test('codex json stream emits command execution tool events', () => {
       isError: false,
     },
   ]);
+});
+
+test('codex json stream turns Windows sandbox logon error 1385 into a terminal runtime error', () => {
+  const { events, handler } = collectEvents('codex');
+  const sandboxFailure =
+    'execution error: Io(Custom { kind: Other, error: "windows sandbox: CreateProcessWithLogonW failed: 1385" })';
+
+  handler.feed(
+    JSON.stringify({
+      type: 'item.started',
+      item: {
+        id: 'item-windows-sandbox',
+        type: 'command_execution',
+        command: 'powershell.exe -NoProfile -Command Get-ChildItem',
+        aggregated_output: '',
+        exit_code: null,
+        status: 'in_progress',
+      },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'item.completed',
+      item: {
+        id: 'item-windows-sandbox',
+        type: 'command_execution',
+        command: 'powershell.exe -NoProfile -Command Get-ChildItem',
+        aggregated_output: sandboxFailure,
+        exit_code: 1,
+        status: 'failed',
+      },
+    }) +
+    '\n',
+  );
+
+  assert.equal(events.length, 3);
+  assert.deepEqual(events.slice(0, 2), [
+    {
+      type: 'tool_use',
+      id: 'item-windows-sandbox',
+      name: 'Bash',
+      input: { command: 'powershell.exe -NoProfile -Command Get-ChildItem' },
+    },
+    {
+      type: 'tool_result',
+      toolUseId: 'item-windows-sandbox',
+      content: sandboxFailure,
+      isError: true,
+    },
+  ]);
+  assert.equal(events[2]?.type, 'error');
+  assert.equal(events[2]?.code, 'CODEX_WINDOWS_SANDBOX_UNAVAILABLE');
+  assert.equal(events[2]?.raw, sandboxFailure);
+  assert.match(String(events[2]?.message), /Windows error 1385/);
 });
 
 test('codex json stream emits TodoWrite events from todo_list items', () => {

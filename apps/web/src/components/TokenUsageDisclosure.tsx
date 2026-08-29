@@ -102,8 +102,9 @@ export function TokenUsageDisclosure({
             : t('assistant.usageUnitUsdWhenAvailable')}</strong>
         </div>
         <dl className="token-usage__grid">
-          <div><dt>{t('assistant.usageInput')}</dt><UsageValue value={exactTokenCount(newInputTokens)} unit={t('assistant.usageUnitTokens')} /></div>
+          <div><dt>{t('assistant.usageInputTotal')}</dt><UsageValue value={exactTokenCount(metrics.inputTokens)} unit={t('assistant.usageUnitTokens')} /></div>
           <div><dt>{t('assistant.usageCached')}</dt><UsageValue value={exactTokenCount(metrics.cachedInputTokens)} unit={t('assistant.usageUnitTokens')} /></div>
+          <div><dt>{t('assistant.usageInput')}</dt><UsageValue value={exactTokenCount(newInputTokens)} unit={t('assistant.usageUnitTokens')} /></div>
           <div><dt>{t('assistant.usageOutput')}</dt><UsageValue value={exactTokenCount(metrics.outputTokens)} unit={t('assistant.usageUnitTokens')} /></div>
           <div><dt>{t('assistant.usageReasoning')}</dt><UsageValue value={exactTokenCount(metrics.reasoningTokens)} unit={t('assistant.usageUnitTokens')} /></div>
           <div><dt>{t('assistant.usageTotal')}</dt><UsageValue value={exactTokenCount(metrics.totalTokens)} unit={t('assistant.usageUnitTokens')} /></div>

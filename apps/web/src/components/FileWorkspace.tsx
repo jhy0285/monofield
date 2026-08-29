@@ -146,6 +146,10 @@ interface Props {
   commentQueueOnSend?: boolean;
   commentSendDisabled?: boolean;
   openRequest?: { name: string; nonce: number } | null;
+  /** Confirms that an external open request was actually applied to the active
+   * workspace tab. Document completion combines this UI acknowledgement with
+   * a host read-back before it reports success. */
+  onOpenRequestApplied?: (request: { name: string; nonce: number }) => void;
   // Open the named file AND surface its Share/Export menu. Drives the chat-side
   // "Share" next-step action without a dedicated share backend.
   shareRequest?: { name: string; nonce: number } | null;
@@ -420,6 +424,7 @@ export function FileWorkspace({
   commentQueueOnSend = false,
   commentSendDisabled = false,
   openRequest,
+  onOpenRequestApplied,
   shareRequest,
   downloadRequest,
   slideNavRequest,
@@ -553,6 +558,7 @@ export function FileWorkspace({
   const [activeTab, setActiveTab] = useState<string>(
     tabsState.active ?? defaultRootTab,
   );
+  const lastAppliedOpenRequestRef = useRef<string | null>(null);
 
   const [showPasteDialog, setShowPasteDialog] = useState(false);
   const [showLibraryPicker, setShowLibraryPicker] = useState(false);
@@ -896,6 +902,14 @@ export function FileWorkspace({
     setActiveTab(name);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openRequest]);
+
+  useEffect(() => {
+    if (!openRequest || activeTab !== openRequest.name) return;
+    const acknowledgementKey = `${projectId}\0${openRequest.nonce}`;
+    if (lastAppliedOpenRequestRef.current === acknowledgementKey) return;
+    lastAppliedOpenRequestRef.current = acknowledgementKey;
+    onOpenRequestApplied?.(openRequest);
+  }, [activeTab, onOpenRequestApplied, openRequest, projectId]);
 
   // Share request: ensure the target file is open + active so the FileViewer
   // below receives the matching `shareRequest` and opens its Share menu.
