@@ -268,6 +268,10 @@ type BrowserLoadError = {
 };
 
 interface DesignBrowserPanelProps {
+  /** Whether this workspace browser tab is currently visible. Inactive panels
+   * stay mounted to preserve their guest session, but must not own project-wide
+   * verification state or open approval UI. */
+  active?: boolean;
   automationParentSessionId?: string | null;
   initialIconUrl?: string;
   initialTitle?: string;
@@ -835,6 +839,7 @@ const PAGE_BRIEF_SCRIPT = `(() => {
 })()`;
 
 export function DesignBrowserPanel({
+  active = true,
   automationParentSessionId,
   initialIconUrl,
   initialTitle,
@@ -935,10 +940,16 @@ export function DesignBrowserPanel({
   }, [automationSession]);
 
   useEffect(() => {
-    if (!automationSession) return;
+    if (!active || !automationSession) return;
     setActiveBrowserVerification(projectId, automationSession, currentUrl);
     return () => clearActiveBrowserVerification(projectId, automationSession.sessionId);
-  }, [automationSession, currentUrl, projectId]);
+  }, [active, automationSession, currentUrl, projectId]);
+
+  useEffect(() => {
+    if (active) return;
+    autoVerifyApprovalPromptedOriginRef.current = null;
+    setAutomationApprovalOpen(false);
+  }, [active]);
 
   useEffect(() => subscribeHostBrowserAutomation((event) => {
     setAutomationEvents((current) => [event, ...current].slice(0, 12));
@@ -969,7 +980,7 @@ export function DesignBrowserPanel({
   // ready. Cancelling is respected for the rest of that origin/session; the
   // user can still reopen Automate manually at any time.
   useEffect(() => {
-    if (!autoVerify) {
+    if (!active || !autoVerify) {
       autoVerifyApprovalPromptedOriginRef.current = null;
       return undefined;
     }
@@ -986,8 +997,8 @@ export function DesignBrowserPanel({
       return undefined;
     }
     const offerApproval = () => {
-      const origin = browserOrigin(node.getURL?.() || currentUrl);
-      if (!origin || !node.getWebContentsId?.()) return;
+      const origin = browserOrigin(safeGetWebviewUrl(node) || currentUrl);
+      if (!origin || !safeGetWebviewContentsId(node)) return;
       if (autoVerifyApprovalPromptedOriginRef.current === origin) return;
       autoVerifyApprovalPromptedOriginRef.current = origin;
       setBrowserAccessOpen(false);
@@ -1000,6 +1011,7 @@ export function DesignBrowserPanel({
     offerApproval();
     return () => node.removeEventListener('dom-ready', offerApproval);
   }, [
+    active,
     autoVerify,
     automationBackendConnected,
     automationParentSessionId,
@@ -1022,8 +1034,8 @@ export function DesignBrowserPanel({
     }
     let cancelled = false;
     const linkSession = async () => {
-      const guestWebContentsId = node.getWebContentsId?.();
-      const origin = browserOrigin(node.getURL?.() || currentUrl);
+      const guestWebContentsId = safeGetWebviewContentsId(node);
+      const origin = browserOrigin(safeGetWebviewUrl(node) || currentUrl);
       if (!guestWebContentsId || !origin) return;
       const result = await linkHostBrowserAutomation({
         guestWebContentsId,
@@ -1061,7 +1073,7 @@ export function DesignBrowserPanel({
     if (!browserTabId) return undefined;
     const handle: BrandBrowserHandle = {
       isDesktopWebview: desktopHostAvailable && Boolean(webviewNode),
-      getURL: () => webviewNode?.getURL?.() ?? currentUrl,
+      getURL: () => webviewNode ? (safeGetWebviewUrl(webviewNode) || currentUrl) : currentUrl,
       executeJavaScript: (code, gesture) =>
         webviewNode ? webviewNode.executeJavaScript(code, gesture) : null,
     };
@@ -1276,7 +1288,7 @@ export function DesignBrowserPanel({
   useEffect(() => {
     if (!desktopHostAvailable) return undefined;
     return subscribeHostBrowserPopup((popup) => {
-      const sourceId = webviewNode?.getWebContentsId?.();
+      const sourceId = webviewNode ? safeGetWebviewContentsId(webviewNode) : 0;
       if (!sourceId || sourceId !== popup.guestWebContentsId || !isHistoryUrl(popup.url)) return;
       if (onOpenPopup) {
         const parentSessionId = automationSession && browserOrigin(popup.url) === automationSession.origin
@@ -1942,7 +1954,7 @@ export function DesignBrowserPanel({
 
   async function approveBrowserAutomation() {
     if (automationStarting) return;
-    const guestWebContentsId = webviewNode?.getWebContentsId?.();
+    const guestWebContentsId = webviewNode ? safeGetWebviewContentsId(webviewNode) : 0;
     const origin = browserOrigin(currentUrl);
     if (!guestWebContentsId || !origin || isBlank) {
       setStatusMessage(browserAccessText.status.openPageToApprove);
@@ -1991,7 +2003,7 @@ export function DesignBrowserPanel({
         setBrowserUseOpen(true);
         return;
       }
-      if (!webviewNode || isBlank || !webviewNode.getWebContentsId?.() || !browserOrigin(currentUrl)) {
+      if (!webviewNode || isBlank || !safeGetWebviewContentsId(webviewNode) || !browserOrigin(currentUrl)) {
         setStatusMessage(browserAccessText.status.openPageToApprove);
         return;
       }
@@ -2804,7 +2816,7 @@ export function DesignBrowserPanel({
           </div>
         </section>
       ) : null}
-      {automationApprovalOpen ? (
+      {active && automationApprovalOpen ? (
         <div className="db-automation-dialog-backdrop" role="presentation">
           <div className="db-automation-dialog" role="dialog" aria-modal="true" aria-labelledby="db-automation-title">
             <div className="db-automation-dialog-icon"><RemixIcon name="cursor-line" size={20} /></div>
@@ -4311,6 +4323,18 @@ function safeGetWebviewUrl(node: WebviewElement): string {
     return node.getURL();
   } catch {
     return '';
+  }
+}
+
+function safeGetWebviewContentsId(node: WebviewElement): number {
+  try {
+    const id = node.getWebContentsId?.();
+    return typeof id === 'number' && Number.isFinite(id) && id > 0 ? id : 0;
+  } catch {
+    // Electron exposes the method before the guest has attached, but calling
+    // it in that window throws. Treat the guest as unavailable until the
+    // subsequent dom-ready event retries the operation.
+    return 0;
   }
 }
 

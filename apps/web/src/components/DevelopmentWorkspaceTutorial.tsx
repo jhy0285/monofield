@@ -6,7 +6,8 @@ import { useT } from '../i18n';
 import { Icon } from './Icon';
 import styles from './ProductTutorial.module.css';
 
-const STORAGE_KEY = 'monofield:development-workspace-tutorial:v2';
+const DEVELOPMENT_STORAGE_KEY = 'monofield:development-workspace-tutorial:v2';
+const CREATION_STORAGE_KEY = 'monofield:creation-workspace-tutorial:v1';
 const SPOTLIGHT_PADDING = 9;
 const CALLOUT_GAP = 14;
 const CALLOUT_WIDTH = 372;
@@ -26,7 +27,17 @@ type GuideKey =
   | 'development.guideChangesTitle'
   | 'development.guideChangesBody'
   | 'development.guideVerifyTitle'
-  | 'development.guideVerifyBody';
+  | 'development.guideVerifyBody'
+  | 'productTutorial.creationFormatTitle'
+  | 'productTutorial.creationFormatBody'
+  | 'productTutorial.stepConnectTitle'
+  | 'productTutorial.stepConnectBody'
+  | 'productTutorial.stepReviewTitle'
+  | 'productTutorial.stepReviewBody'
+  | 'productTutorial.stepAskTitle'
+  | 'productTutorial.stepAskBody'
+  | 'productTutorial.creationComposeTitle'
+  | 'productTutorial.creationComposeBody';
 
 type Step = {
   title: GuideKey;
@@ -45,7 +56,7 @@ type SpotlightRect = {
   height: number;
 };
 
-const STEPS: readonly Step[] = [
+const DEVELOPMENT_STEPS: readonly Step[] = [
   {
     title: 'workMode.development',
     body: 'workMode.developmentHint',
@@ -91,10 +102,37 @@ const STEPS: readonly Step[] = [
   },
 ] as const;
 
+const CREATION_STEPS: readonly Step[] = [
+  {
+    title: 'productTutorial.creationFormatTitle',
+    body: 'productTutorial.creationFormatBody',
+    selector: '[data-testid="design-files-tab"]',
+    advanceOn: 'click',
+  },
+  {
+    title: 'productTutorial.creationComposeTitle',
+    body: 'productTutorial.creationComposeBody',
+    selector: '[data-testid="workspace-add-tab"]',
+    advanceOn: 'click',
+  },
+  {
+    title: 'productTutorial.stepReviewTitle',
+    body: 'productTutorial.stepReviewBody',
+    selector: '[data-testid="screenshot-copy-button"], [data-testid="board-mode-toggle"], [data-testid="file-workspace"]',
+    advanceOn: 'click',
+  },
+  {
+    title: 'productTutorial.stepAskTitle',
+    body: 'productTutorial.stepAskBody',
+    selector: '[data-testid="chat-composer"], [data-testid="file-workspace"]',
+    advanceOn: 'click',
+  },
+] as const;
+
 export function shouldOpenDevelopmentWorkspaceTutorial(): boolean {
   if (typeof window === 'undefined') return false;
   try {
-    return window.localStorage.getItem(STORAGE_KEY) !== 'done';
+    return window.localStorage.getItem(DEVELOPMENT_STORAGE_KEY) !== 'done';
   } catch {
     return false;
   }
@@ -103,7 +141,25 @@ export function shouldOpenDevelopmentWorkspaceTutorial(): boolean {
 export function completeDevelopmentWorkspaceTutorial(): void {
   if (typeof window === 'undefined') return;
   try {
-    window.localStorage.setItem(STORAGE_KEY, 'done');
+    window.localStorage.setItem(DEVELOPMENT_STORAGE_KEY, 'done');
+  } catch {
+    // The guide can still close when storage is unavailable.
+  }
+}
+
+export function shouldOpenCreationWorkspaceTutorial(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(CREATION_STORAGE_KEY) !== 'done';
+  } catch {
+    return false;
+  }
+}
+
+export function completeCreationWorkspaceTutorial(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(CREATION_STORAGE_KEY, 'done');
   } catch {
     // The guide can still close when storage is unavailable.
   }
@@ -184,19 +240,24 @@ function calloutPosition(rect: SpotlightRect | null, measuredHeight: number): { 
   };
 }
 
-export function DevelopmentWorkspaceTutorial({
+function WorkspaceTutorial({
   open,
   onClose,
+  kind,
 }: {
   open: boolean;
   onClose: () => void;
+  kind: 'development' | 'creation';
 }) {
   const t = useT();
+  const steps = kind === 'development' ? DEVELOPMENT_STEPS : CREATION_STEPS;
+  const guideLabel = kind === 'development' ? t('development.guide') : t('workMode.creation');
+  const testIdPrefix = kind === 'development' ? 'development' : 'creation';
   const [step, setStep] = useState(0);
   const [targetRect, setTargetRect] = useState<SpotlightRect | null>(null);
   const [calloutHeight, setCalloutHeight] = useState(CALLOUT_HEIGHT);
   const calloutRef = useRef<HTMLElement>(null);
-  const activeStep: Step = STEPS[step] ?? STEPS[0]!;
+  const activeStep: Step = steps[step] ?? steps[0]!;
 
   const target = useCallback(
     () => document.querySelector<HTMLElement>(activeStep.selector),
@@ -269,14 +330,15 @@ export function DevelopmentWorkspaceTutorial({
   useEffect(() => {
     if (!open) return;
     function finish() {
-      completeDevelopmentWorkspaceTutorial();
+      if (kind === 'development') completeDevelopmentWorkspaceTutorial();
+      else completeCreationWorkspaceTutorial();
       onClose();
     }
     function advance(event: Event) {
       const element = target();
       if (!element || !element.contains(event.target as Node)) return;
       if (activeStep.advanceOn !== event.type) return;
-      if (step >= STEPS.length - 1) finish();
+      if (step >= steps.length - 1) finish();
       else setStep((current) => current + 1);
     }
     function onKeyDown(event: KeyboardEvent) {
@@ -292,18 +354,19 @@ export function DevelopmentWorkspaceTutorial({
       document.removeEventListener('change', advance, true);
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [activeStep, onClose, open, step, target]);
+  }, [activeStep, kind, onClose, open, step, steps.length, target]);
 
   const placement = useMemo(() => calloutPosition(targetRect, calloutHeight), [calloutHeight, targetRect]);
   if (!open || typeof document === 'undefined') return null;
 
   function close() {
-    completeDevelopmentWorkspaceTutorial();
+    if (kind === 'development') completeDevelopmentWorkspaceTutorial();
+    else completeCreationWorkspaceTutorial();
     onClose();
   }
 
   return createPortal(
-    <div className={styles.tour} data-testid="development-workspace-tutorial" data-step={step + 1}>
+    <div className={styles.tour} data-testid={`${testIdPrefix}-workspace-tutorial`} data-step={step + 1}>
       {targetRect ? (
         <>
           <div className={styles.blind} style={{ top: 0, left: 0, right: 0, height: targetRect.top }} />
@@ -312,7 +375,7 @@ export function DevelopmentWorkspaceTutorial({
           <div className={styles.blind} style={{ top: targetRect.bottom, left: 0, right: 0, bottom: 0 }} />
           <div
             className={styles.spotlight}
-            data-testid="development-tutorial-spotlight"
+            data-testid={`${testIdPrefix}-tutorial-spotlight`}
             style={{
               top: targetRect.top,
               left: targetRect.left,
@@ -327,44 +390,44 @@ export function DevelopmentWorkspaceTutorial({
       <section
         ref={calloutRef}
         className={styles.callout}
-        data-testid="development-tutorial-callout"
+        data-testid={`${testIdPrefix}-tutorial-callout`}
         style={placement.style}
         data-placement={placement.placement}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="development-guide-title"
-        aria-describedby="development-guide-description"
+        aria-labelledby={`${testIdPrefix}-guide-title`}
+        aria-describedby={`${testIdPrefix}-guide-description`}
       >
         <div className={styles.calloutTopline}>
-          <span className={styles.eyebrow}>{t('development.guide')} / {STEPS.length}</span>
+          <span className={styles.eyebrow}>{guideLabel} / {steps.length}</span>
           <Button size="icon" variant="ghost" onClick={close} aria-label={t('productTutorial.close')}>
             <Icon name="close" size={15} />
           </Button>
         </div>
         <div className={`${styles.progress} ${styles.developmentProgress}`} aria-label={t('productTutorial.progressLabel')}>
-          {STEPS.map((item, index) => (
+          {steps.map((item, index) => (
             <button
               key={item.title}
               type="button"
               className={index === step ? styles.progressActive : undefined}
               onClick={() => setStep(index)}
-              aria-label={t('productTutorial.stepOf', { current: index + 1, total: STEPS.length })}
+              aria-label={t('productTutorial.stepOf', { current: index + 1, total: steps.length })}
               aria-current={index === step ? 'step' : undefined}
             />
           ))}
         </div>
         <div className={styles.copy} key={activeStep.title}>
           <span>{String(step + 1).padStart(2, '0')}</span>
-          <h2 id="development-guide-title">{t(activeStep.title)}</h2>
-          <p id="development-guide-description">{t(activeStep.body)}</p>
+          <h2 id={`${testIdPrefix}-guide-title`}>{t(activeStep.title)}</h2>
+          <p id={`${testIdPrefix}-guide-description`}>{t(activeStep.body)}</p>
         </div>
         <footer className={styles.footer}>
-          <span className={styles.eyebrow}>{t('development.guide')}</span>
+          <span className={styles.eyebrow}>{guideLabel}</span>
           <div>
             <Button variant="ghost" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0}>
               {t('productTutorial.previous')}
             </Button>
-            {step < STEPS.length - 1 ? (
+            {step < steps.length - 1 ? (
               <Button variant="primary" onClick={() => setStep((current) => current + 1)}>
                 {t('productTutorial.next')}
               </Button>
@@ -377,4 +440,12 @@ export function DevelopmentWorkspaceTutorial({
     </div>,
     document.body,
   );
+}
+
+export function DevelopmentWorkspaceTutorial(props: { open: boolean; onClose: () => void }) {
+  return <WorkspaceTutorial {...props} kind="development" />;
+}
+
+export function CreationWorkspaceTutorial(props: { open: boolean; onClose: () => void }) {
+  return <WorkspaceTutorial {...props} kind="creation" />;
 }

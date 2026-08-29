@@ -23,21 +23,25 @@ vi.mock('../../src/router', () => ({
   navigate: vi.fn(),
 }));
 
-vi.mock('../../src/state/projects', () => ({
-  addPluginMarketplace: vi.fn(),
-  applyPlugin: vi.fn(),
-  getPluginMarketplaceInstallMode: vi.fn(),
-  installPluginSource: vi.fn(),
-  listPluginMarketplaces: vi.fn(),
-  listPlugins: vi.fn(),
-  refreshPluginMarketplace: vi.fn(),
-  removePluginMarketplace: vi.fn(),
-  setPluginMarketplaceTrust: vi.fn(),
-  uninstallPlugin: vi.fn(),
-  uploadPluginFolder: vi.fn(),
-  uploadPluginZip: vi.fn(),
-  upgradePlugin: vi.fn(),
-}));
+vi.mock('../../src/state/projects', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/state/projects')>();
+  return {
+    ...actual,
+    addPluginMarketplace: vi.fn(),
+    applyPlugin: vi.fn(),
+    getPluginMarketplaceInstallMode: vi.fn(),
+    installPluginSource: vi.fn(),
+    listPluginMarketplaces: vi.fn(),
+    listPlugins: vi.fn(),
+    refreshPluginMarketplace: vi.fn(),
+    removePluginMarketplace: vi.fn(),
+    setPluginMarketplaceTrust: vi.fn(),
+    uninstallPlugin: vi.fn(),
+    uploadPluginFolder: vi.fn(),
+    uploadPluginZip: vi.fn(),
+    upgradePlugin: vi.fn(),
+  };
+});
 
 function makePlugin(
   id: string,

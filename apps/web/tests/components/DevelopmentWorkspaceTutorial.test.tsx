@@ -4,8 +4,11 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  completeCreationWorkspaceTutorial,
   completeDevelopmentWorkspaceTutorial,
+  CreationWorkspaceTutorial,
   DevelopmentWorkspaceTutorial,
+  shouldOpenCreationWorkspaceTutorial,
   shouldOpenDevelopmentWorkspaceTutorial,
 } from '../../src/components/DevelopmentWorkspaceTutorial';
 import { I18nProvider } from '../../src/i18n';
@@ -117,5 +120,36 @@ describe('DevelopmentWorkspaceTutorial', () => {
     await waitFor(() => expect(spotlight.style.left).toBe('251px'));
     expect(parseFloat(callout.style.left)).toBeGreaterThanOrEqual(12);
     expect(parseFloat(callout.style.left) + parseFloat(callout.style.width)).toBeLessThanOrEqual(408);
+  });
+});
+
+describe('CreationWorkspaceTutorial', () => {
+  it('opens once and follows the real document workspace controls', async () => {
+    expect(shouldOpenCreationWorkspaceTutorial()).toBe(true);
+    const onClose = vi.fn();
+    render(
+      <I18nProvider initial="ko">
+        <button type="button" data-testid="design-files-tab">문서 파일</button>
+        <button type="button" data-testid="workspace-add-tab">새 탭</button>
+        <button type="button" data-testid="board-mode-toggle">표시</button>
+        <div data-testid="chat-composer">요청 입력</div>
+        <CreationWorkspaceTutorial open onClose={onClose} />
+      </I18nProvider>,
+    );
+
+    const guide = screen.getByTestId('creation-workspace-tutorial');
+    expect(guide.getAttribute('data-step')).toBe('1');
+    fireEvent.click(screen.getByTestId('design-files-tab'));
+    await waitFor(() => expect(guide.getAttribute('data-step')).toBe('2'));
+    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    await waitFor(() => expect(guide.getAttribute('data-step')).toBe('3'));
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
+    await waitFor(() => expect(guide.getAttribute('data-step')).toBe('4'));
+    fireEvent.click(screen.getByTestId('chat-composer'));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+    expect(shouldOpenCreationWorkspaceTutorial()).toBe(false);
+    completeCreationWorkspaceTutorial();
+    expect(shouldOpenCreationWorkspaceTutorial()).toBe(false);
   });
 });

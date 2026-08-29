@@ -12,11 +12,15 @@
 // gallery-clean while the active state surfaces everything the user
 // needs to commit.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { VisuallyHidden } from '@open-design/components';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 import { useI18n } from '../../i18n';
-import type { PluginShareAction } from '../../state/projects';
+import {
+  getPluginDetails,
+  pluginRecordHasQuery,
+  type PluginShareAction,
+} from '../../state/projects';
 import { Icon } from '../Icon';
 import { TrustBadge } from '../TrustBadge';
 import { PreviewSurface } from './cards/PreviewSurface';
@@ -47,6 +51,23 @@ interface Props {
 }
 
 const MAX_VISIBLE_TAGS = 3;
+const detailRecordCache = new Map<string, Promise<InstalledPluginRecord | null>>();
+
+function loadPluginDetailsOnce(id: string): Promise<InstalledPluginRecord | null> {
+  const cached = detailRecordCache.get(id);
+  if (cached) return cached;
+  const pending = getPluginDetails(id).then((record) => {
+    if (!record) detailRecordCache.delete(id);
+    return record;
+  });
+  detailRecordCache.set(id, pending);
+  while (detailRecordCache.size > 64) {
+    const oldest = detailRecordCache.keys().next().value;
+    if (typeof oldest !== 'string') break;
+    detailRecordCache.delete(oldest);
+  }
+  return pending;
+}
 
 export function PluginCard({
   record,
@@ -64,11 +85,13 @@ export function PluginCard({
 }: Props) {
   const { locale } = useI18n();
   const [useMenuOpen, setUseMenuOpen] = useState(false);
+  const [lazyDescription, setLazyDescription] = useState<string | null>(null);
   // Tiles prefer the cheap pre-baked hover-pan clip; the detail modal still
   // opens the live interactive page (it calls inferPluginPreview without this).
   const preview = useMemo(() => inferPluginPreview(record, { preferBaked: true }), [record]);
   const title = localizePluginTitle(locale, record);
-  const description = localizePluginDescription(locale, record);
+  const summaryDescription = localizePluginDescription(locale, record);
+  const description = lazyDescription ?? summaryDescription;
   const tags = useMemo(
     () =>
       (record.manifest?.tags ?? [])
@@ -76,11 +99,26 @@ export function PluginCard({
         .slice(0, MAX_VISIBLE_TAGS),
     [record.manifest?.tags],
   );
-  const hasQuery = Boolean(record.manifest?.od?.useCase?.query);
+  const hasQuery = pluginRecordHasQuery(record);
   const sharePendingAction =
     pendingShareAction?.pluginId === record.id ? pendingShareAction.action : null;
   const shareBusy = sharePendingAction !== null;
   const useDisabled = isPending || pendingAny || shareBusy;
+  const isSummary = (record.manifest?.od as { summary?: unknown } | undefined)?.summary === true;
+
+  useEffect(() => {
+    setLazyDescription(null);
+  }, [locale, record.id]);
+
+  const hydrateHoverDescription = () => {
+    if (!isSummary || summaryDescription || lazyDescription) return;
+    const expectedId = record.id;
+    void loadPluginDetailsOnce(expectedId).then((detail) => {
+      if (!detail || detail.id !== expectedId) return;
+      const localized = localizePluginDescription(locale, detail);
+      if (localized) setLazyDescription(localized);
+    });
+  };
 
   function pickUseAction(action: PluginUseAction) {
     setUseMenuOpen(false);
@@ -162,6 +200,8 @@ export function PluginCard({
       data-plugin-id={record.id}
       data-preview-kind={preview.kind}
       {...(isFeatured ? { 'data-featured': 'true' } : {})}
+      onPointerEnter={hydrateHoverDescription}
+      onFocusCapture={hydrateHoverDescription}
     >
       <PreviewSurface
         pluginId={record.id}

@@ -38,6 +38,7 @@ function esc(value: unknown): string {
 interface DetailModel {
   interfaceId: string;
   interfaceName: string;
+  businessPurpose: string;
   apiKey: string;
   requestRows: Array<{ no: number | string; nameEn: string; nameKo: string; dataType: string; minSize: string; maxSize: string; required: string; note: string }>;
   responseRows: Array<{ no: number | string; nameEn: string; nameKo: string; dataType: string; minSize: string; maxSize: string; required: string; note: string }>;
@@ -87,6 +88,7 @@ function computeModel(doc: InterfaceSpecDocument): DetailModel[] {
     return {
       interfaceId,
       interfaceName: resolveInterfaceName(ep),
+      businessPurpose: ep.businessPurpose?.trim() || resolveInterfaceName(ep),
       apiKey: endpointApiKey(ep),
       requestRows,
       responseRows,
@@ -123,7 +125,7 @@ function detailSection(d: DetailModel, index: number): string {
   return `<section class="detail" id="if-${index}" data-od-id="interface-spec-${index}" data-screen-label="${esc(`${d.interfaceName} ${d.interfaceId}`)}">
     <h3>${esc(d.interfaceName)} <span class="id">${esc(d.interfaceId)}</span></h3>
     <table class="meta">
-      <tr><th>인터페이스 ID</th><td>${esc(d.interfaceId)}</td><th>인터페이스 설명</th><td>${esc(d.interfaceName)}</td></tr>
+      <tr><th>인터페이스 ID</th><td>${esc(d.interfaceId)}</td><th>인터페이스 설명</th><td>${esc(d.businessPurpose)}</td></tr>
       <tr><th>인터페이스 URL</th><td colspan="3">${esc(d.apiKey)}</td></tr>
     </table>
     <div class="sec-title">REQUEST</div>

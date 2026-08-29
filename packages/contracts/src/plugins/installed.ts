@@ -48,6 +48,58 @@ export const InstalledPluginRecordSchema = z.object({
 
 export type InstalledPluginRecord = z.infer<typeof InstalledPluginRecordSchema>;
 
+// Lightweight wire shape for plugin pickers. The full installed record can
+// contain a large, localized manifest (including example prompts and asset
+// lists); loading hundreds of those records on Home made the initial response
+// several megabytes. This DTO keeps only fields needed to render/filter cards
+// and seed the composer. GET /api/plugins remains the compatible full-record
+// endpoint unless callers explicitly request the summary view.
+export const InstalledPluginSummarySchema = z.object({
+  summary:             z.literal(true),
+  id:                  z.string().min(1),
+  title:               z.string(),
+  version:             z.string().optional(),
+  sourceKind:          PluginSourceKindSchema.optional(),
+  sourceMarketplaceId: z.string().optional(),
+  sourceMarketplaceEntryName:    z.string().optional(),
+  sourceMarketplaceEntryVersion: z.string().optional(),
+  marketplaceTrust:              MarketplaceTrustSchema.optional(),
+  trust:               TrustTierSchema,
+  // Omitted when empty/default. Picker records are not persistence records;
+  // callers hydrate the one selected plugin through GET /api/plugins/:id.
+  capabilitiesGranted: z.array(z.string()).optional(),
+  updatedAt:           z.number().optional(),
+  name:                z.string().min(1).optional(),
+  description:         z.string().optional(),
+  tags:     z.array(z.string()).optional(),
+  kind:     z.string().optional(),
+  taskKind: z.string().optional(),
+  mode:     z.string().optional(),
+  platform: z.string().optional(),
+  scenario: z.string().optional(),
+  surface:  z.string().optional(),
+  hidden:   z.boolean().optional(),
+  preview:  z.record(z.unknown()).optional(),
+  bakedPreview: z.record(z.unknown()).optional(),
+  hasQuery: z.boolean().optional(),
+  pipelineAtoms: z.array(z.string()).optional(),
+  designSystemRef: z.string().optional(),
+  exampleOutput: z.object({
+    path:  z.string(),
+    title: z.string().optional(),
+  }).passthrough().optional(),
+});
+
+export type InstalledPluginSummary = z.infer<typeof InstalledPluginSummarySchema>;
+
+export const InstalledPluginSummaryListResponseSchema = z.object({
+  plugins: z.array(InstalledPluginSummarySchema),
+});
+
+export type InstalledPluginSummaryListResponse = z.infer<
+  typeof InstalledPluginSummaryListResponseSchema
+>;
+
 export const InstalledPluginListResponseSchema = z.object({
   plugins: z.array(InstalledPluginRecordSchema),
 });

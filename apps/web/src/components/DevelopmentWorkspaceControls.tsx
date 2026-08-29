@@ -1,14 +1,16 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 
 import type {
   DatabaseConnectionSummary,
   DevelopmentConfigsResponse,
   DevelopmentRunConfig,
+  DevelopmentServersResponse,
   DevelopmentServerStatus,
+  ProjectDatabaseContext,
   ProjectMetadata,
 } from '@open-design/contracts';
 import { getOpenDesignHost } from '@open-design/host';
-import { useT } from '../i18n';
+import { useI18n } from '../i18n';
 import { Icon } from './Icon';
 import {
   getActiveBrowserVerification,
@@ -24,13 +26,11 @@ type Props = {
   projectId: string;
   metadata: ProjectMetadata;
   resolvedDir?: string | null;
+  automaticVerificationAvailable?: boolean;
   onMetadataChange: (metadata: ProjectMetadata) => void;
   onOpenUrl: (url: string) => void;
   onOpenChanges: () => void;
-};
-
-type DevelopmentServersResponse = {
-  servers: DevelopmentServerStatus[];
+  onActiveProjectStateChange?: (state: { projectPath: string | null; ready: boolean }) => void;
 };
 
 function runtimePath(status: DevelopmentServerStatus): string {
@@ -55,6 +55,76 @@ async function responseJson<T>(response: Response): Promise<T> {
   const payload = await response.json().catch(() => null) as T | { error?: { message?: string } } | null;
   if (!response.ok) throw new Error((payload as { error?: { message?: string } } | null)?.error?.message ?? `HTTP ${response.status}`);
   return payload as T;
+}
+
+function developmentModuleKey(value: string | null | undefined): string {
+  return value?.trim().replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/$/, '') || '.';
+}
+
+export function activeModuleDatabaseContext(
+  metadata: ProjectMetadata,
+  projectPath = metadata.development?.activeProjectPath,
+): ProjectDatabaseContext | null {
+  const key = developmentModuleKey(projectPath);
+  const scoped = metadata.development?.databaseContextsByProject;
+  if (scoped !== undefined) return scoped[key] ?? null;
+  return developmentModuleKey(metadata.development?.activeProjectPath) === key
+    ? metadata.databaseContext ?? null
+    : null;
+}
+
+export function metadataWithSelectedModuleDatabase(
+  metadata: ProjectMetadata,
+  projectPath: string,
+  databaseContext: ProjectDatabaseContext | null,
+): ProjectMetadata {
+  const activeKey = developmentModuleKey(metadata.development?.activeProjectPath ?? projectPath);
+  const targetKey = developmentModuleKey(projectPath);
+  const scoped = { ...(metadata.development?.databaseContextsByProject ?? {}) };
+  if (metadata.development?.databaseContextsByProject === undefined && metadata.databaseContext) {
+    scoped[activeKey] = metadata.databaseContext;
+  }
+  if (databaseContext) scoped[targetKey] = databaseContext;
+  else delete scoped[targetKey];
+  const effectiveActiveContext = scoped[activeKey] ?? null;
+  const { databaseContext: _legacyDatabaseContext, ...metadataWithoutDatabase } = metadata;
+  return {
+    ...metadataWithoutDatabase,
+    ...(effectiveActiveContext ? { databaseContext: effectiveActiveContext } : {}),
+    development: {
+      ...metadata.development,
+      // Keep an empty map authoritative after an explicit disconnect. This
+      // prevents a stale top-level compatibility value from being inherited.
+      databaseContextsByProject: scoped,
+    },
+  };
+}
+
+export function metadataWithActiveDevelopmentModule(
+  metadata: ProjectMetadata,
+  projectPath: string,
+  previousProjectPath?: string,
+): ProjectMetadata {
+  const previousKey = developmentModuleKey(
+    previousProjectPath ?? metadata.development?.activeProjectPath ?? projectPath,
+  );
+  const nextKey = developmentModuleKey(projectPath);
+  const hadScopedContexts = metadata.development?.databaseContextsByProject !== undefined;
+  const scoped = { ...(metadata.development?.databaseContextsByProject ?? {}) };
+  if (!hadScopedContexts && metadata.databaseContext) scoped[previousKey] = metadata.databaseContext;
+  const nextContext = scoped[nextKey] ?? null;
+  const { databaseContext: _legacyDatabaseContext, ...metadataWithoutDatabase } = metadata;
+  return {
+    ...metadataWithoutDatabase,
+    ...(nextContext ? { databaseContext: nextContext } : {}),
+    development: {
+      ...metadata.development,
+      activeProjectPath: nextKey,
+      ...(hadScopedContexts || Object.keys(scoped).length > 0
+        ? { databaseContextsByProject: scoped }
+        : { databaseContextsByProject: undefined }),
+    },
+  };
 }
 
 export function parseRunArguments(input: string): string[] {
@@ -103,31 +173,140 @@ export function parseRunArguments(input: string): string[] {
   return values;
 }
 
-export function DevelopmentWorkspaceControls({ projectId, metadata, resolvedDir, onMetadataChange, onOpenUrl, onOpenChanges }: Props) {
-  const t = useT();
+const RUN_ENVIRONMENT_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const RUN_ENVIRONMENT_RESERVED_KEYS = new Set([
+  'ASPNETCORE_URLS',
+  'BROWSER',
+  'GRADIO_SERVER_PORT',
+  'PORT',
+  'SERVER_PORT',
+  'STREAMLIT_SERVER_PORT',
+]);
+
+export function parseRunEnvironment(input: string): Record<string, string> {
+  const environment: Record<string, string> = {};
+  const lines = input.split(/\r?\n/);
+  for (const rawLine of lines) {
+    if (!rawLine.trim() || rawLine.trimStart().startsWith('#')) continue;
+    const separator = rawLine.indexOf('=');
+    if (separator < 1) throw new Error('Environment variables must use NAME=value');
+    const key = rawLine.slice(0, separator).trim();
+    const value = rawLine.slice(separator + 1);
+    if (!RUN_ENVIRONMENT_KEY_PATTERN.test(key) || RUN_ENVIRONMENT_RESERVED_KEYS.has(key.toUpperCase())) {
+      throw new Error(`Environment variable ${key} is invalid or reserved`);
+    }
+    if (Object.hasOwn(environment, key)) throw new Error(`Environment variable ${key} is duplicated`);
+    if (value.length > 8_192 || value.includes('\0')) throw new Error(`Environment variable ${key} is too long`);
+    environment[key] = value;
+    if (Object.keys(environment).length > 64) throw new Error('At most 64 environment variables are supported');
+  }
+  return environment;
+}
+
+function normalizeRunNetwork(portInput: string, urlInput: string): { port: number; url: string } {
+  const port = Number(portInput.trim());
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error('Port must be an integer between 1 and 65535');
+  }
+  let url: URL;
+  try {
+    url = new URL(urlInput.trim());
+  } catch {
+    throw new Error('URL must be a valid local HTTP(S) URL');
+  }
+  const hostname = url.hostname.toLowerCase();
+  if ((url.protocol !== 'http:' && url.protocol !== 'https:')
+    || (hostname !== 'localhost' && hostname !== '127.0.0.1' && hostname !== '[::1]' && hostname !== '::1')
+    || url.username || url.password) {
+    throw new Error('URL must use HTTP(S), a loopback host, and no credentials');
+  }
+  url.port = String(port);
+  return { port, url: url.toString().replace(/\/$/, url.pathname === '/' ? '' : '/') };
+}
+
+export function DevelopmentWorkspaceControls({
+  projectId,
+  metadata,
+  resolvedDir,
+  automaticVerificationAvailable = true,
+  onMetadataChange,
+  onOpenUrl,
+  onOpenChanges,
+  onActiveProjectStateChange,
+}: Props) {
+  const { locale, t } = useI18n();
+  const runCopy = locale === 'ko'
+    ? {
+        environment: '세션 환경변수',
+        environmentHint: 'NAME=value 형식입니다. 이 앱 세션에서만 실행 프로세스에 전달되고 프로젝트에는 저장되지 않습니다. 공유 비밀값은 OS 또는 CLI 자격 증명 저장소를 사용하세요.',
+        invalidEnvironment: '세션 환경변수를 확인하세요. NAME=value 형식이며 포트·브라우저 제어 변수는 실행 설정에서 관리합니다.',
+        invalidNetwork: '포트와 로컬 URL을 확인하세요.',
+        automaticVerificationUnavailable: '자동 화면 검증은 로컬 CLI 실행에서만 사용할 수 있습니다. BYOK에서는 사용할 수 없습니다.',
+        localCliOnly: '로컬 CLI 전용',
+        port: '포트',
+        url: '준비 상태 URL',
+      }
+    : {
+        environment: 'Session environment',
+        environmentHint: 'Use NAME=value. Values are passed only to this process for the current app session and are never saved in the project. Keep shared secrets in the OS or CLI credential store.',
+        invalidEnvironment: 'Check the session environment. Use NAME=value; port and browser control variables are managed by the run settings.',
+        invalidNetwork: 'Check the port and local URL.',
+        automaticVerificationUnavailable: 'Automatic screen verification is available only for local CLI runs, not BYOK.',
+        localCliOnly: 'Local CLI only',
+        port: 'Port',
+        url: 'Readiness URL',
+      };
   const [detected, setDetected] = useState<DevelopmentConfigsResponse | null>(null);
   const [runtime, setRuntime] = useState<DevelopmentServerStatus | null>(null);
   const [runtimeStatuses, setRuntimeStatuses] = useState<DevelopmentServerStatus[]>([]);
   const [activeProjectPath, setActiveProjectPath] = useState(metadata.development?.activeProjectPath ?? '');
+  const [resolvedProjectSelection, setResolvedProjectSelection] = useState<{
+    loadKey: string;
+    projectPath: string;
+  } | null>(null);
   const [connections, setConnections] = useState<DatabaseConnectionSummary[]>([]);
   const [busy, setBusy] = useState<'detect' | 'start' | 'stop' | null>(null);
   const [launchElapsedSeconds, setLaunchElapsedSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [runSettingsOpen, setRunSettingsOpen] = useState(false);
+  const [runSettingsProjectKey, setRunSettingsProjectKey] = useState<string | null>(null);
+  const [projectMenuOpen, setProjectMenuOpen] = useState(false);
+  const [logsOpen, setLogsOpen] = useState(false);
   const [draftProfile, setDraftProfile] = useState('');
   const [draftArguments, setDraftArguments] = useState('');
+  const [draftPort, setDraftPort] = useState('');
+  const [draftUrl, setDraftUrl] = useState('');
+  const [draftEnvironment, setDraftEnvironment] = useState('');
   const guideAutoOpenChecked = useRef(false);
   const openBrowserWhenReady = useRef(false);
   const activeProjectPathRef = useRef(activeProjectPath);
   const detectedByProjectPathRef = useRef(new Map<string, DevelopmentConfigsResponse>());
   const runtimeByProjectPathRef = useRef(new Map<string, DevelopmentServerStatus>());
   const detectionRequestRef = useRef(0);
+  const loadAbortRef = useRef<AbortController | null>(null);
+  const runtimeSummaryAbortRef = useRef<AbortController | null>(null);
+  const projectPickerRef = useRef<HTMLDivElement | null>(null);
+  const projectTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const projectOptionRefs = useRef(new Map<string, HTMLButtonElement>());
+  const logViewportRef = useRef<HTMLPreElement | null>(null);
+  const logFollowRef = useRef(true);
+  const metadataRef = useRef(metadata);
+  const sessionEnvironmentByProjectRef = useRef(new Map<string, string>());
   const resolvedDirRef = useRef<string | null>(null);
+  const initialLoadKeyRef = useRef('');
   const [browserVerificationActive, setBrowserVerificationActive] = useState(
     () => Boolean(getActiveBrowserVerification(projectId)),
   );
-  const preferredId = metadata.development?.runConfigId;
+  const runOverrideKey = activeProjectPath || '.';
+  const activeDatabaseContext = activeModuleDatabaseContext(metadata, runOverrideKey);
+  const moduleOverride = metadata.development?.runOverridesByProject?.[runOverrideKey];
+  // Top-level fields predate multi-module workspaces. Read them only while the
+  // metadata still points at this exact module; persistActiveProjectPath
+  // migrates them into the module map before switching away.
+  const legacySettingsApply = (metadata.development?.activeProjectPath || '.') === runOverrideKey;
+  const preferredId = moduleOverride?.configId
+    ?? (legacySettingsApply ? metadata.development?.runConfigId : undefined);
   const selectedId = preferredId && detected?.configs.some((item) => item.id === preferredId)
     ? preferredId
     : detected?.recommendedConfigId ?? '';
@@ -135,8 +314,15 @@ export function DevelopmentWorkspaceControls({ projectId, metadata, resolvedDir,
     () => detected?.configs.find((item) => item.id === selectedId) ?? null,
     [detected, selectedId],
   );
-  const effectiveProfile = metadata.development?.runProfile ?? selected?.profile ?? '';
-  const effectiveArguments = metadata.development?.runArguments ?? '';
+  const effectiveProfile = moduleOverride?.profile
+    ?? (legacySettingsApply ? metadata.development?.runProfile : undefined)
+    ?? selected?.profile
+    ?? '';
+  const effectiveArguments = moduleOverride?.arguments
+    ?? (legacySettingsApply ? metadata.development?.runArguments : undefined)
+    ?? '';
+  const effectivePort = moduleOverride?.port ?? selected?.port ?? null;
+  const effectiveUrl = moduleOverride?.url ?? selected?.url ?? '';
   const springProfiles = useMemo(
     () => Array.from(new Set(detected?.configs
       .filter((item) => item.framework === 'Spring Boot' && item.profile)
@@ -145,16 +331,54 @@ export function DevelopmentWorkspaceControls({ projectId, metadata, resolvedDir,
   );
 
   activeProjectPathRef.current = activeProjectPath;
+  metadataRef.current = metadata;
 
-  const rememberRuntimes = useCallback((statuses: DevelopmentServerStatus[]) => {
-    const next = new Map(runtimeByProjectPathRef.current);
-    for (const status of statuses) next.set(runtimePath(status), status);
+  const rememberRuntimes = useCallback((
+    statuses: DevelopmentServerStatus[],
+    options: { preserveLogs?: boolean; replace?: boolean } = {},
+  ) => {
+    const previousStatuses = runtimeByProjectPathRef.current;
+    const next = options.replace ? new Map<string, DevelopmentServerStatus>() : new Map(previousStatuses);
+    for (const status of statuses) {
+      const path = runtimePath(status);
+      const previous = previousStatuses.get(path);
+      next.set(path, options.preserveLogs && status.logs.length === 0 && (previous?.logs.length ?? 0) > 0
+        ? { ...status, logs: previous!.logs }
+        : status);
+    }
     runtimeByProjectPathRef.current = next;
     setRuntimeStatuses([...next.values()]);
+    return next;
   }, []);
+
+  const loadRuntimeSummaries = useCallback(async (refresh = false) => {
+    if (!resolvedDir) return;
+    runtimeSummaryAbortRef.current?.abort();
+    const controller = new AbortController();
+    runtimeSummaryAbortRef.current = controller;
+    try {
+      const params = new URLSearchParams({ logs: '0' });
+      if (refresh) params.set('refresh', '1');
+      const response = await fetch(
+        `/api/projects/${encodeURIComponent(projectId)}/development/servers?${params}`,
+        { signal: controller.signal },
+      ).then((value) => responseJson<DevelopmentServersResponse>(value));
+      if (controller.signal.aborted) return;
+      const next = rememberRuntimes(response.servers ?? [], { preserveLogs: true, replace: true });
+      const selectedPath = activeProjectPathRef.current || '.';
+      setRuntime(next.get(selectedPath) ?? idleRuntime(projectId, selectedPath));
+    } catch (caught) {
+      if (caught instanceof DOMException && caught.name === 'AbortError') return;
+    } finally {
+      if (runtimeSummaryAbortRef.current === controller) runtimeSummaryAbortRef.current = null;
+    }
+  }, [projectId, rememberRuntimes, resolvedDir]);
 
   const load = useCallback(async (refresh = false, requestedProjectPath?: string) => {
     if (!resolvedDir) return;
+    loadAbortRef.current?.abort();
+    const controller = new AbortController();
+    loadAbortRef.current = controller;
     const requestId = detectionRequestRef.current + 1;
     detectionRequestRef.current = requestId;
     const projectPath = requestedProjectPath ?? activeProjectPathRef.current;
@@ -174,52 +398,104 @@ export function DevelopmentWorkspaceControls({ projectId, metadata, resolvedDir,
       if (refresh) configParams.set('refresh', '1');
       const configQuery = configParams.size > 0 ? `?${configParams}` : '';
       const statusQuery = statusParams.size > 0 ? `?${statusParams}` : '';
-      const [configs, status, allStatuses] = await Promise.all([
+      const [configs, status] = await Promise.all([
         cachedDetection
           ? Promise.resolve(cachedDetection)
-          : fetch(`/api/projects/${encodeURIComponent(projectId)}/development/configs${configQuery}`).then((response) => responseJson<DevelopmentConfigsResponse>(response)),
-        fetch(`/api/projects/${encodeURIComponent(projectId)}/development/server${statusQuery}`).then((response) => responseJson<DevelopmentServerStatus>(response)),
-        fetch(`/api/projects/${encodeURIComponent(projectId)}/development/servers`).then((response) => responseJson<DevelopmentServersResponse>(response)),
+          : fetch(
+            `/api/projects/${encodeURIComponent(projectId)}/development/configs${configQuery}`,
+            { signal: controller.signal },
+          ).then((response) => responseJson<DevelopmentConfigsResponse>(response)),
+        fetch(
+          `/api/projects/${encodeURIComponent(projectId)}/development/server${statusQuery}`,
+          { signal: controller.signal },
+        ).then((response) => responseJson<DevelopmentServerStatus>(response)),
       ]);
-      if (requestId !== detectionRequestRef.current) return;
-      const resolvedProjectPath = configs.activeProjectPath || runtimePath(status);
-      detectedByProjectPathRef.current.set(resolvedProjectPath, configs);
-      setDetected(configs);
-      if (configs.activeProjectPath) {
-        activeProjectPathRef.current = configs.activeProjectPath;
-        setActiveProjectPath(configs.activeProjectPath);
+      if (controller.signal.aborted || requestId !== detectionRequestRef.current) return;
+      const resolvedProjectPath = projectPath || configs.activeProjectPath || runtimePath(status);
+      const selectedConfigs = configs.activeProjectPath === resolvedProjectPath
+        ? configs
+        : { ...configs, activeProjectPath: resolvedProjectPath };
+      if (resolvedProjectPath !== activeProjectPathRef.current) {
+        // A settings draft belongs to the module that opened it. Never let a
+        // delayed detection response move that draft onto a sibling module.
+        setRunSettingsOpen(false);
+        setRunSettingsProjectKey(null);
       }
-      rememberRuntimes([...(allStatuses.servers ?? []), status]);
+      detectedByProjectPathRef.current.set(resolvedProjectPath, selectedConfigs);
+      setDetected(selectedConfigs);
+      if (resolvedProjectPath) {
+        activeProjectPathRef.current = resolvedProjectPath;
+        setActiveProjectPath(resolvedProjectPath);
+        setResolvedProjectSelection({
+          loadKey: `${projectId}\0${resolvedDir}`,
+          projectPath: resolvedProjectPath,
+        });
+      }
+      rememberRuntimes([status]);
       setRuntime(status);
     } catch (caught) {
+      if ((caught as { name?: string } | null)?.name === 'AbortError') return;
       if (requestId !== detectionRequestRef.current) return;
       setError(caught instanceof Error ? caught.message : t('development.detectFailed'));
     } finally {
-      if (requestId === detectionRequestRef.current) setBusy(null);
+      if (requestId === detectionRequestRef.current) {
+        setBusy(null);
+        if (loadAbortRef.current === controller) loadAbortRef.current = null;
+      }
     }
   }, [projectId, rememberRuntimes, resolvedDir, t]);
 
   useEffect(() => {
     if (!resolvedDir) return;
+    const loadKey = `${projectId}\0${resolvedDir}`;
+    if (initialLoadKeyRef.current === loadKey) return;
+    initialLoadKeyRef.current = loadKey;
     const previousDir = resolvedDirRef.current;
     const folderChanged = previousDir != null && previousDir !== resolvedDir;
     resolvedDirRef.current = resolvedDir;
     if (folderChanged) {
+      loadAbortRef.current?.abort();
+      runtimeSummaryAbortRef.current?.abort();
       activeProjectPathRef.current = '';
       detectedByProjectPathRef.current.clear();
       runtimeByProjectPathRef.current.clear();
       setActiveProjectPath('');
+      setResolvedProjectSelection(null);
       setDetected(null);
       setRuntime(null);
       setRuntimeStatuses([]);
+      setBusy('detect');
+      setRunSettingsOpen(false);
+      setRunSettingsProjectKey(null);
       openBrowserWhenReady.current = false;
-      void fetch(`/api/projects/${encodeURIComponent(projectId)}/development/server/stop-all`, { method: 'POST' })
-        .catch(() => null)
-        .finally(() => { void load(true, ''); });
+      void (async () => {
+        let stopFailure: string | null = null;
+        try {
+          const stopped = await fetch(
+            `/api/projects/${encodeURIComponent(projectId)}/development/server/stop-all`,
+            { method: 'POST' },
+          ).then((value) => responseJson<DevelopmentServersResponse>(value));
+          if (stopped.failures?.length) {
+            stopFailure = stopped.failures
+              .map((failure) => `${failure.projectPath}: ${failure.error}`)
+              .join('\n');
+          }
+        } catch (caught) {
+          stopFailure = caught instanceof Error ? caught.message : String(caught);
+        }
+        if (initialLoadKeyRef.current !== loadKey) return;
+        await Promise.all([load(true, ''), loadRuntimeSummaries(true)]);
+        if (initialLoadKeyRef.current === loadKey && stopFailure) setError(stopFailure);
+      })();
       return;
     }
     void load();
-  }, [load, projectId, resolvedDir]);
+    void loadRuntimeSummaries(true);
+  }, [load, loadRuntimeSummaries, projectId, resolvedDir]);
+  useEffect(() => () => {
+    loadAbortRef.current?.abort();
+    runtimeSummaryAbortRef.current?.abort();
+  }, []);
   useEffect(() => {
     let cancelled = false;
     const database = getOpenDesignHost()?.database;
@@ -235,8 +511,29 @@ export function DevelopmentWorkspaceControls({ projectId, metadata, resolvedDir,
   useEffect(() => {
     const detectedPath = detected?.activeProjectPath;
     if (!detectedPath || metadata.development?.activeProjectPath === detectedPath) return;
-    persistDevelopment({ activeProjectPath: detectedPath });
+    persistActiveProjectPath(detectedPath);
   }, [detected?.activeProjectPath, metadata.development?.activeProjectPath]);
+  useEffect(() => {
+    if (!onActiveProjectStateChange) return;
+    const projectPath = activeProjectPath || null;
+    const loadKey = `${projectId}\0${resolvedDir ?? ''}`;
+    onActiveProjectStateChange({
+      projectPath,
+      ready: Boolean(
+        projectPath
+        && busy !== 'detect'
+        && resolvedProjectSelection?.loadKey === loadKey
+        && resolvedProjectSelection.projectPath === projectPath
+      ),
+    });
+  }, [
+    activeProjectPath,
+    busy,
+    onActiveProjectStateChange,
+    projectId,
+    resolvedDir,
+    resolvedProjectSelection,
+  ]);
   useEffect(() => {
     if (!resolvedDir || !detected || busy != null || guideAutoOpenChecked.current) return;
     guideAutoOpenChecked.current = true;
@@ -247,6 +544,31 @@ export function DevelopmentWorkspaceControls({ projectId, metadata, resolvedDir,
       setBrowserVerificationActive(Boolean(getActiveBrowserVerification(projectId)));
     }
   }), [projectId]);
+  useEffect(() => {
+    const active = runtimeStatuses.some((status) => status.state === 'starting' || status.state === 'ready');
+    if (!active) return;
+    const timer = window.setInterval(() => { void loadRuntimeSummaries(true); }, 2_500);
+    return () => window.clearInterval(timer);
+  }, [loadRuntimeSummaries, runtimeStatuses]);
+  useEffect(() => {
+    if (!projectMenuOpen) return;
+    const frame = window.requestAnimationFrame(() => {
+      projectOptionRefs.current.get(activeProjectPath)?.focus();
+    });
+    const close = (event: PointerEvent) => {
+      if (!projectPickerRef.current?.contains(event.target as Node)) setProjectMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', close);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener('pointerdown', close);
+    };
+  }, [activeProjectPath, projectMenuOpen]);
+  useEffect(() => {
+    if (!logsOpen || !logViewportRef.current || !logFollowRef.current) return;
+    logViewportRef.current.scrollTop = logViewportRef.current.scrollHeight;
+  }, [logsOpen, runtime?.logs.length]);
+  useEffect(() => { logFollowRef.current = true; }, [activeProjectPath]);
   useEffect(() => {
     if (busy !== 'start' && runtime?.state !== 'starting') {
       setLaunchElapsedSeconds(0);
@@ -260,18 +582,24 @@ export function DevelopmentWorkspaceControls({ projectId, metadata, resolvedDir,
     return () => window.clearInterval(timer);
   }, [busy, runtime?.startedAt, runtime?.state]);
   useEffect(() => {
-    if (runtime?.state !== 'starting') return;
+    const shouldPoll = runtime?.state === 'starting' || logsOpen;
+    if (!shouldPoll) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let controller: AbortController | null = null;
     const poll = async () => {
       try {
+        controller?.abort();
+        controller = new AbortController();
+        const requestedPath = activeProjectPathRef.current || '.';
         const params = new URLSearchParams();
-        if (activeProjectPathRef.current) params.set('projectPath', activeProjectPathRef.current);
+        if (requestedPath) params.set('projectPath', requestedPath);
         const query = params.size > 0 ? `?${params}` : '';
-        const next = await fetch(`/api/projects/${encodeURIComponent(projectId)}/development/server${query}`)
+        const next = await fetch(`/api/projects/${encodeURIComponent(projectId)}/development/server${query}`, { signal: controller.signal })
           .then((response) => responseJson<DevelopmentServerStatus>(response));
-        if (cancelled) return;
+        if (cancelled || requestedPath !== (activeProjectPathRef.current || '.')) return;
         rememberRuntimes([next]);
+        if (runtimePath(next) !== (activeProjectPathRef.current || '.')) return;
         setRuntime(next);
         if (next.state === 'ready' && next.url && openBrowserWhenReady.current) {
           openBrowserWhenReady.current = false;
@@ -279,11 +607,12 @@ export function DevelopmentWorkspaceControls({ projectId, metadata, resolvedDir,
         } else if (next.state === 'failed') {
           openBrowserWhenReady.current = false;
           setError(next.error ?? t('development.startFailed'));
-        } else if (next.state === 'starting') {
-          timer = setTimeout(() => void poll(), 750);
+        }
+        if (next.state === 'starting' || (logsOpen && next.state === 'ready')) {
+          timer = setTimeout(() => void poll(), next.state === 'starting' ? 750 : 1_250);
         }
       } catch (caught) {
-        if (cancelled) return;
+        if (cancelled || (caught as { name?: string } | null)?.name === 'AbortError') return;
         setError(caught instanceof Error ? caught.message : t('development.startFailed'));
         timer = setTimeout(() => void poll(), 1_500);
       }
@@ -291,30 +620,103 @@ export function DevelopmentWorkspaceControls({ projectId, metadata, resolvedDir,
     timer = setTimeout(() => void poll(), 300);
     return () => {
       cancelled = true;
+      controller?.abort();
       if (timer) clearTimeout(timer);
     };
-  }, [onOpenUrl, projectId, rememberRuntimes, runtime?.state, t]);
+  }, [activeProjectPath, logsOpen, onOpenUrl, projectId, rememberRuntimes, runtime?.state, t]);
 
   function persistDevelopment(next: Partial<NonNullable<ProjectMetadata['development']>>) {
-    onMetadataChange({
-      ...metadata,
-      development: { autoVerify: metadata.development?.autoVerify !== false, ...metadata.development, ...next },
+    const currentMetadata = metadataRef.current;
+    const nextMetadata: ProjectMetadata = {
+      ...currentMetadata,
+      development: { autoVerify: currentMetadata.development?.autoVerify !== false, ...currentMetadata.development, ...next },
+    };
+    // Keep consecutive same-tick edits (for example save settings then switch
+    // module) based on the latest optimistic metadata instead of waiting for
+    // the parent persistence round trip to re-render this component.
+    metadataRef.current = nextMetadata;
+    onMetadataChange(nextMetadata);
+  }
+
+  function persistActiveProjectPath(projectPath: string, previousProjectPath?: string) {
+    const currentMetadata = metadataRef.current;
+    const development = currentMetadata.development;
+    if (development?.activeProjectPath === projectPath) return;
+    const previousKey = previousProjectPath
+      || development?.activeProjectPath
+      || activeProjectPathRef.current
+      || projectPath
+      || '.';
+    const currentOverrides = { ...(development?.runOverridesByProject ?? {}) };
+    const previousOverride = { ...(currentOverrides[previousKey] ?? {}) };
+    if (development?.runConfigId && previousOverride.configId == null) previousOverride.configId = development.runConfigId;
+    if (development?.runProfile && previousOverride.profile == null) previousOverride.profile = development.runProfile;
+    if (development?.runArguments && previousOverride.arguments == null) previousOverride.arguments = development.runArguments;
+    if (Object.keys(previousOverride).length > 0) currentOverrides[previousKey] = previousOverride;
+    const moduleMetadata = metadataWithActiveDevelopmentModule(currentMetadata, projectPath, previousKey);
+    const nextMetadata: ProjectMetadata = {
+      ...moduleMetadata,
+      development: {
+        autoVerify: moduleMetadata.development?.autoVerify !== false,
+        ...moduleMetadata.development,
+        runConfigId: undefined,
+        runProfile: undefined,
+        runArguments: undefined,
+        runOverridesByProject: Object.keys(currentOverrides).length > 0 ? currentOverrides : undefined,
+      },
+    };
+    metadataRef.current = nextMetadata;
+    onMetadataChange(nextMetadata);
+  }
+
+  function persistModuleRunSettings(next: {
+    arguments?: string;
+    configId?: string;
+    profile?: string;
+  }) {
+    const currentOverrides = { ...(metadataRef.current.development?.runOverridesByProject ?? {}) };
+    const current = { ...(currentOverrides[runOverrideKey] ?? {}) };
+    const merged = { ...current, ...next };
+    for (const key of ['arguments', 'configId', 'profile'] as const) {
+      if (!merged[key]) delete merged[key];
+    }
+    if (Object.keys(merged).length > 0) currentOverrides[runOverrideKey] = merged;
+    else delete currentOverrides[runOverrideKey];
+    persistDevelopment({
+      runConfigId: undefined,
+      runProfile: undefined,
+      runArguments: undefined,
+      runOverridesByProject: Object.keys(currentOverrides).length > 0 ? currentOverrides : undefined,
     });
   }
 
   async function start() {
     if (!selected) return;
     let applicationArgs: string[];
+    let environment: Record<string, string>;
+    let network: { port: number; url: string };
     try {
       applicationArgs = parseRunArguments(effectiveArguments);
     } catch {
       setError(t('development.invalidArguments'));
       return;
     }
+    try {
+      environment = parseRunEnvironment(sessionEnvironmentByProjectRef.current.get(runOverrideKey) ?? '');
+    } catch {
+      setError(runCopy.invalidEnvironment);
+      return;
+    }
+    try {
+      network = normalizeRunNetwork(String(effectivePort ?? ''), effectiveUrl);
+    } catch {
+      setError(runCopy.invalidNetwork);
+      return;
+    }
     setBusy('start');
     setError(null);
     openBrowserWhenReady.current = true;
-    persistDevelopment({ runConfigId: selected.id });
+    persistModuleRunSettings({ configId: selected.id });
     try {
       const next = await fetch(`/api/projects/${encodeURIComponent(projectId)}/development/server/start`, {
         method: 'POST',
@@ -325,6 +727,9 @@ export function DevelopmentWorkspaceControls({ projectId, metadata, resolvedDir,
           overrides: {
             ...(selected.framework === 'Spring Boot' ? { profile: effectiveProfile } : {}),
             ...(applicationArgs.length > 0 ? { applicationArgs } : {}),
+            port: network.port,
+            url: network.url,
+            ...(Object.keys(environment).length > 0 ? { environment } : {}),
           },
         }),
       }).then((response) => responseJson<DevelopmentServerStatus>(response));
@@ -366,40 +771,117 @@ export function DevelopmentWorkspaceControls({ projectId, metadata, resolvedDir,
   }
 
   function selectConfig(config: DevelopmentRunConfig | null) {
-    if (config) persistDevelopment({ runConfigId: config.id, runProfile: undefined });
+    if (config) persistModuleRunSettings({ configId: config.id, profile: undefined });
   }
 
   function openRunSettings() {
     setDraftProfile(effectiveProfile);
     setDraftArguments(effectiveArguments);
+    setDraftPort(String(effectivePort ?? selected?.port ?? ''));
+    setDraftUrl(effectiveUrl || selected?.url || '');
+    setDraftEnvironment(sessionEnvironmentByProjectRef.current.get(runOverrideKey) ?? '');
+    setRunSettingsProjectKey(runOverrideKey);
     setRunSettingsOpen(true);
   }
 
   function saveRunSettings() {
+    const settingsKey = runSettingsProjectKey;
+    if (settingsKey == null || settingsKey !== runOverrideKey) {
+      setRunSettingsOpen(false);
+      setRunSettingsProjectKey(null);
+      return;
+    }
+    let network: { port: number; url: string };
     try {
       parseRunArguments(draftArguments);
+    } catch {
+      setError(t('development.invalidArguments'));
+      return;
+    }
+    try {
+      parseRunEnvironment(draftEnvironment);
+    } catch {
+      setError(runCopy.invalidEnvironment);
+      return;
+    }
+    try {
+      network = normalizeRunNetwork(draftPort, draftUrl);
+    } catch {
+      setError(runCopy.invalidNetwork);
+      return;
+    }
+    try {
       const profile = draftProfile.trim();
       const matchingConfig = detected?.configs.find((item) => item.framework === 'Spring Boot' && (item.profile ?? '') === profile);
+      const currentOverrides = { ...(metadataRef.current.development?.runOverridesByProject ?? {}) };
+      const nextOverride = {
+        ...(currentOverrides[settingsKey] ?? {}),
+        configId: matchingConfig?.id ?? selected?.id,
+        profile: matchingConfig ? undefined : profile || undefined,
+        arguments: draftArguments.trim() || undefined,
+      };
+      if (network.port === selected?.port && network.url === selected?.url) {
+        delete nextOverride.port;
+        delete nextOverride.url;
+      } else {
+        nextOverride.port = network.port;
+        nextOverride.url = network.url;
+      }
+      for (const key of ['arguments', 'configId', 'profile'] as const) {
+        if (!nextOverride[key]) delete nextOverride[key];
+      }
+      if (Object.keys(nextOverride).length > 0) currentOverrides[settingsKey] = nextOverride;
+      else delete currentOverrides[settingsKey];
+      sessionEnvironmentByProjectRef.current.set(settingsKey, draftEnvironment.trim());
       persistDevelopment({
-        runConfigId: matchingConfig?.id ?? selected?.id,
-        runProfile: matchingConfig ? undefined : profile || undefined,
-        runArguments: draftArguments.trim() || undefined,
+        runConfigId: undefined,
+        runProfile: undefined,
+        runArguments: undefined,
+        runOverridesByProject: Object.keys(currentOverrides).length > 0 ? currentOverrides : undefined,
       });
       setError(null);
       setRunSettingsOpen(false);
+      setRunSettingsProjectKey(null);
     } catch {
       setError(t('development.invalidArguments'));
     }
   }
 
   function resetRunSettings() {
+    const settingsKey = runSettingsProjectKey;
+    if (settingsKey == null || settingsKey !== runOverrideKey) {
+      setRunSettingsOpen(false);
+      setRunSettingsProjectKey(null);
+      return;
+    }
     setDraftProfile(selected?.profile ?? '');
     setDraftArguments('');
-    persistDevelopment({ runProfile: undefined, runArguments: undefined });
+    setDraftPort(String(selected?.port ?? ''));
+    setDraftUrl(selected?.url ?? '');
+    setDraftEnvironment('');
+    sessionEnvironmentByProjectRef.current.delete(settingsKey);
+    const currentOverrides = { ...(metadataRef.current.development?.runOverridesByProject ?? {}) };
+    delete currentOverrides[settingsKey];
+    persistDevelopment({
+      runConfigId: undefined,
+      runProfile: undefined,
+      runArguments: undefined,
+      runOverridesByProject: Object.keys(currentOverrides).length > 0 ? currentOverrides : undefined,
+    });
     setError(null);
   }
 
   function selectProject(projectPath: string) {
+    if (projectPath === activeProjectPathRef.current) {
+      setProjectMenuOpen(false);
+      return;
+    }
+    const previousProjectPath = activeProjectPathRef.current || '.';
+    // Draft profile/arguments are intentionally not portable. Closing the
+    // editor before the identity changes prevents A's unsaved values from
+    // being saved under B after its asynchronous config detection completes.
+    setRunSettingsOpen(false);
+    setRunSettingsProjectKey(null);
     activeProjectPathRef.current = projectPath;
     setActiveProjectPath(projectPath);
     setDetected(detectedByProjectPathRef.current.get(projectPath) ?? (detected
@@ -408,19 +890,44 @@ export function DevelopmentWorkspaceControls({ projectId, metadata, resolvedDir,
     setRuntime(runtimeByProjectPathRef.current.get(projectPath) ?? idleRuntime(projectId, projectPath));
     setError(null);
     openBrowserWhenReady.current = false;
-    persistDevelopment({ activeProjectPath: projectPath, runConfigId: undefined });
+    setProjectMenuOpen(false);
+    persistActiveProjectPath(projectPath, previousProjectPath);
     void load(false, projectPath);
+  }
+
+  function handleProjectMenuKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const projects = detected?.projects ?? [];
+    if (projects.length === 0) return;
+    const focusedPath = [...projectOptionRefs.current.entries()]
+      .find(([, element]) => element === document.activeElement)?.[0] ?? activeProjectPath;
+    const currentIndex = Math.max(0, projects.findIndex((project) => project.path === focusedPath));
+    let nextIndex: number | null = null;
+    if (event.key === 'ArrowDown') nextIndex = (currentIndex + 1) % projects.length;
+    else if (event.key === 'ArrowUp') nextIndex = (currentIndex - 1 + projects.length) % projects.length;
+    else if (event.key === 'Home') nextIndex = 0;
+    else if (event.key === 'End') nextIndex = projects.length - 1;
+    else if (event.key === 'Escape') {
+      event.preventDefault();
+      setProjectMenuOpen(false);
+      projectTriggerRef.current?.focus();
+      return;
+    }
+    if (nextIndex == null) return;
+    event.preventDefault();
+    projectOptionRefs.current.get(projects[nextIndex]!.path)?.focus();
   }
 
   function selectDatabase(connectionId: string) {
     const connection = connections.find((item) => item.id === connectionId);
-    const { databaseContext: _currentDatabaseContext, ...metadataWithoutDatabase } = metadata;
-    onMetadataChange({
-      ...(connection ? metadata : metadataWithoutDatabase),
-      ...(connection
-        ? { databaseContext: { connectionId: connection.id, label: connection.label, useForDevelopment: true } }
-        : {}),
-    });
+    const nextMetadata = metadataWithSelectedModuleDatabase(
+      metadataRef.current,
+      activeProjectPathRef.current || '.',
+      connection
+        ? { connectionId: connection.id, label: connection.label, useForDevelopment: true }
+        : null,
+    );
+    metadataRef.current = nextMetadata;
+    onMetadataChange(nextMetadata);
   }
 
   if (!resolvedDir) {
@@ -430,9 +937,32 @@ export function DevelopmentWorkspaceControls({ projectId, metadata, resolvedDir,
   const state = busy === 'start' ? 'starting' : runtime?.state ?? 'idle';
   const canStop = state === 'starting' || state === 'ready' || Boolean(runtime?.pid);
   const launchConfig = runtime?.config ?? selected;
+  const displayedConfig = canStop && runtime?.config ? runtime.config : selected;
+  const displayedProfile = canStop && runtime?.config ? (runtime.config.profile ?? '') : effectiveProfile;
+  const displayedUrl = canStop
+    ? (runtime?.url ?? runtime?.config?.url ?? effectiveUrl)
+    : effectiveUrl;
+  const displayedPort = canStop
+    ? (runtime?.config?.port ?? effectivePort)
+    : effectivePort;
+  const displayedCommand = displayedConfig
+    ? [
+        displayedConfig.command.split(/[\\/]/).pop() ?? displayedConfig.command,
+        ...displayedConfig.args,
+        ...(!canStop && effectiveArguments ? [effectiveArguments] : []),
+      ].join(' ')
+    : '';
   const latestLaunchLog = [...(runtime?.logs ?? [])].reverse().find((line) => line.trim().length > 0);
   const displayedError = error ?? runtime?.error ?? null;
   const runningCount = runtimeStatuses.filter((status) => status.state === 'starting' || status.state === 'ready').length;
+  const activeProject = detected?.projects?.find((project) => project.path === activeProjectPath) ?? null;
+  const runtimeStateLabel = (value: DevelopmentServerStatus['state']) => value === 'ready'
+    ? t('development.ready')
+    : value === 'starting'
+      ? t('development.starting')
+      : value === 'failed'
+        ? t('development.failed')
+        : t('development.stopped');
   const launchCommand = launchConfig
     ? [launchConfig.command.split(/[\\/]/).pop() ?? launchConfig.command, ...launchConfig.args].join(' ')
     : '';
@@ -444,29 +974,72 @@ export function DevelopmentWorkspaceControls({ projectId, metadata, resolvedDir,
           <i />{state === 'ready' ? t('development.ready') : state === 'starting' ? t('development.starting') : state === 'failed' ? t('development.failed') : t('development.stopped')}
         </span>
         {(detected?.projects?.length ?? 0) > 1 ? (
-          <select
-            className={`${styles.select} ${styles.projectSelect}`}
-            data-testid="development-active-project"
-            aria-label={t('workspaceTabs.project')}
-            title={detected?.projects?.find((project) => project.path === activeProjectPath)?.path ?? activeProjectPath}
-            value={activeProjectPath}
-            disabled={busy === 'start' || busy === 'stop'}
-            onChange={(event) => selectProject(event.target.value)}
-          >
-            {detected?.projects?.map((project) => {
-              const projectRuntime = runtimeStatuses.find((status) => runtimePath(status) === project.path);
-              const marker = projectRuntime?.state === 'ready' ? '● '
-                : projectRuntime?.state === 'starting' ? '◐ '
-                  : projectRuntime?.state === 'failed' ? '! ' : '';
-              return <option key={project.path} value={project.path}>{marker}{project.label} · {project.path}</option>;
-            })}
-          </select>
+          <div className={styles.projectPicker} ref={projectPickerRef}>
+            <button
+              type="button"
+              ref={projectTriggerRef}
+              className={styles.projectSelect}
+              data-testid="development-active-project"
+              aria-label={t('workspaceTabs.project')}
+              aria-haspopup="menu"
+              aria-expanded={projectMenuOpen}
+              aria-controls={`development-project-menu-${projectId}`}
+              title={activeProject?.path ?? activeProjectPath}
+              disabled={busy === 'start' || busy === 'stop'}
+              onClick={() => setProjectMenuOpen((open) => !open)}
+            >
+              <i className={styles.projectStateDot} data-state={busy === 'detect' ? 'loading' : state} aria-hidden="true" />
+              <span>{activeProject?.label ?? activeProjectPath}</span>
+              <Icon name="chevron-down" size={12} />
+            </button>
+            {projectMenuOpen ? (
+              <div
+                id={`development-project-menu-${projectId}`}
+                className={styles.projectMenu}
+                role="menu"
+                aria-label={t('workspaceTabs.project')}
+                onKeyDown={handleProjectMenuKeyDown}
+              >
+                {detected?.projects?.map((project) => {
+                  const projectRuntime = runtimeByProjectPathRef.current.get(project.path) ?? idleRuntime(projectId, project.path);
+                  const projectState = busy === 'detect' && project.path === activeProjectPath ? 'loading' : projectRuntime.state;
+                  return (
+                    <button
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={project.path === activeProjectPath}
+                      ref={(element) => {
+                        if (element) projectOptionRefs.current.set(project.path, element);
+                        else projectOptionRefs.current.delete(project.path);
+                      }}
+                      key={project.path}
+                      data-state={projectState}
+                      onClick={() => selectProject(project.path)}
+                    >
+                      <i className={styles.projectStateDot} data-state={projectState} aria-hidden="true" />
+                      <span><strong>{project.label}</strong><small>{project.path}</small></span>
+                      <em>{projectState === 'loading' ? t('common.loading') : runtimeStateLabel(projectRuntime.state)}</em>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
         ) : null}
         {runningCount > 0 ? (
           <span className={styles.runningCount} data-testid="development-running-count">
             {runningCount} {t('development.ready')}
           </span>
         ) : null}
+        <button
+          type="button"
+          className={styles.action}
+          data-testid="development-server-logs-toggle"
+          aria-expanded={logsOpen}
+          onClick={() => setLogsOpen((open) => !open)}
+        >
+          <Icon name="terminal" size={13} />{t('development.logs')}
+        </button>
         <select
           className={`${styles.select} ${styles.runSelect}`}
           data-testid="development-run-config"
@@ -512,20 +1085,26 @@ export function DevelopmentWorkspaceControls({ projectId, metadata, resolvedDir,
         <button type="button" className={styles.action} data-testid="development-open-changes" onClick={onOpenChanges}><Icon name="fork" size={13} />{t('gitChanges.title')}</button>
       </div>
       <div className={styles.contextGroup}>
-        <select className={`${styles.select} ${styles.databaseSelect}`} data-testid="development-database" aria-label={t('development.database')} title={metadata.databaseContext?.label ?? t('development.noDatabase')} value={metadata.databaseContext?.connectionId ?? ''} onChange={(event) => selectDatabase(event.target.value)}>
+        <select className={`${styles.select} ${styles.databaseSelect}`} data-testid="development-database" aria-label={t('development.database')} title={activeDatabaseContext?.label ?? t('development.noDatabase')} value={activeDatabaseContext?.connectionId ?? ''} onChange={(event) => selectDatabase(event.target.value)}>
           <option value="">{t('development.noDatabase')}</option>
           {connections.map((connection) => <option key={connection.id} value={connection.id}>{connection.label}</option>)}
         </select>
         <label
           className={`${styles.verify} od-tooltip`}
           data-testid="development-auto-verify"
-          title={t('development.autoVerifyHint')}
-          data-tooltip={t('development.autoVerifyHint')}
+          data-unavailable={automaticVerificationAvailable ? 'false' : 'true'}
+          title={automaticVerificationAvailable ? t('development.autoVerifyHint') : runCopy.automaticVerificationUnavailable}
+          data-tooltip={automaticVerificationAvailable ? t('development.autoVerifyHint') : runCopy.automaticVerificationUnavailable}
           data-tooltip-placement="bottom"
         >
-          <input type="checkbox" checked={metadata.development?.autoVerify !== false} onChange={(event) => persistDevelopment({ autoVerify: event.target.checked })} />
-          <i className={styles.verifyStatus} data-active={browserVerificationActive ? 'true' : 'false'} aria-hidden="true" />
-          <span>{t('development.autoVerify')}</span>
+          <input
+            type="checkbox"
+            checked={automaticVerificationAvailable && metadata.development?.autoVerify !== false}
+            disabled={!automaticVerificationAvailable}
+            onChange={(event) => persistDevelopment({ autoVerify: event.target.checked })}
+          />
+          <i className={styles.verifyStatus} data-active={automaticVerificationAvailable && browserVerificationActive ? 'true' : 'false'} aria-hidden="true" />
+          <span>{t('development.autoVerify')}{automaticVerificationAvailable ? '' : ` · ${runCopy.localCliOnly}`}</span>
         </label>
         <button
           type="button"
@@ -538,6 +1117,18 @@ export function DevelopmentWorkspaceControls({ projectId, metadata, resolvedDir,
           <Icon name="help-circle" size={13} />
         </button>
       </div>
+      {busy === 'detect' ? (
+        <div
+          className={styles.projectLoading}
+          data-testid="development-project-loading"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <Icon name="spinner" size={12} />
+          <span>{activeProjectPath || t('workspaceTabs.project')} · {t('common.loading')}</span>
+        </div>
+      ) : null}
       {runSettingsOpen && selected ? (
         <div className={styles.runSettings} data-testid="development-run-settings-panel">
           <div className={styles.runSettingsHeading}>
@@ -558,6 +1149,25 @@ export function DevelopmentWorkspaceControls({ projectId, metadata, resolvedDir,
               </datalist>
             </label>
           ) : null}
+          <label>
+            <span>{runCopy.port}</span>
+            <input
+              inputMode="numeric"
+              data-testid="development-run-port"
+              value={draftPort}
+              placeholder={String(selected.port)}
+              onChange={(event) => setDraftPort(event.target.value)}
+            />
+          </label>
+          <label className={styles.runUrlField}>
+            <span>{runCopy.url}</span>
+            <input
+              data-testid="development-run-url"
+              value={draftUrl}
+              placeholder={selected.url}
+              onChange={(event) => setDraftUrl(event.target.value)}
+            />
+          </label>
           <label className={styles.argumentField}>
             <span>{t('development.additionalArguments')}</span>
             <input
@@ -566,22 +1176,36 @@ export function DevelopmentWorkspaceControls({ projectId, metadata, resolvedDir,
               onChange={(event) => setDraftArguments(event.target.value)}
             />
           </label>
+          <label className={styles.environmentField}>
+            <span>{runCopy.environment}</span>
+            <textarea
+              data-testid="development-run-environment"
+              value={draftEnvironment}
+              placeholder={'FEATURE_ORDERS=true\nLOG_LEVEL=debug'}
+              onChange={(event) => setDraftEnvironment(event.target.value)}
+              spellCheck={false}
+            />
+            <small>{runCopy.environmentHint}</small>
+          </label>
           <div className={styles.runSettingsActions}>
             <button type="button" onClick={resetRunSettings}>{t('common.clear')}</button>
-            <button type="button" onClick={() => setRunSettingsOpen(false)}>{t('common.cancel')}</button>
+            <button type="button" onClick={() => {
+              setRunSettingsOpen(false);
+              setRunSettingsProjectKey(null);
+            }}>{t('common.cancel')}</button>
             <button type="button" className={styles.primaryAction} onClick={saveRunSettings}>{t('common.save')}</button>
           </div>
         </div>
       ) : null}
-      {selected ? (
+      {displayedConfig ? (
         <div
           className={styles.configurationSummary}
           data-testid="development-run-summary"
-          title={`${selected.source} · ${selected.cwd} · ${selected.url}`}
+          title={`${displayedConfig.source} · ${displayedConfig.cwd} · ${displayedUrl}`}
         >
-          {effectiveProfile ? <strong>SPRING_PROFILES_ACTIVE={effectiveProfile}</strong> : <strong>{selected.framework}</strong>}
-          <code>{[selected.command.split(/[\\/]/).pop() ?? selected.command, ...selected.args, ...(effectiveArguments ? [effectiveArguments] : [])].join(' ')}</code>
-          <span>{selected.url}</span>
+          {displayedProfile ? <strong>SPRING_PROFILES_ACTIVE={displayedProfile}</strong> : <strong>{displayedConfig.framework}</strong>}
+          <code>{displayedCommand}</code>
+          <span>{displayedUrl}{displayedPort ? ` · ${runCopy.port} ${displayedPort}` : ''}</span>
         </div>
       ) : null}
       {state === 'starting' ? (
@@ -600,6 +1224,21 @@ export function DevelopmentWorkspaceControls({ projectId, metadata, resolvedDir,
           <div className={styles.launchTrack} aria-hidden="true"><i /></div>
           <code title={latestLaunchLog ?? launchCommand}>{latestLaunchLog ?? launchCommand}</code>
         </div>
+      ) : null}
+      {logsOpen ? (
+        <section className={styles.logPanel} data-testid="development-server-logs" aria-label={t('development.logs')}>
+          <header>
+            <span><i className={styles.projectStateDot} data-state={state} aria-hidden="true" />{activeProject?.label ?? (activeProjectPath || '.')}</span>
+            <small>{runtimeStateLabel(state)}{runtime?.pid ? ` · PID ${runtime.pid}` : ''}</small>
+          </header>
+          <pre
+            ref={logViewportRef}
+            onScroll={(event) => {
+              const viewport = event.currentTarget;
+              logFollowRef.current = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 40;
+            }}
+          >{runtime?.logs.length ? runtime.logs.join('\n') : t('development.logsEmpty')}</pre>
+        </section>
       ) : null}
       {displayedError ? (
         <div

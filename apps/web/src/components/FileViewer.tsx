@@ -1079,7 +1079,14 @@ export function FileViewer({
     return <ImageViewer projectId={projectId} file={file} />;
   }
   if (file.kind === 'text' || file.kind === 'code') {
-    return <TextViewer projectId={projectId} file={file} />;
+    return (
+      <TextViewer
+        key={`${projectId}:${file.name}`}
+        projectId={projectId}
+        file={file}
+        onFileSaved={onFileSaved}
+      />
+    );
   }
   if (
     file.kind === 'pdf' ||
@@ -4958,6 +4965,7 @@ function HtmlViewer({
   const manualEditPreviewVersionRef = useRef(0);
   const sourceRef = useRef<string | null>(source);
   const sourceFileKeyRef = useRef<string | null>(null);
+  const liveHtmlInputRef = useRef<string | undefined>(undefined);
   const templateNameId = useId();
   const templateDescriptionId = useId();
   const imageExportTitleId = useId();
@@ -5251,14 +5259,23 @@ function HtmlViewer({
 
   useEffect(() => {
     const sourceFileKey = `${projectId}\0${file.name}\0${liveHtml === undefined ? 'raw' : 'live'}`;
+    const fileChanged = sourceFileKeyRef.current !== sourceFileKey;
+    const liveHtmlChanged = liveHtmlInputRef.current !== liveHtml;
+    sourceFileKeyRef.current = sourceFileKey;
+    liveHtmlInputRef.current = liveHtml;
     if (liveHtml !== undefined) {
-      sourceFileKeyRef.current = sourceFileKey;
-      setSource(liveHtml);
-      sourceRef.current = liveHtml;
+      // `reloadKey` also changes after a successful manual content patch so
+      // URL-loaded previews can invalidate their cache. Do not treat that as
+      // a new liveHtml payload: the prop can still contain the pre-save
+      // snapshot for one render and would otherwise overwrite the freshly
+      // persisted source, draft and srcDoc canvas. A real live update is
+      // applied only when the file identity or the prop value itself changes.
+      if (fileChanged || liveHtmlChanged || sourceRef.current == null) {
+        setSource(liveHtml);
+        sourceRef.current = liveHtml;
+      }
       return;
     }
-    const fileChanged = sourceFileKeyRef.current !== sourceFileKey;
-    sourceFileKeyRef.current = sourceFileKey;
     if (fileChanged) {
       setSource(null);
       sourceRef.current = null;
@@ -10392,38 +10409,162 @@ export function SvgViewer({
   );
 }
 
+type TextViewerDraft = {
+  baseText: string;
+  draftText: string;
+};
+
+// Keep unsaved source edits alive while the user switches workspace tabs. The
+// cache is intentionally memory-only: source text must not be copied into
+// localStorage/sessionStorage, and a bounded cache avoids retaining every file
+// opened during a long Desktop session.
+const textViewerDrafts = new Map<string, TextViewerDraft>();
+const MAX_TEXT_VIEWER_DRAFTS = 24;
+
+function rememberTextViewerDraft(key: string, value: TextViewerDraft | null) {
+  textViewerDrafts.delete(key);
+  if (value == null || value.baseText === value.draftText) return;
+  textViewerDrafts.set(key, value);
+  while (textViewerDrafts.size > MAX_TEXT_VIEWER_DRAFTS) {
+    const oldest = textViewerDrafts.keys().next().value;
+    if (oldest == null) break;
+    textViewerDrafts.delete(oldest);
+  }
+}
+
 function TextViewer({
   projectId,
   file,
+  onFileSaved,
 }: {
   projectId: string;
   file: ProjectFile;
+  onFileSaved?: () => Promise<void> | void;
 }) {
-  const t = useT();
-  const [text, setText] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
+  const { locale, t } = useI18n();
+  const copy = locale === 'ko'
+    ? {
+        cancel: '편집 취소',
+        discard: '저장하지 않은 변경을 버릴까요?',
+        editor: `${file.name} 편집기`,
+        loadFailed: '파일을 불러오지 못했습니다.',
+        overwrite: '내 내용으로 덮어쓰기',
+        overwriteConfirm: '디스크의 최신 변경을 내 내용으로 덮어쓸까요?',
+        reloadDisk: '디스크 버전 불러오기',
+        saveFailed: '파일을 저장하지 못했습니다.',
+        saved: '저장됨',
+        saving: '저장 중…',
+        unsaved: '저장하지 않은 변경',
+      }
+    : {
+        cancel: 'Cancel edit',
+        discard: 'Discard the unsaved changes?',
+        editor: `${file.name} editor`,
+        loadFailed: 'Could not load the file.',
+        overwrite: 'Overwrite with my version',
+        overwriteConfirm: 'Overwrite the latest disk changes with your version?',
+        reloadDisk: 'Load disk version',
+        saveFailed: 'Could not save the file.',
+        saved: 'Saved',
+        saving: 'Saving…',
+        unsaved: 'Unsaved changes',
+      };
+  const draftKey = `${projectId}::${file.name}`;
+  const cachedDraft = textViewerDrafts.get(draftKey);
+  const [baseText, setBaseText] = useState<string | null>(cachedDraft?.baseText ?? null);
+  const [draftText, setDraftText] = useState(cachedDraft?.draftText ?? '');
+  const [loading, setLoading] = useState(cachedDraft == null);
+  const [loadError, setLoadError] = useState('');
+  const [saveError, setSaveError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [diskChanged, setDiskChanged] = useState(false);
+  const [pendingDiskText, setPendingDiskText] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const baseTextRef = useRef(baseText);
+  const draftTextRef = useRef(draftText);
+  const dirty = baseText !== null && draftText !== baseText;
+  const dirtyRef = useRef(dirty);
+  baseTextRef.current = baseText;
+  draftTextRef.current = draftText;
+  dirtyRef.current = dirty;
+
+  async function sha256Text(value: string): Promise<string> {
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  }
+
+  const applyDiskText = useCallback((next: string) => {
+    setBaseText(next);
+    setDraftText(next);
+    setDiskChanged(false);
+    setPendingDiskText(null);
+    setLoadError('');
+    setSaveError('');
+    setSaved(false);
+    setLoading(false);
+    rememberTextViewerDraft(draftKey, null);
+  }, [draftKey]);
+
+  const readDiskText = useCallback(async () => fetchProjectFileText(projectId, file.name, {
+    cache: 'no-store',
+    cacheBustKey: file.mtime,
+  }), [file.mtime, file.name, projectId]);
+
+  // Initial read and external mtime changes. Local edits are never replaced:
+  // an agent or editor changing the same file produces an explicit conflict.
   useEffect(() => {
-    setText(null);
     let cancelled = false;
-    void fetchProjectFileText(projectId, file.name).then((t) => {
-      if (!cancelled) setText(t ?? '');
+    setLoading(baseTextRef.current == null);
+    void readDiskText().then((next) => {
+      if (cancelled) return;
+      if (next == null) {
+        setLoading(false);
+        setLoadError(copy.loadFailed);
+        return;
+      }
+      if (dirtyRef.current && baseTextRef.current !== null && next !== baseTextRef.current) {
+        setPendingDiskText(next);
+        setDiskChanged(true);
+        setLoading(false);
+        return;
+      }
+      if (!dirtyRef.current) applyDiskText(next);
+      else setLoading(false);
     });
     return () => {
       cancelled = true;
     };
-  }, [projectId, file.name, file.mtime, reloadKey]);
+  }, [applyDiskText, copy.loadFailed, readDiskText]);
 
-  async function copy() {
-    if (text == null) return;
+  useEffect(() => {
+    rememberTextViewerDraft(draftKey, baseText == null ? null : { baseText, draftText });
+    return () => {
+      const latestBase = baseTextRef.current;
+      rememberTextViewerDraft(draftKey, latestBase == null ? null : {
+        baseText: latestBase,
+        draftText: draftTextRef.current,
+      });
+    };
+  }, [baseText, draftKey, draftText]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+
+  async function copyEditorText() {
+    if (baseText == null) return;
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(draftText);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
       // best-effort fallback
       const ta = document.createElement('textarea');
-      ta.value = text;
+      ta.value = draftText;
       ta.style.position = 'fixed';
       ta.style.opacity = '0';
       document.body.appendChild(ta);
@@ -10438,22 +10579,87 @@ function TextViewer({
     }
   }
 
-  const displayText = useMemo(
-    () => (text == null ? null : formatJsonFileTextForDisplay(file, text)),
-    [file.name, file.mime, text],
-  );
-  const lineCount = displayText ? displayText.split('\n').length : 0;
+  async function reloadFromDisk() {
+    if (dirty && !window.confirm(copy.discard)) return;
+    setLoading(true);
+    const next = pendingDiskText ?? await readDiskText();
+    if (next == null) {
+      setLoading(false);
+      setLoadError(copy.loadFailed);
+      return;
+    }
+    applyDiskText(next);
+  }
+
+  function cancelEdit() {
+    if (!dirty || baseText == null) return;
+    if (!window.confirm(copy.discard)) return;
+    if (pendingDiskText != null) applyDiskText(pendingDiskText);
+    else {
+      setDraftText(baseText);
+      setSaveError('');
+      setSaved(false);
+      rememberTextViewerDraft(draftKey, null);
+    }
+  }
+
+  async function save(overwriteDisk = false) {
+    if (!dirty || baseText == null || saving) return;
+    setSaving(true);
+    setSaveError('');
+    setSaved(false);
+    try {
+      const latest = await readDiskText();
+      if (latest == null) {
+        setSaveError(copy.loadFailed);
+        return;
+      }
+      if (latest !== baseText && latest !== draftText && !overwriteDisk) {
+        setPendingDiskText(latest);
+        setDiskChanged(true);
+        return;
+      }
+      if (overwriteDisk && !window.confirm(copy.overwriteConfirm)) return;
+      const result = await writeProjectTextFileDetailed(projectId, file.name, draftText, {
+        ...(overwriteDisk ? {} : { expectedContentSha256: await sha256Text(latest) }),
+      });
+      if (!result.ok) {
+        if (result.status === 409 && result.code === 'FILE_CHANGED') {
+          const changed = await readDiskText();
+          if (changed != null) {
+            setPendingDiskText(changed);
+            setDiskChanged(true);
+            return;
+          }
+        }
+        setSaveError(result.message || copy.saveFailed);
+        return;
+      }
+      setBaseText(draftText);
+      setPendingDiskText(null);
+      setDiskChanged(false);
+      setSaved(true);
+      rememberTextViewerDraft(draftKey, null);
+      await onFileSaved?.();
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div className="viewer text-viewer">
       <div className="viewer-toolbar">
-        <div className="viewer-toolbar-left" />
+        <div className="viewer-toolbar-left">
+          {dirty ? <span className="text-editor-dirty" data-testid="text-editor-dirty">{copy.unsaved}</span> : null}
+          {saved ? <span className="text-editor-saved" role="status">{copy.saved}</span> : null}
+        </div>
         <div className="viewer-toolbar-actions">
           <button
             type="button"
             className="viewer-action"
-            onClick={() => setReloadKey((n) => n + 1)}
+            onClick={() => void reloadFromDisk()}
             title={t('fileViewer.reloadDisk')}
+            disabled={loading || saving}
           >
             <Icon name="reload" size={13} />
             <span>{t('fileViewer.reload')}</span>
@@ -10461,16 +10667,28 @@ function TextViewer({
           <button
             type="button"
             className="viewer-action"
-            disabled
-            title={t('fileViewer.saveDisabled')}
+            disabled={!dirty || loading || saving}
+            onClick={() => void save()}
+            title={t('fileViewer.save')}
+            data-testid="text-editor-save"
           >
             <Icon name="check" size={13} />
-            <span>{t('fileViewer.save')}</span>
+            <span>{saving ? copy.saving : t('fileViewer.save')}</span>
           </button>
           <button
             type="button"
             className="viewer-action"
-            onClick={() => void copy()}
+            disabled={!dirty || saving}
+            onClick={cancelEdit}
+            data-testid="text-editor-cancel"
+          >
+            <Icon name="close" size={13} />
+            <span>{copy.cancel}</span>
+          </button>
+          <button
+            type="button"
+            className="viewer-action"
+            onClick={() => void copyEditorText()}
             title={t('fileViewer.copyTitle')}
           >
             <Icon name={copied ? 'check' : 'copy'} size={13} />
@@ -10479,119 +10697,41 @@ function TextViewer({
         </div>
       </div>
       <div className="viewer-body">
-        {text === null ? (
+        {diskChanged ? (
+          <div className="text-editor-conflict" role="alert" data-testid="text-editor-conflict">
+            <span>{t('screenSpec.fileChangedOnDisk')}</span>
+            <span className="text-editor-conflict-actions">
+              <button type="button" onClick={() => void reloadFromDisk()}>{copy.reloadDisk}</button>
+              <button type="button" onClick={() => void save(true)}>{copy.overwrite}</button>
+            </span>
+          </div>
+        ) : null}
+        {saveError || loadError ? <div className="text-editor-error" role="alert">{saveError || loadError}</div> : null}
+        {loading || baseText === null ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
-        ) : displayText !== null && lineCount > 0 ? (
-          <CodeWithLines text={displayText} />
         ) : (
-          <pre className="viewer-source">{displayText}</pre>
+          <textarea
+            className="text-editor-input"
+            data-testid="text-editor-input"
+            aria-label={copy.editor}
+            value={draftText}
+            onChange={(event) => {
+              setDraftText(event.target.value);
+              setSaved(false);
+              setSaveError('');
+            }}
+            onKeyDown={(event) => {
+              if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+                event.preventDefault();
+                void save();
+              }
+            }}
+            spellCheck={false}
+          />
         )}
       </div>
     </div>
   );
-}
-
-function formatJsonFileTextForDisplay(file: ProjectFile, text: string): string {
-  if (!isJsonFile(file)) return text;
-  try {
-    if (hasPrecisionSensitiveJsonNumberText(text)) return text;
-    const parsed = JSON.parse(text) as unknown;
-    if (hasUnsafeJsonNumber(parsed)) return text;
-    return JSON.stringify(parsed, null, 2);
-  } catch {
-    return text;
-  }
-}
-
-function hasPrecisionSensitiveJsonNumberText(text: string): boolean {
-  let inString = false;
-  let escaped = false;
-  const numberTokenPattern = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
-  for (let i = 0; i < text.length;) {
-    const char = text[i];
-    if (inString) {
-      if (escaped) {
-        escaped = false;
-      } else if (char === '\\') {
-        escaped = true;
-      } else if (char === '"') {
-        inString = false;
-      }
-      i += 1;
-      continue;
-    }
-
-    if (char === '"') {
-      inString = true;
-      i += 1;
-      continue;
-    }
-
-    numberTokenPattern.lastIndex = i;
-    const match = numberTokenPattern.exec(text);
-    if (!match) {
-      i += 1;
-      continue;
-    }
-
-    const token = match[0];
-    if (isSignedNegativeZeroJsonNumberToken(token)) return true;
-    if (/[.eE]/.test(token) && isPrecisionSensitiveJsonNumberToken(token)) return true;
-    i = numberTokenPattern.lastIndex;
-  }
-  return false;
-}
-
-function isSignedNegativeZeroJsonNumberToken(token: string): boolean {
-  return /^-0(?:\.0+)?(?:[eE][+-]?\d+)?$/.test(token);
-}
-
-function isPrecisionSensitiveJsonNumberToken(token: string): boolean {
-  const parsed = Number(token);
-  if (!Number.isFinite(parsed)) return true;
-  const rendered = JSON.stringify(parsed);
-  if (!rendered) return true;
-  const originalValue = parseJsonNumberTokenAsDecimal(token);
-  const renderedValue = parseJsonNumberTokenAsDecimal(rendered);
-  return (
-    !originalValue ||
-    !renderedValue ||
-    originalValue.coefficient !== renderedValue.coefficient ||
-    originalValue.exponent !== renderedValue.exponent
-  );
-}
-
-function parseJsonNumberTokenAsDecimal(token: string): { coefficient: bigint; exponent: number } | null {
-  const match = /^(-)?(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/.exec(token);
-  if (!match) return null;
-  const [, sign, integerPart, fractionPart = '', exponentPart = '0'] = match;
-  const coefficient = BigInt(`${sign ?? ''}${integerPart}${fractionPart}`);
-  const exponent = Number(exponentPart) - fractionPart.length;
-  return normalizeDecimalParts(coefficient, exponent);
-}
-
-function normalizeDecimalParts(coefficient: bigint, exponent: number): { coefficient: bigint; exponent: number } {
-  if (coefficient === 0n) return { coefficient: 0n, exponent: 0 };
-  let normalizedCoefficient = coefficient;
-  let normalizedExponent = exponent;
-  while (normalizedCoefficient % 10n === 0n) {
-    normalizedCoefficient /= 10n;
-    normalizedExponent += 1;
-  }
-  return { coefficient: normalizedCoefficient, exponent: normalizedExponent };
-}
-
-function hasUnsafeJsonNumber(value: unknown): boolean {
-  if (typeof value === 'number') {
-    return !Number.isFinite(value) || (Number.isInteger(value) && !Number.isSafeInteger(value));
-  }
-  if (Array.isArray(value)) return value.some(hasUnsafeJsonNumber);
-  if (value && typeof value === 'object') return Object.values(value).some(hasUnsafeJsonNumber);
-  return false;
-}
-
-function isJsonFile(file: ProjectFile): boolean {
-  return file.name.toLowerCase().endsWith('.json') || file.mime.toLowerCase().startsWith('application/json');
 }
 
 function MarkdownViewer({

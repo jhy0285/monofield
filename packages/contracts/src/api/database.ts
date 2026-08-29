@@ -53,4 +53,8 @@ export type DatabaseMutationResponse = {
   schema: string;
   table: string;
   auditId: string;
+  /** Whether the committed mutation was also appended to the local audit log. */
+  auditRecorded: boolean;
+  /** Present when the mutation committed but durable local audit recording failed. */
+  auditWarning?: string;
 };

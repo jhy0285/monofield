@@ -13,15 +13,19 @@ import {
   setToken,
   type StoredMcpToken,
 } from '../src/mcp-tokens.js';
+import { installTestCredentialVault, type TestCredentialVault } from './helpers/credential-vault.js';
 
 describe('mcp-tokens storage', () => {
   let dataDir: string;
+  let vault: TestCredentialVault;
 
   beforeEach(async () => {
+    vault = installTestCredentialVault();
     dataDir = await mkdtemp(path.join(tmpdir(), 'od-mcptokens-'));
   });
 
   afterEach(async () => {
+    vault.restore();
     await rm(dataDir, { recursive: true, force: true });
   });
 
@@ -145,7 +149,8 @@ describe('mcp-tokens storage', () => {
     });
     const raw = await readFile(path.join(dataDir, 'mcp-tokens.json'), 'utf8');
     const parsed = JSON.parse(raw);
-    expect(parsed.servers.higgsfield.accessToken).toBe('tok');
+    expect(parsed.servers.higgsfield.credentialRef).toEqual(expect.any(String));
+    expect(raw).not.toContain('tok');
   });
 
   it('persists OAuth client context fields with the token', async () => {

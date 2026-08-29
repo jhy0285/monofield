@@ -2,6 +2,7 @@ import type { Express } from 'express';
 import type { RouteDeps } from '../server-context.js';
 import type { createTerminalService } from '../terminals.js';
 import { resolveDevelopmentCwd } from '../projects.js';
+import { resolveDevelopmentProjectRoot } from '../development-projects.js';
 
 export interface RegisterTerminalRoutesDeps
   extends RouteDeps<'db' | 'http' | 'paths' | 'projectStore' | 'projectFiles'> {
@@ -54,7 +55,12 @@ export function registerTerminalRoutes(app: Express, ctx: RegisterTerminalRoutes
     }
     const body = req.body || {};
     const workspaceRoot = resolveProjectDir(PROJECTS_DIR, project.id, project.metadata);
-    const cwd = await resolveDevelopmentCwd(workspaceRoot, project.metadata);
+    const requestedProjectPath = typeof body.projectPath === 'string' && body.projectPath.trim()
+      ? body.projectPath
+      : null;
+    const cwd = requestedProjectPath
+      ? (await resolveDevelopmentProjectRoot(workspaceRoot, requestedProjectPath)).root
+      : await resolveDevelopmentCwd(workspaceRoot, project.metadata);
     try {
       const session = await terminals.create({
         projectId: project.id,

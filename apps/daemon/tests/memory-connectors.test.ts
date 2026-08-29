@@ -14,9 +14,37 @@ import {
   __resetExtractionsForTests,
   listExtractions,
 } from '../src/memory-extractions.js';
+import {
+  installTestCredentialVault,
+  type TestCredentialVault,
+} from './helpers/credential-vault.js';
 
 const dataDir = path.join(process.env.OD_DATA_DIR ?? process.cwd(), 'memory-connectors-test');
 const originalFetch = globalThis.fetch;
+let credentialVault: TestCredentialVault;
+
+async function writeNodeCommandStub(
+  directory: string,
+  command: string,
+  source: string,
+): Promise<string> {
+  if (process.platform === 'win32') {
+    const runnerName = `${command}-runner.cjs`;
+    await fsp.writeFile(path.join(directory, runnerName), source, 'utf8');
+    const commandPath = path.join(directory, `${command}.cmd`);
+    await fsp.writeFile(
+      commandPath,
+      `@echo off\r\n"${process.execPath}" "%~dp0${runnerName}" %*\r\n`,
+      'utf8',
+    );
+    return commandPath;
+  }
+
+  const commandPath = path.join(directory, command);
+  await fsp.writeFile(commandPath, source, 'utf8');
+  await fsp.chmod(commandPath, 0o755);
+  return commandPath;
+}
 
 const notionDefinition: ConnectorCatalogDefinition = {
   id: 'notion',
@@ -83,6 +111,7 @@ function createNotionService(
 
 describe('connector memory extraction', () => {
   beforeEach(async () => {
+    credentialVault = installTestCredentialVault();
     await fsp.rm(memoryDir(dataDir), { recursive: true, force: true });
     __resetExtractionsForTests();
     globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
@@ -116,6 +145,7 @@ describe('connector memory extraction', () => {
   });
 
   afterEach(() => {
+    credentialVault.restore();
     globalThis.fetch = originalFetch;
     vi.restoreAllMocks();
   });
@@ -207,7 +237,7 @@ describe('connector memory extraction', () => {
     expect(executeCalls.length).toBeGreaterThan(1);
     expect(executeCalls[0]).toEqual(expect.objectContaining({
       input: expect.objectContaining({
-        query: '设计思路 设计偏好 UI UX 视觉风格 品牌 logo 设计系统 OpenDesign',
+        query: '设计思路 设计偏好 UI UX 视觉风格 品牌 logo 设计系统 MonoField',
       }),
     }));
     expect(executeCalls[1]).toEqual(expect.objectContaining({
@@ -944,13 +974,13 @@ describe('connector memory extraction', () => {
   it('runs Codex Local CLI through JSON event stream with stdin prompt', async () => {
     await writeMemoryConfig(dataDir, { extraction: null });
     const tempDir = await fsp.mkdtemp(path.join(tmpdir(), 'od-codex-memory-'));
-    const binPath = path.join(tempDir, 'codex');
     const capturePath = path.join(tempDir, 'capture.json');
     const previousPath = process.env.PATH;
     const previousCapture = process.env.OD_MEMORY_CODEX_ARGS_OUT;
 
-    await fsp.writeFile(
-      binPath,
+    await writeNodeCommandStub(
+      tempDir,
+      'codex',
       `#!/usr/bin/env node
 const fs = require('node:fs');
 const args = process.argv.slice(2);
@@ -971,9 +1001,7 @@ process.stdout.write(JSON.stringify({
   }
 }) + '\\n');
 `,
-      'utf8',
     );
-    await fsp.chmod(binPath, 0o755);
 
     try {
       process.env.PATH = `${tempDir}${path.delimiter}${previousPath ?? ''}`;
@@ -1002,9 +1030,13 @@ process.stdout.write(JSON.stringify({
         '--json',
         '--skip-git-repo-check',
         '-C',
-        process.cwd(),
+        tmpdir(),
         '--model',
         'gpt-5',
+      ]));
+      expect(captured.args).toEqual(expect.arrayContaining([
+        '-c',
+        'project_doc_max_bytes=0',
       ]));
       expect(captured.stdin).toContain('You are a design-memory extractor');
       expect(captured.stdin).toContain('OpenDesign connector memory should collect design preferences');
@@ -1026,7 +1058,6 @@ process.stdout.write(JSON.stringify({
   it('runs OpenCode Local CLI memory extraction with the prompt on stdin', async () => {
     await writeMemoryConfig(dataDir, { extraction: null });
     const tempDir = await fsp.mkdtemp(path.join(tmpdir(), 'od-opencode-memory-'));
-    const binPath = path.join(tempDir, 'opencode-cli');
     const capturePath = path.join(tempDir, 'capture.json');
     const previousPath = process.env.PATH;
     const previousCapture = process.env.OD_MEMORY_OPENCODE_ARGS_OUT;
@@ -1037,8 +1068,9 @@ process.stdout.write(JSON.stringify({
     // real CLI exit 1 with "File not found: <token>" — which is exactly how
     // a trailing positional message after `--file` crashed extraction. The
     // supported one-shot shape is bare `run` with the prompt on stdin.
-    await fsp.writeFile(
-      binPath,
+    await writeNodeCommandStub(
+      tempDir,
+      'opencode-cli',
       `#!/usr/bin/env node
 const fs = require('node:fs');
 const args = process.argv.slice(2);
@@ -1073,9 +1105,7 @@ process.stdout.write(JSON.stringify({
   }
 }) + '\\n');
 `,
-      'utf8',
     );
-    await fsp.chmod(binPath, 0o755);
 
     try {
       process.env.PATH = `${tempDir}${path.delimiter}${previousPath ?? ''}`;

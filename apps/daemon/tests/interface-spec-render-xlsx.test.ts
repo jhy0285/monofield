@@ -32,6 +32,7 @@ function sampleDocument(): InterfaceSpecDocument {
         method: 'GET',
         path: '/api/v1/users/{userId}',
         interfaceName: '사용자 상세 조회',
+        businessPurpose: '사용자 ID로 상세 정보를 조회합니다.',
         moduleName: 'com.example.user',
         serviceName: 'UserService',
         handlerName: 'getUser',
@@ -83,6 +84,7 @@ describe('renderInterfaceSpecXlsx', () => {
     expect(result.sheetTitles).toHaveLength(5);
 
     const wb = await readBack(result.buffer);
+    expect(wb.getWorksheet('인터페이스 목록(Generated)')?.state).toBe('hidden');
     const cover = wb.getWorksheet('문서표지')!;
     expect(cover.getCell('Q4').value).toBe('스마트 인프라 구축사업');
     expect(cover.getCell('O7').value).toBe('인터페이스 명세서');
@@ -116,6 +118,7 @@ describe('renderInterfaceSpecXlsx', () => {
 
     expect(detail.getCell('A4').value).toBe('인터페이스 명세서');
     expect(detail.getCell('B6').value).toBe('USERS-008');
+    expect(detail.getCell('D6').value).toBe('사용자 ID로 상세 정보를 조회합니다.');
     expect(detail.getCell('B8').value).toBe('[GET] /api/v1/users/{userId}');
     expect(detail.getCell('A10').value).toBe('REQUEST');
     expect(detail.getCell('B11').value).toBe('영문명');

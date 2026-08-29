@@ -17,6 +17,7 @@ interface Props {
   /** PTY session id (the `terminal:<id>` tab's suffix). */
   terminalId: string;
   projectId: string;
+  projectPath?: string;
   /** Close the owning workspace tab (the close button / no-restart paths). */
   onClose: () => void;
   /**
@@ -166,7 +167,7 @@ function subscribeToAppearanceChanges(onChange: () => void): () => void {
  *   with no auto-retry, or a Restart could not spawn a fresh PTY. Both `ended`
  *   and `unavailable` offer Restart (spawn a new PTY in place) and Close.
  */
-export function TerminalViewer({ terminalId, projectId, onClose, onSessionIdChange }: Props) {
+export function TerminalViewer({ terminalId, projectId, projectPath, onClose, onSessionIdChange }: Props) {
   const t = useT();
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -361,14 +362,14 @@ export function TerminalViewer({ terminalId, projectId, onClose, onSessionIdChan
     // usually a no-op — but since unmount no longer kills, it's the guard that
     // stops a stale session from lingering on the daemon if that ever changes.
     void killTerminal(projectId, sessionId, { keepalive: true });
-    const next = await createTerminal(projectId);
+    const next = await createTerminal(projectId, projectPath ? { projectPath } : undefined);
     if (next?.id) {
       lastSizeRef.current = null;
       setSessionId(next.id);
     } else {
       setPhase('unavailable');
     }
-  }, [projectId, sessionId]);
+  }, [projectId, projectPath, sessionId]);
 
   const stopped = phase === 'ended' || phase === 'unavailable';
   const connecting = phase === 'connecting';

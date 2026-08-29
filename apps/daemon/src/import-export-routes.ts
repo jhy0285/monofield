@@ -12,6 +12,7 @@ import {
 import { authorizeReasoningEgress, sendReasoningEgressDenial } from './reasoning-egress.js';
 import { sandboxImportedProjectRootUnavailableReason } from './sandbox-mode.js';
 import { parseOrchestratorWorkspace } from './workspace-contract.js';
+import { resolveByokApiKey } from './byok-credentials.js';
 
 export interface RegisterImportRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'ids' | 'paths' | 'imports' | 'auth' | 'projectStore' | 'conversations' | 'projectFiles' | 'validation'> {}
 
@@ -1037,7 +1038,7 @@ export interface RegisterFinalizeRoutesDeps extends RouteDeps<'db' | 'http' | 'p
 export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutesDeps) {
   const { db } = ctx;
   const { sendApiError } = ctx.http;
-  const { PROJECTS_DIR, DESIGN_SYSTEMS_DIR } = ctx.paths;
+  const { PROJECTS_DIR, DESIGN_SYSTEMS_DIR, RUNTIME_DATA_DIR } = ctx.paths;
   const { getProject } = ctx.projectStore;
   const { isSafeId, validateExternalApiBaseUrl } = ctx.validation;
   const {
@@ -1049,7 +1050,8 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
     redactSecrets,
   } = ctx.finalize;
   app.post('/api/projects/:id/finalize/:provider', async (req, res) => {
-    const { apiKey, baseUrl, model, maxTokens, apiVersion, protocol: bodyProtocol, reasoningExecution } = req.body || {};
+    const { apiKey: suppliedApiKey, baseUrl, model, maxTokens, apiVersion, protocol: bodyProtocol, reasoningExecution } = req.body || {};
+    let apiKey = typeof suppliedApiKey === 'string' ? suppliedApiKey : '';
     try {
       // Centralized path-traversal guard. `isSafeId` (apps/daemon/src/projects.ts)
       // rejects pure-dot ids (`.`, `..`, etc.) which would otherwise pass
@@ -1073,6 +1075,8 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
       if (bodyProtocol !== undefined && bodyProtocol !== protocol) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'body protocol must match route provider');
       }
+
+      apiKey = await resolveByokApiKey(RUNTIME_DATA_DIR, protocol, suppliedApiKey);
 
       if (typeof apiKey !== 'string' || !apiKey.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'apiKey is required');

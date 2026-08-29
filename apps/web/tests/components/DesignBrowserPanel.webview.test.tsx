@@ -9,6 +9,10 @@ import type { OpenDesignHostBrowserPopupListener } from '@open-design/host';
 import { DesignBrowserPanel } from '../../src/components/DesignBrowserPanel';
 import { I18nProvider } from '../../src/i18n';
 import { writeProjectTextFile } from '../../src/providers/registry';
+import {
+  clearActiveBrowserVerification,
+  getActiveBrowserVerification,
+} from '../../src/runtime/browser-verification';
 
 // The panel imports these writers from the registry at module load; stub them so
 // rendering never reaches the network.
@@ -51,6 +55,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  clearActiveBrowserVerification('proj-auto-verify-active-tab');
   restoreHost?.();
   restoreHost = null;
   browserPopupListener = null;
@@ -424,6 +429,118 @@ describe('DesignBrowserPanel <webview> navigation', () => {
       projectId: 'proj-auto-verify',
     }));
     expect(screen.getByTestId('browser-agent-pointer-status')).toBeTruthy();
+  });
+
+  it('offers automatic verification only from the active browser tab and releases project ownership when hidden', async () => {
+    restoreHost?.();
+    const begin = vi.fn(async (input: { origin: string }) => ({
+      expiresAt: null,
+      ok: true as const,
+      origin: input.origin,
+      scopes: ['page:read', 'page:pointer'] as const,
+      sessionId: 'browser_session_active_tab_1234567890',
+    }));
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        browser: {
+          automation: {
+            begin,
+            stop: vi.fn(async () => ({ ok: true as const, stopped: true })),
+            subscribe: () => () => undefined,
+          },
+        },
+      },
+    });
+    const props = {
+      autoVerify: true,
+      projectId: 'proj-auto-verify-active-tab',
+      initialUrl: 'http://127.0.0.1:5173/orders',
+      onOpenFile: () => {},
+      onRefreshFiles: () => {},
+    };
+    const { container, rerender } = render(<DesignBrowserPanel {...props} active={false} />);
+    const webview = container.querySelector('webview.db-webview') as HTMLElement & {
+      getURL?: () => string;
+      getWebContentsId?: () => number;
+    };
+    webview.getURL = () => 'http://127.0.0.1:5173/orders';
+    webview.getWebContentsId = () => 59;
+    act(() => webview.dispatchEvent(new Event('dom-ready')));
+
+    expect(screen.queryByRole('dialog', { name: /Allow agent automation/ })).toBeNull();
+
+    rerender(<DesignBrowserPanel {...props} active />);
+    expect(await screen.findByRole('dialog', { name: /Allow agent automation/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to system approval' }));
+    await waitFor(() => expect(begin).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getActiveBrowserVerification(props.projectId)?.sessionId).toBe(
+      'browser_session_active_tab_1234567890',
+    ));
+
+    rerender(<DesignBrowserPanel {...props} active={false} />);
+    await waitFor(() => expect(getActiveBrowserVerification(props.projectId)).toBeUndefined());
+    expect(screen.queryByRole('dialog', { name: /Allow agent automation/ })).toBeNull();
+  });
+
+  it('waits for webview dom-ready when Electron guest accessors throw before attachment', async () => {
+    restoreHost?.();
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        browser: {
+          automation: {
+            begin: vi.fn(async (input: { origin: string }) => ({
+              expiresAt: null,
+              ok: true as const,
+              origin: input.origin,
+              scopes: ['page:read', 'page:pointer'] as const,
+              sessionId: 'browser_session_delayed_guest_1234567890',
+            })),
+            stop: vi.fn(async () => ({ ok: true as const, stopped: true })),
+            subscribe: () => () => undefined,
+          },
+        },
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, 'getURL', {
+      configurable: true,
+      value: () => { throw new Error('guest is not ready'); },
+    });
+    Object.defineProperty(HTMLElement.prototype, 'getWebContentsId', {
+      configurable: true,
+      value: () => { throw new Error('guest is not attached'); },
+    });
+
+    try {
+      const { container } = render(
+        <DesignBrowserPanel
+          autoVerify
+          projectId="proj-auto-verify-delayed"
+          initialUrl="http://127.0.0.1:5173/orders"
+          onOpenFile={() => {}}
+          onRefreshFiles={() => {}}
+        />,
+      );
+      expect(screen.queryByRole('dialog', { name: /Allow agent automation/ })).toBeNull();
+
+      const webview = container.querySelector('webview.db-webview') as HTMLElement & {
+        getURL?: () => string;
+        getWebContentsId?: () => number;
+      };
+      Object.defineProperty(webview, 'getURL', {
+        configurable: true,
+        value: () => 'http://127.0.0.1:5173/orders',
+      });
+      Object.defineProperty(webview, 'getWebContentsId', {
+        configurable: true,
+        value: () => 58,
+      });
+      act(() => webview.dispatchEvent(new Event('dom-ready')));
+
+      expect(await screen.findByRole('dialog', { name: /Allow agent automation/ })).toBeTruthy();
+    } finally {
+      delete (HTMLElement.prototype as HTMLElement & { getURL?: () => string }).getURL;
+      delete (HTMLElement.prototype as HTMLElement & { getWebContentsId?: () => number }).getWebContentsId;
+    }
   });
 
   it('inherits an approved same-origin popup automation session', async () => {

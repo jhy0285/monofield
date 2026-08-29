@@ -3,8 +3,8 @@
 // Mirrors the Lovart-style "?" affordance shown in the bottom-left
 // corner of the workspace: a single round button that opens a small
 // popover with the four external help links we want every user to be
-// one click away from — GitHub issues for help, GitHub PRs for feature
-// requests, releases for the changelog, and the desktop download.
+// one click away from — GitHub issues for help and feature requests,
+// releases for the changelog, and the desktop download.
 //
 // The links open in a new tab (with safe `noopener` rel) and are
 // labeled via the i18n dictionary so locale switching keeps the menu
@@ -21,12 +21,14 @@ import {
 } from '../analytics/events';
 import { Icon } from './Icon';
 import { useT } from '../i18n';
+import {
+  GITHUB_FEATURE_REQUEST_URL,
+  GITHUB_REPO_URL,
+  GITHUB_SUPPORT_URL,
+} from './useGithubStars';
 
-const REPO = 'https://github.com/jhy0285/monofield';
-const ISSUES_URL = `${REPO}/issues/new`;
-const PRS_URL = `${REPO}/pulls`;
-const RELEASES_URL = `${REPO}/releases`;
-const LATEST_RELEASE_URL = `${REPO}/releases/latest`;
+const RELEASES_URL = `${GITHUB_REPO_URL}/releases`;
+const LATEST_RELEASE_URL = `${GITHUB_REPO_URL}/releases/latest`;
 
 const ext = { target: '_blank', rel: 'noreferrer noopener' } as const;
 
@@ -124,7 +126,7 @@ export function EntryHelpMenu({ onOpenFeatureGuide }: { onOpenFeatureGuide?: () 
           {onOpenFeatureGuide ? <div className="entry-help-popover__divider" aria-hidden /> : null}
           <a
             className="entry-help-popover__item"
-            href={ISSUES_URL}
+            href={GITHUB_SUPPORT_URL}
             {...ext}
             role="menuitem"
             onClick={() => {
@@ -144,7 +146,7 @@ export function EntryHelpMenu({ onOpenFeatureGuide }: { onOpenFeatureGuide?: () 
           </a>
           <a
             className="entry-help-popover__item"
-            href={PRS_URL}
+            href={GITHUB_FEATURE_REQUEST_URL}
             {...ext}
             role="menuitem"
             onClick={() => {

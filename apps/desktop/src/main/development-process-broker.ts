@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { createHash } from "node:crypto";
 import path from "node:path";
 
 import type {
@@ -12,10 +13,29 @@ type ManagedProcess = {
   child: ChildProcess | null;
   error: string | null;
   logs: string[];
+  launchFingerprint: string;
   ownerPid: number;
   pid: number | null;
   projectId: string;
 };
+
+function normalizedAbsolutePathIdentity(value: string): string {
+  const normalized = path.normalize(path.resolve(value));
+  return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+}
+
+function launchFingerprint(input: Extract<DesktopDevelopmentProcessInput, { action: "start" }>): string {
+  const environment = Object.entries(input.environment ?? {})
+    .sort(([left], [right]) => left.localeCompare(right));
+  return createHash("sha256").update(JSON.stringify({
+    args: input.args,
+    command: normalizedAbsolutePathIdentity(input.command),
+    cwd: normalizedAbsolutePathIdentity(input.cwd),
+    environment,
+    port: input.port,
+    windowsVerbatimArguments: input.windowsVerbatimArguments === true,
+  })).digest("hex");
+}
 
 type DevelopmentProcessBrokerOptions = {
   isAlive?: (pid: number) => boolean;
@@ -99,15 +119,40 @@ export class DevelopmentProcessBroker {
       throw new Error("Development server command and cwd must be absolute paths");
     }
     const existing = this.records.get(input.projectId);
+    const requestedFingerprint = launchFingerprint(input);
     if (existing && existing.ownerPid !== input.ownerPid) {
       if (this.isAlive(existing.ownerPid)) throw new Error("The development server belongs to another daemon process");
       await this.terminate(existing);
     }
-    if (existing?.child && existing.pid && this.isAlive(existing.pid)) return this.snapshot("start", input.projectId, existing);
-    const record: ManagedProcess = { child: null, error: null, logs: [], ownerPid: input.ownerPid, pid: null, projectId: input.projectId };
+    if (existing?.child && existing.pid && this.isAlive(existing.pid)) {
+      if (existing.launchFingerprint === requestedFingerprint) {
+        return this.snapshot("start", input.projectId, existing);
+      }
+      await this.terminate(existing);
+    } else if (existing) {
+      this.records.delete(existing.projectId);
+    }
+    const record: ManagedProcess = {
+      child: null,
+      error: null,
+      logs: [],
+      launchFingerprint: requestedFingerprint,
+      ownerPid: input.ownerPid,
+      pid: null,
+      projectId: input.projectId,
+    };
     const child = this.spawnProcess(input.command, input.args, {
       cwd: input.cwd,
-      env: { ...process.env, BROWSER: "none", PORT: String(input.port) },
+      env: {
+        ...process.env,
+        ...input.environment,
+        ASPNETCORE_URLS: `http://127.0.0.1:${input.port}`,
+        BROWSER: "none",
+        GRADIO_SERVER_PORT: String(input.port),
+        PORT: String(input.port),
+        SERVER_PORT: String(input.port),
+        STREAMLIT_SERVER_PORT: String(input.port),
+      },
       detached: process.platform !== "win32",
       shell: false,
       stdio: ["ignore", "pipe", "pipe"],
@@ -131,10 +176,13 @@ export class DevelopmentProcessBroker {
 
   private async terminate(record: ManagedProcess): Promise<void> {
     const pid = record.pid;
+    // Keep the broker record until the OS confirms that the process tree was
+    // terminated.  Clearing it first made a failed Windows `taskkill` look
+    // stopped and removed the only handle MonoField had for retrying.
+    if (pid != null) await this.terminateTree(pid);
     record.child = null;
     record.pid = null;
     this.records.delete(record.projectId);
-    if (pid != null) await this.terminateTree(pid);
   }
 
   private snapshot(action: DesktopDevelopmentProcessInput["action"], projectId: string, record: ManagedProcess | null): DesktopDevelopmentProcessResult {

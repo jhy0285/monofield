@@ -21,7 +21,7 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html { scroll-behavior: smooth; background: var(--bg); }
-body { margin: 0; color: var(--text); background: var(--bg); font-family: var(--sans); line-height: 1.5; -webkit-font-smoothing: antialiased; }
+body { margin: 0; color: var(--text); background: var(--bg); font-family: var(--sans); line-height: 1.5; word-break: keep-all; overflow-wrap: break-word; -webkit-font-smoothing: antialiased; }
 button, a { font: inherit; }
 a { color: inherit; text-decoration: none; }
 button { color: inherit; }
@@ -44,7 +44,7 @@ button { color: inherit; }
 .lang-toggle i { color: #50555a; font-style: normal; }
 .lang-toggle:hover { border-color: var(--accent); }
 .header-download { min-width: 110px; padding: 0 15px; font-size: 12px; background: var(--text); color: var(--bg); }
-.lang-toggle:focus-visible, .header-download:focus-visible, .button:focus-visible, .workspace-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.lang-toggle:focus-visible, .header-download:focus-visible, .button:focus-visible, .workspace-tab:focus-visible, .project-mode-tab:focus-visible, .footer-links a:focus-visible, .brand:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 main { overflow: clip; }
 .hero { min-height: calc(100svh - 68px); position: relative; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; padding: clamp(80px, 10vw, 150px) clamp(20px, 7.5vw, 120px) 80px; border-bottom: 1px solid var(--line); }
@@ -458,6 +458,7 @@ main { overflow: clip; }
 
 .closing-section { min-height: 72svh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 100px 20px; text-align: center; background: radial-gradient(circle at center, rgba(141,164,255,.11), transparent 40%); }
 .closing-section h2 { max-width: 1000px; margin: 0; font-size: clamp(48px, 7.2vw, 104px); line-height: .94; letter-spacing: -.07em; font-weight: 520; }
+.closing-copy { max-width: 640px; margin: 28px 0 0; color: var(--muted); font-size: 15px; }
 .closing-section .hero-actions { justify-content: center; }
 .site-footer { min-height: 330px; display: flex; flex-direction: column; padding: clamp(64px, 7vw, 96px) var(--page-gutter) 30px; border-top: 1px solid var(--line); color: var(--faint); font-size: 10px; }
 .footer-main { width: min(100%, 1450px); margin: 0 auto; display: flex; align-items: flex-start; justify-content: space-between; gap: clamp(40px, 8vw, 130px); }

@@ -168,6 +168,40 @@ export const codexAgentDef = {
             '-c',
             'sandbox_workspace_write.network_access=true',
           ];
+      const dirs = (extraAllowedDirs || []).filter(
+        (d) => typeof d === 'string' && d.length > 0,
+      );
+      if (
+        process.platform === 'win32' &&
+        !needsDangerFullAccess &&
+        runtimeContext.cwd?.trim()
+      ) {
+        // Windows workspace-write tools run as CodexSandboxOnline, while the
+        // selected repository is normally owned by the desktop user. Git
+        // rejects that ownership mismatch before even read-only commands.
+        // Codex filters raw GIT_CONFIG_* variables from its tool environment,
+        // so pass the exact selected cwd through its supported shell policy.
+        // This affects only this Codex child; no global Git config is changed.
+        const safeDirectories = Array.from(
+          new Set(
+            [runtimeContext.cwd, ...dirs]
+              .map((directory) => directory.trim().replace(/\\/g, '/'))
+              .filter(Boolean),
+          ),
+        );
+        args.push(
+          '-c',
+          `shell_environment_policy.set.GIT_CONFIG_COUNT="${safeDirectories.length}"`,
+        );
+        safeDirectories.forEach((safeDirectory, index) => {
+          args.push(
+            '-c',
+            `shell_environment_policy.set.GIT_CONFIG_KEY_${index}="safe.directory"`,
+            '-c',
+            `shell_environment_policy.set.GIT_CONFIG_VALUE_${index}=${JSON.stringify(safeDirectory)}`,
+          );
+        });
+      }
       if (codexShouldDisableExternalPlugins()) {
         args.push('--disable', 'plugins');
       }
@@ -177,9 +211,6 @@ export const codexAgentDef = {
       if (!resumeSessionId && runtimeContext.cwd) {
         args.push('-C', runtimeContext.cwd);
       }
-      const dirs = (extraAllowedDirs || []).filter(
-        (d) => typeof d === 'string' && d.length > 0,
-      );
       for (const d of resumeSessionId ? [] : dirs) {
         args.push('--add-dir', d);
       }

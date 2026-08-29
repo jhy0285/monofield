@@ -99,6 +99,7 @@ describe('interface-spec document contract', () => {
         interfaceId: 'if-ord-001',
         method: 'post',
         path: '/api/orders',
+        businessPurpose: '고객과 상품 목록을 받아 주문을 생성합니다.',
         auth: 'bearer',
         requestFields: [{ nameEn: 'customerId', minSize: '1', maxSize: '36', required: 'TBD' }],
         responseFields: [{ nameEn: 'orderId', dataType: 'String', required: 'Y' }],
@@ -111,9 +112,42 @@ describe('interface-spec document contract', () => {
       templatePreset: 'review',
       endpoints: [{
         interfaceId: 'IF-ORD-001', method: 'POST', authRequired: true,
+        businessPurpose: '고객과 상품 목록을 받아 주문을 생성합니다.',
         auth: { type: 'bearer' }, requestFields: [{ nameEn: 'customerId', minSize: '1', maxSize: '36', required: 'TBD' }],
       }],
     });
+  });
+
+  it('rejects intake drafts and unaccepted AI suggestions before conversion', () => {
+    const intake = createInterfaceSpecDocumentFromManualDraft({
+      documentName: 'Orders',
+      assistMode: 'ai',
+      reviewStage: 'intake',
+      endpoints: [{ interfaceName: '주문 생성', method: 'POST', path: '/api/orders' }],
+    });
+    expect(intake).toMatchObject({ ok: false });
+    if (!intake.ok) expect(intake.error).toContain('must be reviewed');
+
+    const missingAiReviewStage = createInterfaceSpecDocumentFromManualDraft({
+      documentName: 'Orders',
+      assistMode: 'ai',
+      endpoints: [{ interfaceName: '주문 생성', method: 'POST', path: '/api/orders' }],
+    });
+    expect(missingAiReviewStage).toMatchObject({ ok: false });
+
+    const suggested = createInterfaceSpecDocumentFromManualDraft({
+      documentName: 'Orders',
+      assistMode: 'ai',
+      reviewStage: 'review',
+      endpoints: [{
+        interfaceName: '주문 생성',
+        method: 'POST',
+        path: '/api/orders',
+        requestFields: [{ nameEn: 'customerId', suggested: true }],
+      }],
+    });
+    expect(suggested).toMatchObject({ ok: false });
+    if (!suggested.ok) expect(suggested.error).toContain('unaccepted AI suggestions');
   });
 
   it('drops hidden fields when a manual section is explicitly marked none', () => {
@@ -125,7 +159,7 @@ describe('interface-spec document contract', () => {
         path: '/health',
         requestMode: 'none',
         responseMode: 'manual',
-        requestFields: [{ nameEn: 'hiddenDraftValue' }],
+        requestFields: [{ nameEn: 'hiddenDraftValue', suggested: true }],
         responseFields: [{ nameEn: 'status', dataType: 'String' }],
       }],
     });
@@ -189,5 +223,52 @@ describe('interface-spec document contract', () => {
       expect.objectContaining({ code: 'unresolved-field-definition' }),
       expect.objectContaining({ code: 'duplicate-field-name' }),
     ]));
+  });
+
+  it('allows repeated nested leaf names when their canonical field paths differ', () => {
+    const result = parseInterfaceSpecDocument({
+      schemaVersion: INTERFACE_SPEC_SCHEMA_VERSION,
+      kind: 'interface-spec',
+      source: { codebaseName: 'svc' },
+      endpoints: [{
+        method: 'GET', path: '/orders', interfaceId: 'IF-ORD-001',
+        responseFields: [
+          { nameEn: 'id', dataType: 'Long', required: 'Y', path: 'id', depth: 0 },
+          { nameEn: 'items', dataType: 'Array', required: 'Y', path: 'items', depth: 0 },
+          {
+            nameEn: 'id', dataType: 'Long', required: 'Y',
+            path: 'items.id', parentPath: 'items', depth: 1,
+          },
+          {
+            nameEn: 'items', dataType: 'Array', required: 'Y',
+            path: 'items.items', parentPath: 'items', depth: 1,
+          },
+        ],
+      }],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.issues).not.toContainEqual(expect.objectContaining({ code: 'duplicate-field-name' }));
+  });
+
+  it('warns when two fields resolve to the same canonical field path', () => {
+    const result = parseInterfaceSpecDocument({
+      schemaVersion: INTERFACE_SPEC_SCHEMA_VERSION,
+      kind: 'interface-spec',
+      source: { codebaseName: 'svc' },
+      endpoints: [{
+        method: 'GET', path: '/orders', interfaceId: 'IF-ORD-001',
+        responseFields: [
+          { nameEn: 'id', dataType: 'Long', required: 'Y', path: 'items.id', depth: 1 },
+          { nameEn: 'ID', dataType: 'Long', required: 'Y', path: ' ITEMS.ID ', depth: 1 },
+        ],
+      }],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.issues).toContainEqual(expect.objectContaining({
+      code: 'duplicate-field-name',
+      message: expect.stringContaining('field path "ITEMS.ID"'),
+    }));
   });
 });

@@ -185,7 +185,7 @@ suggestions, save the submitted `draft` JSON value as
 `manual-interface-spec-draft.json`, then convert it with the deterministic CLI:
 
 ```bash
-od docs create-manual-interface-spec \
+monofield docs create-manual-interface-spec \
   --input manual-interface-spec-draft.json --out interface-spec.json
 ```
 
@@ -404,7 +404,7 @@ After the user clicks attach, call the broker once with the selected
 `schema.table` values:
 
 ```bash
-od database inspect <connection-id> \
+monofield database inspect <connection-id> \
   --tables-file <selected-tables.json> \
   --limit <sampleRows> --concurrency <8|16|32> --json
 ```
@@ -514,8 +514,8 @@ Before export, preview and then render through the daemon; never construct an
 XLSX file by hand:
 
 ```bash
-od docs preview-interface-spec --input interface-spec.json [--out preview.html]
-od docs render-interface-spec --input interface-spec.json [--style style.json]
+monofield docs preview-interface-spec --input interface-spec.json [--out preview.html]
+monofield docs render-interface-spec --input interface-spec.json [--style style.json]
 ```
 
 Report endpoint counts per domain, skipped/unprovable routes, the selected

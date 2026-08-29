@@ -4,6 +4,31 @@ MonoField uses semantic versions for source and Desktop releases. Historical
 upstream development remains available in Git history; this file records the
 independent MonoField product line.
 
+## 0.11.5 — 2026-08-29
+
+- Isolated development-server state by project, module, working directory, and
+  exact launch fingerprint so parallel services retain their own status, logs,
+  profile, environment, port, and stop lifecycle.
+- Made module database selection authoritative and reset persistent write
+  permission when a connection identity changes, preventing policy reuse across
+  projects or replacement databases.
+- Reduced explanation-style interface and screen specification prompts by
+  91.9% in the measured fixture while keeping full evidence and artifact context
+  for real generation, editing, validation, and export requests.
+- Let the selected local CLI become usable as soon as its readiness result
+  arrives; on the measured Windows host Codex became ready in 1.7 seconds while
+  the remaining adapter scan continued in the background.
+- Fixed manual preview edits being replaced by stale content and tightened
+  screen-spec image inputs with containment, real-file, format, signature, and
+  size checks.
+- Added a responsive four-step documents/design walkthrough, finalized the
+  development walkthrough, and expanded the downloadable illustrated Korean
+  user guide to cover multi-project work, governed data, specifications, usage,
+  recovery, and release checks.
+- Reworked the README and public website around verifiable workflows, clearer
+  local CLI versus BYOK capability boundaries, keyboard-accessible previews,
+  and direct download and GitHub Star paths.
+
 ## 0.11.4 — 2026-08-28
 
 - Made usage reporting explicit across Codex, Claude, Gemini, Copilot, local

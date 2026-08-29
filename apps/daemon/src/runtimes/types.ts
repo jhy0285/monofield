@@ -184,8 +184,9 @@ export type RuntimeAgentDef = {
   // custom input (undefined === true) so most adapters keep today's UX.
   supportsCustomModel?: boolean;
   // When `true`, the daemon trusts this adapter's CLI to carry its own
-  // multi-turn conversation memory across spawn invocations (today only
-  // `agy -c`). The chat composer skips the rendered web transcript on
+  // multi-turn conversation memory across spawn invocations (for example
+  // Codex, Claude, Gemini, OpenCode, Cursor, and Copilot). The chat composer
+  // skips the rendered web transcript on
   // follow-up turns and sends just the latest user message — see the
   // RuntimeContext.hasPriorAssistantTurn comment for why double-context
   // is the discovery-form loop's root cause.

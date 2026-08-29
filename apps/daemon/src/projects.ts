@@ -8,6 +8,7 @@
 // directory to prevent path traversal — see resolveSafe().
 
 import { link, lstat, mkdir, readdir, readFile, realpath, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import JSZip from 'jszip';
 import {
@@ -865,12 +866,29 @@ export async function writeProjectFile(
   projectId,
   name,
   body,
-  { overwrite = true, artifactManifest = null } = {},
+  { overwrite = true, artifactManifest = null, expectedContentSha256 = null } = {},
   metadata?,
 ) {
   const dir = await ensureProject(projectsRoot, projectId, metadata);
   const safeName = sanitizePath(name);
   const target = await resolveSafeReal(dir, safeName);
+  if (expectedContentSha256) {
+    let current;
+    try {
+      current = await readFile(target);
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+      const conflict = new Error('file changed since it was loaded');
+      conflict.code = 'ESTALE';
+      throw conflict;
+    }
+    const currentSha256 = createHash('sha256').update(current).digest('hex');
+    if (currentSha256 !== expectedContentSha256) {
+      const conflict = new Error('file changed since it was loaded');
+      conflict.code = 'ESTALE';
+      throw conflict;
+    }
+  }
   body = normalizeArtifactRuntimeImports(safeName, body);
   if (!overwrite) {
     try {

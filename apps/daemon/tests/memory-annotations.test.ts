@@ -11,12 +11,17 @@ import {
   memoryEvents,
 } from '../src/memory.js';
 import { __resetExtractionsForTests } from '../src/memory-extractions.js';
+import {
+  installTestCredentialVault,
+  type TestCredentialVault,
+} from './helpers/credential-vault.js';
 
 const dataDir = path.join(
   process.env.OD_DATA_DIR ?? process.cwd(),
   'memory-annotations-test',
 );
 const originalFetch = globalThis.fetch;
+let credentialVault: TestCredentialVault;
 
 // Helper: stub the OpenAI chat-completions response the distiller's provider
 // path will hit (the extraction override below routes through callOpenAI).
@@ -33,6 +38,7 @@ function mockOpenAiEntries(entries: unknown[]): void {
 
 describe('annotation → memory distillation', () => {
   beforeEach(async () => {
+    credentialVault = installTestCredentialVault();
     await fsp.rm(memoryDir(dataDir), { recursive: true, force: true });
     __resetExtractionsForTests();
     await writeMemoryConfig(dataDir, {
@@ -41,6 +47,7 @@ describe('annotation → memory distillation', () => {
   });
 
   afterEach(() => {
+    credentialVault.restore();
     globalThis.fetch = originalFetch;
     vi.restoreAllMocks();
   });

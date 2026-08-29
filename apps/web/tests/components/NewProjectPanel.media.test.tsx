@@ -19,6 +19,60 @@ describe('NewProjectPanel media provider badges', () => {
     vi.unstubAllGlobals();
   });
 
+  it('keeps media catalogues idle on startup and fetches only the selected surface', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.startsWith('/api/media/providers/aihubmix/models?type=')) {
+        return new Response(JSON.stringify({ models: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <NewProjectPanel
+        skills={[]}
+        designSystems={[]}
+        defaultDesignSystemId={null}
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={vi.fn()}
+        mediaProviders={{}}
+      />,
+    );
+
+    await Promise.resolve();
+    expect(aiHubMixCatalogueRequests(fetchMock)).toEqual([]);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+    await waitFor(() => {
+      expect(aiHubMixCatalogueRequests(fetchMock)).toEqual([
+        '/api/media/providers/aihubmix/models?type=image_generation',
+      ]);
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Video' }));
+    await waitFor(() => {
+      expect(aiHubMixCatalogueRequests(fetchMock)).toEqual([
+        '/api/media/providers/aihubmix/models?type=image_generation',
+        '/api/media/providers/aihubmix/models?type=video',
+      ]);
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Audio' }));
+    await waitFor(() => {
+      expect(aiHubMixCatalogueRequests(fetchMock)).toEqual([
+        '/api/media/providers/aihubmix/models?type=image_generation',
+        '/api/media/providers/aihubmix/models?type=video',
+        '/api/media/providers/aihubmix/models?type=tts',
+      ]);
+    });
+  });
+
   it('treats daemon-restored apiKeyConfigured providers as configured', () => {
     render(
       <NewProjectPanel
@@ -200,3 +254,9 @@ describe('NewProjectPanel media provider badges', () => {
     );
   });
 });
+
+function aiHubMixCatalogueRequests(fetchMock: ReturnType<typeof vi.fn<typeof fetch>>): string[] {
+  return fetchMock.mock.calls
+    .map(([input]) => String(input))
+    .filter((url) => url.startsWith('/api/media/providers/aihubmix/models?type='));
+}

@@ -110,6 +110,8 @@ const SECTION_ORDER: FileCategory[] = [
 ];
 
 const STYLESHEET_EXTENSIONS = new Set(['css', 'scss', 'sass', 'less']);
+const DEFAULT_PAGE_SIZE = 30;
+const PAGE_SIZE_OPTIONS = [30, 100, 250] as const;
 
 function fileCategory(file: ProjectFile): FileCategory {
   const dot = file.name.lastIndexOf('.');
@@ -162,8 +164,8 @@ function ActionNoticeView({ notice }: { notice: ActionNotice | null }) {
 
 // Useful-info tips that rotate one at a time in the panel footer, ordered as
 // a loose journey: file basics → feeding context → generating → iterating →
-// exporting/sharing → community. A tip with a `url` renders its typed line as
-// a link to that destination.
+// exporting/sharing. Community support has dedicated onboarding and review
+// surfaces, so it must not interrupt the product-help rotation here.
 const USEFUL_TIPS: ReadonlyArray<{ key: keyof Dict; url?: string }> = [
   { key: 'designFiles.usefulInfoTip' },
   { key: 'designFiles.usefulInfoTip2' },
@@ -176,7 +178,6 @@ const USEFUL_TIPS: ReadonlyArray<{ key: keyof Dict; url?: string }> = [
   { key: 'designFiles.usefulInfoTip14' },
   { key: 'designFiles.usefulInfoTip15' },
   { key: 'designFiles.usefulInfoTip5' },
-  { key: 'designFiles.usefulInfoTip7', url: 'https://github.com/jhy0285/monofield' },
 ];
 const TIP_TYPE_MS = 32; // per-character typing speed
 const TIP_HOLD_MS = 3800; // pause on a fully-typed tip before advancing
@@ -304,7 +305,6 @@ export function DesignFilesPanel({
   const [draggingFiles, setDraggingFiles] = useState(false);
   const [dropReadError, setDropReadError] = useState<string | null>(null);
   const dragDepthRef = useRef(0);
-  const [hover, setHover] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ name: string; top: number; left: number } | null>(null);
   const MENU_ESTIMATED_HEIGHT = 145;
   const MENU_SAFE_PADDING = 8;
@@ -318,6 +318,11 @@ export function DesignFilesPanel({
   const [installNotice, setInstallNotice] = useState<ActionNotice | null>(null);
   const [renaming, setRenaming] = useState<{ name: string; draft: string; saving: boolean } | null>(null);
   const [currentDir, setCurrentDir] = useState<string>(() => navState?.currentDir ?? '');
+  const [page, setPage] = useState(() => Math.max(0, navState?.page ?? 0));
+  const [pageSize, setPageSize] = useState(() => {
+    const saved = navState?.pageSize;
+    return typeof saved === 'number' && saved > 0 ? saved : DEFAULT_PAGE_SIZE;
+  });
 
   // Keep the parent's create-target in sync with the folder being viewed, so
   // uploads / pastes / new sketches / dropped files land in the open folder
@@ -330,17 +335,22 @@ export function DesignFilesPanel({
     onNavStateChange?.({
       kindFilter: navState?.kindFilter ?? new Set(),
       currentDir,
-      page: 0,
-      pageSize: 30,
+      page,
+      pageSize,
     });
-  }, [currentDir, navState?.kindFilter, onNavStateChange]);
+  }, [currentDir, navState?.kindFilter, onNavStateChange, page, pageSize]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [currentDir]);
 
   // Derive immediate subdirectories and files at the current directory level
   // from the flat files list. Files with names like "a/b/c.html" contribute
   // "a" as a directory when currentDir is '' and "b" when currentDir is "a".
-  const { dirsAtCurrentDir, filesAtCurrentDir } = useMemo(() => {
+  const { dirsAtCurrentDir, filesAtCurrentDir, descendantCountByDir } = useMemo(() => {
     const prefix = currentDir === '' ? '' : `${currentDir}/`;
     const dirs = new Set<string>();
+    const descendantCounts = new Map<string, number>();
     const localFiles: ProjectFile[] = [];
     for (const f of files) {
       if (!f.name.startsWith(prefix)) continue;
@@ -349,7 +359,9 @@ export function DesignFilesPanel({
       if (slashIdx === -1) {
         localFiles.push(f);
       } else {
-        dirs.add(remainder.slice(0, slashIdx));
+        const immediateDir = remainder.slice(0, slashIdx);
+        dirs.add(immediateDir);
+        descendantCounts.set(immediateDir, (descendantCounts.get(immediateDir) ?? 0) + 1);
         if (currentDir === '') localFiles.push(f);
       }
     }
@@ -365,6 +377,7 @@ export function DesignFilesPanel({
     return {
       dirsAtCurrentDir: [...dirs].sort((a, b) => a.localeCompare(b)),
       filesAtCurrentDir: localFiles,
+      descendantCountByDir: descendantCounts,
     };
   }, [files, folders, currentDir]);
 
@@ -385,6 +398,47 @@ export function DesignFilesPanel({
       (category) => [category, grouped.get(category)!] as const,
     );
   }, [filesAtCurrentDir]);
+
+  // Large linked repositories can contain tens of thousands of files. The
+  // root view intentionally keeps descendant files discoverable, but mounting
+  // every row at once turns a modest toolbar state update into a full-page
+  // React/layout pass. Page the already-sorted rows so server switches, Git
+  // loading indicators, and log updates remain responsive regardless of
+  // workspace size.
+  const orderedFiles = useMemo(
+    () => sections.flatMap(([, sectionFiles]) => sectionFiles),
+    [sections],
+  );
+  const pageCount = Math.max(1, Math.ceil(orderedFiles.length / pageSize));
+  const boundedPage = Math.min(page, pageCount - 1);
+  const visibleSections = useMemo(() => {
+    const start = boundedPage * pageSize;
+    const visible = orderedFiles.slice(start, start + pageSize);
+    const grouped = new Map<FileCategory, ProjectFile[]>();
+    for (const file of visible) {
+      const category = fileCategory(file);
+      const bucket = grouped.get(category) ?? [];
+      bucket.push(file);
+      grouped.set(category, bucket);
+    }
+    return SECTION_ORDER.filter((category) => grouped.has(category)).map(
+      (category) => [category, grouped.get(category)!] as const,
+    );
+  }, [boundedPage, orderedFiles, pageSize]);
+  const sectionCounts = useMemo(
+    () => new Map(sections.map(([category, sectionFiles]) => [category, sectionFiles.length])),
+    [sections],
+  );
+  const pageStart = orderedFiles.length === 0 ? 0 : boundedPage * pageSize + 1;
+  const pageEnd = Math.min((boundedPage + 1) * pageSize, orderedFiles.length);
+
+  useEffect(() => {
+    if (page !== boundedPage) setPage(boundedPage);
+  }, [boundedPage, page]);
+
+  useEffect(() => {
+    setMenuPos(null);
+  }, [page, pageSize]);
 
   // Reset selection and renaming state when the user navigates into or out of
   // a directory.
@@ -575,15 +629,12 @@ export function DesignFilesPanel({
   function renderFileRow(f: ProjectFile, category: FileCategory) {
     const active = preview === f.name;
     const isSelected = selected.has(f.name);
-    const isHovered = hover === f.name;
     const renameState = renaming?.name === f.name ? renaming : null;
     return (
       <div
         key={f.name}
         data-testid={`design-file-row-${f.name}`}
         className={`df-row df-file-row ${active ? 'active' : ''} ${isSelected ? 'selected' : ''}`}
-        onMouseEnter={() => setHover(f.name)}
-        onMouseLeave={() => setHover((c) => (c === f.name ? null : c))}
       >
         <span
           className="df-row-check"
@@ -682,7 +733,7 @@ export function DesignFilesPanel({
         <span
           data-testid={`design-file-menu-${f.name}`}
           className="df-row-menu"
-          style={isHovered || active ? { opacity: 1 } : undefined}
+          style={active ? { opacity: 1 } : undefined}
           role="button"
           tabIndex={0}
           aria-label={t('designFiles.rowMenu')}
@@ -706,16 +757,15 @@ export function DesignFilesPanel({
 
   function renderDirRow(dirName: string) {
     const fullPath = currentDir === '' ? dirName : `${currentDir}/${dirName}`;
-    const prefix = `${fullPath}/`;
-    const count = files.filter((f) => f.name.startsWith(prefix)).length;
+    const count = descendantCountByDir.get(dirName) ?? 0;
     return (
-      <div key={`dir:${fullPath}`} className="df-row df-dir-row" onClick={() => setCurrentDir(fullPath)}>
+      <div key={`dir:${fullPath}`} className="df-row df-dir-row" onClick={() => navigateToDirectory(fullPath)}>
         <span className="df-row-check" aria-hidden />
         <span className="df-row-icon" data-kind="folder" aria-hidden>
           <Icon name="folder" size={14} />
         </span>
         <div className="df-row-name-wrap">
-          <button type="button" className="df-row-name-btn" onClick={() => setCurrentDir(fullPath)}>
+          <button type="button" className="df-row-name-btn" onClick={() => navigateToDirectory(fullPath)}>
             <span className="df-row-name-wrap">
               <span className="df-row-name" title={dirName}>{dirName}</span>
               <span className="df-row-sub">{t('designFiles.folderCount', { n: count })}</span>
@@ -726,6 +776,12 @@ export function DesignFilesPanel({
         <span className="df-row-menu df-row-menu-placeholder" aria-hidden />
       </div>
     );
+  }
+
+  function navigateToDirectory(path: string) {
+    setPage(0);
+    setMenuPos(null);
+    setCurrentDir(path);
   }
 
   async function handleBatchDownload() {
@@ -850,7 +906,7 @@ export function DesignFilesPanel({
         <button
           type="button"
           className="df-breadcrumb-btn"
-          onClick={() => setCurrentDir('')}
+          onClick={() => navigateToDirectory('')}
         >
           {rootDirName ?? t('designFiles.crumbs')}
         </button>
@@ -867,7 +923,7 @@ export function DesignFilesPanel({
               <button
                 type="button"
                 className="df-breadcrumb-btn"
-                onClick={() => setCurrentDir(path)}
+                onClick={() => navigateToDirectory(path)}
               >
                 {segment}
               </button>
@@ -1139,15 +1195,51 @@ export function DesignFilesPanel({
                   {dirsAtCurrentDir.map((d) => renderDirRow(d))}
                 </div>
               ) : null}
-              {sections.map(([category, sectionFiles]) => (
+              {visibleSections.map(([category, sectionFiles]) => (
                 <div className="df-section" key={`cat:${category}`}>
                   <div className="df-section-label">
                     {sectionLabel(category, t)}
-                    <span className="df-section-count">{sectionFiles.length}</span>
+                    <span className="df-section-count">{sectionCounts.get(category) ?? sectionFiles.length}</span>
                   </div>
                   {sectionFiles.map((f) => renderFileRow(f, category))}
                 </div>
               ))}
+              {orderedFiles.length > DEFAULT_PAGE_SIZE ? (
+                <nav className="df-pagination df-pagination-center" aria-label={t('designFiles.jumpToPage')}>
+                  <label>
+                    <span>{t('designFiles.perPage')}</span>
+                    <select
+                      aria-label={t('designFiles.perPage')}
+                      value={pageSize}
+                      onChange={(event) => {
+                        setPageSize(Number(event.target.value));
+                        setPage(0);
+                      }}
+                    >
+                      {PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={size}>{size}</option>)}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    className="df-page-btn"
+                    disabled={boundedPage === 0}
+                    onClick={() => setPage((current) => Math.max(0, current - 1))}
+                  >
+                    {t('designFiles.prev')}
+                  </button>
+                  <span className="df-page-info">
+                    {t('designFiles.pageInfo', { start: pageStart, end: pageEnd, total: orderedFiles.length })}
+                  </span>
+                  <button
+                    type="button"
+                    className="df-page-btn"
+                    disabled={boundedPage >= pageCount - 1}
+                    onClick={() => setPage((current) => Math.min(pageCount - 1, current + 1))}
+                  >
+                    {t('designFiles.next')}
+                  </button>
+                </nav>
+              ) : null}
             </>
           )}
           <div className="df-footer-info">

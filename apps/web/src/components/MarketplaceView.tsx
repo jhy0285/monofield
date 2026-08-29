@@ -33,7 +33,7 @@ export function MarketplaceView() {
   useEffect(() => {
     let cancelled = false;
     void Promise.all([
-      listPlugins(),
+      listPlugins({ summary: true, locale }),
       fetch('/api/marketplaces')
         .then((r) => (r.ok ? r.json() : { marketplaces: [] }))
         .then((d) => (d?.marketplaces ?? []) as Marketplace[]),
@@ -46,7 +46,7 @@ export function MarketplaceView() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [locale]);
 
   const visible = plugins.filter((p) => filter === 'all' || p.trust === filter);
 

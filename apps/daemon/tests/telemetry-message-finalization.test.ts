@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   FORM_ANSWERED_GENERIC_OVERRIDE,
+  FORM_ANSWERED_INTERFACE_SPEC_MANUAL_OVERRIDE,
   composeChatUserRequestForAgent,
   createFinalizedMessageTelemetryReporter,
   shouldReportRunCompletedFromMessage,
   shouldReportRunCompletionTelemetryFallbackStatus,
   telemetryPromptFromRunRequest,
+  formAnsweredSystemOverrideForPrompt,
 } from '../src/server.js';
 
 describe('Langfuse message finalization gate', () => {
@@ -229,6 +231,33 @@ describe('Langfuse message finalization gate', () => {
     // adapter that doesn't set resumesSessionViaCli).
     const kept = composeChatUserRequestForAgent(transcript, currentPrompt);
     expect(kept).toBe(transcript);
+  });
+
+  it('allows the manual interface-spec intake form to transition to the same review form', () => {
+    const currentPrompt = [
+      '[form answers — interface-spec-manual-draft]',
+      '- reviewStage: intake',
+      '- interfaceName: Create order',
+    ].join('\n');
+    const prompt = composeChatUserRequestForAgent('## user\ncreate a spec', currentPrompt);
+
+    expect(prompt).toContain('submitted a stage of the interface-spec-manual-draft form');
+    expect(prompt).toContain('emit the same form once at review stage');
+    expect(prompt).not.toContain(
+      'The user has answered the interface-spec-manual-draft form. Do not emit another',
+    );
+    expect(FORM_ANSWERED_INTERFACE_SPEC_MANUAL_OVERRIDE).toContain(
+      'reviewStage: \"review\"',
+    );
+    expect(FORM_ANSWERED_INTERFACE_SPEC_MANUAL_OVERRIDE).toContain(
+      'suggested: true',
+    );
+    expect(FORM_ANSWERED_INTERFACE_SPEC_MANUAL_OVERRIDE).toContain(
+      'Do not create or convert the final interface specification from an intake form',
+    );
+    expect(formAnsweredSystemOverrideForPrompt(currentPrompt)).toBe(
+      FORM_ANSWERED_INTERFACE_SPEC_MANUAL_OVERRIDE,
+    );
   });
 
   it('bounds the one-time bootstrap transcript while preserving the project brief and latest turn', () => {

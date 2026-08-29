@@ -475,13 +475,15 @@ describe('spawn writes external MCP config for Claude Code', () => {
       expect(written.mcpServers['run-local']).toMatchObject({
         command: 'node',
         args: ['run-tool.js'],
-        env: { RUN_ONLY: '1' },
+        env: { RUN_ONLY: '${MONOFIELD_MCP_SECRET_1}' },
       });
       expect(written.mcpServers['run-remote']).toMatchObject({
         type: 'http',
         url: 'https://example.test/mcp',
-        headers: { 'X-Run': 'ok' },
+        headers: { 'X-Run': '${MONOFIELD_MCP_SECRET_2}' },
       });
+      expect(JSON.stringify(written)).not.toContain('"RUN_ONLY":"1"');
+      expect(JSON.stringify(written)).not.toContain('"X-Run":"ok"');
 
       const persistedRes = await fetch(`${baseUrl}/api/mcp/servers`);
       expect(persistedRes.ok).toBe(true);

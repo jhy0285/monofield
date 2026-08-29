@@ -34,11 +34,12 @@ import {
   useState,
 } from 'react';
 import { useT } from '../i18n';
-import type {
-  MemoryExtractionConfig as MemoryExtractionConfigShape,
-  MemoryExtractionMaskedConfig,
-  MemoryExtractionProvider,
-  MemoryListResponse,
+import {
+  isStoredByokApiKey,
+  type MemoryExtractionConfig as MemoryExtractionConfigShape,
+  type MemoryExtractionMaskedConfig,
+  type MemoryExtractionProvider,
+  type MemoryListResponse,
 } from '@open-design/contracts';
 import type { AgentModelOption, ApiProtocol, ExecMode } from '../types';
 import {
@@ -347,12 +348,21 @@ export function MemoryModelInline({
     if (!config || !config.model) return;
     const trimmedBaseUrl = chatBaseUrl.trim();
     const newTail = (chatApiKey || '').slice(-4);
+    const storedChatKey = isStoredByokApiKey(chatApiKey);
     const azureVersion = apiProtocol === 'azure' ? chatApiVersion.trim() : '';
+    // A stored BYOK key is represented in the browser by an opaque sentinel,
+    // not the real secret. Convert a prior copied memory key to the sentinel
+    // once, then consider the empty-tail sentinel response synchronized;
+    // comparing the sentinel's own last four characters caused an endless
+    // PATCH loop and repeatedly discarded the dedicated memory credential.
+    const keyDrift = storedChatKey
+      ? !config.apiKeyConfigured || config.apiKeyTail !== ''
+      : config.apiKeyTail !== newTail;
     const drift =
       config.provider !== apiProtocol
       || config.baseUrl !== trimmedBaseUrl
       || config.apiVersion !== azureVersion
-      || config.apiKeyTail !== newTail;
+      || keyDrift;
     if (!drift) return;
     const handle = setTimeout(() => {
       void persist(buildOverride(config.model), { silent: true });

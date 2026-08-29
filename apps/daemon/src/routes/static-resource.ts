@@ -148,10 +148,12 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       for await (const agent of detectAgentsStream(agentCliEnv, {
         priorityAgentId:
           typeof config.agentId === 'string' ? config.agentId : null,
-        // CLI detection launches version/help/model/auth probes. Four adapters
-        // at a time keeps the UI incremental without flooding Windows with
-        // dozens of competing processes during the user's first prompt.
-        concurrency: 4,
+        // CLI detection launches version/help/model/auth probes. On Windows,
+        // four cold Node/native CLI trees compete with security scanning and
+        // delayed the configured (priority) Codex probe from ~1s to ~5s.
+        // Two still completes the full catalog in roughly the same wall time,
+        // while making the selected engine usable several seconds earlier.
+        concurrency: 2,
       })) {
         if (aborted) break;
         res.write(`event: agent\ndata: ${JSON.stringify(agent)}\n\n`);

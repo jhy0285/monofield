@@ -915,6 +915,10 @@ export interface Dict {
   // Desktop updater
   'updater.available': string;
   'updater.availableBody': string;
+  'updater.channelBeta': string;
+  'updater.channelPrerelease': string;
+  'updater.channelPreview': string;
+  'updater.channelStable': string;
   'updater.checking': string;
   'updater.download': string;
   'updater.downloading': string;
@@ -928,6 +932,7 @@ export interface Dict {
   'updater.installRestart': string;
   'updater.installingRestart': string;
   'updater.openInstaller': string;
+  'updater.openReleasePage': string;
   'updater.opening': string;
   'updater.payloadReadyGeneric': string;
   'updater.payloadReadyVersion': string;
@@ -940,10 +945,11 @@ export interface Dict {
   'updater.readyVersion': string;
   'updater.upToDate': string;
 
-  // Newsletter email field on the onboarding About-you step.
+  // In-product satisfaction check-in and optional community support prompts.
   'community.checkInTitle': string;
   'community.checkInBody': string;
   'community.worksWell': string;
+  'community.shareFeedback': string;
   'community.later': string;
   'community.starTitle': string;
   'community.starBody': string;
@@ -1789,6 +1795,7 @@ export interface Dict {
   'entry.helpAria': string;
   'entry.helpMenuAria': string;
   'entry.helpGetHelp': string;
+  'entry.helpReportProblem': string;
   'entry.helpSubmitFeature': string;
   'entry.helpWhatsNew': string;
   'entry.helpDownloadDesktop': string;
@@ -2939,9 +2946,6 @@ export interface Dict {
   'designFiles.usefulInfoTip2': string;
   'designFiles.usefulInfoTip4': string;
   'designFiles.usefulInfoTip5': string;
-  'designFiles.usefulInfoTip6': string;
-  'designFiles.usefulInfoTip7': string;
-  'designFiles.usefulInfoTip8': string;
   'designFiles.usefulInfoTip9': string;
   'designFiles.usefulInfoTip10': string;
   'designFiles.usefulInfoTip11': string;
@@ -3999,6 +4003,8 @@ export interface Dict {
   'development.springProfilePlaceholder': string;
   'development.additionalArguments': string;
   'development.invalidArguments': string;
+  'development.logs': string;
+  'development.logsEmpty': string;
   'gitChanges.title': string;
   'gitChanges.description': string;
   'gitChanges.branch': string;

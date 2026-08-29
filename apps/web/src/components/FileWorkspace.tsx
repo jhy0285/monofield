@@ -100,6 +100,10 @@ import { buildLauncherActions, type LauncherContext } from './workspace/tab-laun
 import { SideChatTab, type ActiveConversationChatState } from './workspace/SideChatTab';
 import { TerminalViewer } from './workspace/TerminalViewer';
 import { DevelopmentWorkspaceControls } from './DevelopmentWorkspaceControls';
+import {
+  CreationWorkspaceTutorial,
+  shouldOpenCreationWorkspaceTutorial,
+} from './DevelopmentWorkspaceTutorial';
 import { GitChangesPanel } from './GitChangesPanel';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
 import { MissingBrandFontsBanner } from './MissingBrandFontsBanner';
@@ -478,6 +482,44 @@ export function FileWorkspace({
   focusQuestionsRequest = null,
 }: Props) {
   const t = useT();
+  const creationWorkspace = projectMetadata?.workMode === 'creation';
+  const [creationGuideOpen, setCreationGuideOpen] = useState(false);
+
+  useEffect(() => {
+    if (!creationWorkspace || !shouldOpenCreationWorkspaceTutorial()) return;
+    setCreationGuideOpen(true);
+  }, [creationWorkspace, projectId]);
+
+  const developmentContextKey = `${projectId}\0${resolvedDir ?? ''}`;
+  const [developmentProjectSelection, setDevelopmentProjectSelection] = useState<{
+    contextKey: string;
+    projectPath: string | null;
+    ready: boolean;
+  }>(() => ({
+    contextKey: developmentContextKey,
+    projectPath: projectMetadata?.development?.activeProjectPath ?? null,
+    ready: false,
+  }));
+  const activeDevelopmentProjectSelection = developmentProjectSelection.contextKey === developmentContextKey
+    ? developmentProjectSelection
+    : {
+        contextKey: developmentContextKey,
+        projectPath: projectMetadata?.development?.activeProjectPath ?? null,
+        ready: false,
+      };
+  const handleActiveDevelopmentProjectStateChange = useCallback((state: {
+    projectPath: string | null;
+    ready: boolean;
+  }) => {
+    setDevelopmentProjectSelection((current) => {
+      if (
+        current.contextKey === developmentContextKey
+        && current.projectPath === state.projectPath
+        && current.ready === state.ready
+      ) return current;
+      return { contextKey: developmentContextKey, ...state };
+    });
+  }, [developmentContextKey]);
   const browserTabLabel = t('chat.designToolbox.context.browser');
   // The chat column only shows a compact Questions banner; the form itself
   // lives here, including after submission when a banner click can reopen the
@@ -1867,7 +1909,8 @@ export function FileWorkspace({
     // Surface a toast when the daemon can't start one (e.g. node-pty not
     // compiled) instead of silently no-opping the launcher action.
     createTerminal: async () => {
-      const term = await createTerminal(projectId);
+      const projectPath = projectMetadata?.development?.activeProjectPath;
+      const term = await createTerminal(projectId, projectPath ? { projectPath } : undefined);
       if (!term) {
         setLauncherToast(t('workspace.terminalStartFailed'));
         return null;
@@ -2112,6 +2155,20 @@ export function FileWorkspace({
             className="ws-tabs-file-actions"
             data-app-chrome-file-actions="true"
           />
+          {creationWorkspace ? (
+            <button
+              type="button"
+              className="icon-only ws-tab-add od-tooltip"
+              data-testid="creation-guide-trigger"
+              title={`${t('workMode.creation')} · ${t('productTutorial.reopen')}`}
+              data-tooltip={`${t('workMode.creation')} · ${t('productTutorial.reopen')}`}
+              data-tooltip-placement="bottom"
+              aria-label={`${t('workMode.creation')} · ${t('productTutorial.reopen')}`}
+              onClick={() => setCreationGuideOpen(true)}
+            >
+              <Icon name="help-circle" size={13} />
+            </button>
+          ) : null}
           {headerActions ? (
             <div className="ws-tabs-project-actions">{headerActions}</div>
           ) : null}
@@ -2123,11 +2180,19 @@ export function FileWorkspace({
             projectId={projectId}
             metadata={projectMetadata}
             resolvedDir={resolvedDir}
+            automaticVerificationAvailable={chatConfig?.mode !== 'api'}
             onMetadataChange={onProjectMetadataChange}
             onOpenUrl={openDevelopmentUrl}
             onOpenChanges={() => openFile(GIT_CHANGES_TAB)}
+            onActiveProjectStateChange={handleActiveDevelopmentProjectStateChange}
           />
         </div>
+      ) : null}
+      {creationWorkspace ? (
+        <CreationWorkspaceTutorial
+          open={creationGuideOpen}
+          onClose={() => setCreationGuideOpen(false)}
+        />
       ) : null}
       {launcherOpen ? (
         <TabLauncherMenu
@@ -2184,6 +2249,7 @@ export function FileWorkspace({
             aria-hidden={activeTab === browserTab.id ? undefined : true}
           >
             <DesignBrowserPanel
+              active={activeTab === browserTab.id}
               automationParentSessionId={browserPopupAutomationParentsRef.current.get(browserTab.id) ?? null}
               projectId={projectId}
               browserTabId={browserTab.id}
@@ -2337,7 +2403,8 @@ export function FileWorkspace({
         ) : activeTab === GIT_CHANGES_TAB ? (
           <GitChangesPanel
             projectId={projectId}
-            projectPath={projectMetadata?.development?.activeProjectPath}
+            projectPath={activeDevelopmentProjectSelection.projectPath}
+            projectSelectionReady={activeDevelopmentProjectSelection.ready}
             onOpenFile={openFile}
           />
         ) : isBrowserTabId(activeTab) ? (
@@ -2382,6 +2449,7 @@ export function FileWorkspace({
           <TerminalViewer
             key={activeTab}
             projectId={projectId}
+            projectPath={projectMetadata?.development?.activeProjectPath}
             terminalId={terminalIdFromTabId(activeTab)}
             onClose={() => closeTab(activeTab)}
             onSessionIdChange={handleTerminalSessionChange}

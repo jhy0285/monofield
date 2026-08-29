@@ -2,7 +2,7 @@
 
 Wraps the proven static scanner (ported from the generate-api-interface-excel
 skill, stdlib-only) and emits an interface-spec.json document (schema v1)
-that `od docs render-interface-spec` accepts directly.
+that `monofield docs render-interface-spec` accepts directly.
 
 Usage:
   python scan_spring.py --codebase-path <repo-or-module> [--inventory-only]

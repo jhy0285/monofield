@@ -20,9 +20,17 @@
 // Token persistence lives in `mcp-tokens.ts`. This file is the protocol
 // layer; storage is somebody else's job.
 
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
+import {
+  credentialVaultKey,
+  deleteCredential,
+  legacyCredentialVaultKey,
+  readCredential,
+  writeCredential,
+} from './credential-vault.js';
+import { hardenCredentialFile } from './credential-file-security.js';
 
 // ───────────────────────────────────────────────────────────────────────
 // Types — narrow subsets of the relevant RFC payloads.
@@ -200,16 +208,124 @@ interface ClientCacheFile {
   clients: RegisteredClient[];
 }
 
+const STORED_CLIENT_SECRET = '__MONOFIELD_STORED_MCP_CLIENT_SECRET__';
+const STORED_CLIENT_SECRET_REF_PREFIX = `${STORED_CLIENT_SECRET}:ref:`;
+
 function clientsFile(dataDir: string): string {
   return path.join(dataDir, 'mcp-oauth-clients.json');
 }
 
+function clientSecretRef(dataDir: string, client: RegisteredClient): string {
+  const id = createHash('sha256')
+    .update(`${client.authServerIssuer}\0${client.redirectUri}\0${client.clientId}`)
+    .digest('hex')
+    .slice(0, 32);
+  return credentialVaultKey('mcp-oauth-client', clientsFile(dataDir), id);
+}
+
+function freshClientSecretRef(dataDir: string, client: RegisteredClient): string {
+  return `${clientSecretRef(dataDir, client)}:v-${randomBytes(12).toString('hex')}`;
+}
+
+function storedClientSecretMarker(ref: string): string {
+  return `${STORED_CLIENT_SECRET_REF_PREFIX}${ref}`;
+}
+
+function storedClientSecretRef(dataDir: string, client: RegisteredClient): string {
+  if (client.clientSecret?.startsWith(STORED_CLIENT_SECRET_REF_PREFIX)) {
+    return client.clientSecret.slice(STORED_CLIENT_SECRET_REF_PREFIX.length);
+  }
+  return legacyCredentialVaultKey(
+    'mcp-oauth-client',
+    clientsFile(dataDir),
+    createHash('sha256')
+      .update(`${client.authServerIssuer}\0${client.redirectUri}\0${client.clientId}`)
+      .digest('hex')
+      .slice(0, 32),
+  );
+}
+
+function isStoredClientSecret(value: unknown): value is string {
+  return value === STORED_CLIENT_SECRET
+    || (typeof value === 'string' && value.startsWith(STORED_CLIENT_SECRET_REF_PREFIX));
+}
+
+async function persistClientCache(dataDir: string, next: ClientCacheFile): Promise<void> {
+  const file = clientsFile(dataDir);
+  const directory = path.dirname(file);
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  try { await chmod(directory, 0o700); } catch (error: unknown) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== 'ENOTSUP' && code !== 'EPERM' && code !== 'EINVAL') throw error;
+  }
+  const tmp = `${file}.${randomBytes(4).toString('hex')}.tmp`;
+  try {
+    await writeFile(tmp, JSON.stringify(next, null, 2), { encoding: 'utf8', mode: 0o600 });
+    await rename(tmp, file);
+    await chmod(file, 0o600).catch(() => undefined);
+  } catch (error) {
+    await rm(tmp, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
+async function readPersistedClientCache(dataDir: string): Promise<ClientCacheFile> {
+  try {
+    await hardenCredentialFile(clientsFile(dataDir));
+    const parsed = JSON.parse(await readFile(clientsFile(dataDir), 'utf8')) as unknown;
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray((parsed as { clients?: unknown }).clients)) {
+      return { clients: [] };
+    }
+    return {
+      clients: (parsed as { clients: unknown[] }).clients.filter(isRegisteredClient) as RegisteredClient[],
+    };
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { clients: [] };
+    throw error;
+  }
+}
+
 async function readClientCache(dataDir: string): Promise<ClientCacheFile> {
   try {
+    await hardenCredentialFile(clientsFile(dataDir));
     const raw = await readFile(clientsFile(dataDir), 'utf8');
     const parsed = JSON.parse(raw);
     if (!parsed || !Array.isArray(parsed.clients)) return { clients: [] };
-    return { clients: parsed.clients.filter(isRegisteredClient) };
+    const clients = parsed.clients.filter(isRegisteredClient) as RegisteredClient[];
+    const runtime = clients.map((client) => ({ ...client }));
+    const persisted = clients.map((client) => ({ ...client }));
+    const stagedRefs: string[] = [];
+    let migrated = false;
+    try {
+      for (let index = 0; index < runtime.length; index++) {
+        const client = runtime[index]!;
+        const saved = persisted[index]!;
+        if (!client.clientSecret) continue;
+        if (isStoredClientSecret(client.clientSecret)) {
+          const ref = storedClientSecretRef(dataDir, client);
+          try {
+            const secret = (await readCredential(ref))?.trim() ?? '';
+            if (secret) client.clientSecret = secret;
+            else delete client.clientSecret;
+          } catch {
+            delete client.clientSecret;
+            console.warn('[mcp-oauth] Encrypted client registration secret is currently unavailable.');
+          }
+          continue;
+        }
+        const ref = freshClientSecretRef(dataDir, client);
+        await writeCredential(ref, client.clientSecret);
+        stagedRefs.push(ref);
+        saved.clientSecret = storedClientSecretMarker(ref);
+        migrated = true;
+      }
+      if (migrated) await persistClientCache(dataDir, { clients: persisted });
+    } catch {
+      await Promise.all(stagedRefs.map((ref) => deleteCredential(ref).catch(() => undefined)));
+      console.warn('[mcp-oauth] Client registration secret migration deferred until the encrypted Desktop vault is available.');
+      return { clients: runtime };
+    }
+    return { clients: runtime };
   } catch (err: unknown) {
     const e = err as { code?: string };
     if (e.code === 'ENOENT') return { clients: [] };
@@ -231,11 +347,33 @@ async function writeClientCache(
   dataDir: string,
   next: ClientCacheFile,
 ): Promise<void> {
-  const file = clientsFile(dataDir);
-  await mkdir(path.dirname(file), { recursive: true });
-  const tmp = file + '.' + randomBytes(4).toString('hex') + '.tmp';
-  await writeFile(tmp, JSON.stringify(next, null, 2), 'utf8');
-  await rename(tmp, file);
+  const persisted: ClientCacheFile = {
+    clients: next.clients.map((client) => ({ ...client })),
+  };
+  const prior = await readPersistedClientCache(dataDir);
+  const oldRefs = prior.clients
+    .filter((client) => isStoredClientSecret(client.clientSecret))
+    .map((client) => storedClientSecretRef(dataDir, client));
+  const stagedRefs: string[] = [];
+  for (const client of persisted.clients) {
+    if (!client.clientSecret || isStoredClientSecret(client.clientSecret)) continue;
+    const ref = freshClientSecretRef(dataDir, client);
+    try {
+      await writeCredential(ref, client.clientSecret);
+    } catch (error) {
+      await Promise.all(stagedRefs.map((staged) => deleteCredential(staged).catch(() => undefined)));
+      throw error;
+    }
+    stagedRefs.push(ref);
+    client.clientSecret = storedClientSecretMarker(ref);
+  }
+  try {
+    await persistClientCache(dataDir, persisted);
+  } catch (error) {
+    await Promise.all(stagedRefs.map((ref) => deleteCredential(ref).catch(() => undefined)));
+    throw error;
+  }
+  await Promise.all(oldRefs.filter((ref) => !stagedRefs.includes(ref)).map((ref) => deleteCredential(ref).catch(() => undefined)));
 }
 
 /**

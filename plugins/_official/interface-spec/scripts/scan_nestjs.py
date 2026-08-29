@@ -3,7 +3,7 @@
 Static scanner over TypeScript sources — stdlib only. Python's ast cannot
 parse TypeScript, so this uses regex + string-aware brace/paren tracking
 instead. Emits an interface-spec.json document (schema v1) that
-`od docs render-interface-spec` accepts directly.
+`monofield docs render-interface-spec` accepts directly.
 
 Handles:
   - @Controller('prefix') classes + @Get/@Post/@Put/@Patch/@Delete('path')

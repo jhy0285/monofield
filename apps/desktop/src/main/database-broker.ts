@@ -15,6 +15,7 @@ const DEFAULT_INSPECT_CONCURRENCY = 8;
 const MAX_VALUE_CHARS = 2_000;
 const SENSITIVE_COLUMN = /(?:api[_-]?key|authorization|credential|passwd|password|secret|token|e-?mail|phone|mobile|address|birth|dob|ssn|national[_-]?id|passport|card[_-]?(?:number|no)|iban|bank[_-]?account|account[_-]?(?:number|no)|latitude|longitude)/i;
 const READ_ONLY_CONNECTION_OPTIONS = '-c default_transaction_read_only=on -c statement_timeout=10000';
+const WRITE_CONNECTION_OPTIONS = '-c statement_timeout=10000';
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_$]*$/;
 
 type StoredConnection = {
@@ -195,22 +196,34 @@ export class DatabaseBroker {
     }
     const document = await this.read();
     const existing = document.connections.find((connection) => connection.label === label);
+    const sameTarget = existing?.connectionString === url.toString();
     const connection: StoredConnection = {
-      id: existing?.id ?? randomUUID(),
+      // A connection id is the project-facing identity of one exact target.
+      // Replacing the URL under the same id would silently retarget every
+      // linked project, so issue a new id and force those projects to relink.
+      id: sameTarget ? existing.id : randomUUID(),
       label,
       connectionString: url.toString(),
       createdAt: existing?.createdAt ?? new Date().toISOString(),
       // A saved approval belongs to the exact encrypted connection target.
       // Reusing a label for another host/database must not carry it over.
-      readApproval: existing?.connectionString === url.toString()
+      readApproval: sameTarget
         ? (existing.readApproval ?? 'prompt')
         : 'prompt',
-      writePolicy: input.writePolicy ?? existing?.writePolicy ?? 'disabled',
+      // Access approvals belong to the encrypted connection target, not its
+      // display label. Reusing a label for a different host/database must not
+      // silently grant the new target the prior target's write capability.
+      writePolicy: input.writePolicy ?? (sameTarget ? existing?.writePolicy : undefined) ?? 'disabled',
     };
-    if (connection.writePolicy === 'always' && existing?.writePolicy !== 'always' && !await this.confirmAlwaysWrite(connection.label)) {
+    if (connection.writePolicy === 'always'
+      && (!sameTarget || existing?.writePolicy !== 'always')
+      && !await this.confirmAlwaysWrite(connection.label)) {
       throw new Error('Always allow writes was not approved');
     }
-    document.connections = [...document.connections.filter((item) => item.id !== connection.id), connection];
+    document.connections = [
+      ...document.connections.filter((item) => item.id !== connection.id && item.id !== existing?.id),
+      connection,
+    ];
     await this.write(document);
     return summary(connection);
   }
@@ -438,7 +451,10 @@ export class DatabaseBroker {
       connectionString: connection.connectionString,
       connectionTimeoutMillis: 10_000,
       query_timeout: 10_000,
-      options: READ_ONLY_CONNECTION_OPTIONS,
+      // Mutation connections must not inherit the read-only startup option
+      // used by schema/sample reads. The structured broker policy, bounded
+      // statements, and explicit transaction remain the write safety boundary.
+      options: WRITE_CONNECTION_OPTIONS,
     });
     try {
       await client.connect();
@@ -479,8 +495,28 @@ export class DatabaseBroker {
         affectedRows: result.rowCount ?? 0,
         reason: request.reason.trim().slice(0, 240),
       };
-      await fs.appendFile(join(app.getPath('userData'), AUDIT_FILE), `${JSON.stringify(audit)}\n`, { encoding: 'utf8', mode: 0o600 });
-      return { approved: true, affectedRows: result.rowCount ?? 0, operation: request.operation, schema: request.schema, table: request.table, auditId };
+      let auditRecorded = true;
+      try {
+        await fs.appendFile(join(app.getPath('userData'), AUDIT_FILE), `${JSON.stringify(audit)}\n`, { encoding: 'utf8', mode: 0o600 });
+      } catch {
+        // COMMIT has already succeeded. Returning a failed mutation here invites
+        // an agent or user to retry an operation that was actually applied.
+        // Preserve the committed result and make the degraded audit state
+        // explicit without exposing local filesystem details.
+        auditRecorded = false;
+      }
+      return {
+        approved: true,
+        affectedRows: result.rowCount ?? 0,
+        operation: request.operation,
+        schema: request.schema,
+        table: request.table,
+        auditId,
+        auditRecorded,
+        ...(auditRecorded ? {} : {
+          auditWarning: 'The database mutation committed, but the local audit log could not be written.',
+        }),
+      };
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined);
       throw safeError(error);

@@ -71,7 +71,7 @@ import { Icon, type IconName } from './Icon';
 import { repoConnectCopy } from './design-system-github-evidence';
 import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 import type { SettingsSection } from './SettingsDialog';
-import { GITHUB_REPO_URL } from './useGithubStars';
+import { GITHUB_ISSUES_URL, GITHUB_REPO_URL } from './useGithubStars';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
@@ -1155,10 +1155,9 @@ export function ChatPane({
   // this no longer the last assistant — keep their pill so the error survives.
   const errorCardOwnerId =
     retryAssistant && failedRunErrorEvent ? retryAssistant.id : null;
-  // AMR promotion card payload (only the non-AMR model/auth/quota case).
+  // Support card payload for model/auth/quota failures.
   const amrSwitchPayload =
     runFailureUi?.showSwitchCard
-    && failedRunErrorEvent?.code !== 'UPSTREAM_UNAVAILABLE'
     && retryAssistant
     && failedRunErrorEvent?.code
       ? {
@@ -2432,15 +2431,6 @@ export function ChatPane({
               {amrSwitchPayload ? (
                 <AmrGuidance
                   {...amrSwitchPayload}
-                  sourceDetail="chat_error_switch_retry_card"
-                  metricsConsent={config?.telemetry?.metrics === true}
-                  onActivate={() => {
-                    if (retryAssistant && onSwitchToAmrAndRetry) {
-                      onSwitchToAmrAndRetry(retryAssistant);
-                    } else {
-                      onOpenAmrSettings?.();
-                    }
-                  }}
                 />
               ) : null}
               {/* Dynamic spacer: when a turn is anchored to the top, this
@@ -2539,14 +2529,6 @@ export function ChatPane({
           className="community-support-prompt"
           role="dialog"
         >
-          <button
-            type="button"
-            className="community-support-prompt__close"
-            aria-label={t('updater.later')}
-            onClick={() => setCommunityPromptStage(null)}
-          >
-            <Icon name="close" size={14} />
-          </button>
           <span className="community-support-prompt__mark" aria-hidden>
             M
           </span>
@@ -2566,6 +2548,17 @@ export function ChatPane({
             <button type="button" onClick={() => setCommunityPromptStage(null)}>
               {t('community.later')}
             </button>
+            {communityPromptStage === 'check-in' ? (
+              <button
+                type="button"
+                onClick={() => {
+                  void openExternalUrl(GITHUB_ISSUES_URL);
+                  setCommunityPromptStage(null);
+                }}
+              >
+                {t('community.shareFeedback')}
+              </button>
+            ) : null}
             <button
               type="button"
               className="primary"

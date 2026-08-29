@@ -247,6 +247,10 @@ export interface ComposeInput {
   // workflow; chat mode keeps the same context/tools but answers like a
   // standard multi-turn assistant unless the user explicitly asks to build.
   sessionMode?: ChatSessionMode | undefined;
+  // Stable per-turn profile for interface/screen specification projects.
+  // False keeps explanation/how-to turns lightweight; true (or omitted for
+  // compatibility) injects the full collector and artifact workflow.
+  structuredArtifactInstructions?: boolean | undefined;
   // UI locale selected by the client. User-visible generated form copy
   // must follow this locale even when the user's initial prompt is brief.
   locale?: string | undefined;
@@ -274,6 +278,7 @@ export function composeSystemPrompt({
   audioVoiceOptionsError,
   streamFormat,
   sessionMode,
+  structuredArtifactInstructions,
   locale,
   userInstructions,
   projectInstructions,
@@ -289,6 +294,9 @@ export function composeSystemPrompt({
     metadata?.kind === 'interface-spec'
     || metadata?.kind === 'screen-spec'
     || /(?:interface|screen)[\s-]*spec/i.test(skillName ?? '');
+  const isStructuredSpecGuidance =
+    isStructuredSpecificationWorkflow && structuredArtifactInstructions === false;
+  const isLeanResponseMode = isLeanChatMode || isStructuredSpecGuidance;
   const hasConnectedProjectDatabase =
     typeof metadata?.databaseContext?.connectionId === 'string'
     && metadata.databaseContext.connectionId.trim().length > 0;
@@ -344,7 +352,7 @@ export function composeSystemPrompt({
     parts.push('\n\n---\n\n');
   }
 
-  const localePrompt = renderUiLocalePrompt(locale, { lean: isLeanChatMode });
+  const localePrompt = renderUiLocalePrompt(locale, { lean: isLeanResponseMode });
   if (localePrompt) {
     parts.push(localePrompt);
     parts.push('\n\n---\n\n');
@@ -366,7 +374,7 @@ export function composeSystemPrompt({
   // in apps/daemon/src/prompts/system.ts — keep both in sync so a daemon chat
   // and a BYOK/API chat route follow-up choices through the same surface
   // instead of drifting back to plain markdown option lists.
-  if (!isLeanChatMode) {
+  if (!isLeanResponseMode) {
     parts.push(
       "\n\n---\n\n## Clarifying questions mid-conversation\n\nWhen you need a clarification AFTER turn 1 and the natural answer is one of a small finite set of choices (2-4 options per question), emit a `<question-form>` block — the same markup turn-1 discovery uses — instead of writing a bulleted list of options in markdown. The host renders it as a Questions banner the user opens in the side tab; a markdown list renders as plain text and forces the user to type a reply. Use free-form prose questions only when the answer is naturally open-ended, needs more than ~4 options, or is a single yes/no. Do NOT also duplicate the form's questions as markdown text alongside it.\n\n`<question-form>` is assistant text for the MonoField UI, not a native tool call. If you need to clarify direction, emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call. Do not stop after an introductory sentence such as \"先确认一下方向：\"; the same message must include the full form.",
     );
@@ -392,19 +400,19 @@ export function composeSystemPrompt({
     // use no backticks so they stay literal inside the template strings.
     // Keep this whole block BYTE-IDENTICAL to the daemon-side composer in
     // apps/daemon/src/prompts/system.ts.
-    if (!isLeanChatMode && (memoryHooks?.rewrite ?? true)) {
+    if (!isLeanResponseMode && (memoryHooks?.rewrite ?? true)) {
       parts.push(
         `\n\n## Intent gateway — turn short asks into a brief\n\nWhen the user's request is short or underspecified AND memory gives you enough to expand it, silently build an internal task brief (task type, audience, files/artifacts in play, delivery preferences, constraints, and what "done" means) before acting. Surface it as ONE collapsed card at the very start of your reply, then continue with the work without waiting for confirmation:\n\n<od-card type="task-brief">\n{ "summary": "<one line restating the expanded intent>", "fields": [ {"label": "Audience", "value": "…"}, {"label": "Deliverable", "value": "…"}, {"label": "Done means", "value": "…"} ] }\n</od-card>\n\nEmit at most one task-brief per turn. Skip it entirely when the request is already explicit or trivial (a greeting, a yes/no, a tiny edit). If you applied memory but skipped the brief, you may instead emit one compact chip: <od-card type="memory-applied">{ "summary": "Applied your profile and 2 rules", "used": [ {"type": "profile", "name": "Work profile"} ] }</od-card>. Never dump the brief as prose — only as the card.\n\nThe task-brief card REPLACES the turn-1 discovery question-form when memory already makes the intent clear — it does NOT replace the rest of the build flow. On every artifact-producing turn you STILL open with a TodoWrite plan (RULE 3) before writing files and update it live as you work, then run the anti-slop / brand self-check before shipping. The brief only expands intent; it is never the deliverable and never stands in for the TodoWrite plan or the self-check. Skipping the discovery form when intent is already understood is correct; skipping TodoWrite or the anti-slop gate is not.`,
       );
     }
 
-    if (!isLeanChatMode && (memoryHooks?.verify ?? true)) {
+    if (!isLeanResponseMode && (memoryHooks?.verify ?? true)) {
       parts.push(
         `\n\n## Self-verify against your verified rules\n\nThe **Verified rules** above are enforceable checks, not soft preferences. After you finish producing or editing an artifact, evaluate it against every active rule, FIX any failure in place before ending your turn, then emit one scorecard:\n\n<od-card type="verify-scorecard">\n{ "status": "pass|partial|fail", "summary": "5/6 checks passed · 1 auto-fixed", "rows": [ {"rule": "<the check>", "status": "pass|fail|fixed", "note": "<what was wrong / what you fixed>"} ] }\n</od-card>\n\nPrefer fixing silently over asking. Leave a row as "fail" only when fixing it needs a decision you genuinely cannot make from the request plus memory. The daemon programmatically checks this scorecard after your turn — a missing scorecard or a rule left uncovered on an artifact turn is recorded as an enforcement failure — so always emit it when verified rules apply. Skip the scorecard entirely only when there are no verified rules or the turn produced no artifact.\n\nThe scorecard is ADDITIVE to — never a replacement for — the rest of the end-of-run flow. On an artifact turn you still run the existing anti-slop / brand self-check (the "N/N brand checks passed" gate) and still close with the normal handoff. Order the end of your turn as: (1) finish the anti-slop / brand self-check and fix any failure in place, (2) emit the verify-scorecard card, (3) close with the normal handoff — a single <artifact> block when this turn wrote a new canonical HTML file, otherwise a brief file-operation summary of what changed and what is still open. The scorecard only checks your verified rules; it does not absorb the anti-slop gate or the end-of-run summary.`,
       );
     }
 
-    if (!isLeanChatMode) {
+    if (!isLeanResponseMode) {
       parts.push(
         `\n\n## Propose new verified rules from corrections\n\nWhen the user corrects your output in a way that implies a reusable, checkable rule, PROPOSE it — never save it silently. Emit a proposal card the user can Keep, Edit, or Discard:\n\n<od-card type="rule-proposal">\n{ "name": "<short name>", "description": "<one line>", "assertion": "<what must hold>", "check": "<how to verify it>", "rationale": "<why you inferred it>" }\n</od-card>\n\nPropose at most one rule per turn, and only when confident it generalizes beyond the current artifact.`,
       );
@@ -423,24 +431,24 @@ export function composeSystemPrompt({
     );
   }
 
-  if (activeDesignSystemBody && activeDesignSystemBody.length > 0) {
+  if (!isStructuredSpecGuidance && activeDesignSystemBody && activeDesignSystemBody.length > 0) {
     parts.push(
       `\n\n## Active design system${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nTreat the following DESIGN.md as authoritative for color, typography, spacing, and component rules. Do not invent tokens outside this palette. When you copy the active skill's seed template, bind these tokens into its \`:root\` block before generating any layout.\n\n${activeDesignSystemBody}`,
     );
   }
 
-  if (skillBody && skillBody.trim().length > 0) {
+  if (!isStructuredSpecGuidance && skillBody && skillBody.trim().length > 0) {
     const preflight = derivePreflight(skillBody);
     parts.push(
       `\n\n## Active skill${skillName ? ` — ${skillName}` : ''}\n\nFollow this skill's workflow exactly.${preflight}\n\n${skillBody.trim()}`,
     );
   }
 
-  if (pluginBlock && pluginBlock.trim().length > 0) {
+  if (!isStructuredSpecGuidance && pluginBlock && pluginBlock.trim().length > 0) {
     parts.push(pluginBlock);
   }
 
-  if (Array.isArray(activeStageBlocks) && activeStageBlocks.length > 0) {
+  if (!isStructuredSpecGuidance && Array.isArray(activeStageBlocks) && activeStageBlocks.length > 0) {
     for (const block of activeStageBlocks) {
       if (typeof block === 'string' && block.trim().length > 0) {
         parts.push(block);
@@ -448,7 +456,7 @@ export function composeSystemPrompt({
     }
   }
 
-  const metaBlock = isLeanChatMode
+  const metaBlock = isLeanResponseMode
     ? renderLeanProjectContext(metadata)
     : renderMetadataBlock(metadata, template, audioVoiceOptions, audioVoiceOptionsError);
   if (metaBlock) parts.push(metaBlock);
@@ -473,9 +481,9 @@ export function composeSystemPrompt({
   const isFreeformProject = !skillMode && (!metadata || metadata.kind === 'other');
   const hasSkillSeed =
     !!skillBody && /assets\/template\.html/.test(skillBody);
-  if (isDeckProject && !hasSkillSeed) {
+  if (!isStructuredSpecGuidance && isDeckProject && !hasSkillSeed) {
     parts.push(`\n\n---\n\n${DECK_FRAMEWORK_DIRECTIVE}`);
-  } else if (!isLeanChatMode && isFreeformProject && !hasSkillSeed) {
+  } else if (!isLeanResponseMode && isFreeformProject && !hasSkillSeed) {
     // Freeform / kind=other projects skip the kind picker entirely and
     // land here. If the user's brief is a deck/keynote/slides ("讲解",
     // "presentation", "make a deck"), the agent used to invent its own
@@ -490,11 +498,11 @@ export function composeSystemPrompt({
     );
   }
 
-  if (isMediaSurfaceEarly) {
+  if (!isStructuredSpecGuidance && isMediaSurfaceEarly) {
     parts.push(MEDIA_GENERATION_CONTRACT);
   }
 
-  if (activeDesignSystemBody && activeDesignSystemBody.length > 0) {
+  if (!isStructuredSpecGuidance && activeDesignSystemBody && activeDesignSystemBody.length > 0) {
     parts.push(ACTIVE_DESIGN_SYSTEM_VISUAL_DIRECTION_OVERRIDE);
   }
 

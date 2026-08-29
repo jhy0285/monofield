@@ -69,6 +69,30 @@ describe('i18n locales', () => {
     }
   });
 
+  it('keeps critical community prompts localized in every non-English locale', async () => {
+    const criticalCommunityKeys: Array<keyof Dict> = [
+      'community.checkInTitle',
+      'community.checkInBody',
+      'community.worksWell',
+      'community.shareFeedback',
+      'community.later',
+      'community.starTitle',
+      'community.starBody',
+      'community.starAction',
+      'community.onboardingBody',
+    ];
+
+    for (const locale of LOCALES.filter((candidate) => candidate !== 'en')) {
+      const dict = await loadDict(locale);
+      for (const key of criticalCommunityKeys) {
+        expect(
+          dict[key],
+          `${locale}.${String(key)} must be translated instead of using the English fallback`,
+        ).not.toBe(en[key]);
+      }
+    }
+  });
+
   it('keeps Indonesian connector settings copy translated instead of falling back to English', () => {
     const translatedKeys: Array<keyof Dict> = [
       'settings.connectorsNavHint',

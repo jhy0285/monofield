@@ -17,6 +17,10 @@ import {
 } from '../analytics/events';
 import type { AppConfig, AppTheme } from '../types';
 import { Icon } from './Icon';
+import {
+  GITHUB_PROBLEM_REPORT_URL,
+  GITHUB_SUPPORT_URL,
+} from './useGithubStars';
 
 export type EntrySettingsSection =
   | 'execution'
@@ -266,43 +270,13 @@ export function EntrySettingsMenu({
           <section className="entry-settings-menu__section">
             <div className="entry-settings-menu__section-title">
               <Icon name="file-text" size={13} />
-              <span>Contact</span>
+              <span>{t('connectors.category.support')}</span>
             </div>
             <div className="entry-settings-menu__contact-list">
               <a
                 className="entry-settings-menu__contact-link"
-                href="mailto:jhy0285@gmail.com"
-                role="menuitem"
-                onClick={() => {
-                  trackSettingsPopoverClick(analytics.track, {
-                    page_name: pageName,
-                    area: 'settings_popover',
-                    element: 'contact_email',
-                  });
-                  setOpen(false);
-                }}
-              >
-                Personal contact: jhy0285@gmail.com
-              </a>
-              <a
-                className="entry-settings-menu__contact-link"
-                href="mailto:whdudwls0285@lgcns.com"
-                role="menuitem"
-                onClick={() => {
-                  trackSettingsPopoverClick(analytics.track, {
-                    page_name: pageName,
-                    area: 'settings_popover',
-                    element: 'company_email',
-                  });
-                  setOpen(false);
-                }}
-              >
-                Work contact: whdudwls0285@lgcns.com
-              </a>
-              <a
-                className="entry-settings-menu__contact-link"
-                href="https://github.com/jhy0285/monofield"
-                rel="noreferrer"
+                href={GITHUB_SUPPORT_URL}
+                rel="noreferrer noopener"
                 role="menuitem"
                 target="_blank"
                 onClick={() => {
@@ -310,11 +284,30 @@ export function EntrySettingsMenu({
                     page_name: pageName,
                     area: 'settings_popover',
                     element: 'contact_github',
+                    value: 'support',
                   });
                   setOpen(false);
                 }}
               >
-                GitHub: jhy0285/monofield
+                {t('entry.helpGetHelp')}
+              </a>
+              <a
+                className="entry-settings-menu__contact-link"
+                href={GITHUB_PROBLEM_REPORT_URL}
+                rel="noreferrer noopener"
+                role="menuitem"
+                target="_blank"
+                onClick={() => {
+                  trackSettingsPopoverClick(analytics.track, {
+                    page_name: pageName,
+                    area: 'settings_popover',
+                    element: 'contact_github',
+                    value: 'report_problem',
+                  });
+                  setOpen(false);
+                }}
+              >
+                {t('entry.helpReportProblem')}
               </a>
             </div>
           </section>

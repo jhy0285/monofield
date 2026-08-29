@@ -1,5 +1,6 @@
 import { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 import type { ApiProtocol, ProviderModelOption } from '../../types';
+import { isStoredByokApiKey } from '@open-design/contracts';
 
 export type ByokDraftField = 'api_key' | 'base_url' | 'model';
 
@@ -240,6 +241,7 @@ function validateApiKeyShape(
   baseUrl: string,
 ): ByokDraftIssue | null {
   if (!apiKey) return null;
+  if (isStoredByokApiKey(apiKey)) return null;
   const detectedProtocol = detectByokApiKeyProtocol(apiKey);
 
   if (protocol === 'anthropic' && isAnthropicFirstPartyBaseUrl(baseUrl)) {

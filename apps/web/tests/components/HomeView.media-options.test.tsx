@@ -58,14 +58,33 @@ afterEach(() => {
 });
 
 describe('HomeView media composer options', () => {
-  it('shows the Home composer session-mode switcher and defaults to Design', async () => {
+  it('does not fetch the AIHubMix catalogue while the ordinary Home composer is idle', async () => {
+    const fetchMock = stubFetch();
+    renderHome();
+
+    await screen.findByTestId('home-hero-input');
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(aiHubMixCatalogueRequests(fetchMock)).toEqual([]);
+
+    await clickHomeRailChip('image');
+    await waitFor(() => {
+      expect(aiHubMixCatalogueRequests(fetchMock)).toEqual([
+        '/api/media/providers/aihubmix/models?type=image_generation',
+      ]);
+    });
+  });
+
+  it('shows the Home composer session-mode switcher and defaults to Docs', async () => {
     stubFetch();
     renderHome();
 
     await screen.findByTestId('home-hero-input');
 
     const modeTrigger = screen.getByTestId('session-mode-trigger');
-    expect(modeTrigger.textContent).toContain('Design');
+    expect(modeTrigger.textContent).toContain('Docs');
 
     fireEvent.click(modeTrigger);
     fireEvent.click(screen.getByRole('menuitemradio', { name: /Ask mode/i }));
@@ -484,10 +503,19 @@ function stubFetch(options: { elevenLabsVoices?: Array<{ voiceId: string; name: 
         ],
       });
     }
+    if (typeof url === 'string' && url.startsWith('/api/media/providers/aihubmix/models?type=')) {
+      return json({ models: [] });
+    }
     throw new Error(`unexpected fetch ${url}`);
   });
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
+}
+
+function aiHubMixCatalogueRequests(fetchMock: ReturnType<typeof vi.fn<typeof fetch>>): string[] {
+  return fetchMock.mock.calls
+    .map(([input]) => String(input))
+    .filter((url) => url.startsWith('/api/media/providers/aihubmix/models?type='));
 }
 
 async function openOption(name: string) {

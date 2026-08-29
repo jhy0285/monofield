@@ -19,7 +19,8 @@ export function isBrowserUseRequested(...values: unknown[]): boolean {
       value.includes('Browser tab context:') ||
       value.includes('Use the selected MonoField Browser tab as the bound target.') ||
       value.includes('MonoField browser automation session:') ||
-      value.includes('MonoField browser automation session:')
+      value.includes('Open Agent browser automation session:') ||
+      value.includes('Open Docs browser automation session:')
     )
   ));
 }
@@ -27,7 +28,7 @@ export function isBrowserUseRequested(...values: unknown[]): boolean {
 export function browserAutomationSessionId(...values: unknown[]): string | null {
   for (const value of values) {
     if (typeof value !== 'string') continue;
-    const match = /Open (?:Agent|Docs) browser automation session:\s*([A-Za-z0-9_-]{20,128})/.exec(value);
+    const match = /(?:MonoField|Open (?:Agent|Docs)) browser automation session:\s*([A-Za-z0-9_-]{20,128})/.exec(value);
     if (match?.[1]) return match[1];
   }
   return null;

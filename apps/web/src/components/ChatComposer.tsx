@@ -394,6 +394,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     ref
   ) {
     const t = useT();
+    const { locale } = useI18n();
     const analytics = useAnalytics();
     const activeFileContext =
       projectMetadata?.importedFrom === 'folder' && activeProjectFileName
@@ -643,14 +644,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     useEffect(() => {
       if (!projectId || !composerEngaged) return;
       let cancelled = false;
-      void listPlugins().then((rows) => {
+      void listPlugins({ summary: true, locale }).then((rows) => {
         if (cancelled) return;
         setInstalledPlugins(rows);
       });
       return () => {
         cancelled = true;
       };
-    }, [projectId, composerEngaged]);
+    }, [projectId, composerEngaged, locale]);
 
     useEffect(() => {
       if (!composerEngaged) return;

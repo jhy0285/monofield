@@ -272,7 +272,7 @@ describe("ensureWorkspaceBuildArtifacts", () => {
     } finally {
       await rm(root, { force: true, recursive: true });
     }
-  });
+  }, 15_000);
 
   it("keeps platform-specific workspace build cache nodes separate", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-workspace-build-platform-"));

@@ -3,7 +3,7 @@
 AST-based (not regex): parses urls.py route tables, DRF routers/ViewSets,
 @api_view function views, DRF serializers, and Django models to emit an
 interface-spec.json document (schema v1) that
-`od docs render-interface-spec` accepts directly.
+`monofield docs render-interface-spec` accepts directly.
 
 Handles:
   - urls.py `path("x/", view)` / `re_path(r"^x/$", view)` entries and

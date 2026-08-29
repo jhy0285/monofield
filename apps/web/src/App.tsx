@@ -52,6 +52,7 @@ import {
   fetchDesignTemplates,
   fetchPromptTemplates,
   fetchSkills,
+  isSelectedAgentDetectionPending,
   uploadProjectFiles,
   replaceProjectWorkingDir,
 } from './providers/registry';
@@ -66,17 +67,25 @@ import { AMR_LOGIN_STATUS_EVENT } from './components/amrLoginPolling';
 import { navigate, useRoute } from './router';
 import {
   fetchDaemonConfig,
+  fetchByokCredentialsFromDaemon,
   DEFAULT_PET,
   fetchMediaProvidersFromDaemon,
   hasAnyConfiguredProvider,
   fetchComposioConfigFromDaemon,
   loadConfig,
+  hasPlaintextAgentCliCredential,
+  hasPlaintextByokCredential,
+  markAgentCliCredentialsStored,
+  markByokCredentialsStored,
+  mergeDaemonByokCredentials,
   mergeDaemonConfig,
   mergeDaemonMediaProviders,
   saveConfig,
   shouldSyncLocalMediaProvidersToDaemon,
+  shouldSyncByokCredentials,
   syncComposioConfigToDaemon,
   syncConfigToDaemon,
+  syncByokCredentialsToDaemon,
   syncMediaProvidersToDaemon,
 } from './state/config';
 import { applyAppearanceToDocument, observeSystemAppearance } from './state/appearance';
@@ -425,7 +434,17 @@ function AppInner() {
   // every tab waiting on the slowest endpoint (typically `/api/agents`,
   // which probes CLI versions and can take seconds on cold start). The entry
   // view picks the right flag for whichever tab the user is currently on.
-  const [agentsLoading, setAgentsLoading] = useState(true);
+  const [agentsCatalogLoading, setAgentsCatalogLoading] = useState(true);
+  // The selected runtime is the only adapter that can block the current
+  // route. `/api/agents` streams it first; once that one record arrives the
+  // project and settings surfaces become usable while the remaining adapter
+  // catalog continues probing in the background.
+  const agentsLoading = isSelectedAgentDetectionPending({
+    catalogLoading: agentsCatalogLoading,
+    mode: config.mode,
+    agentId: config.agentId,
+    agents,
+  });
   const [skillsLoading, setSkillsLoading] = useState(true);
   const [dsLoading, setDsLoading] = useState(true);
   const [projectsLoading, setProjectsLoading] = useState(true);
@@ -595,7 +614,7 @@ function AppInner() {
   // changes; the next capture inherits the fresh values, so dashboards
   // can segment by execution setup without per-helper boilerplate.
   //
-  // Gated on `agentsLoading` so the cold-start probe (`fetchAgentsStream()`
+  // Gated on the full catalog load so the cold-start probe (`fetchAgentsStream()`
   // lands asynchronously after this effect's first run) does not stamp
   // the first home/projects/plugins page_view with
   // has_available_configure_cli=false / configure_availability=unavailable
@@ -604,7 +623,7 @@ function AppInner() {
   // matching what the helper would return for an empty agent list with
   // no mode pinned.
   useEffect(() => {
-    if (agentsLoading) return;
+    if (agentsCatalogLoading) return;
     const byokConfigured = (() => {
       const protocols = config.apiProtocolConfigs;
       if (!protocols) return Boolean(config.apiKey?.trim());
@@ -622,7 +641,7 @@ function AppInner() {
     analytics.setConfigureGlobals(globals);
   }, [
     analytics.setConfigureGlobals,
-    agentsLoading,
+    agentsCatalogLoading,
     amrLoginStatus,
     config.mode,
     config.agentId,
@@ -776,7 +795,7 @@ function AppInner() {
       if (!alive) {
         // No daemon — clear every loading flag so empty states render
         // instead of the entry view sitting on indefinite spinners.
-        setAgentsLoading(false);
+        setAgentsCatalogLoading(false);
         setSkillsLoading(false);
         setDsLoading(false);
         setProjectsLoading(false);
@@ -823,7 +842,7 @@ function AppInner() {
         })
         .finally(() => {
           if (cancelled || !isCurrentAgentStreamRequest(agentRequestId)) return;
-          setAgentsLoading(false);
+          setAgentsCatalogLoading(false);
         });
 
       // Functional skills + design templates land independently. Both
@@ -886,10 +905,12 @@ function AppInner() {
         fetchDaemonConfig(),
         fetchComposioConfigFromDaemon(),
         fetchMediaProvidersFromDaemon(),
-      ]).then(([
+        fetchByokCredentialsFromDaemon(),
+      ]).then(async ([
         daemonConfig,
         daemonComposioConfig,
         daemonMediaProvidersResult,
+        daemonByokCredentials,
       ]) => {
         if (cancelled) return;
         const daemonMediaProvidersLoaded =
@@ -915,10 +936,13 @@ function AppInner() {
           baseConfig.mediaProviders,
           daemonMediaProvidersLoaded,
         );
-        const next = mergeDaemonMediaProviders(
+        let next = mergeDaemonMediaProviders(
           clearStaleAmrModelChoiceOnProfileChange(
             baseConfig,
-            mergeDaemonConfig(baseConfig, daemonConfig),
+            mergeDaemonByokCredentials(
+              mergeDaemonConfig(baseConfig, daemonConfig),
+              daemonByokCredentials,
+            ),
           ),
           daemonMediaProvidersLoaded,
         );
@@ -926,7 +950,36 @@ function AppInner() {
         if (!hasLocalComposioKey && daemonComposioConfig) {
           next.composio = daemonComposioConfig;
         }
-        saveConfig(next);
+        let preserveLegacyByokPlaintext = false;
+        let preserveLegacyAgentCliPlaintext = false;
+        let appConfigAlreadySynced = false;
+        if (hasPlaintextByokCredential(next)) {
+          try {
+            await syncByokCredentialsToDaemon(next);
+            next = markByokCredentialsStored(next);
+          } catch {
+            // Migration is vault-first. Keep the legacy browser value until a
+            // later launch can confirm encrypted storage instead of silently
+            // discarding the only usable credential.
+            preserveLegacyByokPlaintext = true;
+          }
+        }
+        if (hasPlaintextAgentCliCredential(next)) {
+          try {
+            await syncConfigToDaemon(next, { throwOnError: true });
+            next = markAgentCliCredentialsStored(next);
+            appConfigAlreadySynced = true;
+          } catch {
+            // As with BYOK, never discard the only legacy browser copy before
+            // Electron safeStorage confirms the encrypted write.
+            preserveLegacyAgentCliPlaintext = true;
+          }
+        }
+        if (cancelled) return;
+        saveConfig(next, {
+          preserveLegacyAgentCliPlaintext,
+          preserveLegacyByokPlaintext,
+        });
         if (
           daemonMediaProvidersResult.status === 'ok' &&
           migratedLocalMediaProviders &&
@@ -939,7 +992,7 @@ function AppInner() {
         // Migrate localStorage prefs to daemon on first boot with the new
         // endpoint. If daemon already had values the merge above used them;
         // writing back is idempotent and keeps both sides in sync.
-        void syncConfigToDaemon(next);
+        if (!appConfigAlreadySynced) void syncConfigToDaemon(next);
         void syncComposioConfigToDaemon(next.composio);
         latestPersistedConfigRef.current = next;
         setConfig(next);
@@ -988,7 +1041,7 @@ function AppInner() {
   // selection on the next launch. Gate on onboardingCompleted so this only
   // backfills an empty slot for returning users.
   useEffect(() => {
-    if (!daemonConfigLoaded || agentsLoading) return;
+    if (!daemonConfigLoaded || agentsCatalogLoading) return;
     if (config.onboardingCompleted !== true) return;
     if (config.agentId) return;
     const firstAvailable = agents.find((a) => a.available);
@@ -1002,7 +1055,7 @@ function AppInner() {
     });
   }, [
     daemonConfigLoaded,
-    agentsLoading,
+    agentsCatalogLoading,
     agents,
     config.agentId,
     config.onboardingCompleted,
@@ -1124,7 +1177,11 @@ function AppInner() {
     // a half-typed key can't survive in localStorage. If the dialog is
     // closing, preserve any onboarding completion that the close gesture
     // already committed so an unmount autosave cannot re-open the welcome flow.
-    const persisted = buildPersistedConfig(next, configRef.current);
+    const persistedDraft = buildPersistedConfig(next, configRef.current);
+    if (shouldSyncByokCredentials(persistedDraft, configRef.current)) {
+      await syncByokCredentialsToDaemon(persistedDraft);
+    }
+    const persisted = markByokCredentialsStored(persistedDraft);
     latestPersistedConfigRef.current = persisted;
     saveConfig(persisted);
     setConfig(persisted);
@@ -1143,6 +1200,12 @@ function AppInner() {
         : Promise.resolve(),
       syncConfigToDaemon(persisted, { throwOnError: true }),
     ]);
+    const secured = markAgentCliCredentialsStored(persisted);
+    if (secured !== persisted) {
+      latestPersistedConfigRef.current = secured;
+      saveConfig(secured);
+      setConfig(secured);
+    }
   }, [daemonMediaProviders, daemonMediaProvidersFetchState]);
 
   /**
@@ -1277,7 +1340,7 @@ function AppInner() {
         setConfig(nextConfig);
       }
       const agentRequestId = beginAgentStreamRequest();
-      setAgentsLoading(true);
+      setAgentsCatalogLoading(true);
       try {
         const next = await fetchAgentsStream({
           onAgent: (agent) => {
@@ -1293,12 +1356,12 @@ function AppInner() {
         const ordered = orderAgentsByRegistry(next);
         if (isCurrentAgentStreamRequest(agentRequestId)) {
           setAgents(mergeAmrModelsIntoAgents(ordered, amrModelsRef.current));
-          setAgentsLoading(false);
+          setAgentsCatalogLoading(false);
         }
         return ordered;
       } catch (err) {
         if (!isCurrentAgentStreamRequest(agentRequestId)) return [];
-        setAgentsLoading(false);
+        setAgentsCatalogLoading(false);
         if (options?.throwOnError) throw err;
         setAgents([]);
         return [];
@@ -1308,7 +1371,7 @@ function AppInner() {
   );
 
   useEffect(() => {
-    if (!daemonLive || agentsLoading) return;
+    if (!daemonLive || agentsCatalogLoading) return;
 
     const refreshIfDue = () => {
       if (document.visibilityState === 'hidden') return;
@@ -1330,7 +1393,7 @@ function AppInner() {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.clearInterval(intervalId);
     };
-  }, [agentsLoading, daemonLive, refreshAgents]);
+  }, [agentsCatalogLoading, daemonLive, refreshAgents]);
 
   useEffect(() => {
     const handleAppConfigChanged = () => {

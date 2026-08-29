@@ -24,6 +24,7 @@ import {
   classifyInterfaceSpecSourceIntent,
   executionProfileFromStreamFormat,
   isInterfaceSpecGenerationRequest,
+  isStructuredSpecificationArtifactRequest,
   normalizeProviderTokenUsage,
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
 } from '@open-design/contracts';
@@ -33,6 +34,15 @@ import {
 } from './prompts/system.js';
 import { emittedRenderableQuestionForm } from './question-form-detect.js';
 import { resolveProjectRoot } from './project-root.js';
+import { preflightInterfaceSpecSource } from './interface-spec-source-preflight.js';
+import {
+  interfaceSpecDatabaseAccessAllowed,
+  isInterfaceSpecDatabaseSampleAnswer,
+  isInterfaceSpecFormAnswer,
+  readPersistedInterfaceSpecSourceMode,
+  resolveInterfaceSpecRuntimeSourceMode,
+  scopeToolCapabilitiesForInterfaceSpecMode,
+} from './interface-spec-runtime-policy.js';
 import {
   resolveDaemonCliPath,
   resolveDaemonPluginPreviewsDir,
@@ -79,6 +89,10 @@ import {
   renderBrowserUseUnavailablePrompt,
 } from './browser-use-diagnostics.js';
 import {
+  BrowserVerificationEvidenceStore,
+  runAutomaticBrowserVerification,
+} from './automatic-browser-verification.js';
+import {
   UPLOAD_DIR,
   composeLiveInstructionPrompt,
   formatDesignFilesWorkspaceHint,
@@ -97,7 +111,10 @@ import {
   selectPromptImagePaths,
   validateCodexGeneratedImagesDir,
 } from './runtimes/chat-prompt-inputs.js';
-import { canUseLocalGreetingFastPath } from './runtimes/local-chat-fast-path.js';
+import {
+  configureCredentialVaultBroker,
+  type DesktopCredentialVaultBroker,
+} from './credential-vault.js';
 import {
   applyClaudeStreamJsonRunBookkeeping,
   assertValidRuntimeDefInactivityTimeoutMs,
@@ -415,6 +432,7 @@ import {
   buildAcpMcpServers,
   buildClaudeMcpJson,
   buildOpenCodeMcpConfigContent,
+  externalizeClaudeMcpSecrets,
   isManagedProjectCwd,
   readMcpConfig,
   writeMcpConfig,
@@ -533,9 +551,13 @@ import {
 } from './db.js';
 import {
   computeIncludeStable,
+  isCopilotResumeFailure,
   hashStableInstructions,
   isClaudeResumeFailure,
   isCodexResumeFailure,
+  isCursorResumeFailure,
+  isGeminiResumeFailure,
+  isOpenCodeResumeFailure,
   persistCapturedAgentSession,
   resolveAgentResumeContext,
 } from './agent-session-resume.js';
@@ -591,6 +613,10 @@ import { registerDatabaseRoutes } from './routes/database.js';
 import { registerDevelopmentRoutes } from './routes/development.js';
 import { registerDocumentRenderRoutes } from './routes/document-render.js';
 import { DevelopmentServerService } from './development-server.js';
+import {
+  activeDevelopmentDatabaseContext,
+  metadataWithActiveDevelopmentDatabaseContext,
+} from './development-projects.js';
 import { registerDictionaryRoutes } from './routes/dictionaries.js';
 import { registerTelemetryRoutes } from './routes/telemetry.js';
 import {
@@ -2392,6 +2418,36 @@ user instruction and respond accordingly.
 
 `;
 
+// The manual interface-spec AI-assist flow intentionally uses the same form id
+// twice: intake first, then an AI-enriched review.  A generic form-answer
+// override would suppress the required review form and let an unreviewed draft
+// reach conversion, so keep this transition explicit and independently tested.
+export const FORM_ANSWERED_INTERFACE_SPEC_MANUAL_OVERRIDE = `## OVERRIDE \u2014 manual interface-spec stage submitted
+
+The user submitted the \`interface-spec-manual-draft\` form.
+If its \`reviewStage\` is \`intake\`, enrich only the missing fields and emit the
+same \`interface-spec-manual-draft\` form once with \`reviewStage: \"review\"\`.
+Mark every AI-proposed field with \`suggested: true\` so the user can review it.
+Do not create or convert the final interface specification from an intake form.
+Only a reviewed form with no remaining \`suggested: true\` fields may proceed to
+the canonical document and preview workflow.
+
+`;
+
+export function formAnsweredSystemOverrideForPrompt(currentPrompt: unknown): string {
+  if (typeof currentPrompt !== 'string') return '';
+  const match = FORM_ANSWERS_HEADER_RE.exec(currentPrompt);
+  if (!match) return '';
+  const formId = ((match[1] || 'form').trim().replace(/[^\w.-]/g, '') || 'form').toLowerCase();
+  if (formId === 'discovery' || formId === 'task-type') {
+    return FORM_ANSWERED_SYSTEM_OVERRIDE;
+  }
+  if (formId === 'interface-spec-manual-draft') {
+    return FORM_ANSWERED_INTERFACE_SPEC_MANUAL_OVERRIDE;
+  }
+  return FORM_ANSWERED_GENERIC_OVERRIDE;
+}
+
 function formAnswerTransitionForCurrentPrompt(currentPrompt) {
   if (typeof currentPrompt !== 'string') return null;
   const trimmed = currentPrompt.trim();
@@ -2400,6 +2456,8 @@ function formAnswerTransitionForCurrentPrompt(currentPrompt) {
   if (!match) return null;
   const rawFormId = (match[1] || 'form').trim() || 'form';
   const formId = rawFormId.replace(/[^\w.-]/g, '') || 'form';
+  const isManualInterfaceSpecDraft =
+    formId.toLowerCase() === 'interface-spec-manual-draft';
   const lines = [
     '## Latest user turn - form answers submitted',
     trimmed,
@@ -2411,11 +2469,17 @@ function formAnswerTransitionForCurrentPrompt(currentPrompt) {
     // user-request transition string here breaks `chat-route.test
     // marks submitted discovery form answers ...` which asserts on
     // the exact main wording.
-    `The user has answered the ${formId} form. Do not emit another ${formId} form.`,
+    isManualInterfaceSpecDraft
+      ? `The user has submitted a stage of the ${formId} form.`
+      : `The user has answered the ${formId} form. Do not emit another ${formId} form.`,
   ];
   if (formId.toLowerCase() === 'discovery' || formId.toLowerCase() === 'task-type') {
     lines.push(
       'Continue with RULE 2 / RULE 3 now. For Branch B answers, build now instead of asking another brief.',
+    );
+  } else if (isManualInterfaceSpecDraft) {
+    lines.push(
+      'For an intake-stage answer, enrich missing fields and emit the same form once at review stage. Do not create the final artifact until the reviewed form has no remaining suggested fields.',
     );
   } else {
     lines.push(
@@ -3554,6 +3618,7 @@ export interface StartServerOptions {
   desktopBrowserAutomation?: DesktopBrowserAutomation | null;
   desktopArtifactExporter?: DesktopArtifactExporter | null;
   desktopDatabaseBroker?: DesktopDatabaseBroker | null;
+  desktopCredentialVault?: DesktopCredentialVaultBroker | null;
   desktopDevelopmentProcessBroker?: DesktopDevelopmentProcessBroker | null;
   desktopPdfExporter?: DesktopPdfExporter | null;
   host?: string;
@@ -3569,6 +3634,27 @@ export interface StartServerResult {
   routeInventory: import('./route-registration-guard.js').RouteRegistration[];
 }
 
+let gitExecutablePrewarmStarted = false;
+
+function prewarmGitExecutableOnWindows() {
+  if (process.platform !== 'win32' || gitExecutablePrewarmStarted) return;
+  gitExecutablePrewarmStarted = true;
+  // Windows may spend several seconds scanning/loading git.exe on the first
+  // child-process launch. Do that work in parallel with daemon/plugin startup
+  // so the first Changes panel opens with an already-warm executable instead
+  // of making the user stare at a cold-process delay.
+  execFile(
+    'git',
+    ['--version'],
+    {
+      windowsHide: true,
+      timeout: 10_000,
+      env: { ...process.env, GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0' },
+    },
+    () => undefined,
+  );
+}
+
 export async function startServer({
   port = 7456,
   host = normalizeDaemonBindHost(process.env.MONOFIELD_BIND_HOST ?? process.env.OD_BIND_HOST),
@@ -3576,11 +3662,14 @@ export async function startServer({
   desktopPdfExporter = null,
   desktopArtifactExporter = null,
   desktopDatabaseBroker = null,
+  desktopCredentialVault = null,
   desktopDevelopmentProcessBroker = null,
   desktopBrowserAutomation = null,
   runtime = null,
 }: StartServerOptions = {}) {
+  configureCredentialVaultBroker(desktopCredentialVault);
   host = normalizeDaemonBindHost(host);
+  prewarmGitExecutableOnWindows();
   let resolvedPort = port;
   let daemonShuttingDown = false;
   const extraAllowedOrigins = configuredAllowedOrigins();
@@ -3611,6 +3700,8 @@ export async function startServer({
   const app = express();
   installRouteRegistrationGuard(app);
   const developmentServers = new DevelopmentServerService(desktopDevelopmentProcessBroker);
+  const browserVerificationEvidence = new BrowserVerificationEvidenceStore();
+  const interfaceSpecRuntimeSourceModes = new Map();
   // Clipper page captures are self-contained HTML with inlined images plus a
   // Figma IR, which for an image-heavy site (The Economist, news front pages)
   // runs to tens of MB — far past a normal JSON body. Give the ingest route a
@@ -4061,7 +4152,7 @@ export async function startServer({
         return null;
       }
       const project = getProject(db, validation.grant.projectId);
-      const databaseContext = project?.metadata?.databaseContext;
+      const databaseContext = activeDevelopmentDatabaseContext(project?.metadata);
       const connectionId = databaseContext?.useForDevelopment === true
         && typeof databaseContext.connectionId === 'string'
         ? databaseContext.connectionId.trim()
@@ -4083,7 +4174,7 @@ export async function startServer({
         return null;
       }
       const project = getProject(db, validation.grant.projectId);
-      const databaseContext = project?.metadata?.databaseContext;
+      const databaseContext = activeDevelopmentDatabaseContext(project?.metadata);
       const connectionId = databaseContext?.useForDevelopment === true
         && typeof databaseContext.connectionId === 'string'
         ? databaseContext.connectionId.trim()
@@ -4109,6 +4200,7 @@ export async function startServer({
         return sendApiError(res, 400, 'INVALID_BROWSER_AUTOMATION_REQUEST', 'Invalid browser automation request');
       }
       const result = await desktopBrowserAutomation(message.input);
+      browserVerificationEvidence.recordResult(message.input, result);
       return res.status(result.ok ? 200 : 409).json(result);
     } catch (error) {
       return sendApiError(
@@ -5226,6 +5318,7 @@ export async function startServer({
     connectedExternalMcp,
     appliedPluginSnapshotId,
     mediaExecution,
+    structuredArtifactInstructions,
   }) => {
     const project =
       typeof projectId === 'string' && projectId
@@ -5264,7 +5357,7 @@ export async function startServer({
       allowAppDefault: project === null,
     });
     const effectiveDesignSystemId = designSystemSelection.id;
-    const metadata = project?.metadata;
+    const metadata = metadataWithActiveDevelopmentDatabaseContext(project?.metadata);
     let allSkillsPromise: ReturnType<typeof listAllSkillLikeEntries> | null = null;
     const loadAllSkills = async () => {
       allSkillsPromise ??= listAllSkillLikeEntries();
@@ -5734,6 +5827,7 @@ export async function startServer({
       critiqueSkill: critiqueShouldRun ? critiqueSkill : undefined,
       locale: typeof locale === 'string' ? locale : undefined,
       sessionMode: normalizeConversationSessionMode(sessionMode),
+      structuredArtifactInstructions,
       mediaExecution,
       streamFormat,
       executionProfile: executionProfileFromStreamFormat(streamFormat),
@@ -5762,9 +5856,11 @@ export async function startServer({
         digest: designSystemDigest,
       },
       promptTelemetryParts: {
-        skillPrompt: skillBody ?? '',
-        designSystemPrompt: designSystemBody ?? '',
-        pluginStagePrompt: [pluginBlock, ...(activeStageBlocks ?? [])]
+        skillPrompt: structuredArtifactInstructions === false ? '' : skillBody ?? '',
+        designSystemPrompt: structuredArtifactInstructions === false ? '' : designSystemBody ?? '',
+        pluginStagePrompt: (structuredArtifactInstructions === false
+          ? []
+          : [pluginBlock, ...(activeStageBlocks ?? [])])
           .filter((part) => typeof part === 'string' && part.trim().length > 0)
           .join('\n\n---\n\n'),
       },
@@ -5948,40 +6044,6 @@ export async function startServer({
     ) {
       return design.runs.fail(run, 'BAD_REQUEST', 'message required');
     }
-    const localGreetingResponse = canUseLocalGreetingFastPath({
-      prompt:
-        typeof currentPrompt === 'string' && currentPrompt.trim().length > 0
-          ? currentPrompt
-          : message,
-      locale,
-      imagePaths,
-      attachments,
-      commentAttachments: safeCommentAttachments,
-      skillIds,
-      appliedPluginSnapshotId: run?.appliedPluginSnapshotId,
-      research,
-      browserVerification,
-    });
-    if (localGreetingResponse) {
-      const payload = {
-        type: 'text_delta',
-        delta: localGreetingResponse,
-      };
-      // A standalone greeting needs neither model reasoning nor project
-      // context. Persist and stream it locally so opening a coding project and
-      // saying hello does not pay the CLI's full first-session context cost.
-      // Deliberately emit no usage event: no provider was called and zero
-      // model tokens were consumed.
-      persistRunEventToAssistantMessage(db, run, 'agent', payload);
-      design.runs.emit(run, 'agent', payload);
-      run.localResponse = true;
-      run.analyticsTelemetry = {
-        ...(run.analyticsTelemetry ?? {}),
-        promptBuildEndAt: Date.now(),
-        localFastPath: 'greeting',
-      };
-      return design.runs.finish(run, 'succeeded', 0, null);
-    }
     const normalizedBrowserVerification = (() => {
       if (!browserVerification || typeof browserVerification !== 'object' || Array.isArray(browserVerification)) return null;
       const sessionId = typeof browserVerification.sessionId === 'string' ? browserVerification.sessionId.trim() : '';
@@ -5996,6 +6058,11 @@ export async function startServer({
       }
       return { sessionId, origin, url };
     })();
+    const automaticBrowserVerificationStartedAt = Date.now();
+    const automaticBrowserVerificationRequested = normalizedBrowserVerification != null
+      && /(?:수정|고쳐|변경|구현|추가|삭제|리팩터|만들|개발|빌드|검증|테스트|fix|change|implement|add|remove|update|refactor|build|verify|test)/i.test(
+        `${typeof message === 'string' ? message : ''}\n${typeof currentPrompt === 'string' ? currentPrompt : ''}`,
+      );
     const browserUseRunState = buildBrowserUseRunState({
       requested: normalizedBrowserVerification != null || isBrowserUseRequested(message, currentPrompt, systemPrompt),
       agentId: def.id,
@@ -6112,7 +6179,8 @@ export async function startServer({
       typeof projectId === 'string' && projectId
         ? getProject(db, projectId)
         : null;
-    const runContextPrompt = renderRunContextPrompt(context, projectRecord?.metadata);
+    const activeProjectMetadata = metadataWithActiveDevelopmentDatabaseContext(projectRecord?.metadata);
+    const runContextPrompt = renderRunContextPrompt(context, activeProjectMetadata);
     const linkedDirs = (() => {
       if (!Array.isArray(projectRecord?.metadata?.linkedDirs)) return [];
       const v = validateLinkedDirs(projectRecord.metadata.linkedDirs);
@@ -6126,12 +6194,23 @@ export async function startServer({
       && projectRecord.metadata.baseDir.trim().length > 0
       ? projectRecord.metadata.baseDir
       : null;
+    const developmentWorkspaceRoot =
+      projectRecord?.metadata?.workMode === 'development'
+      && projectBaseDir
+      && cwd
+      && path.resolve(projectBaseDir) !== path.resolve(cwd)
+        ? projectBaseDir
+        : null;
     const sourceDirs = Array.from(new Set([
       ...(projectBaseDir ? [projectBaseDir] : []),
       ...linkedDirs,
     ]));
     const cwdHint = cwd
-      ? formatDesignFilesWorkspaceHint(cwd, existingProjectFiles, existingProjectFolders)
+      ? `${formatDesignFilesWorkspaceHint(cwd, existingProjectFiles, existingProjectFolders)}${
+          developmentWorkspaceRoot
+            ? `\n\nDevelopment workspace boundary: \`${developmentWorkspaceRoot}\`. The active module above is the default cwd, but this user-selected workspace root is also writable. Inspect and update sibling modules only when the request spans them.`
+            : ''
+        }`
       : '';
     const linkedDirsHint = linkedDirs.length > 0
       ? `\n\nLinked code folders (read-only reference code the user wants you to see):\n${
@@ -6145,12 +6224,44 @@ export async function startServer({
       sourceDirs.includes(interfaceSpecCollectionReset.workingDir)
         ? interfaceSpecCollectionReset.workingDir
         : null;
-    const interfaceSpecCollectionResetPrompt =
+    const interfaceSpecPromptText =
+      typeof currentPrompt === 'string' ? currentPrompt : message;
+    const structuredArtifactInstructions =
+      projectRecord?.metadata?.kind === 'interface-spec'
+      || projectRecord?.metadata?.kind === 'screen-spec'
+        ? isStructuredSpecificationArtifactRequest(
+            interfaceSpecPromptText,
+            projectRecord.metadata.kind,
+          )
+        : true;
+    const interfaceSpecGenerationRequested =
       projectRecord?.metadata?.kind === 'interface-spec' &&
+      isInterfaceSpecGenerationRequest(interfaceSpecPromptText);
+    const interfaceSpecOptionsAnswered = isInterfaceSpecFormAnswer(
+      interfaceSpecPromptText,
+      'interface-spec-options',
+    );
+    const interfaceSpecDatabaseSampleRequested = isInterfaceSpecDatabaseSampleAnswer(
+      interfaceSpecPromptText,
+    );
+    const interfaceSpecCollectionTurn =
+      interfaceSpecGenerationRequested || interfaceSpecOptionsAnswered;
+    const interfaceSpecSourceIntent = classifyInterfaceSpecSourceIntent(
+      interfaceSpecPromptText,
+    );
+    const selectedInterfaceSpecSource =
+      resetWorkingDir ?? projectBaseDir ?? linkedDirs[0] ?? null;
+    const interfaceSpecSourcePreflight =
+      interfaceSpecCollectionTurn &&
+      interfaceSpecSourceIntent !== 'manual' &&
+      selectedInterfaceSpecSource
+        ? await preflightInterfaceSpecSource(selectedInterfaceSpecSource)
+        : null;
+    const interfaceSpecCollectionResetPrompt =
+      interfaceSpecGenerationRequested &&
       resetWorkingDir &&
-      classifyInterfaceSpecSourceIntent(
-        typeof currentPrompt === 'string' ? currentPrompt : message,
-      ) !== 'manual'
+      interfaceSpecSourceIntent !== 'manual' &&
+      interfaceSpecSourcePreflight?.ok === true
         ? [
             '# Required interface-spec preflight',
             '',
@@ -6161,22 +6272,53 @@ export async function startServer({
           ].join('\n')
         : '';
     const interfaceSpecSourceRequiredPrompt =
-      projectRecord?.metadata?.kind === 'interface-spec' &&
-      sourceDirs.length === 0 &&
-      isInterfaceSpecGenerationRequest(
-        typeof currentPrompt === 'string' ? currentPrompt : message,
-      ) &&
-      classifyInterfaceSpecSourceIntent(
-        typeof currentPrompt === 'string' ? currentPrompt : message,
-      ) === 'codebase'
+      interfaceSpecCollectionTurn &&
+      interfaceSpecSourceIntent !== 'manual' &&
+      (
+        (interfaceSpecSourceIntent === 'codebase' && !selectedInterfaceSpecSource) ||
+        interfaceSpecSourcePreflight?.ok === false
+      )
         ? [
             '# Required interface-spec source folder',
             '',
-            'This is an explicit interface-spec collection request, but the user has not selected a working source folder.',
+            selectedInterfaceSpecSource
+              ? `The selected source folder cannot be used for interface-spec collection: ${interfaceSpecSourcePreflight?.message ?? 'no analyzable API source was found.'}`
+              : 'This is an explicit interface-spec collection request, but the user has not selected a working source folder.',
+            selectedInterfaceSpecSource
+              ? `Selected folder: ${JSON.stringify(selectedInterfaceSpecSource)}`
+              : '',
             '',
-            'For this turn, do not inspect the managed project directory, call database tools, reuse prior collection context, create an artifact, or emit the `interface-spec-options` form. Explain that the user must first choose a valid Working folder/codebase in the composer. Stop after that explanation.',
+            'For this turn, do not inspect any other folder, inspect database data, call database tools, reuse prior collection context, create an artifact, or emit the `interface-spec-options` form. Explain that the user must first choose a readable Working folder containing route, controller, DTO, schema, or OpenAPI source. Stop after that explanation.',
           ].join('\n')
         : '';
+    const previousInterfaceSpecRuntimeMode =
+      typeof projectId === 'string' && projectId
+        ? interfaceSpecRuntimeSourceModes.get(projectId) ?? null
+        : null;
+    const persistedInterfaceSpecRuntimeMode =
+      projectRecord?.metadata?.kind === 'interface-spec' && !previousInterfaceSpecRuntimeMode
+        ? await readPersistedInterfaceSpecSourceMode(cwd)
+        : null;
+    const interfaceSpecRuntimeSourceMode = resolveInterfaceSpecRuntimeSourceMode({
+      projectKind: projectRecord?.metadata?.kind,
+      currentPrompt: interfaceSpecPromptText,
+      generationRequested: interfaceSpecGenerationRequested,
+      sourceIntent: interfaceSpecSourceIntent,
+      hasSelectedSource: Boolean(selectedInterfaceSpecSource),
+      collectionReset: Boolean(resetWorkingDir),
+      previousMode: previousInterfaceSpecRuntimeMode,
+      persistedMode: persistedInterfaceSpecRuntimeMode,
+    });
+    if (typeof projectId === 'string' && projectId && interfaceSpecRuntimeSourceMode) {
+      interfaceSpecRuntimeSourceModes.set(projectId, interfaceSpecRuntimeSourceMode);
+    }
+    const interfaceSpecDatabaseAllowed = interfaceSpecDatabaseAccessAllowed({
+      projectKind: projectRecord?.metadata?.kind,
+      mode: interfaceSpecRuntimeSourceMode,
+      sourceValidated: interfaceSpecSourcePreflight?.ok === true,
+      optionsAnswered: interfaceSpecOptionsAnswered,
+      databaseSampleRequested: interfaceSpecDatabaseSampleRequested,
+    });
     const attachmentHint = formatProjectAttachmentHint(safeAttachments);
     // Plan §3.A3 / spec §9: thread plugin context onto every tool token
     // so the connector execute route can re-validate the §5.3
@@ -6193,12 +6335,16 @@ export async function startServer({
         };
       }
     }
+    const scopedToolCapabilities = scopeToolCapabilitiesForInterfaceSpecMode(
+      interfaceSpecDatabaseAllowed,
+      CHAT_TOOL_ENDPOINTS,
+      CHAT_TOOL_OPERATIONS,
+    );
     const toolTokenGrant = cwd && typeof projectId === 'string' && projectId
       ? toolTokenRegistry.mint({
           runId,
           projectId,
-          allowedEndpoints: CHAT_TOOL_ENDPOINTS,
-          allowedOperations: CHAT_TOOL_OPERATIONS,
+          ...scopedToolCapabilities,
           ...(pluginGrantContext ?? {}),
         })
       : null;
@@ -6239,6 +6385,9 @@ export async function startServer({
       runScopedServers: runScopedMcpServers,
       sandboxMode: SANDBOX_RUNTIME.enabled,
     });
+    // This map is deliberately run-scoped: only enabled, persisted MCP ids
+    // selected for this run are read and forwarded. Disabled/unselected
+    // server secrets must never enter the agent child environment.
     const oauthTokensForSpawn = {};
     if (persistedTokenServerIds.size > 0) {
       try {
@@ -6306,6 +6455,7 @@ export async function startServer({
         sessionMode: runSessionMode,
         connectedExternalMcp,
         mediaExecution: run?.mediaExecution,
+        structuredArtifactInstructions,
         // Plan §3.M2 / §3.V1 — forward the run's snapshot id so the
         // prompt composer can splice in `## Active stage` blocks.
         // Default ON; set OD_BUNDLED_ATOM_PROMPTS=0 to opt out.
@@ -6332,9 +6482,10 @@ export async function startServer({
     //      and `DESIGN_SYSTEMS_DIR` so the absolute fallback path in the
     //      preamble is reachable when staging fails (e.g. the project has
     //      no on-disk cwd, or fs.cp errored). Codex treats `--add-dir`
-    //      entries as writable, so Codex receives only the narrow
-    //      `${CODEX_HOME:-$HOME/.codex}/generated_images` output folder
-    //      for allowlisted gpt-image image projects.
+    //      entries as writable, so Codex receives only user-authorized
+    //      writable roots: the selected development workspace when cwd is a
+    //      nested module, plus the narrow generated_images output folder for
+    //      allowlisted gpt-image image projects.
     //   3. PROJECT_ROOT cwd. When `cwd` is null, the agent runs with
     //      `cwd: PROJECT_ROOT` — there the absolute path is already an
     //      in-cwd path, so neither (1) nor (2) is required for it to
@@ -6403,6 +6554,7 @@ export async function startServer({
       skillsDir: SKILLS_DIR,
       designSystemsDir: DESIGN_SYSTEMS_DIR,
       linkedDirs,
+      workspaceRootDir: developmentWorkspaceRoot,
       codexGeneratedImagesDir,
     });
     const codexImagegenOverride = resolveGrantedCodexImagegenOverride({
@@ -6514,18 +6666,7 @@ export async function startServer({
     // instructions and request) — see server.ts:9920 composer notes.
     const ECHO_GUARD =
       '\n\n(Do not quote, restate, or echo the # Instructions block above in your reply. Begin your response with the answer to the # User request below.)';
-    const formAnswerMatch = FORM_ANSWERS_HEADER_RE.exec(
-      typeof currentPrompt === 'string' ? currentPrompt : '',
-    );
-    const formIdForOverride = formAnswerMatch
-      ? ((formAnswerMatch[1] || 'form').trim().replace(/[^\w.-]/g, '') || 'form').toLowerCase()
-      : null;
-    const formOverride =
-      formIdForOverride === 'discovery' || formIdForOverride === 'task-type'
-        ? FORM_ANSWERED_SYSTEM_OVERRIDE
-        : formIdForOverride !== null
-          ? FORM_ANSWERED_GENERIC_OVERRIDE
-          : '';
+    const formOverride = formAnsweredSystemOverrideForPrompt(currentPrompt);
     const promptImagePaths = selectPromptImagePaths(
       def.id,
       safeImages,
@@ -6984,6 +7125,7 @@ export async function startServer({
       command: process.execPath,
       argsPrefix: [OD_BIN],
     });
+    let claudeMcpSecretEnv: Record<string, string> = {};
 
     // External MCP servers configured by the user in Settings → External MCP.
     // MonoField relays them to the agent so the model can call those tools.
@@ -7036,12 +7178,15 @@ export async function startServer({
               oauthTokensForSpawn,
             );
             if (claudeMcp) {
+              const externalized = externalizeClaudeMcpSecrets(claudeMcp);
               await fs.promises.mkdir(path.dirname(target), { recursive: true });
               await fs.promises.writeFile(
                 target,
-                JSON.stringify(claudeMcp, null, 2),
-                'utf8',
+                JSON.stringify(externalized.config, null, 2),
+                { encoding: 'utf8', mode: 0o600 },
               );
+              await fs.promises.chmod(target, 0o600).catch(() => undefined);
+              claudeMcpSecretEnv = externalized.env;
             }
           } catch (err) {
             console.warn(
@@ -7720,6 +7865,7 @@ export async function startServer({
         return design.runs.finish(run, 'failed', 1, null);
       }
     }
+    const activeDatabaseContext = activeDevelopmentDatabaseContext(projectRecord?.metadata);
     const odMediaEnv = {
       MONOFIELD_BIN: OD_BIN,
       MONOFIELD_NODE_BIN: OD_NODE_BIN,
@@ -7741,12 +7887,13 @@ export async function startServer({
             OD_PROJECT_WORK_MODE: projectRecord.metadata.workMode,
           }
         : {}),
-      ...(projectRecord?.metadata?.databaseContext?.useForDevelopment === true
-        && typeof projectRecord.metadata.databaseContext.connectionId === 'string'
-        && projectRecord.metadata.databaseContext.connectionId.trim()
+      ...(interfaceSpecDatabaseAllowed
+        && activeDatabaseContext?.useForDevelopment === true
+        && typeof activeDatabaseContext.connectionId === 'string'
+        && activeDatabaseContext.connectionId.trim()
         ? {
-            MONOFIELD_PROJECT_DATABASE_ID: projectRecord.metadata.databaseContext.connectionId.trim(),
-            OD_PROJECT_DATABASE_ID: projectRecord.metadata.databaseContext.connectionId.trim(),
+            MONOFIELD_PROJECT_DATABASE_ID: activeDatabaseContext.connectionId.trim(),
+            OD_PROJECT_DATABASE_ID: activeDatabaseContext.connectionId.trim(),
           }
         : {}),
     };
@@ -7800,6 +7947,7 @@ export async function startServer({
           : 'ignore';
       const env = applyAgentLaunchEnv({
         ...agentSpawnEnv,
+        ...claudeMcpSecretEnv,
         ...(mmdRouteLaunchEnv || {}),
         ...odMediaEnv,
         ...openDesignAmrTraceEnv({
@@ -8860,7 +9008,15 @@ export async function startServer({
           ? isClaudeResumeFailure(`${agentStderrTail}\n${agentStdoutTail}`)
           : def.id === 'codex'
             ? isCodexResumeFailure(`${agentStderrTail}\n${agentStdoutTail}`)
-            : false;
+            : def.id === 'gemini'
+              ? isGeminiResumeFailure(`${agentStderrTail}\n${agentStdoutTail}`)
+              : def.id === 'opencode'
+                ? isOpenCodeResumeFailure(`${agentStderrTail}\n${agentStdoutTail}`)
+                : def.id === 'cursor-agent'
+                  ? isCursorResumeFailure(`${agentStderrTail}\n${agentStdoutTail}`)
+                  : def.id === 'copilot'
+                    ? isCopilotResumeFailure(`${agentStderrTail}\n${agentStdoutTail}`)
+                    : false;
       if (
         code !== 0 &&
         !run.cancelRequested &&
@@ -9170,6 +9326,44 @@ export async function startServer({
       }
       if (status === 'succeeded') {
         persistDeliveredAgentSessionState();
+      }
+      if (
+        status === 'succeeded'
+        && automaticBrowserVerificationRequested
+        && normalizedBrowserVerification
+        && desktopBrowserAutomation
+      ) {
+        const verification = await runAutomaticBrowserVerification({
+          execute: desktopBrowserAutomation,
+          evidence: browserVerificationEvidence,
+          sessionId: normalizedBrowserVerification.sessionId,
+          startedAt: automaticBrowserVerificationStartedAt,
+          url: normalizedBrowserVerification.url,
+        });
+        const korean = typeof locale === 'string' && locale.toLowerCase().startsWith('ko');
+        const interaction = verification.interactionActions.length > 0
+          ? verification.interactionActions.join(', ')
+          : null;
+        const delta = verification.ok
+          ? korean
+            ? interaction
+              ? `\n\n자동 검증 완료 — 승인된 탭을 새로고침하고 DOM·스크린샷을 확인했으며 상호작용 기록(${interaction})도 확인했습니다.`
+              : '\n\n자동 화면 검증 완료 — 승인된 탭을 새로고침하고 DOM·스크린샷을 확인했습니다. 이 요청에서 실행된 상호작용 기록은 없어 클릭 동작까지 검증했다고 표시하지 않습니다.'
+            : interaction
+              ? `\n\nAutomatic verification complete — reloaded the approved tab, captured DOM and screenshot evidence, and confirmed interaction evidence (${interaction}).`
+              : '\n\nAutomatic screen verification complete — reloaded the approved tab and captured DOM and screenshot evidence. No interaction action was recorded, so interaction behavior is not claimed as verified.'
+          : korean
+            ? `\n\n자동 검증 실패 — ${verification.error ?? '승인된 브라우저 탭에서 필수 검증 단계를 완료하지 못했습니다.'}`
+            : `\n\nAutomatic verification failed — ${verification.error ?? 'The required checks did not complete in the approved browser tab.'}`;
+        send('agent', { type: 'text_delta', delta });
+        send('diagnostic', {
+          type: verification.ok ? 'automatic_browser_verification_succeeded' : 'automatic_browser_verification_failed',
+          ...verification,
+          sessionId: normalizedBrowserVerification.sessionId,
+        });
+      }
+      if (normalizedBrowserVerification) {
+        browserVerificationEvidence.clear(normalizedBrowserVerification.sessionId);
       }
       finishWithRetryDecision(status, code, signal);
       } finally {

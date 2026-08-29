@@ -172,7 +172,11 @@ export function InterfaceSpecManualInput({
           requestMode: endpoint.requestMode === 'ai' ? 'manual' as const : endpoint.requestMode,
           responseMode: endpoint.responseMode === 'ai' ? 'manual' as const : endpoint.responseMode,
         }))
-      : draft.endpoints;
+      : draft.endpoints.map((endpoint) => ({
+          ...endpoint,
+          requestMode: endpoint.requestMode === 'manual' ? 'ai' as const : endpoint.requestMode,
+          responseMode: endpoint.responseMode === 'manual' ? 'ai' as const : endpoint.responseMode,
+        }));
     commit({
       ...draft,
       assistMode: mode,

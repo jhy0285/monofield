@@ -259,4 +259,30 @@ describe('QuestionsPanel staggered reveal', () => {
     });
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    'interface-spec-options',
+    'interface-spec-manual-draft',
+    'interface-spec-source-mode',
+  ])('requires explicit submission for %s instead of skip or countdown', (formId) => {
+    vi.useFakeTimers();
+    const onSubmit = vi.fn();
+    render(
+      <QuestionsPanel
+        form={{ ...form, id: formId }}
+        interactive
+        generating={false}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    revealAll();
+    expect((screen.getByRole('button', { name: 'Skip all' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByText('10:00')).toBeNull();
+
+    act(() => {
+      vi.advanceTimersByTime(10 * 60 * 1000);
+    });
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
 });

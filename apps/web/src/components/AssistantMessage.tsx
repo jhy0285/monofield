@@ -85,8 +85,6 @@ export type QuestionFormOpenRequest = {
   submittedAnswers?: Record<string, string | string[]>;
 };
 
-const CONTACT_EMAIL_URL = "mailto:jhy0285@gmail.com";
-
 interface ActionNotice {
   message: string;
   url?: string;
@@ -1517,29 +1515,6 @@ function AssistantFeedback({
               onChange={(event) => setCustomReason(event.target.value)}
             />
           ) : null}
-          {reasonRating === "positive" ? (
-            <p className="assistant-feedback-discord-note">
-              Share what you made by email at{" "}
-              <a
-                href={CONTACT_EMAIL_URL}
-                data-testid="assistant-feedback-contact-positive"
-              >
-                jhy0285@gmail.com
-              </a>{" "}
-              with a screenshot and what worked well.
-            </p>
-          ) : (
-            <p className="assistant-feedback-discord-note">
-              Share more context by email at{" "}
-              <a
-                href={CONTACT_EMAIL_URL}
-                data-testid="assistant-feedback-contact-negative"
-              >
-                jhy0285@gmail.com
-              </a>{" "}
-              so the team can understand what went wrong and follow up directly.
-            </p>
-          )}
           <div className="assistant-feedback-actions">
             <button
               type="button"

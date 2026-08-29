@@ -55,6 +55,9 @@ const REASONIX_AUTH_GUIDANCE =
 const CLAUDE_AUTH_GUIDANCE =
   'Claude Code is installed but is not authenticated. Run `claude auth login` or open `claude` and complete login in a terminal, then rescan. If MonoField was launched outside an interactive shell, your shell rc files (e.g. ~/.zshrc) may not be loaded into its environment.';
 
+const GEMINI_AUTH_GUIDANCE =
+  'Gemini CLI is installed but no usable authentication method is configured. Open `gemini` in a terminal and complete Google sign-in, or configure GEMINI_API_KEY / Vertex AI credentials, then rescan.';
+
 export function cursorAuthGuidance(): string {
   return CURSOR_AUTH_GUIDANCE;
 }
@@ -77,6 +80,10 @@ export function reasonixAuthGuidance(): string {
 
 export function claudeAuthGuidance(): string {
   return CLAUDE_AUTH_GUIDANCE;
+}
+
+export function geminiAuthGuidance(): string {
+  return GEMINI_AUTH_GUIDANCE;
 }
 
 export function isCursorAuthFailureText(text: string): boolean {
@@ -160,6 +167,17 @@ export function isClaudeAuthFailureText(text: string): boolean {
   );
 }
 
+export function isGeminiAuthFailureText(text: string): boolean {
+  const value = String(text || '');
+  if (!value.trim()) return false;
+  return (
+    /please set an auth method/i.test(value) ||
+    /manual authorization is required/i.test(value) ||
+    /run the gemini cli in an interactive terminal to log in/i.test(value) ||
+    /no usable authentication method/i.test(value)
+  );
+}
+
 export function classifyAgentAuthFailure(
   agentId: string,
   text: string,
@@ -169,6 +187,13 @@ export function classifyAgentAuthFailure(
     return {
       status: 'missing',
       message: claudeAuthGuidance(),
+    };
+  }
+  if (agentId === 'gemini') {
+    if (!isGeminiAuthFailureText(text)) return null;
+    return {
+      status: 'missing',
+      message: geminiAuthGuidance(),
     };
   }
   if (agentId === 'cursor-agent') {
@@ -306,6 +331,7 @@ function genericAuthGuidance(agentName: string): string {
 // fallback for adapters with no tailored classifier of their own.
 const TAILORED_AUTH_AGENTS = new Set([
   'claude',
+  'gemini',
   'cursor-agent',
   'deepseek',
   'antigravity',

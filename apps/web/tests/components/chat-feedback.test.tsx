@@ -12,10 +12,20 @@ if (typeof HTMLElement.prototype.scrollTo !== 'function') {
   };
 }
 
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatPane } from '../../src/components/ChatPane';
+import { I18nProvider, type Locale } from '../../src/i18n';
 import type { ChatMessage, ChatMessageFeedbackChange } from '../../src/types';
+
+const externalMocks = vi.hoisted(() => ({
+  openExternalUrl: vi.fn(async () => true),
+}));
+
+vi.mock('../../src/providers/registry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/providers/registry')>();
+  return { ...actual, openExternalUrl: externalMocks.openExternalUrl };
+});
 
 const originalScrollIntoView = Element.prototype.scrollIntoView;
 
@@ -100,6 +110,7 @@ function renderChatPane({
   streaming = false,
   onAssistantFeedback = vi.fn(),
   hasActiveDesignSystem = false,
+  locale = 'en',
 }: {
   messages: ChatMessage[];
   streaming?: boolean;
@@ -108,27 +119,30 @@ function renderChatPane({
     change: ChatMessageFeedbackChange,
   ) => void;
   hasActiveDesignSystem?: boolean;
+  locale?: Locale;
 }) {
   return {
     onAssistantFeedback,
     ...render(
-      <ChatPane
-        projectKindForTracking="prototype"
-        messages={messages}
-        streaming={streaming}
-        error={null}
-        projectId="project-1"
-        projectFiles={[]}
-        hasActiveDesignSystem={hasActiveDesignSystem}
-        onEnsureProject={async () => 'project-1'}
-        onSend={() => {}}
-        onStop={() => {}}
-        conversations={[]}
-        activeConversationId="conversation-1"
-        onSelectConversation={() => {}}
-        onDeleteConversation={() => {}}
-        onAssistantFeedback={onAssistantFeedback}
-      />,
+      <I18nProvider initial={locale}>
+        <ChatPane
+          projectKindForTracking="prototype"
+          messages={messages}
+          streaming={streaming}
+          error={null}
+          projectId="project-1"
+          projectFiles={[]}
+          hasActiveDesignSystem={hasActiveDesignSystem}
+          onEnsureProject={async () => 'project-1'}
+          onSend={() => {}}
+          onStop={() => {}}
+          conversations={[]}
+          activeConversationId="conversation-1"
+          onSelectConversation={() => {}}
+          onDeleteConversation={() => {}}
+          onAssistantFeedback={onAssistantFeedback}
+        />
+      </I18nProvider>,
     ),
   };
 }
@@ -138,6 +152,8 @@ describe('chat assistant feedback', () => {
 
   beforeEach(() => {
     Element.prototype.scrollIntoView = vi.fn();
+    window.localStorage.clear();
+    externalMocks.openExternalUrl.mockClear();
   });
 
   afterEach(() => {
@@ -150,17 +166,17 @@ describe('chat assistant feedback', () => {
       messages: [completedAssistant()],
     });
 
-    expect(screen.getByRole('group', { name: 'Feedback' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Rate this response' })).toBeTruthy();
   });
 
   it('collects positive and negative feedback on completed artifact results', () => {
     const { onAssistantFeedback } = renderChatPane({
       messages: [completedArtifactAssistant()],
     });
-    const feedbackGroup = screen.getByRole('group', { name: 'Feedback' });
+    const feedbackGroup = screen.getByRole('group', { name: 'Rate this response' });
     const footer = document.querySelector('.assistant-footer');
 
-    expect(feedbackGroup.textContent).not.toContain('Feedback');
+    expect(feedbackGroup.textContent).not.toContain('Rate this response');
     expect(footer?.contains(feedbackGroup)).toBe(true);
 
     fireEvent.click(screen.getByRole('button', { name: 'Helpful' }));
@@ -169,7 +185,7 @@ describe('chat assistant feedback', () => {
       { rating: 'positive' },
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Not helpful' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Needs improvement' }));
     expect(onAssistantFeedback).toHaveBeenLastCalledWith(
       expect.objectContaining({ id: 'assistant-1' }),
       { rating: 'negative' },
@@ -182,7 +198,7 @@ describe('chat assistant feedback', () => {
       messages: [completedEditAssistant()],
     });
 
-    expect(screen.getByRole('group', { name: 'Feedback' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Rate this response' })).toBeTruthy();
   });
 
   it('shows feedback after completed live artifact updates', () => {
@@ -190,7 +206,7 @@ describe('chat assistant feedback', () => {
       messages: [completedLiveArtifactAssistant()],
     });
 
-    expect(screen.getByRole('group', { name: 'Feedback' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Rate this response' })).toBeTruthy();
   });
 
   it('keeps every artifact turn feedback control visible and independent', () => {
@@ -207,7 +223,7 @@ describe('chat assistant feedback', () => {
       ],
     });
 
-    const groups = screen.getAllByRole('group', { name: 'Feedback' });
+    const groups = screen.getAllByRole('group', { name: 'Rate this response' });
     expect(groups).toHaveLength(2);
 
     fireEvent.click(within(groups[0]!).getByRole('button', { name: 'Helpful' }));
@@ -216,7 +232,7 @@ describe('chat assistant feedback', () => {
       { rating: 'positive' },
     );
 
-    fireEvent.click(within(groups[1]!).getByRole('button', { name: 'Not helpful' }));
+    fireEvent.click(within(groups[1]!).getByRole('button', { name: 'Needs improvement' }));
     expect(onAssistantFeedback).toHaveBeenLastCalledWith(
       expect.objectContaining({ id: 'assistant-2' }),
       { rating: 'negative' },
@@ -238,7 +254,7 @@ describe('chat assistant feedback', () => {
 
     expect(screen.queryByText('Feedback saved')).toBeNull();
     expect(
-      screen.getByRole('button', { name: 'Not helpful' }).getAttribute('aria-pressed'),
+      screen.getByRole('button', { name: 'Needs improvement' }).getAttribute('aria-pressed'),
     ).toBe('true');
     expect(
       screen.getByRole('button', { name: 'Helpful' }).getAttribute('aria-pressed'),
@@ -271,19 +287,14 @@ describe('chat assistant feedback', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Helpful' }));
-    expect(screen.getByText('Tell us why')).toBeTruthy();
+    expect(screen.getByText('What influenced your rating?')).toBeTruthy();
     expect(screen.getByText('😊')).toBeTruthy();
-    expect(
-      screen.getByTestId('assistant-feedback-discord-positive').getAttribute('href'),
-    ).toBe('https://discord.gg/9ptkbbqRu');
-    expect(screen.getByText(/Share what you made with the/i)).toBeTruthy();
-
     fireEvent.click(screen.getByLabelText('Understood my request'));
     fireEvent.click(screen.getByLabelText('Other'));
     fireEvent.change(screen.getByPlaceholderText('Add a short note...'), {
       target: { value: 'The layout is ready to present.' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save feedback' }));
 
     expect(onAssistantFeedback).toHaveBeenLastCalledWith(
       expect.objectContaining({ id: 'assistant-1' }),
@@ -294,7 +305,7 @@ describe('chat assistant feedback', () => {
         reasonsSubmittedAt: expect.any(Number),
       }),
     );
-    expect(screen.queryByText('Tell us why')).toBeNull();
+    expect(screen.queryByText('What influenced your rating?')).toBeNull();
   });
 
   it('adds design-system feedback reasons only when a design system is active', () => {
@@ -303,7 +314,7 @@ describe('chat assistant feedback', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Helpful' }));
-    expect(screen.queryByLabelText('Followed the design system')).toBeNull();
+    expect(screen.queryByLabelText('Followed the document style')).toBeNull();
     unmount();
 
     const { onAssistantFeedback } = renderChatPane({
@@ -312,8 +323,8 @@ describe('chat assistant feedback', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Helpful' }));
-    fireEvent.click(screen.getByLabelText('Followed the design system'));
-    fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+    fireEvent.click(screen.getByLabelText('Followed the document style'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save feedback' }));
 
     expect(onAssistantFeedback).toHaveBeenLastCalledWith(
       expect.objectContaining({ id: 'assistant-1' }),
@@ -323,8 +334,8 @@ describe('chat assistant feedback', () => {
       }),
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Not helpful' }));
-    expect(screen.getByLabelText('Did not follow the design system')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Needs improvement' }));
+    expect(screen.getByLabelText('Did not follow the document style')).toBeTruthy();
   });
 
   it('clears custom reason when Other is deselected', () => {
@@ -341,7 +352,7 @@ describe('chat assistant feedback', () => {
     expect(screen.queryByPlaceholderText('Add a short note...')).toBeNull();
 
     fireEvent.click(screen.getByLabelText('Understood my request'));
-    fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save feedback' }));
 
     expect(onAssistantFeedback).toHaveBeenLastCalledWith(
       expect.objectContaining({ id: 'assistant-1' }),
@@ -359,16 +370,10 @@ describe('chat assistant feedback', () => {
       messages: [completedArtifactAssistant()],
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Not helpful' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Needs improvement' }));
 
-    expect(screen.getByText('Tell us why')).toBeTruthy();
+    expect(screen.getByText('What influenced your rating?')).toBeTruthy();
     expect(screen.getByText('😔')).toBeTruthy();
-    expect(
-      screen.getByTestId('assistant-feedback-discord-negative').getAttribute('href'),
-    ).toBe('https://discord.gg/9ptkbbqRu');
-    expect(
-      screen.getByText(/so the team can understand what went wrong/i),
-    ).toBeTruthy();
   });
 
   it('scrolls the feedback reasons panel into view after selecting a rating', () => {
@@ -379,7 +384,7 @@ describe('chat assistant feedback', () => {
       messages: [completedArtifactAssistant()],
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Not helpful' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Needs improvement' }));
 
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start', behavior: 'smooth' });
   });
@@ -408,7 +413,7 @@ describe('chat assistant feedback', () => {
       ],
     });
 
-    expect(screen.queryByRole('group', { name: 'Feedback' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Rate this response' })).toBeNull();
   });
 
   it('collects feedback on a failed assistant turn', () => {
@@ -422,7 +427,7 @@ describe('chat assistant feedback', () => {
       ],
     });
 
-    expect(screen.getByRole('group', { name: 'Feedback' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Rate this response' })).toBeTruthy();
   });
 
   it('collects feedback on a canceled assistant turn', () => {
@@ -435,7 +440,7 @@ describe('chat assistant feedback', () => {
       ],
     });
 
-    expect(screen.getByRole('group', { name: 'Feedback' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Rate this response' })).toBeTruthy();
   });
 
   it('does not ask for feedback on a queued turn that has not started', () => {
@@ -451,6 +456,75 @@ describe('chat assistant feedback', () => {
       ],
     });
 
-    expect(screen.queryByRole('group', { name: 'Feedback' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Rate this response' })).toBeNull();
+  });
+
+  it('asks for a real experience response after five completed turns', async () => {
+    renderChatPane({
+      messages: Array.from({ length: 5 }, (_, index) => completedAssistant({
+        id: `community-assistant-${index + 1}`,
+        createdAt: 1_700_000_000_000 + index,
+      })),
+    });
+
+    const dialog = await screen.findByRole('dialog', {
+      name: 'How has MonoField been working for you?',
+    });
+    expect(within(dialog).getByText(
+      'Is it working well, or is there something you would like us to improve?',
+    )).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: 'It works well' })).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: 'Share feedback' })).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: 'Close' })).toBeTruthy();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Share feedback' }));
+    await waitFor(() => {
+      expect(externalMocks.openExternalUrl).toHaveBeenCalledWith(
+        'https://github.com/jhy0285/monofield/issues/new',
+      );
+    });
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('asks the same direct experience question in Korean without exposing trigger mechanics', async () => {
+    renderChatPane({
+      locale: 'ko',
+      messages: Array.from({ length: 5 }, (_, index) => completedAssistant({
+        id: `korean-community-assistant-${index + 1}`,
+        createdAt: 1_700_000_050_000 + index,
+      })),
+    });
+
+    const dialog = await screen.findByRole('dialog', {
+      name: 'MonoField를 사용해 보니 어떠셨나요?',
+    });
+    expect(within(dialog).getByText(
+      '잘 쓰고 계신가요? 불편하거나 바뀌었으면 하는 점이 있다면 알려주세요.',
+    )).toBeTruthy();
+    expect(within(dialog).queryByText(/몇 번의 작업|이 기기에만/)).toBeNull();
+    expect(within(dialog).getByRole('button', { name: '잘 쓰고 있어요' })).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: '개선점 보내기' })).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: '닫기' })).toBeTruthy();
+  });
+
+  it('turns a positive experience response into an explicit optional Star request', async () => {
+    renderChatPane({
+      messages: Array.from({ length: 5 }, (_, index) => completedAssistant({
+        id: `positive-community-assistant-${index + 1}`,
+        createdAt: 1_700_000_100_000 + index,
+      })),
+    });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'It works well' }));
+    const starDialog = screen.getByRole('dialog', {
+      name: 'We will keep making MonoField better',
+    });
+    fireEvent.click(within(starDialog).getByRole('button', { name: 'Star MonoField' }));
+
+    await waitFor(() => {
+      expect(externalMocks.openExternalUrl).toHaveBeenCalledWith(
+        'https://github.com/jhy0285/monofield',
+      );
+    });
   });
 });

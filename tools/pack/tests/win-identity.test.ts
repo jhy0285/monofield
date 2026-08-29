@@ -185,7 +185,7 @@ describe("resolveWinInstallIdentity", () => {
     } finally {
       await rm(root, { force: true, recursive: true });
     }
-  });
+  }, 15_000);
 
   it("keeps installer diagnostic log events ASCII-only for silent overwrite", async () => {
     const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");

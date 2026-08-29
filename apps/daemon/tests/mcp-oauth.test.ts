@@ -17,6 +17,10 @@ import {
   getOrRegisterClient,
   refreshAccessToken,
 } from '../src/mcp-oauth.js';
+import {
+  installTestCredentialVault,
+  type TestCredentialVault,
+} from './helpers/credential-vault.js';
 
 // Tiny fetch mock — looks up the URL in a Map and returns canned JSON.
 type FetchInput = Parameters<typeof fetch>[0];
@@ -194,12 +198,15 @@ describe('buildAuthorizeUrl', () => {
 
 describe('client registration cache', () => {
   let dataDir: string;
+  let vault: TestCredentialVault;
 
   beforeEach(async () => {
     dataDir = await mkdtemp(path.join(tmpdir(), 'od-mcp-oauth-'));
+    vault = installTestCredentialVault();
   });
 
   afterEach(async () => {
+    vault.restore();
     await rm(dataDir, { recursive: true, force: true });
   });
 
@@ -214,7 +221,7 @@ describe('client registration cache', () => {
           'https://app.example.com/api/mcp/oauth/callback',
         ]);
         return new Response(
-          JSON.stringify({ client_id: 'fresh-client-id' }),
+          JSON.stringify({ client_id: 'fresh-client-id', client_secret: 'fresh-client-secret' }),
           { status: 201, headers: { 'content-type': 'application/json' } },
         );
       }
@@ -235,6 +242,7 @@ describe('client registration cache', () => {
       fetchImpl,
     );
     expect(a.clientId).toBe('fresh-client-id');
+    expect(a.clientSecret).toBe('fresh-client-secret');
     expect(registerHits).toBe(1);
 
     const b = await getOrRegisterClient(
@@ -244,6 +252,7 @@ describe('client registration cache', () => {
       fetchImpl,
     );
     expect(b.clientId).toBe('fresh-client-id');
+    expect(b.clientSecret).toBe('fresh-client-secret');
     expect(registerHits).toBe(1); // cached, no second register
 
     const cacheFile = JSON.parse(
@@ -251,6 +260,29 @@ describe('client registration cache', () => {
     );
     expect(cacheFile.clients).toHaveLength(1);
     expect(cacheFile.clients[0].clientId).toBe('fresh-client-id');
+    expect(JSON.stringify(cacheFile)).not.toContain('fresh-client-secret');
+    expect(cacheFile.clients[0].clientSecret).toMatch(/^__MONOFIELD_STORED_MCP_CLIENT_SECRET__:ref:/);
+  });
+
+  it('preserves a legacy client secret when vault migration fails', async () => {
+    const file = path.join(dataDir, 'mcp-oauth-clients.json');
+    await writeFile(file, JSON.stringify({ clients: [{
+      authServerIssuer: 'https://auth.example.com',
+      redirectUri: 'https://app.example.com/api/mcp/oauth/callback',
+      clientId: 'legacy-client',
+      clientSecret: 'legacy-client-secret',
+      registeredAt: 0,
+    }] }));
+    vault.state.failWrites = true;
+
+    const out = await getOrRegisterClient(dataDir, {
+      issuer: 'https://auth.example.com',
+      authorization_endpoint: 'https://auth.example.com/authorize',
+      token_endpoint: 'https://auth.example.com/token',
+    }, 'https://app.example.com/api/mcp/oauth/callback');
+
+    expect(out.clientSecret).toBe('legacy-client-secret');
+    expect(await readFile(file, 'utf8')).toContain('legacy-client-secret');
   });
 
   it('does not register when the cache file already pins a matching client', async () => {

@@ -56,8 +56,8 @@ const AGENT_INSTALL_LINKS: Record<
     docsUrl: 'https://docs.qoder.com',
   },
   copilot: {
-    installUrl: 'https://github.com/github/copilot-cli',
-    docsUrl: 'https://docs.github.com/en/copilot/how-tos/use-copilot-extensions/use-in-cli',
+    installUrl: 'https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli',
+    docsUrl: 'https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli/overview',
   },
   pi: {
     installUrl: 'https://github.com/jhy0285/monofield/blob/main/docs/agent-adapters.md',

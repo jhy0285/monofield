@@ -8,7 +8,9 @@ import type {
 } from '@open-design/contracts';
 import {
   applyPlugin,
+  getPluginDetails,
   listPlugins,
+  pluginRecordHasQuery,
   renderPluginBriefTemplate,
   resolvePluginQueryFallback,
 } from '../state/projects';
@@ -84,7 +86,7 @@ export function PluginLoopHome({ onSubmit }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    void listPlugins().then((rows) => {
+    void listPlugins({ summary: true, locale }).then((rows) => {
       if (cancelled) return;
       setPlugins(rows);
       setLoading(false);
@@ -92,12 +94,12 @@ export function PluginLoopHome({ onSubmit }: Props) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [locale]);
 
   const sortedPlugins = useMemo(() => {
     return [...plugins].sort((a, b) => {
-      const aHasQuery = Boolean(a.manifest?.od?.useCase?.query);
-      const bHasQuery = Boolean(b.manifest?.od?.useCase?.query);
+      const aHasQuery = pluginRecordHasQuery(a);
+      const bHasQuery = pluginRecordHasQuery(b);
       if (aHasQuery !== bHasQuery) return aHasQuery ? -1 : 1;
       const aScenario = a.manifest?.od?.kind === 'scenario';
       const bScenario = b.manifest?.od?.kind === 'scenario';
@@ -130,6 +132,10 @@ export function PluginLoopHome({ onSubmit }: Props) {
 
   function openDetails(record: InstalledPluginRecord) {
     setDetailsRecord(record);
+    void getPluginDetails(record.id).then((detail) => {
+      if (!detail) return;
+      setDetailsRecord((current) => current?.id === record.id ? detail : current);
+    });
   }
 
   function closeDetails() {
@@ -248,7 +254,7 @@ export function PluginLoopHome({ onSubmit }: Props) {
           </div>
         ) : (
           sortedPlugins.map((p) => {
-            const hasQuery = Boolean(p.manifest?.od?.useCase?.query);
+            const hasQuery = pluginRecordHasQuery(p);
             const isActive = active?.record.id === p.id;
             const isPending = pendingApplyId === p.id;
             const links = derivePluginSourceLinks(p);

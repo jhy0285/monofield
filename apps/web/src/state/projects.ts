@@ -15,6 +15,7 @@ import type {
   ImportFolderRequest,
   ImportFolderResponse,
   InstalledPluginRecord,
+  InstalledPluginSummary,
   MarketplaceSecurityPolicy,
   MarketplaceVisibility,
   PluginInstallOutcome,
@@ -678,19 +679,127 @@ export async function persistTabsToDaemonNow(
 
 export interface ListPluginsOptions {
   includeHidden?: boolean;
+  /** Use the compact picker payload instead of downloading every full manifest. */
+  summary?: boolean;
+  /** Locale used by the daemon to collapse localized copy in summary mode. */
+  locale?: string;
+}
+
+const PLUGIN_SUMMARY_HAS_QUERY = Symbol('plugin-summary-has-query');
+
+type PluginSummaryRecord = InstalledPluginRecord & {
+  [PLUGIN_SUMMARY_HAS_QUERY]?: boolean;
+};
+
+/**
+ * Summary records intentionally omit the potentially large query text, but
+ * cards still need to know whether the full plugin offers a query action.
+ * Keep that picker-only bit out of the serialized manifest so it can never be
+ * mistaken for a real query and inserted into the composer.
+ */
+export function pluginRecordHasQuery(record: InstalledPluginRecord): boolean {
+  return Boolean(record.manifest?.od?.useCase?.query)
+    || Boolean((record as PluginSummaryRecord)[PLUGIN_SUMMARY_HAS_QUERY]);
+}
+
+function pluginSummaryToRecord(summary: InstalledPluginSummary): InstalledPluginRecord {
+  const preview = summary.preview ?? (summary.exampleOutput
+    ? { type: 'html', entry: summary.exampleOutput.path }
+    : undefined);
+  const record: PluginSummaryRecord = {
+    id: summary.id,
+    title: summary.title,
+    version: summary.version ?? '0.0.0',
+    sourceKind: summary.sourceKind ?? 'local',
+    source: '',
+    ...(summary.sourceMarketplaceId ? { sourceMarketplaceId: summary.sourceMarketplaceId } : {}),
+    ...(summary.sourceMarketplaceEntryName
+      ? { sourceMarketplaceEntryName: summary.sourceMarketplaceEntryName }
+      : {}),
+    ...(summary.sourceMarketplaceEntryVersion
+      ? { sourceMarketplaceEntryVersion: summary.sourceMarketplaceEntryVersion }
+      : {}),
+    ...(summary.marketplaceTrust ? { marketplaceTrust: summary.marketplaceTrust } : {}),
+    trust: summary.trust ?? 'untrusted',
+    capabilitiesGranted: summary.capabilitiesGranted ?? [],
+    manifest: {
+      name: summary.name ?? summary.id,
+      title: summary.title,
+      version: summary.version ?? '0.0.0',
+      ...(summary.description ? { description: summary.description } : {}),
+      ...(summary.tags ? { tags: summary.tags } : {}),
+      od: {
+        summary: true,
+        ...(summary.kind ? { kind: summary.kind as 'skill' | 'scenario' | 'atom' | 'bundle' } : {}),
+        ...(summary.taskKind
+          ? { taskKind: summary.taskKind as 'new-generation' | 'code-migration' | 'figma-migration' | 'tune-collab' }
+          : {}),
+        ...(summary.mode ? { mode: summary.mode } : {}),
+        ...(summary.platform ? { platform: summary.platform } : {}),
+        ...(summary.scenario ? { scenario: summary.scenario } : {}),
+        ...(summary.surface ? { surface: summary.surface } : {}),
+        ...(summary.hidden !== undefined ? { hidden: summary.hidden } : {}),
+        ...(preview ? { preview } : {}),
+        ...(summary.bakedPreview ? { bakedPreview: summary.bakedPreview } : {}),
+        ...(summary.exampleOutput
+          ? {
+              useCase: {
+                ...(summary.exampleOutput ? { exampleOutputs: [summary.exampleOutput] } : {}),
+              },
+            }
+          : {}),
+        ...(summary.pipelineAtoms
+          ? { pipeline: { stages: [{ id: 'summary', atoms: summary.pipelineAtoms }] } }
+          : {}),
+        ...(summary.designSystemRef
+          ? { context: { designSystem: { ref: summary.designSystemRef } } }
+          : {}),
+      },
+    },
+    fsPath: '',
+    installedAt: 0,
+    updatedAt: summary.updatedAt ?? 0,
+  };
+  record[PLUGIN_SUMMARY_HAS_QUERY] = summary.hasQuery === true;
+  return record;
 }
 
 export async function listPlugins(
   options: ListPluginsOptions = {},
 ): Promise<InstalledPluginRecord[]> {
   try {
-    const resp = await fetch('/api/plugins');
+    const resp = await fetch('/api/plugins', options.summary
+      ? {
+          headers: {
+            'x-monofield-plugin-view': 'summary',
+            ...(options.locale ? { 'x-monofield-locale': options.locale } : {}),
+          },
+        }
+      : undefined);
     if (!resp.ok) return [];
-    const json = (await resp.json()) as { plugins?: InstalledPluginRecord[] };
-    const plugins = json.plugins ?? [];
+    const json = (await resp.json()) as {
+      plugins?: InstalledPluginRecord[] | InstalledPluginSummary[];
+    };
+    const plugins = options.summary
+      ? (json.plugins ?? []).map((plugin) => (
+          plugin && typeof plugin === 'object' && 'manifest' in plugin
+            ? plugin as InstalledPluginRecord
+            : pluginSummaryToRecord(plugin as InstalledPluginSummary)
+        ))
+      : (json.plugins ?? []) as InstalledPluginRecord[];
     return options.includeHidden ? plugins : plugins.filter(isVisiblePlugin);
   } catch {
     return [];
+  }
+}
+
+export async function getPluginDetails(id: string): Promise<InstalledPluginRecord | null> {
+  try {
+    const resp = await fetch(`/api/plugins/${encodeURIComponent(id)}`);
+    if (!resp.ok) return null;
+    return await resp.json() as InstalledPluginRecord;
+  } catch {
+    return null;
   }
 }
 

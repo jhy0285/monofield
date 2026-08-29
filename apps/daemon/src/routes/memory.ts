@@ -1,6 +1,7 @@
 import type { Express } from 'express';
-import { MEMORY_TYPES } from '@open-design/contracts';
+import { MEMORY_TYPES, STORED_BYOK_API_KEY } from '@open-design/contracts';
 import type { RouteDeps } from '../server-context.js';
+import { resolveByokApiKey } from '../byok-credentials.js';
 
 import {
   buildMemoryTree,
@@ -45,7 +46,14 @@ type MemoryType =
   | 'reference'
   | 'profile'
   | 'rule';
-type MemoryExtractionProvider = 'anthropic' | 'openai' | 'azure' | 'google' | 'ollama';
+type MemoryExtractionProvider =
+  | 'anthropic'
+  | 'openai'
+  | 'azure'
+  | 'google'
+  | 'ollama'
+  | 'senseaudio'
+  | 'aihubmix';
 
 interface MemoryExtractionPatch {
   provider: MemoryExtractionProvider;
@@ -78,6 +86,36 @@ interface MemoryAppConfigLike {
   agentModels?: Record<string, { model?: string }>;
 }
 
+async function resolveMemoryChatProvider(
+  dataDir: string,
+  value: unknown,
+): Promise<Record<string, string> | null> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const chatConfig = value as UnknownRecord;
+  const provider = chatConfig.provider;
+  if (
+    provider !== 'anthropic'
+    && provider !== 'openai'
+    && provider !== 'azure'
+    && provider !== 'google'
+    && provider !== 'ollama'
+    && provider !== 'senseaudio'
+    && provider !== 'aihubmix'
+  ) return null;
+
+  const suppliedApiKey = typeof chatConfig.apiKey === 'string' ? chatConfig.apiKey : '';
+  const apiKey = suppliedApiKey === STORED_BYOK_API_KEY
+    ? await resolveByokApiKey(dataDir, provider, suppliedApiKey)
+    : suppliedApiKey;
+  return {
+    provider,
+    apiKey,
+    baseUrl: typeof chatConfig.baseUrl === 'string' ? chatConfig.baseUrl : '',
+    apiVersion: typeof chatConfig.apiVersion === 'string' ? chatConfig.apiVersion : '',
+    model: typeof chatConfig.model === 'string' ? chatConfig.model : '',
+  };
+}
+
 function asRecord(value: unknown): UnknownRecord {
   return value && typeof value === 'object' ? (value as UnknownRecord) : {};
 }
@@ -102,6 +140,8 @@ function isExtractionProvider(value: unknown): value is MemoryExtractionProvider
     || value === 'azure'
     || value === 'google'
     || value === 'ollama'
+    || value === 'senseaudio'
+    || value === 'aihubmix'
   );
 }
 
@@ -225,39 +265,31 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
           patch.extraction = null;
         } else if (body.extraction && typeof body.extraction === 'object') {
           const incoming = body.extraction as UnknownRecord;
-          const current = await readMemoryConfig(RUNTIME_DATA_DIR);
-          const currentExtraction = current.extraction as MemoryExtractionPatch | null;
           const apiKeyOmitted = !Object.prototype.hasOwnProperty.call(
             incoming,
             'apiKey',
           );
-          const sameProvider =
-            !!currentExtraction
-            && currentExtraction.provider === incoming.provider;
-          let nextApiKey = '';
-          if (typeof incoming.apiKey === 'string' && incoming.apiKey) {
-            nextApiKey = incoming.apiKey;
-          } else if (apiKeyOmitted && sameProvider) {
-            nextApiKey = currentExtraction?.apiKey ?? '';
-          }
           if (!isExtractionProvider(incoming.provider)) {
             throw new Error('invalid extraction provider');
           }
           const nextExtraction: MemoryExtractionPatch = {
             provider: incoming.provider,
-            apiKey: nextApiKey,
           };
+          // Omission is distinct from clearing. Leave the key absent so the
+          // storage layer can retain the existing opaque vault ref without
+          // decrypting and re-encrypting it; an explicit empty string clears.
+          if (!apiKeyOmitted && typeof incoming.apiKey === 'string') {
+            nextExtraction.apiKey = incoming.apiKey;
+          }
           if (typeof incoming.model === 'string') nextExtraction.model = incoming.model;
           if (typeof incoming.baseUrl === 'string') nextExtraction.baseUrl = incoming.baseUrl;
           // Azure-only; ignored by the validator for the other providers.
-          // We forward whatever the UI sent (or the previously-stored
-          // value when the UI omits the field) so re-saving an azure
-          // override without re-typing the api-version doesn't blank it.
-          const apiVersion =
-            typeof incoming.apiVersion === 'string'
-              ? incoming.apiVersion
-              : currentExtraction?.apiVersion;
-          if (typeof apiVersion === 'string') nextExtraction.apiVersion = apiVersion;
+          // Omission is preserved atomically by writeMemoryConfig under its
+          // per-dataDir lock; do not pre-read here or concurrent PATCH calls
+          // can reintroduce a stale apiVersion.
+          if (typeof incoming.apiVersion === 'string') {
+            nextExtraction.apiVersion = incoming.apiVersion;
+          }
           patch.extraction = nextExtraction;
         }
       }
@@ -411,6 +443,10 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
           : (chatAgentId && appConfig.agentModels?.[chatAgentId]?.model
             ? appConfig.agentModels[chatAgentId].model ?? null
             : null);
+      const chatProvider = await resolveMemoryChatProvider(
+        RUNTIME_DATA_DIR,
+        body.chatProvider,
+      );
       const result = await distillRulesFromAnnotations(
         RUNTIME_DATA_DIR,
         { annotations },
@@ -418,9 +454,7 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
           projectRoot: PROJECT_ROOT,
           ...(chatAgentId ? { chatAgentId } : {}),
           ...(chatModel ? { chatModel } : {}),
-          ...(body.chatProvider && typeof body.chatProvider === 'object'
-            ? { chatProvider: body.chatProvider }
-            : {}),
+          ...(chatProvider ? { chatProvider } : {}),
         },
       );
       res.json(result);
@@ -566,28 +600,10 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
       // shapes the extractor speaks; an unknown / missing provider
       // means "let the legacy chain decide" so a malformed payload
       // can't override the env / media-config fallbacks.
-      const rawChat = body.chatProvider;
-      let chatProvider = null;
-      if (rawChat && typeof rawChat === 'object') {
-        const chatConfig = rawChat as UnknownRecord;
-        const provider = chatConfig.provider;
-        if (
-          provider === 'anthropic'
-          || provider === 'openai'
-          || provider === 'azure'
-          || provider === 'google'
-          || provider === 'ollama'
-        ) {
-          chatProvider = {
-            provider,
-            apiKey: typeof chatConfig.apiKey === 'string' ? chatConfig.apiKey : '',
-            baseUrl: typeof chatConfig.baseUrl === 'string' ? chatConfig.baseUrl : '',
-            apiVersion:
-              typeof chatConfig.apiVersion === 'string' ? chatConfig.apiVersion : '',
-            model: typeof chatConfig.model === 'string' ? chatConfig.model : '',
-          };
-        }
-      }
+      const chatProvider = await resolveMemoryChatProvider(
+        RUNTIME_DATA_DIR,
+        body.chatProvider,
+      );
       let attemptedLLM = false;
       if (userMessage.trim().length > 0 && hasAssistant) {
         attemptedLLM = true;

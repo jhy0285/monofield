@@ -91,6 +91,22 @@ export type WebDeployProjectFileResponse = DeployProjectFileResponse;
 export type WebCloudflarePagesDeploySelection = CloudflarePagesDeploySelection;
 export type WebCloudflarePagesZonesResponse = CloudflarePagesZonesResponse;
 
+/**
+ * The catalog probe may continue after the runtime needed by the current
+ * route has arrived.  Only that selected adapter is allowed to block the UI;
+ * API/BYOK mode does not depend on a local adapter at all.
+ */
+export function isSelectedAgentDetectionPending(input: {
+  catalogLoading: boolean;
+  mode: 'daemon' | 'api';
+  agentId: string | null | undefined;
+  agents: ReadonlyArray<Pick<AgentInfo, 'id'>>;
+}): boolean {
+  if (!input.catalogLoading || input.mode === 'api') return false;
+  if (!input.agentId) return true;
+  return !input.agents.some((agent) => agent.id === input.agentId);
+}
+
 export function isDeployProviderId(value: unknown): value is WebDeployProviderId {
   return typeof value === 'string' && (DEPLOY_PROVIDER_IDS as readonly string[]).includes(value);
 }
@@ -1403,15 +1419,70 @@ export async function createSocialSharePayload(
 
 // Project files — all paths are scoped under .od/projects/<id>/ on disk.
 
+const PROJECT_LIST_CACHE_TTL_MS = 1_000;
+
+type ProjectListCacheEntry<T> = {
+  expiresAt: number;
+  value: T;
+};
+
+type ProjectListInflightEntry<T> = {
+  generation: number;
+  promise: Promise<T>;
+};
+
+const projectFilesCache = new Map<string, ProjectListCacheEntry<ProjectFile[]>>();
+const projectFilesInflight = new Map<string, ProjectListInflightEntry<ProjectFile[]>>();
+const projectFoldersCache = new Map<string, ProjectListCacheEntry<ProjectFolder[]>>();
+const projectFoldersInflight = new Map<string, ProjectListInflightEntry<ProjectFolder[]>>();
+const projectListGeneration = new Map<string, number>();
+
+function currentProjectListGeneration(projectId: string): number {
+  return projectListGeneration.get(projectId) ?? 0;
+}
+
+function invalidateProjectListings(projectId: string): void {
+  projectListGeneration.set(projectId, currentProjectListGeneration(projectId) + 1);
+  projectFilesCache.delete(projectId);
+  projectFoldersCache.delete(projectId);
+  // Do not let a caller after this mutation join a pre-mutation traversal.
+  projectFilesInflight.delete(projectId);
+  projectFoldersInflight.delete(projectId);
+}
+
 export async function fetchProjectFiles(projectId: string): Promise<ProjectFile[]> {
-  try {
-    const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files`);
-    if (!resp.ok) return [];
-    const json = (await resp.json()) as { files: ProjectFile[] };
-    return json.files ?? [];
-  } catch {
-    return [];
-  }
+  const now = Date.now();
+  const cached = projectFilesCache.get(projectId);
+  if (cached && cached.expiresAt > now) return cached.value;
+
+  const generation = currentProjectListGeneration(projectId);
+  const inflight = projectFilesInflight.get(projectId);
+  if (inflight?.generation === generation) return inflight.promise;
+
+  const promise = (async () => {
+    try {
+      const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files`);
+      if (!resp.ok) return [];
+      const json = (await resp.json()) as { files: ProjectFile[] };
+      const files = json.files ?? [];
+      if (currentProjectListGeneration(projectId) === generation) {
+        projectFilesCache.set(projectId, {
+          expiresAt: Date.now() + PROJECT_LIST_CACHE_TTL_MS,
+          value: files,
+        });
+      }
+      return files;
+    } catch {
+      return [];
+    }
+  })();
+  projectFilesInflight.set(projectId, { generation, promise });
+  void promise.finally(() => {
+    if (projectFilesInflight.get(projectId)?.promise === promise) {
+      projectFilesInflight.delete(projectId);
+    }
+  });
+  return promise;
 }
 
 async function dictionaryResponse<T>(response: Response, fallback: string): Promise<T> {
@@ -1489,14 +1560,38 @@ export async function fetchProjectDictionarySnapshots(projectId: string): Promis
 }
 
 export async function fetchProjectFolders(projectId: string): Promise<ProjectFolder[]> {
-  try {
-    const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/folders`);
-    if (!resp.ok) return [];
-    const json = (await resp.json()) as { folders?: ProjectFolder[] };
-    return json.folders ?? [];
-  } catch {
-    return [];
-  }
+  const now = Date.now();
+  const cached = projectFoldersCache.get(projectId);
+  if (cached && cached.expiresAt > now) return cached.value;
+
+  const generation = currentProjectListGeneration(projectId);
+  const inflight = projectFoldersInflight.get(projectId);
+  if (inflight?.generation === generation) return inflight.promise;
+
+  const promise = (async () => {
+    try {
+      const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/folders`);
+      if (!resp.ok) return [];
+      const json = (await resp.json()) as { folders?: ProjectFolder[] };
+      const folders = json.folders ?? [];
+      if (currentProjectListGeneration(projectId) === generation) {
+        projectFoldersCache.set(projectId, {
+          expiresAt: Date.now() + PROJECT_LIST_CACHE_TTL_MS,
+          value: folders,
+        });
+      }
+      return folders;
+    } catch {
+      return [];
+    }
+  })();
+  projectFoldersInflight.set(projectId, { generation, promise });
+  void promise.finally(() => {
+    if (projectFoldersInflight.get(projectId)?.promise === promise) {
+      projectFoldersInflight.delete(projectId);
+    }
+  });
+  return promise;
 }
 
 export async function createProjectFolder(
@@ -1511,6 +1606,7 @@ export async function createProjectFolder(
     });
     if (!resp.ok) return null;
     const json = (await resp.json()) as { folder?: ProjectFolder };
+    invalidateProjectListings(projectId);
     return json.folder ?? null;
   } catch {
     return null;
@@ -1527,6 +1623,7 @@ export async function deleteProjectFolder(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path: folderPath }),
     });
+    if (resp.ok) invalidateProjectListings(projectId);
     return resp.ok;
   } catch {
     return false;
@@ -1860,7 +1957,7 @@ export async function writeProjectTextFile(
   projectId: string,
   name: string,
   content: string,
-  options?: { artifactManifest?: ArtifactManifest },
+  options?: { artifactManifest?: ArtifactManifest; expectedContentSha256?: string },
 ): Promise<ProjectFile | null> {
   const result = await writeProjectTextFileDetailed(projectId, name, content, options);
   return result.ok ? result.file : null;
@@ -1874,13 +1971,18 @@ export async function writeProjectTextFileDetailed(
   projectId: string,
   name: string,
   content: string,
-  options?: { artifactManifest?: ArtifactManifest },
+  options?: { artifactManifest?: ArtifactManifest; expectedContentSha256?: string },
 ): Promise<WriteProjectTextFileResult> {
   try {
     const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, content, artifactManifest: options?.artifactManifest }),
+      body: JSON.stringify({
+        name,
+        content,
+        artifactManifest: options?.artifactManifest,
+        expectedContentSha256: options?.expectedContentSha256,
+      }),
     });
     if (!resp.ok) {
       const body = await readApiErrorBody(resp);
@@ -1892,6 +1994,7 @@ export async function writeProjectTextFileDetailed(
       };
     }
     const json = (await resp.json()) as { file: ProjectFile };
+    invalidateProjectListings(projectId);
     return { ok: true, file: json.file };
   } catch {
     return { ok: false, message: 'Network error while saving the file' };
@@ -1911,6 +2014,7 @@ export async function writeProjectBase64File(
     });
     if (!resp.ok) return null;
     const json = (await resp.json()) as { file: ProjectFile };
+    invalidateProjectListings(projectId);
     return json.file;
   } catch {
     return null;
@@ -1932,6 +2036,7 @@ export async function uploadProjectFile(
     });
     if (!resp.ok) return null;
     const json = (await resp.json()) as { file: ProjectFile };
+    invalidateProjectListings(projectId);
     return json.file;
   } catch {
     return null;
@@ -2068,6 +2173,7 @@ export async function uploadProjectFiles(
     }
   }
 
+  if (uploaded.length > 0) invalidateProjectListings(projectId);
   return { uploaded, failed, error };
 }
 
@@ -2101,6 +2207,7 @@ export async function deleteProjectFile(
       projectRawUrl(projectId, name),
       { method: 'DELETE' },
     );
+    if (resp.ok) invalidateProjectListings(projectId);
     return resp.ok;
   } catch {
     return false;
@@ -2121,6 +2228,7 @@ export async function renameProjectFile(
     const errorBody = await readApiErrorBody(resp);
     throw new Error(errorBody.message);
   }
+  invalidateProjectListings(projectId);
   return (await resp.json()) as RenameProjectFileResponse;
 }
 

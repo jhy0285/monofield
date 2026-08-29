@@ -20,10 +20,23 @@
 // last-writer-wins on a per-file basis; the daemon only ever has one
 // chat run at a time touching memory so we don't need locking yet.
 
+import { randomBytes } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
-import { MEMORY_TYPES, PROFILE_MEMORY_ID, parseFormAnswers } from '@open-design/contracts';
+import {
+  MEMORY_TYPES,
+  PROFILE_MEMORY_ID,
+  STORED_BYOK_API_KEY,
+  parseFormAnswers,
+} from '@open-design/contracts';
+import {
+  credentialVaultKey,
+  credentialVaultKeyCandidates,
+  deleteCredential,
+  readCredential,
+  writeCredential,
+} from './credential-vault.js';
 import { parseFrontmatter } from './design-systems/frontmatter.js';
 // Imported lazily through the memory-extractions module by the call
 // sites below so a future test-only build of memory.ts that stubs the
@@ -142,6 +155,57 @@ function configPath(dataDir) {
   return path.join(memoryDir(dataDir), CONFIG_FILE);
 }
 
+const STORED_MEMORY_EXTRACTION_KEY = '__MONOFIELD_STORED_MEMORY_EXTRACTION_API_KEY__';
+const STORED_MEMORY_EXTRACTION_KEY_REF_PREFIX = `${STORED_MEMORY_EXTRACTION_KEY}:ref:`;
+const memoryConfigWriteLocks = new Map();
+const warnedMemoryCredentialMigrations = new Set();
+
+function defaultMemoryConfig() {
+  return {
+    enabled: true,
+    chatExtractionEnabled: false,
+    profileEnabled: true,
+    rewriteEnabled: true,
+    verifyEnabled: true,
+    extraction: null,
+  };
+}
+
+function memoryExtractionCredentialRef(dataDir, provider) {
+  return credentialVaultKey('memory-extraction', configPath(dataDir), provider);
+}
+
+function freshMemoryExtractionCredentialRef(dataDir, provider) {
+  return `${memoryExtractionCredentialRef(dataDir, provider)}:v-${randomBytes(12).toString('hex')}`;
+}
+
+function memoryExtractionCredentialMarker(ref) {
+  return `${STORED_MEMORY_EXTRACTION_KEY_REF_PREFIX}${ref}`;
+}
+
+function refFromMemoryExtractionCredentialMarker(value) {
+  return typeof value === 'string' && value.startsWith(STORED_MEMORY_EXTRACTION_KEY_REF_PREFIX)
+    ? value.slice(STORED_MEMORY_EXTRACTION_KEY_REF_PREFIX.length)
+    : null;
+}
+
+function validatedMemoryExtractionCredentialRef(dataDir, provider, value) {
+  const ref = refFromMemoryExtractionCredentialMarker(value);
+  if (!ref || !VALID_EXTRACTION_PROVIDERS.has(provider)) return null;
+  const bases = credentialVaultKeyCandidates(
+    'memory-extraction',
+    configPath(dataDir),
+    provider,
+  );
+  return bases.some((base) => (
+    ref === base
+    || (
+      ref.startsWith(`${base}:v-`)
+      && /^[a-f0-9]{24}$/.test(ref.slice(`${base}:v-`.length))
+    )
+  )) ? ref : null;
+}
+
 // Whitelist of fields the extraction override may contain. Anything else
 // in the patch is dropped to keep `.config.json` from accumulating
 // arbitrary user-supplied keys (e.g. a typo'd field that quietly breaks
@@ -152,6 +216,8 @@ const VALID_EXTRACTION_PROVIDERS = new Set([
   'azure',
   'google',
   'ollama',
+  'senseaudio',
+  'aihubmix',
 ]);
 
 function normalizeExtractionPatch(input) {
@@ -174,35 +240,159 @@ function normalizeExtractionPatch(input) {
   return out;
 }
 
+function normalizeMemoryConfigDocument(parsed) {
+  return {
+    enabled: parsed?.enabled !== false,
+    // Automatic chat extraction launches a second model request after every
+    // completed turn. Keep it explicit opt-in so a greeting or one-off coding
+    // task never silently doubles CLI token usage.
+    chatExtractionEnabled: parsed?.chatExtractionEnabled === true,
+    profileEnabled: parsed?.profileEnabled !== false,
+    rewriteEnabled: parsed?.rewriteEnabled !== false,
+    verifyEnabled: parsed?.verifyEnabled !== false,
+    extraction: normalizeExtractionPatch(parsed?.extraction),
+  };
+}
+
+async function readPersistedMemoryConfig(dataDir) {
+  try {
+    const directory = memoryDir(dataDir);
+    const file = configPath(dataDir);
+    const contents = await fsp.readFile(file, 'utf8');
+    // Tighten legacy permissions before attempting vault migration. If the
+    // platform cannot chmod (for example Windows ACL-only filesystems), the
+    // migration still proceeds and the atomic replacement below is created
+    // with the restrictive mode.
+    await Promise.all([
+      fsp.chmod(directory, 0o700).catch(() => undefined),
+      fsp.chmod(file, 0o600).catch(() => undefined),
+    ]);
+    return normalizeMemoryConfigDocument(JSON.parse(contents));
+  } catch (error) {
+    const code = error?.code;
+    if (code === 'ENOENT') return defaultMemoryConfig();
+    if (error?.name === 'SyntaxError') {
+      // A malformed metadata file may still contain the only reference to an
+      // encrypted secret. Refuse to overwrite it with defaults; the GET path
+      // can degrade safely, while PATCH must preserve the file for recovery.
+      throw new Error('memory config is corrupted and must be repaired before it can be updated.');
+    }
+    throw error;
+  }
+}
+
+async function persistMemoryConfigFile(dataDir, config) {
+  const directory = memoryDir(dataDir);
+  const file = configPath(dataDir);
+  await fsp.mkdir(directory, { recursive: true, mode: 0o700 });
+  await fsp.chmod(directory, 0o700).catch(() => undefined);
+  const temporary = `${file}.${randomBytes(6).toString('hex')}.tmp`;
+  try {
+    await fsp.writeFile(temporary, JSON.stringify(config, null, 2), {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
+    await fsp.rename(temporary, file);
+    await fsp.chmod(file, 0o600).catch(() => undefined);
+  } catch (error) {
+    await fsp.rm(temporary, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
+async function readMemoryConfigState(dataDir) {
+  const persisted = await readPersistedMemoryConfig(dataDir);
+  const runtime = {
+    ...persisted,
+    extraction: persisted.extraction ? { ...persisted.extraction } : null,
+  };
+  const storedKey = persisted.extraction?.apiKey;
+  if (!storedKey || storedKey === STORED_BYOK_API_KEY) return { persisted, runtime };
+
+  const markerRef = refFromMemoryExtractionCredentialMarker(storedKey);
+  const explicitRef = validatedMemoryExtractionCredentialRef(
+    dataDir,
+    persisted.extraction.provider,
+    storedKey,
+  );
+  if (markerRef && !explicitRef) {
+    // Metadata is local and therefore not an authorization boundary. Still,
+    // never let a forged memory marker turn the vault into a confused-deputy
+    // oracle for a BYOK/MCP/connector secret, and never delete that foreign
+    // ref during a later settings update. Scrub only the invalid marker.
+    delete persisted.extraction.apiKey;
+    delete runtime.extraction.apiKey;
+    await persistMemoryConfigFile(dataDir, persisted).catch(() => undefined);
+    console.warn('[memory] Rejected an extraction credential reference outside the memory namespace.');
+    return { persisted, runtime };
+  }
+  if (explicitRef) {
+    try {
+      const secret = (await readCredential(explicitRef))?.trim() ?? '';
+      if (secret) runtime.extraction.apiKey = secret;
+      else delete runtime.extraction.apiKey;
+    } catch {
+      delete runtime.extraction.apiKey;
+      console.warn('[memory] Encrypted extraction credential is currently unavailable.');
+    }
+    return { persisted, runtime };
+  }
+
+  // Legacy memory config stored a provider key in plaintext. Stage the new
+  // immutable ref first and scrub the file only after its atomic rename. If
+  // either operation fails, the original file remains untouched and usable.
+  const ref = freshMemoryExtractionCredentialRef(dataDir, persisted.extraction.provider);
+  try {
+    await writeCredential(ref, storedKey);
+    const secured = {
+      ...persisted,
+      extraction: {
+        ...persisted.extraction,
+        apiKey: memoryExtractionCredentialMarker(ref),
+      },
+    };
+    try {
+      await persistMemoryConfigFile(dataDir, secured);
+    } catch (error) {
+      await deleteCredential(ref).catch(() => undefined);
+      throw error;
+    }
+    return { persisted: secured, runtime };
+  } catch {
+    await deleteCredential(ref).catch(() => undefined);
+    const warningKey = configPath(dataDir);
+    if (!warnedMemoryCredentialMigrations.has(warningKey)) {
+      warnedMemoryCredentialMigrations.add(warningKey);
+      console.warn('[memory] Extraction credential migration deferred; the legacy value was preserved.');
+    }
+    return { persisted, runtime };
+  }
+}
+
+async function withMemoryConfigLock(dataDir, operation) {
+  const prior = memoryConfigWriteLocks.get(dataDir) ?? Promise.resolve();
+  const task = prior.catch(() => undefined).then(operation);
+  memoryConfigWriteLocks.set(dataDir, task);
+  try {
+    return await task;
+  } finally {
+    if (memoryConfigWriteLocks.get(dataDir) === task) memoryConfigWriteLocks.delete(dataDir);
+  }
+}
+
 export async function readMemoryConfig(dataDir) {
   try {
-    const raw = await fsp.readFile(configPath(dataDir), 'utf8');
-    const parsed = JSON.parse(raw);
-    return {
-      enabled: parsed?.enabled !== false,
-      // Automatic chat extraction launches a second model request after every
-      // completed turn. Keep it explicit opt-in so a greeting or one-off
-      // coding task never silently doubles CLI token usage.
-      chatExtractionEnabled: parsed?.chatExtractionEnabled === true,
-      // Two-loop memory per-hook flags. All default-ON (`!== false`) so a
-      // config written before these existed still injects the profile,
-      // rewrites short queries, and self-verifies output.
-      profileEnabled: parsed?.profileEnabled !== false,
-      rewriteEnabled: parsed?.rewriteEnabled !== false,
-      verifyEnabled: parsed?.verifyEnabled !== false,
-      extraction: normalizeExtractionPatch(parsed?.extraction),
-    };
+    // Legacy vault migration performs an atomic metadata rewrite. Serialize it
+    // with PATCH writes so a slow migration cannot rename stale config over a
+    // newer user update and orphan the freshly stored credential ref.
+    return await withMemoryConfigLock(
+      dataDir,
+      async () => (await readMemoryConfigState(dataDir)).runtime,
+    );
   } catch {
     // Saved memory remains available by default, but model-backed extraction
     // is opt-in because it has a real latency/token cost on every chat turn.
-    return {
-      enabled: true,
-      chatExtractionEnabled: false,
-      profileEnabled: true,
-      rewriteEnabled: true,
-      verifyEnabled: true,
-      extraction: null,
-    };
+    return defaultMemoryConfig();
   }
 }
 
@@ -214,8 +404,9 @@ export async function readMemoryConfig(dataDir) {
 // object replaces it whole; an absent key leaves the existing override
 // untouched. The three per-hook booleans default-on and only flip when an
 // explicit boolean is supplied.
-export async function writeMemoryConfig(dataDir, patch) {
-  const current = await readMemoryConfig(dataDir);
+async function doWriteMemoryConfig(dataDir, patch) {
+  const state = await readMemoryConfigState(dataDir);
+  const current = state.runtime;
   const next = {
     enabled:
       typeof patch?.enabled === 'boolean' ? patch.enabled : current.enabled,
@@ -237,12 +428,40 @@ export async function writeMemoryConfig(dataDir, patch) {
       typeof patch?.verifyEnabled === 'boolean'
         ? patch.verifyEnabled
         : current.verifyEnabled,
-    extraction: current.extraction,
+    extraction: current.extraction ? { ...current.extraction } : null,
   };
-  if (Object.prototype.hasOwnProperty.call(patch || {}, 'extraction')) {
-    next.extraction = patch.extraction === null
-      ? null
-      : normalizeExtractionPatch(patch.extraction);
+  const extractionWasPatched = Object.prototype.hasOwnProperty.call(patch || {}, 'extraction');
+  const incomingExtraction = patch?.extraction;
+  const incomingKeyWasSpecified = Boolean(
+    incomingExtraction
+    && typeof incomingExtraction === 'object'
+    && Object.prototype.hasOwnProperty.call(incomingExtraction, 'apiKey'),
+  );
+  const incomingApiVersionWasSpecified = Boolean(
+    incomingExtraction
+    && typeof incomingExtraction === 'object'
+    && Object.prototype.hasOwnProperty.call(incomingExtraction, 'apiVersion'),
+  );
+  if (extractionWasPatched) {
+    next.extraction = incomingExtraction === null ? null : normalizeExtractionPatch(incomingExtraction);
+    if (
+      next.extraction
+      && !incomingKeyWasSpecified
+      && current.extraction?.provider === next.extraction.provider
+      && current.extraction.apiKey
+    ) {
+      next.extraction.apiKey = current.extraction.apiKey;
+    }
+    if (
+      next.extraction
+      && !incomingApiVersionWasSpecified
+      && current.extraction?.provider === next.extraction.provider
+      && current.extraction.apiVersion
+    ) {
+      // Preserve Azure's version inside the same storage lock that commits the
+      // patch. Reading it in the HTTP route first created a lost-update window.
+      next.extraction.apiVersion = current.extraction.apiVersion;
+    }
   }
   if (typeof next.enabled !== 'boolean') next.enabled = true;
   if (typeof next.chatExtractionEnabled !== 'boolean') {
@@ -252,8 +471,55 @@ export async function writeMemoryConfig(dataDir, patch) {
   if (typeof next.profileEnabled !== 'boolean') next.profileEnabled = true;
   if (typeof next.rewriteEnabled !== 'boolean') next.rewriteEnabled = true;
   if (typeof next.verifyEnabled !== 'boolean') next.verifyEnabled = true;
-  await ensureDir(memoryDir(dataDir));
-  await fsp.writeFile(configPath(dataDir), JSON.stringify(next, null, 2));
+  const priorPersistedKey = state.persisted.extraction?.apiKey;
+  const priorRef = validatedMemoryExtractionCredentialRef(
+    dataDir,
+    state.persisted.extraction?.provider,
+    priorPersistedKey,
+  );
+  let persistedExtraction = next.extraction ? { ...next.extraction } : null;
+  let stagedRef = null;
+  let refToDelete = null;
+
+  if (!extractionWasPatched) {
+    persistedExtraction = state.persisted.extraction
+      ? { ...state.persisted.extraction }
+      : null;
+  } else if (
+    persistedExtraction
+    && !incomingKeyWasSpecified
+    && state.persisted.extraction?.provider === persistedExtraction.provider
+    && priorPersistedKey
+  ) {
+    persistedExtraction.apiKey = priorPersistedKey;
+  } else {
+    const nextKey = persistedExtraction?.apiKey;
+    if (!nextKey || nextKey === STORED_BYOK_API_KEY) {
+      if (priorRef) refToDelete = priorRef;
+    } else if (
+      priorRef
+      && current.extraction?.provider === persistedExtraction.provider
+      && current.extraction?.apiKey === nextKey
+    ) {
+      persistedExtraction.apiKey = priorPersistedKey;
+    } else {
+      stagedRef = freshMemoryExtractionCredentialRef(dataDir, persistedExtraction.provider);
+      await writeCredential(stagedRef, nextKey);
+      persistedExtraction.apiKey = memoryExtractionCredentialMarker(stagedRef);
+      if (priorRef) refToDelete = priorRef;
+    }
+  }
+
+  const persisted = { ...next, extraction: persistedExtraction };
+  try {
+    await persistMemoryConfigFile(dataDir, persisted);
+  } catch (error) {
+    if (stagedRef) await deleteCredential(stagedRef).catch(() => undefined);
+    throw error;
+  }
+  if (refToDelete && refToDelete !== stagedRef) {
+    await deleteCredential(refToDelete).catch(() => undefined);
+  }
   if (
     current.enabled !== next.enabled
     || current.chatExtractionEnabled !== next.chatExtractionEnabled
@@ -270,6 +536,10 @@ export async function writeMemoryConfig(dataDir, patch) {
   return next;
 }
 
+export async function writeMemoryConfig(dataDir, patch) {
+  return withMemoryConfigLock(dataDir, () => doWriteMemoryConfig(dataDir, patch));
+}
+
 // Public — returns the masked shape consumed by GET /api/memory.
 // Keeps the secret out of the DOM but lets the UI render "configured" /
 // "•••• abcd" affordances without round-tripping through writeConfig.
@@ -282,7 +552,7 @@ export function maskMemoryExtractionConfig(extraction) {
     baseUrl: typeof extraction.baseUrl === 'string' ? extraction.baseUrl : '',
     apiVersion:
       typeof extraction.apiVersion === 'string' ? extraction.apiVersion : '',
-    apiKeyTail: apiKey ? apiKey.slice(-4) : '',
+    apiKeyTail: apiKey && apiKey !== STORED_BYOK_API_KEY ? apiKey.slice(-4) : '',
     apiKeyConfigured: Boolean(apiKey),
   };
 }

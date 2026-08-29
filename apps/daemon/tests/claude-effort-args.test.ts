@@ -3,9 +3,11 @@ import { claudeAgentDef } from '../src/runtimes/defs/claude.js';
 
 const MODELS = [
   'default',
-  'claude-opus-4-8',
+  'claude-opus-5',
+  'claude-mythos-5',
   'claude-fable-5',
   'claude-sonnet-5',
+  'claude-opus-4-8',
   'claude-haiku-4-5-20251001',
   'opus',
   'sonnet',
@@ -19,6 +21,19 @@ function build(model: string, reasoning?: string): string[] {
 }
 
 describe('claude buildArgs --effort wiring', () => {
+  it('keeps current fixed ids plus moving aliases in the static fallback catalog', () => {
+    const ids = claudeAgentDef.fallbackModels.map((model) => model.id);
+    expect(ids.slice(0, 6)).toEqual([
+      'default',
+      'claude-opus-5',
+      'claude-mythos-5',
+      'claude-fable-5',
+      'claude-sonnet-5',
+      'claude-opus-4-8',
+    ]);
+    expect(ids).toEqual(expect.arrayContaining(['opus', 'sonnet', 'haiku']));
+  });
+
   it('declares the five CLI effort levels plus default', () => {
     const ids = (claudeAgentDef.reasoningOptions ?? []).map((o) => o.id);
     expect(ids).toEqual(['default', 'low', 'medium', 'high', 'xhigh', 'max']);

@@ -11,6 +11,7 @@ import { createCommandInvocation } from '@open-design/platform';
 import type {
   DevelopmentConfigsResponse,
   DevelopmentRunConfig,
+  DevelopmentServersResponse,
   DevelopmentServerStartRequest,
   DevelopmentServerStatus,
 } from '@open-design/contracts';
@@ -34,15 +35,42 @@ type RunConfigCacheEntry = {
 
 const runConfigCache = new Map<string, RunConfigCacheEntry>();
 const runConfigDetectionInFlight = new Map<string, Promise<DevelopmentConfigsResponse>>();
+const runConfigGeneration = new Map<string, number>();
+const executablePathCache = new Map<string, string>();
 
 type RuntimeRecord = DevelopmentServerStatus & {
   child: ChildProcess | null;
+  cwdIdentity: string;
+  desktopProcessKey: string;
   desktopManaged: boolean;
+  environmentFingerprint: string;
   stopping: boolean;
+  revision: number;
+  workspaceRootIdentity: string;
 };
 
 function configId(parts: string[]): string {
   return createHash('sha256').update(parts.join('\0')).digest('hex').slice(0, 18);
+}
+
+function developmentEnvironmentFingerprint(environment: Record<string, string>): string {
+  return createHash('sha256')
+    .update(JSON.stringify(Object.entries(environment).sort(([left], [right]) => left.localeCompare(right))))
+    .digest('hex');
+}
+
+function normalizedAbsolutePathIdentity(value: string): string {
+  const normalized = path.normalize(path.resolve(value));
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+function encodeSpringApplicationArgument(value: string): string {
+  if (value.length > 0 && !/[\s"\\]/.test(value)) return value;
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+function encodeSpringApplicationArguments(values: string[]): string {
+  return values.map(encodeSpringApplicationArgument).join(' ');
 }
 
 function validatedApplicationArgs(input: unknown): string[] {
@@ -56,47 +84,169 @@ function validatedApplicationArgs(input: unknown): string[] {
   });
 }
 
+const DEVELOPMENT_ENVIRONMENT_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const DEVELOPMENT_ENVIRONMENT_RESERVED_KEYS = new Set([
+  'ASPNETCORE_URLS',
+  'BROWSER',
+  'GRADIO_SERVER_PORT',
+  'PORT',
+  'SERVER_PORT',
+  'STREAMLIT_SERVER_PORT',
+]);
+
+export function validatedDevelopmentEnvironment(input: unknown): Record<string, string> {
+  if (input == null) return {};
+  if (typeof input !== 'object' || Array.isArray(input)) {
+    throw Object.assign(new Error('environment must be an object'), { status: 400 });
+  }
+  const entries = Object.entries(input as Record<string, unknown>);
+  if (entries.length > 64) {
+    throw Object.assign(new Error('environment must contain at most 64 values'), { status: 400 });
+  }
+  const environment: Record<string, string> = {};
+  for (const [key, value] of entries) {
+    if (!DEVELOPMENT_ENVIRONMENT_KEY_PATTERN.test(key)
+      || DEVELOPMENT_ENVIRONMENT_RESERVED_KEYS.has(key.toUpperCase())) {
+      throw Object.assign(new Error(`Environment variable ${key} is invalid or reserved`), { status: 400 });
+    }
+    if (typeof value !== 'string' || value.length > 8_192 || value.includes('\0')) {
+      throw Object.assign(new Error('Environment values must be strings of at most 8192 characters'), { status: 400 });
+    }
+    environment[key] = value;
+  }
+  return environment;
+}
+
+function validatedDevelopmentUrl(input: unknown): URL | null {
+  if (input == null || input === '') return null;
+  if (typeof input !== 'string' || input.length > 2_048) {
+    throw Object.assign(new Error('url must be a local HTTP(S) URL of at most 2048 characters'), { status: 400 });
+  }
+  let url: URL;
+  try {
+    url = new URL(input);
+  } catch {
+    throw Object.assign(new Error('url must be a valid local HTTP(S) URL'), { status: 400 });
+  }
+  const hostname = url.hostname.toLowerCase();
+  if ((url.protocol !== 'http:' && url.protocol !== 'https:')
+    || (hostname !== 'localhost' && hostname !== '127.0.0.1' && hostname !== '[::1]' && hostname !== '::1')
+    || url.username || url.password) {
+    throw Object.assign(new Error('url must use HTTP(S), a loopback host, and no credentials'), { status: 400 });
+  }
+  return url;
+}
+
+function applyDirectPortArgumentOverride(
+  config: DevelopmentRunConfig,
+  args: string[],
+  port: number,
+): string[] {
+  const next = [...args];
+  for (let index = 0; index < next.length; index += 1) {
+    const value = next[index] ?? '';
+    if (value === '--port' || value === '-p' || value === '--server.port' || value === '--server.port-number') {
+      if (index + 1 < next.length) next[index + 1] = String(port);
+      else next.push(String(port));
+      return next;
+    }
+    if (/^(?:--port|--server\.port|--server\.port-number)=/i.test(value)) {
+      next[index] = `${value.slice(0, value.indexOf('=') + 1)}${port}`;
+      return next;
+    }
+    if (value === '--bind' && index + 1 < next.length && /:\d+$/.test(next[index + 1] ?? '')) {
+      next[index + 1] = String(next[index + 1]).replace(/:\d+$/, `:${port}`);
+      return next;
+    }
+  }
+  if (config.framework === 'Django') {
+    const addressIndex = next.findIndex((value) => /^(?:127\.0\.0\.1|localhost):\d+$/.test(value));
+    if (addressIndex >= 0) {
+      next[addressIndex] = String(next[addressIndex]).replace(/:\d+$/, `:${port}`);
+      return next;
+    }
+  }
+  if (config.framework === 'Static HTML') {
+    const moduleIndex = next.indexOf('http.server');
+    if (moduleIndex >= 0 && /^\d+$/.test(next[moduleIndex + 1] ?? '')) {
+      next[moduleIndex + 1] = String(port);
+    }
+  }
+  return next;
+}
+
 export function applyDevelopmentRunOverrides(
   config: DevelopmentRunConfig,
   overrides?: DevelopmentServerStartRequest['overrides'],
 ): DevelopmentRunConfig {
   if (!overrides) return config;
   const applicationArgs = validatedApplicationArgs(overrides.applicationArgs);
+  const requestedPort = overrides.port === undefined ? null : overrides.port;
+  if (requestedPort !== null
+    && (typeof requestedPort !== 'number' || !Number.isInteger(requestedPort) || requestedPort < 1 || requestedPort > 65_535)) {
+    throw Object.assign(new Error('port must be an integer between 1 and 65535'), { status: 400 });
+  }
+  const requestedUrl = validatedDevelopmentUrl(overrides.url);
+  const urlPort = requestedUrl?.port ? Number(requestedUrl.port) : null;
+  const port = requestedPort ?? urlPort ?? config.port;
+  const normalizedUrl = requestedUrl ?? validatedDevelopmentUrl(config.url);
+  if (normalizedUrl == null) throw Object.assign(new Error('Detected run configuration has an invalid URL'), { status: 400 });
+  normalizedUrl.port = String(port);
+  const url = normalizedUrl.toString().replace(/\/$/, normalizedUrl.pathname === '/' ? '' : '/');
   const requestedProfile = overrides.profile === undefined ? (config.profile ?? '') : overrides.profile.trim();
   if (requestedProfile && !/^[A-Za-z0-9_.-]+(?:,[A-Za-z0-9_.-]+)*$/.test(requestedProfile)) {
     throw Object.assign(new Error('Spring profiles may contain letters, numbers, dots, underscores, hyphens, and commas only'), { status: 400 });
   }
 
   let args = [...config.args];
+  const portChanged = port !== config.port;
   if (config.framework === 'Spring Boot') {
     const isMaven = args.includes('spring-boot:run');
     const isGradle = args.includes('bootRun');
     if (isMaven) {
       args = args.filter((value) => !value.startsWith('-Dspring-boot.run.profiles=') && !value.startsWith('-Dspring-boot.run.arguments='));
       if (requestedProfile) args.push(`-Dspring-boot.run.profiles=${requestedProfile}`);
-      if (applicationArgs.length > 0) args.push(`-Dspring-boot.run.arguments=${applicationArgs.join(' ')}`);
+      const springArguments = [
+        ...(portChanged ? [`--server.port=${port}`] : []),
+        ...applicationArgs,
+      ];
+      if (springArguments.length > 0) args.push(`-Dspring-boot.run.arguments=${encodeSpringApplicationArguments(springArguments)}`);
     } else if (isGradle) {
       args = args.filter((value) => !value.startsWith('--args='));
       const springArgs = [
         ...(requestedProfile ? [`--spring.profiles.active=${requestedProfile}`] : []),
+        ...(portChanged ? [`--server.port=${port}`] : []),
         ...applicationArgs,
       ];
-      if (springArgs.length > 0) args.push(`--args=${springArgs.join(' ')}`);
+      if (springArgs.length > 0) args.push(`--args=${encodeSpringApplicationArguments(springArgs)}`);
     } else {
+      if (portChanged) args.push(`--server.port=${port}`);
       args.push(...applicationArgs);
     }
   } else {
-    args.push(...applicationArgs);
+    if (portChanged && config.packageManager && config.framework !== 'Create React App') {
+      const portFlag = config.framework === 'Next.js' ? '-p' : '--port';
+      // Package managers pass values after `--` to the detected script. A
+      // trailing port flag overrides a port hard-coded in package.json.
+      args = [...config.args, '--', portFlag, String(port), ...applicationArgs];
+    } else {
+      args.push(...applicationArgs);
+      if (portChanged) args = applyDirectPortArgumentOverride(config, args, port);
+    }
   }
 
   if (args.length === config.args.length
     && args.every((value, index) => value === config.args[index])
-    && requestedProfile === (config.profile ?? '')) return config;
+    && requestedProfile === (config.profile ?? '')
+    && port === config.port
+    && url === config.url) return config;
   const { profile: _detectedProfile, ...configWithoutProfile } = config;
   return {
     ...configWithoutProfile,
-    id: configId([config.id, requestedProfile, ...applicationArgs]),
+    id: configId([config.id, requestedProfile, ...applicationArgs, String(port), url]),
     args,
+    port,
+    url,
     ...(requestedProfile ? { profile: requestedProfile } : {}),
   };
 }
@@ -499,22 +649,38 @@ async function detectRunConfigsCached(root: string, refresh: boolean): Promise<D
   const key = path.resolve(root);
   const cached = runConfigCache.get(key);
   if (!refresh && cached && cached.expiresAt > Date.now()) return cached.value;
-  const active = runConfigDetectionInFlight.get(key);
-  if (!refresh && active) return await active;
+  if (refresh) runConfigGeneration.set(key, (runConfigGeneration.get(key) ?? 0) + 1);
+  const generation = runConfigGeneration.get(key) ?? 0;
+  const inFlightKey = `${key}\0${generation}`;
+  const active = runConfigDetectionInFlight.get(inFlightKey);
+  if (active) return await active;
   const detection = detectRunConfigsAtRoot(key)
     .then((value) => {
-      runConfigCache.set(key, { expiresAt: Date.now() + RUN_CONFIG_CACHE_TTL_MS, value });
+      if ((runConfigGeneration.get(key) ?? 0) === generation) {
+        runConfigCache.set(key, { expiresAt: Date.now() + RUN_CONFIG_CACHE_TTL_MS, value });
+      }
       return value;
     })
     .finally(() => {
-      if (runConfigDetectionInFlight.get(key) === detection) runConfigDetectionInFlight.delete(key);
+      if (runConfigDetectionInFlight.get(inFlightKey) === detection) runConfigDetectionInFlight.delete(inFlightKey);
     });
-  runConfigDetectionInFlight.set(key, detection);
+  runConfigDetectionInFlight.set(inFlightKey, detection);
   return await detection;
 }
 
-export async function detectDevelopmentRunConfigs(workspaceRoot: string, projectPath?: string | null, refresh = false): Promise<DevelopmentConfigsResponse> {
-  const selection = await resolveDevelopmentProjectRoot(workspaceRoot, projectPath, refresh);
+export async function detectDevelopmentRunConfigs(
+  workspaceRoot: string,
+  projectPath?: string | null,
+  refresh = false,
+  fallbackMissingStoredPath = false,
+): Promise<DevelopmentConfigsResponse> {
+  let selection: Awaited<ReturnType<typeof resolveDevelopmentProjectRoot>>;
+  try {
+    selection = await resolveDevelopmentProjectRoot(workspaceRoot, projectPath, refresh);
+  } catch (error) {
+    if (!fallbackMissingStoredPath || Number((error as { status?: number } | null)?.status) !== 404) throw error;
+    selection = await resolveDevelopmentProjectRoot(workspaceRoot, null, false);
+  }
   const detected = await detectRunConfigsCached(selection.root, refresh);
   return {
     ...detected,
@@ -548,8 +714,13 @@ export function selectExecutableCandidate(
 }
 
 function executablePath(command: string): string {
+  const cached = executablePathCache.get(command);
+  if (cached) return cached;
   if (path.isAbsolute(command)) {
-    if (existsSync(command)) return command;
+    if (existsSync(command)) {
+      executablePathCache.set(command, command);
+      return command;
+    }
     throw new Error(`${path.basename(command)} is missing or is not executable`);
   }
   const finder = process.platform === 'win32' ? 'where.exe' : 'which';
@@ -566,12 +737,16 @@ function executablePath(command: string): string {
         .filter((entry) => entry.isDirectory() && /^IntelliJ IDEA/i.test(entry.name))
         .map((entry) => path.join(jetBrainsRoot, entry.name, 'plugins', 'maven', 'lib', 'maven3', 'bin', 'mvn.cmd'))
         .find((candidate) => existsSync(candidate));
-      if (bundled) return bundled;
+      if (bundled) {
+        executablePathCache.set(command, bundled);
+        return bundled;
+      }
     } catch {
       // IntelliJ is an optional, read-only fallback for projects without mvnw.
     }
   }
   if (!first) throw new Error(`${command} is not installed or is not available on PATH. Add the build tool to PATH or commit its project wrapper.`);
+  executablePathCache.set(command, first);
   return first;
 }
 
@@ -633,6 +808,31 @@ export type DesktopDevelopmentProcessBroker = (
   input: DesktopDevelopmentProcessInput,
 ) => Promise<DesktopDevelopmentProcessResult>;
 
+/**
+ * The Desktop bridge accepts only a short filesystem-safe process owner id.
+ * Internal runtime keys intentionally retain the readable module path, but
+ * paths contain `:`, `/` and percent escapes that the hardened bridge rejects.
+ * Hash the full identity so sibling modules stay isolated without leaking a
+ * path into the IPC contract or exceeding its 128-character bound.
+ */
+export function desktopDevelopmentProcessKey(
+  projectId: string,
+  projectPath?: string | null,
+  workspaceRoot?: string | null,
+  cwd?: string | null,
+): string {
+  const normalizedPath = projectPath?.trim().replace(/\\/g, '/') || '.';
+  if (workspaceRoot == null && cwd == null) {
+    if (normalizedPath === '.') return projectId;
+    return `mf-${createHash('sha256').update(`${projectId}\0${normalizedPath}`).digest('hex')}`;
+  }
+  const workspaceIdentity = workspaceRoot ? normalizedAbsolutePathIdentity(workspaceRoot) : '';
+  const cwdIdentity = cwd ? normalizedAbsolutePathIdentity(cwd) : '';
+  return `mf-${createHash('sha256')
+    .update([projectId, normalizedPath, workspaceIdentity, cwdIdentity].join('\0'))
+    .digest('hex')}`;
+}
+
 async function terminateTree(child: ChildProcess): Promise<void> {
   const pid = child.pid;
   if (!pid) return;
@@ -642,6 +842,8 @@ async function terminateTree(child: ChildProcess): Promise<void> {
 
 export class DevelopmentServerService {
   private readonly records = new Map<string, RuntimeRecord>();
+  private readonly statusSyncAt = new Map<string, number>();
+  private readonly statusSyncInFlight = new Map<string, Promise<DevelopmentServerStatus>>();
 
   constructor(private readonly desktopProcessBroker: DesktopDevelopmentProcessBroker | null = null) {}
 
@@ -650,11 +852,35 @@ export class DevelopmentServerService {
     return normalizedPath === '.' ? projectId : `${projectId}::${encodeURIComponent(normalizedPath)}`;
   }
 
+  private async reconcileWorkspaceRoot(
+    projectId: string,
+    projectPath: string,
+    workspaceRootIdentity: string,
+  ): Promise<void> {
+    const key = this.runtimeKey(projectId, projectPath);
+    const record = this.records.get(key);
+    if (!record || record.workspaceRootIdentity === workspaceRootIdentity) return;
+    if (record.pid) await this.stop(projectId, projectPath);
+    if (this.records.get(key) === record) this.records.delete(key);
+    this.statusSyncAt.delete(key);
+    this.statusSyncInFlight.delete(key);
+  }
+
   status(projectId: string, projectPath?: string | null): DevelopmentServerStatus {
     const normalizedPath = projectPath?.trim().replace(/\\/g, '/') || '.';
     const record = this.records.get(this.runtimeKey(projectId, normalizedPath));
     if (!record) return { projectId, projectPath: normalizedPath, state: 'idle', config: null, pid: null, url: null, startedAt: null, error: null, logs: [] };
-    const { child: _child, desktopManaged: _desktopManaged, stopping: _stopping, ...status } = record;
+    const {
+      child: _child,
+      cwdIdentity: _cwdIdentity,
+      desktopProcessKey: _desktopProcessKey,
+      desktopManaged: _desktopManaged,
+      environmentFingerprint: _environmentFingerprint,
+      stopping: _stopping,
+      revision: _revision,
+      workspaceRootIdentity: _workspaceRootIdentity,
+      ...status
+    } = record;
     return { ...status, logs: [...status.logs] };
   }
 
@@ -665,27 +891,85 @@ export class DevelopmentServerService {
       .sort((left, right) => (left.projectPath ?? '.').localeCompare(right.projectPath ?? '.'));
   }
 
-  async statusAsync(projectId: string, projectPath?: string | null): Promise<DevelopmentServerStatus> {
+  async statusAsync(
+    projectId: string,
+    projectPath?: string | null,
+    refresh = false,
+    workspaceRoot?: string | null,
+  ): Promise<DevelopmentServerStatus> {
     const normalizedPath = projectPath?.trim().replace(/\\/g, '/') || '.';
+    if (workspaceRoot) {
+      await this.reconcileWorkspaceRoot(
+        projectId,
+        normalizedPath,
+        normalizedAbsolutePathIdentity(workspaceRoot),
+      );
+    }
     const key = this.runtimeKey(projectId, normalizedPath);
     const record = this.records.get(key);
     if (!record?.desktopManaged || this.desktopProcessBroker == null) return this.status(projectId, normalizedPath);
-    const managed = await this.desktopProcessBroker({ action: 'status', ownerPid: process.pid, projectId: key });
-    record.pid = managed.pid;
-    // The desktop broker keeps a bounded rolling buffer. Re-parse its tail on
-    // every status poll so a URL emitted after the buffer wrapped is still
-    // discovered; duplicate parsing is harmless and keeps no secret cursor.
-    if (managed.logs.length > 0) appendLog(record, managed.logs.slice(-20).join('\n'));
-    record.logs = managed.logs.slice(-MAX_LOG_LINES);
-    // A later broker status can legitimately have no record after an exited
-    // process was reaped. Do not erase the actionable exit/timeout reason that
-    // MonoField already captured for the user.
-    if (managed.error != null) record.error = managed.error;
-    if (!managed.running && (record.state === 'starting' || record.state === 'ready')) {
-      record.state = record.stopping ? 'idle' : 'failed';
-      record.error ??= 'The development server exited';
+    if (!refresh && Date.now() - (this.statusSyncAt.get(key) ?? 0) < 650) {
+      return this.status(projectId, normalizedPath);
     }
-    return this.status(projectId, normalizedPath);
+    const running = this.statusSyncInFlight.get(key);
+    if (running) return running;
+    const revision = record.revision;
+    const sync = (async () => {
+      const managed = await this.desktopProcessBroker!({
+        action: 'status',
+        ownerPid: process.pid,
+        projectId: record.desktopProcessKey,
+      });
+      if (this.records.get(key) !== record || record.revision !== revision) {
+        return this.status(projectId, normalizedPath);
+      }
+      record.pid = managed.pid;
+      // The desktop broker keeps a bounded rolling buffer. Re-parse its tail on
+      // every status poll so a URL emitted after the buffer wrapped is still
+      // discovered; duplicate parsing is harmless and keeps no secret cursor.
+      if (managed.logs.length > 0) appendLog(record, managed.logs.slice(-20).join('\n'));
+      record.logs = managed.logs.slice(-MAX_LOG_LINES);
+      // A later broker status can legitimately have no record after an exited
+      // process was reaped. Do not erase the actionable exit/timeout reason that
+      // MonoField already captured for the user.
+      if (managed.error != null) record.error = managed.error;
+      if (!managed.running && (record.state === 'starting' || record.state === 'ready')) {
+        record.state = record.stopping ? 'idle' : 'failed';
+        record.error ??= 'The development server exited';
+      }
+      this.statusSyncAt.set(key, Date.now());
+      return this.status(projectId, normalizedPath);
+    })().finally(() => {
+      if (this.statusSyncInFlight.get(key) === sync) this.statusSyncInFlight.delete(key);
+    });
+    this.statusSyncInFlight.set(key, sync);
+    return sync;
+  }
+
+  async statusesAsync(
+    projectId: string,
+    refresh = false,
+    workspaceRoot?: string | null,
+  ): Promise<DevelopmentServerStatus[]> {
+    if (workspaceRoot) {
+      const workspaceRootIdentity = normalizedAbsolutePathIdentity(workspaceRoot);
+      const knownPaths = [...this.records.values()]
+        .filter((record) => record.projectId === projectId)
+        .map((record) => record.projectPath ?? '.');
+      await Promise.all(knownPaths.map(async (projectPath) => {
+        await this.reconcileWorkspaceRoot(projectId, projectPath, workspaceRootIdentity);
+      }));
+    }
+    const projectPaths = [...this.records.values()]
+      // Only live processes need a Desktop broker round trip. Idle/failed
+      // records are already authoritative in daemon memory; polling all past
+      // modules made large workspaces progressively slower after each server
+      // had been opened once.
+      .filter((record) => record.projectId === projectId
+        && (record.pid != null || record.state === 'starting' || record.state === 'ready'))
+      .map((record) => record.projectPath ?? '.');
+    await Promise.allSettled(projectPaths.map((projectPath) => this.statusAsync(projectId, projectPath, refresh)));
+    return this.statuses(projectId);
   }
 
   private async monitorStartup(projectId: string, projectPath: string, record: RuntimeRecord): Promise<void> {
@@ -710,7 +994,7 @@ export class DevelopmentServerService {
         record.state = 'ready';
         return;
       }
-      await delay(350);
+      await delay(700);
     }
     if (this.records.get(key) !== record || record.state !== 'starting') return;
 
@@ -718,7 +1002,11 @@ export class DevelopmentServerService {
     record.stopping = true;
     try {
       if (record.desktopManaged && record.pid && this.desktopProcessBroker) {
-        await this.desktopProcessBroker({ action: 'terminate', ownerPid: process.pid, projectId: key });
+        await this.desktopProcessBroker({
+          action: 'terminate',
+          ownerPid: process.pid,
+          projectId: record.desktopProcessKey,
+        });
       } else if (record.child) {
         await terminateTree(record.child);
       }
@@ -741,13 +1029,29 @@ export class DevelopmentServerService {
     const selection = await resolveDevelopmentProjectRoot(root, projectPath);
     const selectedProjectPath = selection.project.path;
     const key = this.runtimeKey(projectId, selectedProjectPath);
-    await this.statusAsync(projectId, selectedProjectPath);
+    const workspaceRootIdentity = normalizedAbsolutePathIdentity(root);
+    await this.reconcileWorkspaceRoot(projectId, selectedProjectPath, workspaceRootIdentity);
     const detected = await detectRunConfigsAtRoot(selection.root);
     const detectedConfig = detected.configs.find((candidate) => candidate.id === configIdValue);
     if (!detectedConfig) throw new Error('The selected run configuration is no longer available; detect configurations again');
     const config = applyDevelopmentRunOverrides(detectedConfig, overrides);
-    const current = this.records.get(key);
-    if (current?.pid && current.state !== 'failed' && current.config?.id === config.id) {
+    const environment = validatedDevelopmentEnvironment(overrides?.environment);
+    const environmentFingerprint = developmentEnvironmentFingerprint(environment);
+    const cwd = path.resolve(selection.root, config.cwd === '.' ? '' : config.cwd);
+    const relative = path.relative(path.resolve(selection.root), cwd);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('Run configuration escaped the project folder');
+    const cwdIdentity = normalizedAbsolutePathIdentity(cwd);
+    let current = this.records.get(key);
+    if (current && current.cwdIdentity !== cwdIdentity) {
+      if (current.pid) await this.stop(projectId, selectedProjectPath);
+      if (this.records.get(key) === current) this.records.delete(key);
+      current = undefined;
+    } else {
+      await this.statusAsync(projectId, selectedProjectPath);
+      current = this.records.get(key);
+    }
+    if (current?.pid && current.state !== 'failed' && current.config?.id === config.id
+      && current.environmentFingerprint === environmentFingerprint) {
       return this.status(projectId, selectedProjectPath);
     }
     // Each runnable module owns an independent record. Reconfiguring this
@@ -759,11 +1063,24 @@ export class DevelopmentServerService {
         { status: 409 },
       );
     }
-    const cwd = path.resolve(selection.root, config.cwd === '.' ? '' : config.cwd);
-    const relative = path.relative(path.resolve(selection.root), cwd);
-    if (relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('Run configuration escaped the project folder');
     const executable = executablePath(config.command);
-    const invocation = createCommandInvocation({ command: executable, args: config.args, env: process.env });
+    const spawnEnvironment = {
+      ...process.env,
+      ...environment,
+      ASPNETCORE_URLS: `http://127.0.0.1:${config.port}`,
+      BROWSER: 'none',
+      GRADIO_SERVER_PORT: String(config.port),
+      PORT: String(config.port),
+      SERVER_PORT: String(config.port),
+      STREAMLIT_SERVER_PORT: String(config.port),
+    };
+    const invocation = createCommandInvocation({ command: executable, args: config.args, env: spawnEnvironment });
+    const processKey = desktopDevelopmentProcessKey(
+      projectId,
+      selectedProjectPath,
+      workspaceRootIdentity,
+      cwdIdentity,
+    );
     const record: RuntimeRecord = {
       projectId,
       projectPath: selectedProjectPath,
@@ -775,10 +1092,16 @@ export class DevelopmentServerService {
       error: null,
       logs: [],
       child: null,
+      cwdIdentity,
+      desktopProcessKey: processKey,
       desktopManaged: process.platform === 'win32',
+      environmentFingerprint,
       stopping: false,
+      revision: (current?.revision ?? 0) + 1,
+      workspaceRootIdentity,
     };
     this.records.set(key, record);
+    this.statusSyncAt.delete(key);
     if (process.platform === 'win32') {
       if (this.desktopProcessBroker == null) {
         record.state = 'failed';
@@ -793,7 +1116,8 @@ export class DevelopmentServerService {
           cwd,
           ownerPid: process.pid,
           port: config.port,
-          projectId: key,
+          projectId: record.desktopProcessKey,
+          ...(Object.keys(environment).length > 0 ? { environment } : {}),
           ...(invocation.windowsVerbatimArguments == null ? {} : { windowsVerbatimArguments: invocation.windowsVerbatimArguments }),
         });
         record.pid = managed.pid;
@@ -807,7 +1131,7 @@ export class DevelopmentServerService {
     } else {
     const child = spawn(invocation.command, invocation.args, {
       cwd,
-      env: { ...process.env, BROWSER: 'none', PORT: String(config.port) },
+      env: spawnEnvironment,
       // This branch is POSIX-only; a detached process group lets us terminate
       // the full development-server tree.
       detached: true,
@@ -852,6 +1176,8 @@ export class DevelopmentServerService {
     const record = this.records.get(key);
     if (!record?.pid) return this.status(projectId, normalizedPath);
     const previousState = record.state;
+    record.revision += 1;
+    this.statusSyncAt.delete(key);
     record.stopping = true;
     // Change state before awaiting process termination so a concurrent startup
     // monitor cannot turn an intentional stop into a startup failure.
@@ -860,7 +1186,11 @@ export class DevelopmentServerService {
     try {
       if (record.desktopManaged) {
         if (this.desktopProcessBroker == null) throw new Error('MonoField desktop process management is unavailable');
-        await this.desktopProcessBroker({ action: 'terminate', ownerPid: process.pid, projectId: key });
+        await this.desktopProcessBroker({
+          action: 'terminate',
+          ownerPid: process.pid,
+          projectId: record.desktopProcessKey,
+        });
       } else if (record.child) {
         await terminateTree(record.child);
       }
@@ -873,15 +1203,25 @@ export class DevelopmentServerService {
     }
     record.child = null;
     record.pid = null;
+    this.statusSyncAt.delete(key);
     return this.status(projectId, normalizedPath);
   }
 
-  async stopAll(projectId: string): Promise<DevelopmentServerStatus[]> {
+  async stopAll(projectId: string): Promise<DevelopmentServersResponse> {
     const projectPaths = [...this.records.values()]
       .filter((record) => record.projectId === projectId)
       .map((record) => record.projectPath ?? '.');
-    await Promise.allSettled(projectPaths.map((projectPath) => this.stop(projectId, projectPath)));
-    return this.statuses(projectId);
+    const settled = await Promise.allSettled(projectPaths.map((projectPath) => this.stop(projectId, projectPath)));
+    const failures = settled.flatMap((result, index) => result.status === 'rejected'
+      ? [{
+          projectPath: projectPaths[index] ?? '.',
+          error: safeRuntimeError(result.reason),
+        }]
+      : []);
+    return {
+      servers: this.statuses(projectId),
+      ...(failures.length > 0 ? { failures } : {}),
+    };
   }
 
   async shutdown(): Promise<void> {

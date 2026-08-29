@@ -86,9 +86,19 @@ export const copilotAgentDef = {
       { id: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash' },
       { id: 'mai-code-1-flash', label: 'MAI Code 1 Flash' },
     ],
-    buildArgs: (_prompt, _imagePaths, extraAllowedDirs = [], options = {}) => {
+    buildArgs: (
+      _prompt,
+      _imagePaths,
+      extraAllowedDirs = [],
+      options = {},
+      runtimeContext = {},
+    ) => {
       const args = [
         '--allow-all-tools',
+        // Programmatic runs have no interactive field for Copilot's native
+        // ask_user tool. Disable it so a headless child cannot wait forever;
+        // MonoField clarifications use the rendered <question-form> contract.
+        '--no-ask-user',
         '--output-format',
         'json',
       ];
@@ -99,10 +109,23 @@ export const copilotAgentDef = {
         (d) => typeof d === 'string' && d.length > 0,
       );
       for (const d of dirs) args.push('--add-dir', d);
+      const resumeSessionId = runtimeContext.resumeSessionId?.trim();
+      const newSessionId = runtimeContext.newSessionId?.trim();
+      if (resumeSessionId) {
+        // `--resume=<id>` fails clearly for a missing previous session. Do
+        // not use `--session-id` here: current Copilot creates a new session
+        // for a missing valid UUID, which would silently lose prior context.
+        args.push(`--resume=${resumeSessionId}`);
+      } else if (newSessionId) {
+        // A valid UUID that does not exist creates a deterministic new
+        // session, allowing the daemon to persist it without scraping prose.
+        args.push('--session-id', newSessionId);
+      }
       return args;
     },
     promptViaStdin: true,
     streamFormat: 'copilot-stream-json',
+    resumesSessionViaCli: true,
     // GitHub Copilot's deck-generation and large-prompt turns go silent
     // (no stdout, no streamed events) for stretches that exceed the
     // 10-minute global default — the model is still working but the

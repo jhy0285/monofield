@@ -47,6 +47,34 @@ describe("copyBundledResourceTrees", () => {
         "orbit-general",
         "SKILL.md",
       );
+      const runtimeExamplePath = join(
+        workspaceRoot,
+        "design-templates",
+        "orbit-general",
+        "examples",
+        "runtime-example.html",
+      );
+      const runtimeReferencePath = join(
+        workspaceRoot,
+        "plugins",
+        "_official",
+        "sample",
+        "references",
+        "runtime-contract.md",
+      );
+      const excludedPaths = [
+        join(workspaceRoot, "skills", "README.md"),
+        join(workspaceRoot, "design-templates", "orbit-general", "docs", "preview.png"),
+        join(workspaceRoot, "design-templates", "AGENTS.md"),
+        join(workspaceRoot, "plugins", "_official", "sample", "fixtures", "input.json"),
+        join(workspaceRoot, "plugins", "_official", "sample", "scripts", "tests", "plugin.test.ts"),
+        join(workspaceRoot, "plugins", "_official", "sample", "scripts", "__pycache__", "plugin.cpython-314.pyc"),
+        join(workspaceRoot, "plugins", "_official", "sample", "screenshots", "result.png"),
+        join(workspaceRoot, "plugins", "_official", "sample", "logs", "runtime.txt"),
+        join(workspaceRoot, "plugins", "_official", "sample", ".gitignore"),
+        join(workspaceRoot, "plugins", "_official", "sample", "bundle.js.map"),
+        join(workspaceRoot, "plugins", "_official", "sample", "debug.log"),
+      ];
       const communityPetPath = join(
         workspaceRoot,
         "assets",
@@ -104,6 +132,14 @@ describe("copyBundledResourceTrees", () => {
         "utf8",
       );
       await writeFile(designTemplatePath, "# Orbit General\n", "utf8");
+      await mkdir(dirname(runtimeExamplePath), { recursive: true });
+      await writeFile(runtimeExamplePath, "<main>runtime example</main>\n", "utf8");
+      await mkdir(dirname(runtimeReferencePath), { recursive: true });
+      await writeFile(runtimeReferencePath, "# Runtime contract\n", "utf8");
+      for (const excludedPath of excludedPaths) {
+        await mkdir(dirname(excludedPath), { recursive: true });
+        await writeFile(excludedPath, "development-only\n", "utf8");
+      }
       await writeFile(communityPetPath, "{\"name\":\"sample\"}\n", "utf8");
       await writeFile(
         join(workspaceRoot, "plugins", "_official", "sample", "open-design.json"),
@@ -137,6 +173,18 @@ describe("copyBundledResourceTrees", () => {
       ).resolves.toBe("# Orbit General\n");
       await expect(
         readFile(
+          join(resourceRoot, "design-templates", "orbit-general", "examples", "runtime-example.html"),
+          "utf8",
+        ),
+      ).resolves.toBe("<main>runtime example</main>\n");
+      await expect(
+        readFile(
+          join(resourceRoot, "plugins", "_official", "sample", "references", "runtime-contract.md"),
+          "utf8",
+        ),
+      ).resolves.toBe("# Runtime contract\n");
+      await expect(
+        readFile(
           join(resourceRoot, "community-pets", "sample", "pet.json"),
           "utf8",
         ),
@@ -168,6 +216,10 @@ describe("copyBundledResourceTrees", () => {
       await expect(
         readFile(join(resourceRoot, "THIRD_PARTY_NOTICES.md"), "utf8"),
       ).resolves.toBe("third-party notices\n");
+      for (const excludedPath of excludedPaths) {
+        const relativeExcludedPath = excludedPath.slice(workspaceRoot.length + 1);
+        await expect(access(join(resourceRoot, relativeExcludedPath))).rejects.toThrow();
+      }
     } finally {
       await rm(root, { force: true, recursive: true });
     }

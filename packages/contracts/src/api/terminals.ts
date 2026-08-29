@@ -31,6 +31,13 @@ export interface TerminalSession {
 }
 
 export interface CreateTerminalRequest {
+  /**
+   * Workspace-relative runnable project selected by the development toolbar.
+   * Passing it explicitly prevents a fast module switch followed by “Terminal”
+   * from racing the debounced project-metadata save and opening in the previous
+   * module.
+   */
+  projectPath?: string;
   /** Initial column count for the PTY; defaults to 80. */
   cols?: number;
   /** Initial row count for the PTY; defaults to 24. */

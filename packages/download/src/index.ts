@@ -580,8 +580,12 @@ async function tryResumeDownload(
   emit: (progress: ManagedDownloadProgress) => void,
   requestHeaders: Record<string, string> | undefined,
 ): Promise<DownloadAttemptResult | "restart"> {
-  const partialBytes = await statFileSize(target.partialPath);
-  if (partialBytes == null || partialBytes <= 0) return "restart";
+  // A response can be interrupted after its headers arrive but before the
+  // runtime exposes the first body chunk (small responses hit this reliably
+  // with Node's fetch implementation).  The persisted partial manifest still
+  // proves that a transfer started, so resume from byte zero instead of
+  // silently turning the retry into another unconditional full request.
+  const partialBytes = await statFileSize(target.partialPath) ?? 0;
   const response = await fetchImpl(target.url, {
     headers: {
       ...(requestHeaders ?? {}),
@@ -650,9 +654,13 @@ async function downloadWithRetries(
     } catch (error) {
       lastError = error;
       const partialBytes = await statFileSize(target.partialPath);
-      if (partialBytes != null && partialBytes > 0) {
+      const persistedManifest = await readManifest(target.manifestPath);
+      const resumableManifest = persistedManifest !== "invalid" && persistedManifest?.state === "partial"
+        ? persistedManifest
+        : null;
+      if ((partialBytes != null && partialBytes > 0) || resumableManifest != null) {
         nextManifest = {
-          ...(nextManifest ?? createManifest(target, "partial")),
+          ...(nextManifest ?? resumableManifest ?? createManifest(target, "partial")),
           state: "partial",
           updatedAt: new Date().toISOString(),
         };

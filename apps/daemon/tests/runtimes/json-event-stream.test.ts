@@ -20,7 +20,7 @@ test('opencode json stream emits text and usage events', () => {
   );
 
   assert.deepEqual(events, [
-    { type: 'status', label: 'running' },
+    { type: 'status', label: 'running', sessionId: 'ses-1' },
     { type: 'text_delta', delta: 'hello' },
     {
       type: 'usage',
@@ -676,7 +676,12 @@ test('cursor stream emits partial text once and usage events', () => {
   const { events, handler } = collectEvents('cursor-agent');
 
   handler.feed(
-    JSON.stringify({ type: 'system', subtype: 'init', model: 'GPT-5 Mini' }) + '\n' +
+    JSON.stringify({
+      type: 'system',
+      subtype: 'init',
+      model: 'GPT-5 Mini',
+      session_id: 'cursor-session-1',
+    }) + '\n' +
     JSON.stringify({
       type: 'assistant',
       timestamp_ms: 1,
@@ -703,7 +708,12 @@ test('cursor stream emits partial text once and usage events', () => {
   );
 
   assert.deepEqual(events, [
-    { type: 'status', label: 'initializing', model: 'GPT-5 Mini' },
+    {
+      type: 'status',
+      label: 'initializing',
+      model: 'GPT-5 Mini',
+      sessionId: 'cursor-session-1',
+    },
     { type: 'text_delta', delta: 'OD' },
     { type: 'text_delta', delta: '_OK' },
     {

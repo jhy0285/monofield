@@ -1,13 +1,28 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { OpenDesignHostUpdaterStatusListener, OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
 import { installMockOpenDesignHost } from '@open-design/host/testing';
 
+vi.mock('../../src/providers/registry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/providers/registry')>();
+  return {
+    ...actual,
+    fetchAppVersionInfo: vi.fn(),
+    fetchLatestGithubReleaseInfo: vi.fn(),
+    openExternalUrl: vi.fn(),
+  };
+});
+
 import { isNewerRelease, UpdaterPopup } from '../../src/components/UpdaterPopup';
 import { I18nProvider } from '../../src/i18n';
+import {
+  fetchAppVersionInfo,
+  fetchLatestGithubReleaseInfo,
+  openExternalUrl,
+} from '../../src/providers/registry';
 
 function idleStatus(): OpenDesignHostUpdaterStatusSnapshot {
   return {
@@ -70,10 +85,78 @@ describe('isNewerRelease', () => {
 describe('UpdaterPopup', () => {
   let restoreHost: (() => void) | null = null;
 
+  beforeEach(() => {
+    vi.mocked(fetchAppVersionInfo).mockReset();
+    vi.mocked(fetchAppVersionInfo).mockResolvedValue(null);
+    vi.mocked(fetchLatestGithubReleaseInfo).mockReset();
+    vi.mocked(fetchLatestGithubReleaseInfo).mockResolvedValue(null);
+    vi.mocked(openExternalUrl).mockReset();
+    vi.mocked(openExternalUrl).mockResolvedValue(true);
+    window.localStorage.clear();
+  });
+
   afterEach(() => {
     cleanup();
     restoreHost?.();
     restoreHost = null;
+  });
+
+  it('does not contact GitHub for update metadata in an unpackaged web or dev session', async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetchAppVersionInfo).mockResolvedValue({
+      version: '0.1.0',
+      channel: 'development',
+      packaged: false,
+      platform: 'win32',
+      arch: 'x64',
+    });
+
+    try {
+      render(<UpdaterPopup />);
+      await act(async () => {
+        vi.advanceTimersByTime(1_500);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(fetchAppVersionInfo).toHaveBeenCalledTimes(1);
+      expect(fetchLatestGithubReleaseInfo).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('checks GitHub release metadata only after confirming a packaged app', async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetchAppVersionInfo).mockResolvedValue({
+      version: '0.1.0',
+      channel: 'stable',
+      packaged: true,
+      platform: 'win32',
+      arch: 'x64',
+    });
+    vi.mocked(fetchLatestGithubReleaseInfo).mockResolvedValue({
+      tagName: 'v0.1.0',
+      htmlUrl: 'https://github.com/jhy0285/monofield/releases/tag/v0.1.0',
+      stale: false,
+    });
+
+    try {
+      render(<UpdaterPopup />);
+      await act(async () => {
+        vi.advanceTimersByTime(1_500);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(fetchAppVersionInfo).toHaveBeenCalledTimes(1);
+      expect(fetchLatestGithubReleaseInfo).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(fetchAppVersionInfo).mock.invocationCallOrder[0]!).toBeLessThan(
+        vi.mocked(fetchLatestGithubReleaseInfo).mock.invocationCallOrder[0]!,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('stays hidden for non-installable updater states', async () => {
@@ -159,6 +242,50 @@ describe('UpdaterPopup', () => {
     expect(await screen.findByRole('dialog', { name: '更新已就绪' })).toBeTruthy();
     expect(screen.getByTestId('updater-install-button').textContent).toBe('安装更新');
     expect(screen.getByText('MonoField 1.2.3-beta.4 已就绪。MonoField 会关闭并打开安装器。')).toBeTruthy();
+    expect(screen.getByText('测试版频道')).toBeTruthy();
+  });
+
+  it('labels a manual update as a release-page action and opens that page', async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetchAppVersionInfo).mockResolvedValue({
+      version: '0.1.0',
+      channel: 'stable',
+      packaged: true,
+      platform: 'win32',
+      arch: 'x64',
+    });
+    vi.mocked(fetchLatestGithubReleaseInfo).mockResolvedValue({
+      tagName: 'v0.2.0',
+      htmlUrl: 'https://github.com/jhy0285/monofield/releases/tag/v0.2.0',
+      stale: false,
+    });
+
+    try {
+      render(
+        <I18nProvider initial="ko">
+          <UpdaterPopup />
+        </I18nProvider>,
+      );
+
+      await act(async () => {
+        vi.advanceTimersByTime(1_500);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(screen.getByRole('dialog', { name: '업데이트 사용 가능' })).toBeTruthy();
+      expect(screen.getByText('MonoField 0.2.0 새 버전이 나왔습니다. 릴리스 페이지에서 내 운영체제에 맞는 설치 파일을 선택해 다운로드하세요.')).toBeTruthy();
+      const action = screen.getByTestId('updater-install-button');
+      expect(action.textContent).toBe('릴리스 페이지 열기');
+      fireEvent.click(action);
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(openExternalUrl).toHaveBeenCalledWith('https://github.com/jhy0285/monofield/releases/tag/v0.2.0');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('uses install-and-restart copy for payload updates', async () => {

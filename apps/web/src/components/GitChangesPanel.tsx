@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import type {
   GitBranchMutationResponse,
@@ -18,7 +18,19 @@ import styles from './GitChangesPanel.module.css';
 type Props = {
   projectId: string;
   projectPath?: string | null;
+  projectSelectionReady?: boolean;
   onOpenFile: (path: string) => void;
+};
+
+type GitWorkspaceUiSnapshot = {
+  status: GitWorkspaceStatusResponse | null;
+  branches: GitWorkspaceBranchesResponse | null;
+  selectedBranch: string;
+  scope: GitDiffScope;
+  selectedPath: string | null;
+  diff: GitWorkspaceDiffResponse | null;
+  statusSourceKey: string;
+  viewMode: 'split' | 'unified';
 };
 
 async function responseJson<T>(response: Response): Promise<T> {
@@ -64,7 +76,12 @@ function SplitCell({ value }: { value: SplitDiffCell }) {
   );
 }
 
-export function GitChangesPanel({ projectId, projectPath, onOpenFile }: Props) {
+export function GitChangesPanel({
+  projectId,
+  projectPath,
+  projectSelectionReady = true,
+  onOpenFile,
+}: Props) {
   const t = useT();
   const [status, setStatus] = useState<GitWorkspaceStatusResponse | null>(null);
   const [branches, setBranches] = useState<GitWorkspaceBranchesResponse | null>(null);
@@ -73,7 +90,10 @@ export function GitChangesPanel({ projectId, projectPath, onOpenFile }: Props) {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [diff, setDiff] = useState<GitWorkspaceDiffResponse | null>(null);
   const [viewMode, setViewMode] = useState<'split' | 'unified'>('split');
-  const [loading, setLoading] = useState(false);
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [branchesLoading, setBranchesLoading] = useState(false);
+  const [diffLoading, setDiffLoading] = useState(false);
+  const [statusSourceKey, setStatusSourceKey] = useState('');
   const [branchBusy, setBranchBusy] = useState(false);
   const [branchManagerOpen, setBranchManagerOpen] = useState(false);
   const [switchTarget, setSwitchTarget] = useState('');
@@ -81,46 +101,182 @@ export function GitChangesPanel({ projectId, projectPath, onOpenFile }: Props) {
   const [pendingBranchAction, setPendingBranchAction] = useState<{ kind: 'switch' | 'create'; value: string; dirtyCount: number } | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const statusRequestRef = useRef(0);
+  const branchRequestRef = useRef(0);
+  const diffRequestRef = useRef(0);
+  const statusAbortRef = useRef<AbortController | null>(null);
+  const branchAbortRef = useRef<AbortController | null>(null);
+  const diffAbortRef = useRef<AbortController | null>(null);
+  const workspaceKey = `${projectId}::${projectPath?.replace(/\\/g, '/') || '.'}`;
+  const workspaceKeyRef = useRef(workspaceKey);
+  const branchWorkspaceKeyRef = useRef(workspaceKey);
+  workspaceKeyRef.current = workspaceKey;
+  const activeComparisonBranch = branchWorkspaceKeyRef.current === workspaceKey ? selectedBranch : '';
+  const statusContextKey = `${workspaceKey}::${activeComparisonBranch}`;
+  const workspaceSnapshotsRef = useRef(new Map<string, GitWorkspaceUiSnapshot>());
+  const displayedWorkspaceKeyRef = useRef(workspaceKey);
+  const [restoredWorkspaceKey, setRestoredWorkspaceKey] = useState(workspaceKey);
+  const currentSnapshotRef = useRef<GitWorkspaceUiSnapshot>({
+    status,
+    branches,
+    selectedBranch,
+    scope,
+    selectedPath,
+    diff,
+    statusSourceKey,
+    viewMode,
+  });
+  currentSnapshotRef.current = {
+    status,
+    branches,
+    selectedBranch,
+    scope,
+    selectedPath,
+    diff,
+    statusSourceKey,
+    viewMode,
+  };
+  const workspaceRestored = restoredWorkspaceKey === workspaceKey;
 
   const files = useMemo(
-    () => status?.files.filter((file) => scope === 'branch' || (scope === 'staged' ? file.staged : file.unstaged)) ?? [],
-    [scope, status],
+    () => statusSourceKey === statusContextKey
+      ? status?.files.filter((file) => scope === 'branch' || (scope === 'staged' ? file.staged : file.unstaged)) ?? []
+      : [],
+    [scope, status, statusContextKey, statusSourceKey],
   );
 
-  const loadStatus = useCallback(async () => {
-    setLoading(true);
+  const loadStatus = useCallback(async (refresh = false) => {
+    if (!projectSelectionReady || !workspaceRestored) return;
+    statusAbortRef.current?.abort();
+    const controller = new AbortController();
+    statusAbortRef.current = controller;
+    const requestId = statusRequestRef.current + 1;
+    statusRequestRef.current = requestId;
+    setStatusLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams();
       if (projectPath) params.set('projectPath', projectPath);
-      if (selectedBranch) params.set('branch', selectedBranch);
+      if (activeComparisonBranch) params.set('branch', activeComparisonBranch);
+      if (refresh) params.set('refresh', '1');
       const query = params.size > 0 ? `?${params}` : '';
-      const next = await fetch(`/api/projects/${encodeURIComponent(projectId)}/development/git/status${query}`, { cache: 'no-store' })
+      const next = await fetch(`/api/projects/${encodeURIComponent(projectId)}/development/git/status${query}`, {
+        cache: 'no-store',
+        signal: controller.signal,
+      })
         .then((response) => responseJson<GitWorkspaceStatusResponse>(response));
+      if (controller.signal.aborted || requestId !== statusRequestRef.current) return;
       setStatus(next);
-      if (selectedBranch) setScope('branch');
+      setStatusSourceKey(statusContextKey);
+      if (activeComparisonBranch) setScope('branch');
       else setScope((current) => current === 'branch' ? 'working' : current);
     } catch (caught) {
+      if ((caught as { name?: string } | null)?.name === 'AbortError') return;
+      if (requestId !== statusRequestRef.current) return;
       setError(caught instanceof Error ? caught.message : t('gitChanges.loadFailed'));
     } finally {
-      setLoading(false);
+      if (requestId === statusRequestRef.current) setStatusLoading(false);
     }
-  }, [projectId, projectPath, selectedBranch, t]);
+  }, [activeComparisonBranch, projectId, projectPath, projectSelectionReady, statusContextKey, t, workspaceRestored]);
 
-  const loadBranches = useCallback(async () => {
+  const loadBranches = useCallback(async (refresh = false) => {
+    if (!projectSelectionReady || !workspaceRestored) return;
+    branchAbortRef.current?.abort();
+    const controller = new AbortController();
+    branchAbortRef.current = controller;
+    const requestId = branchRequestRef.current + 1;
+    branchRequestRef.current = requestId;
+    setBranchesLoading(true);
     try {
-      const query = projectPath ? `?${new URLSearchParams({ projectPath })}` : '';
-      const next = await fetch(`/api/projects/${encodeURIComponent(projectId)}/development/git/branches${query}`, { cache: 'no-store' })
+      const params = new URLSearchParams();
+      if (projectPath) params.set('projectPath', projectPath);
+      if (refresh) params.set('refresh', '1');
+      const query = params.size > 0 ? `?${params}` : '';
+      const next = await fetch(`/api/projects/${encodeURIComponent(projectId)}/development/git/branches${query}`, {
+        cache: 'no-store',
+        signal: controller.signal,
+      })
         .then((response) => responseJson<GitWorkspaceBranchesResponse>(response));
+      if (controller.signal.aborted || requestId !== branchRequestRef.current) return;
       setBranches(next);
       setSelectedBranch((current) => current && !next.branches.some((branch) => branch.fullName === current) ? '' : current);
     } catch (caught) {
+      if ((caught as { name?: string } | null)?.name === 'AbortError') return;
+      if (requestId !== branchRequestRef.current) return;
       setError(caught instanceof Error ? caught.message : t('gitChanges.loadFailed'));
+    } finally {
+      if (requestId === branchRequestRef.current) setBranchesLoading(false);
     }
-  }, [projectId, projectPath, t]);
+  }, [projectId, projectPath, projectSelectionReady, t, workspaceRestored]);
 
-  useEffect(() => { void loadStatus(); }, [loadStatus]);
-  useEffect(() => { void loadBranches(); }, [loadBranches]);
+  useLayoutEffect(() => {
+    statusAbortRef.current?.abort();
+    branchAbortRef.current?.abort();
+    diffAbortRef.current?.abort();
+    const previousWorkspaceKey = displayedWorkspaceKeyRef.current;
+    if (previousWorkspaceKey !== workspaceKey) {
+      const previousSnapshot = currentSnapshotRef.current;
+      if (previousSnapshot.status || previousSnapshot.branches || previousSnapshot.diff) {
+        workspaceSnapshotsRef.current.delete(previousWorkspaceKey);
+        workspaceSnapshotsRef.current.set(previousWorkspaceKey, previousSnapshot);
+        while (workspaceSnapshotsRef.current.size > 16) {
+          const oldest = workspaceSnapshotsRef.current.keys().next().value as string | undefined;
+          if (!oldest) break;
+          workspaceSnapshotsRef.current.delete(oldest);
+        }
+      }
+
+      const snapshot = workspaceSnapshotsRef.current.get(workspaceKey);
+      if (snapshot) {
+        workspaceSnapshotsRef.current.delete(workspaceKey);
+        workspaceSnapshotsRef.current.set(workspaceKey, snapshot);
+      }
+      displayedWorkspaceKeyRef.current = workspaceKey;
+      branchWorkspaceKeyRef.current = workspaceKey;
+      setStatus(snapshot?.status ?? null);
+      setBranches(snapshot?.branches ?? null);
+      setStatusSourceKey(snapshot?.statusSourceKey ?? '');
+      setSelectedBranch(snapshot?.selectedBranch ?? '');
+      setScope(snapshot?.scope ?? 'working');
+      setSelectedPath(snapshot?.selectedPath ?? null);
+      setDiff(snapshot?.diff ?? null);
+      setViewMode(snapshot?.viewMode ?? 'split');
+      setStatusLoading(false);
+      setBranchesLoading(false);
+      setDiffLoading(false);
+      setBranchManagerOpen(false);
+      setPendingBranchAction(null);
+      setBranchBusy(false);
+      setActionNotice(null);
+      setError(null);
+    }
+    setRestoredWorkspaceKey(workspaceKey);
+  }, [workspaceKey]);
+  useEffect(() => {
+    if (!projectSelectionReady || !workspaceRestored) return;
+    void loadStatus();
+  }, [loadStatus, projectSelectionReady, workspaceRestored]);
+  useEffect(() => {
+    if (!projectSelectionReady || !workspaceRestored) return;
+    void loadBranches();
+  }, [loadBranches, projectSelectionReady, workspaceRestored]);
+  useEffect(() => {
+    if (projectSelectionReady) return;
+    statusAbortRef.current?.abort();
+    branchAbortRef.current?.abort();
+    diffAbortRef.current?.abort();
+    statusRequestRef.current += 1;
+    branchRequestRef.current += 1;
+    diffRequestRef.current += 1;
+    setStatusLoading(false);
+    setBranchesLoading(false);
+    setDiffLoading(false);
+  }, [projectSelectionReady, workspaceKey]);
+  useEffect(() => () => {
+    statusAbortRef.current?.abort();
+    branchAbortRef.current?.abort();
+    diffAbortRef.current?.abort();
+  }, []);
   useEffect(() => {
     if (switchTarget && branches?.branches.some((candidate) => candidate.fullName === switchTarget && !candidate.current)) return;
     setSwitchTarget(branches?.branches.find((candidate) => !candidate.current)?.fullName ?? '');
@@ -132,35 +288,54 @@ export function GitChangesPanel({ projectId, projectPath, onOpenFile }: Props) {
   }, [files, selectedPath]);
 
   useEffect(() => {
+    if (!projectSelectionReady || !workspaceRestored) return;
     if (!selectedPath || !files.some((file) => file.path === selectedPath)) {
+      diffAbortRef.current?.abort();
       setDiff(null);
+      setDiffLoading(false);
       return;
     }
+    diffAbortRef.current?.abort();
     const controller = new AbortController();
-    setLoading(true);
+    diffAbortRef.current = controller;
+    const requestId = diffRequestRef.current + 1;
+    diffRequestRef.current = requestId;
+    setDiffLoading(true);
     setError(null);
     const query = new URLSearchParams({ path: selectedPath, scope });
     if (projectPath) query.set('projectPath', projectPath);
-    if (selectedBranch) query.set('branch', selectedBranch);
+    if (activeComparisonBranch) query.set('branch', activeComparisonBranch);
     void fetch(`/api/projects/${encodeURIComponent(projectId)}/development/git/diff?${query}`, {
       cache: 'no-store',
       signal: controller.signal,
     })
       .then((response) => responseJson<GitWorkspaceDiffResponse>(response))
-      .then(setDiff)
-      .catch((caught) => {
-        if ((caught as Error).name !== 'AbortError') setError(caught instanceof Error ? caught.message : t('gitChanges.loadFailed'));
+      .then((next) => {
+        if (!controller.signal.aborted && requestId === diffRequestRef.current) setDiff(next);
       })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+      .catch((caught) => {
+        if ((caught as Error).name !== 'AbortError' && requestId === diffRequestRef.current) {
+          setError(caught instanceof Error ? caught.message : t('gitChanges.loadFailed'));
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted && requestId === diffRequestRef.current) setDiffLoading(false);
+      });
     return () => controller.abort();
-  }, [files, projectId, projectPath, scope, selectedBranch, selectedPath, status?.generatedAt, t]);
+  }, [activeComparisonBranch, files, projectId, projectPath, projectSelectionReady, scope, selectedPath, status?.generatedAt, t, workspaceRestored]);
 
   const selected = files.find((file) => file.path === selectedPath) ?? null;
   const branch = status?.branch ?? status?.head ?? '—';
   const comparableBranches = branches?.branches.filter((candidate) => !candidate.current) ?? [];
-  const splitRows = useMemo(() => splitUnifiedDiff(diff?.patch ?? ''), [diff?.patch]);
+  const visibleDiff = diff?.path === selectedPath && diff.scope === scope ? diff : null;
+  const deferredPatch = useDeferredValue(visibleDiff?.patch ?? '');
+  const splitRows = useMemo(() => splitUnifiedDiff(deferredPatch), [deferredPatch]);
+  const diffRendering = Boolean(visibleDiff?.patch) && deferredPatch !== visibleDiff?.patch;
+  const loading = statusLoading || branchesLoading;
 
-  async function refreshAfterBranchMutation(result: GitBranchMutationResponse) {
+  async function refreshAfterBranchMutation(result: GitBranchMutationResponse, sourceWorkspaceKey: string) {
+    if (workspaceKeyRef.current !== sourceWorkspaceKey) return;
+    branchWorkspaceKeyRef.current = sourceWorkspaceKey;
     setSelectedBranch('');
     setScope('working');
     setSelectedPath(null);
@@ -170,6 +345,7 @@ export function GitChangesPanel({ projectId, projectPath, onOpenFile }: Props) {
     setActionNotice(result.created ? t('gitChanges.branchCreated') : t('gitChanges.branchSwitched'));
     const params = new URLSearchParams();
     if (projectPath) params.set('projectPath', projectPath);
+    params.set('refresh', '1');
     const query = params.size > 0 ? `?${params}` : '';
     const [nextStatus, nextBranches] = await Promise.all([
       fetch(`/api/projects/${encodeURIComponent(projectId)}/development/git/status${query}`, { cache: 'no-store' })
@@ -177,7 +353,9 @@ export function GitChangesPanel({ projectId, projectPath, onOpenFile }: Props) {
       fetch(`/api/projects/${encodeURIComponent(projectId)}/development/git/branches${query}`, { cache: 'no-store' })
         .then((response) => responseJson<GitWorkspaceBranchesResponse>(response)),
     ]);
+    if (workspaceKeyRef.current !== sourceWorkspaceKey) return;
     setStatus(nextStatus);
+    setStatusSourceKey(`${workspaceKey}::`);
     setBranches(nextBranches);
   }
 
@@ -185,6 +363,7 @@ export function GitChangesPanel({ projectId, projectPath, onOpenFile }: Props) {
     action: { kind: 'switch' | 'create'; value: string },
     strategy: GitWorkingTreeStrategy,
   ) {
+    const sourceWorkspaceKey = workspaceKey;
     setBranchBusy(true);
     setError(null);
     setActionNotice(null);
@@ -199,9 +378,12 @@ export function GitChangesPanel({ projectId, projectPath, onOpenFile }: Props) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(payload),
       }).then((response) => responseJson<GitBranchMutationResponse>(response));
-      await refreshAfterBranchMutation(result);
+      if (workspaceKeyRef.current !== sourceWorkspaceKey) return;
+      await refreshAfterBranchMutation(result, sourceWorkspaceKey);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t('gitChanges.branchActionFailed'));
+      if (workspaceKeyRef.current === sourceWorkspaceKey) {
+        setError(caught instanceof Error ? caught.message : t('gitChanges.branchActionFailed'));
+      }
     } finally {
       setBranchBusy(false);
     }
@@ -209,6 +391,7 @@ export function GitChangesPanel({ projectId, projectPath, onOpenFile }: Props) {
 
   async function prepareBranchAction(action: { kind: 'switch' | 'create'; value: string }) {
     if (!action.value.trim()) return;
+    const sourceWorkspaceKey = workspaceKey;
     setBranchBusy(true);
     setError(null);
     setActionNotice(null);
@@ -216,13 +399,16 @@ export function GitChangesPanel({ projectId, projectPath, onOpenFile }: Props) {
       const params = projectPath ? `?${new URLSearchParams({ projectPath })}` : '';
       const working = await fetch(`/api/projects/${encodeURIComponent(projectId)}/development/git/dirty${params}`, { cache: 'no-store' })
         .then((response) => responseJson<GitWorkspaceDirtyResponse>(response));
+      if (workspaceKeyRef.current !== sourceWorkspaceKey) return;
       if (working.dirty) {
         setPendingBranchAction({ ...action, dirtyCount: working.changeCount });
         return;
       }
       await mutateBranch(action, 'reject');
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t('gitChanges.branchActionFailed'));
+      if (workspaceKeyRef.current === sourceWorkspaceKey) {
+        setError(caught instanceof Error ? caught.message : t('gitChanges.branchActionFailed'));
+      }
     } finally {
       setBranchBusy(false);
     }
@@ -239,8 +425,11 @@ export function GitChangesPanel({ projectId, projectPath, onOpenFile }: Props) {
               <Icon name="fork" size={11} />
               <select
                 aria-label={t('gitChanges.branch')}
-                value={selectedBranch}
-                onChange={(event) => setSelectedBranch(event.target.value)}
+                value={activeComparisonBranch}
+                onChange={(event) => {
+                  branchWorkspaceKeyRef.current = workspaceKey;
+                  setSelectedBranch(event.target.value);
+                }}
               >
                 <option value="">{t('gitChanges.currentBranch')} · {branch}</option>
                 {comparableBranches.map((candidate) => (
@@ -258,7 +447,12 @@ export function GitChangesPanel({ projectId, projectPath, onOpenFile }: Props) {
               <Icon name="fork" size={13} />{t('gitChanges.manageBranches')}
             </button>
           ) : null}
-          <button type="button" className={styles.refresh} onClick={() => void Promise.all([loadStatus(), loadBranches()])} disabled={loading || branchBusy}>
+          <button
+            type="button"
+            className={styles.refresh}
+            onClick={() => void Promise.all([loadStatus(true), loadBranches(true)])}
+            disabled={!projectSelectionReady || !workspaceRestored || loading || branchBusy}
+          >
             <Icon name={loading ? 'spinner' : 'reload'} size={13} />
             {t('gitChanges.refresh')}
           </button>
@@ -307,9 +501,9 @@ export function GitChangesPanel({ projectId, projectPath, onOpenFile }: Props) {
       ) : null}
 
       <div className={styles.scope} role="tablist" aria-label={t('gitChanges.title')}>
-        {selectedBranch ? (
+        {activeComparisonBranch ? (
           <button type="button" role="tab" aria-selected="true" className={styles.selectedScope}>
-            {t('gitChanges.compareBranch')} · {status?.comparisonBranch ?? branches?.branches.find((candidate) => candidate.fullName === selectedBranch)?.name}
+            {t('gitChanges.compareBranch')} · {status?.comparisonBranch ?? branches?.branches.find((candidate) => candidate.fullName === activeComparisonBranch)?.name}
             <span>{status?.files.length ?? 0}</span>
           </button>
         ) : (
@@ -324,10 +518,20 @@ export function GitChangesPanel({ projectId, projectPath, onOpenFile }: Props) {
         )}
       </div>
 
+      {!projectSelectionReady ? (
+        <div className={styles.loadingState} data-testid="git-project-loading" role="status" aria-live="polite" aria-busy="true">
+          <Icon name="spinner" size={13} />{t('gitChanges.title')} · {t('common.loading')}
+        </div>
+      ) : null}
+      {statusLoading ? (
+        <div className={styles.loadingState} data-testid="git-status-loading" role="status" aria-live="polite" aria-busy="true">
+          <Icon name="spinner" size={13} />{t('gitChanges.title')} · {t('common.loading')}
+        </div>
+      ) : null}
       {error ? <div className={styles.message} role="alert">{error}</div> : null}
       {actionNotice ? <div className={styles.notice} role="status">{actionNotice}</div> : null}
-      {status && !status.repository ? <div className={styles.message}>{t('gitChanges.noRepository')}</div> : null}
-      {status?.repository && files.length === 0 ? <div className={styles.message}>{t('gitChanges.noChanges')}</div> : null}
+      {!statusLoading && status && !status.repository ? <div className={styles.message}>{t('gitChanges.noRepository')}</div> : null}
+      {!statusLoading && status?.repository && files.length === 0 ? <div className={styles.message}>{t('gitChanges.noChanges')}</div> : null}
 
       {status?.repository && files.length > 0 ? (
         <div className={styles.content}>
@@ -375,9 +579,14 @@ export function GitChangesPanel({ projectId, projectPath, onOpenFile }: Props) {
                 ) : null}
               </div>
             </div>
-            {diff?.truncated ? <div className={styles.warning}>{t('gitChanges.truncated')}</div> : null}
-            {diff?.binary ? <div className={styles.message}>{t('gitChanges.binary')}</div> : null}
-            {!diff?.binary && diff?.patch && viewMode === 'split' ? (
+            {diffLoading || diffRendering ? (
+              <div className={styles.diffLoading} data-testid="git-diff-loading" role="status" aria-live="polite" aria-busy="true">
+                <Icon name="spinner" size={13} />{t('gitChanges.patch')} · {t('common.loading')}
+              </div>
+            ) : null}
+            {!diffRendering && visibleDiff?.truncated ? <div className={styles.warning}>{t('gitChanges.truncated')}</div> : null}
+            {!diffRendering && visibleDiff?.binary ? <div className={styles.message}>{t('gitChanges.binary')}</div> : null}
+            {!diffRendering && !visibleDiff?.binary && visibleDiff?.patch && viewMode === 'split' ? (
               <div
                 className={styles.splitPatch}
                 role="table"
@@ -402,11 +611,11 @@ export function GitChangesPanel({ projectId, projectPath, onOpenFile }: Props) {
                   </div>
                 </div>
               </div>
-            ) : !diff?.binary && diff?.patch ? (
+            ) : !diffRendering && !visibleDiff?.binary && visibleDiff?.patch ? (
               <pre className={styles.patch} aria-label={t('gitChanges.patch')}>
-                {diff.patch.split('\n').map((line, index) => <span key={index} className={patchLineClass(line)}>{line || ' '}</span>)}
+                {visibleDiff.patch.split('\n').map((line, index) => <span key={index} className={patchLineClass(line)}>{line || ' '}</span>)}
               </pre>
-            ) : !loading && !diff?.binary ? <div className={styles.message}>{t('gitChanges.emptyPatch')}</div> : null}
+            ) : !diffLoading && !diffRendering && !visibleDiff?.binary ? <div className={styles.message}>{t('gitChanges.emptyPatch')}</div> : null}
           </div>
         </div>
       ) : null}

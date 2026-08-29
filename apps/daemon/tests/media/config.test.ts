@@ -12,6 +12,7 @@ import {
   seedProviderIfMissing,
   writeConfig,
 } from '../../src/media/config.js';
+import { installTestCredentialVault, type TestCredentialVault } from '../helpers/credential-vault.js';
 
 const TEST_NANOBANANA_BASE_URL = 'https://nano-banana-gateway.example.test';
 
@@ -21,6 +22,16 @@ const OPENAI_ENV_KEYS = [
   'AZURE_API_KEY',
   'AZURE_OPENAI_API_KEY',
 ];
+
+let credentialVault: TestCredentialVault;
+
+beforeEach(() => {
+  credentialVault = installTestCredentialVault();
+});
+
+afterEach(() => {
+  credentialVault.restore();
+});
 
 describe('media-config OpenAI auth-file fallback', () => {
   let homeDir: string;
@@ -507,14 +518,16 @@ describe('media-config OpenAI auth-file fallback', () => {
         path.join(target, 'media-config.json'),
         'utf8',
       );
-      expect(JSON.parse(onDisk)).toEqual({
+      expect(JSON.parse(onDisk)).toMatchObject({
         providers: {
           openai: {
-            apiKey: 'fresh-write-key',
+            credentialRef: expect.any(String),
+            apiKeyTail: '-key',
             baseUrl: 'https://fresh.test/v1',
           },
         },
       });
+      expect(onDisk).not.toContain('fresh-write-key');
 
       // And resolveProviderConfig reads it back correctly.
       const resolved = await resolveProviderConfig(projectRoot, 'openai');
@@ -980,7 +993,8 @@ describe('media-config model alias resolution (issue #1277)', () => {
         'utf8',
       ),
     );
-    expect(onDisk.providers.openai).toMatchObject({ apiKey: 'sk-key' });
+    expect(onDisk.providers.openai).toMatchObject({ credentialRef: expect.any(String), apiKeyTail: '-key' });
+    expect(JSON.stringify(onDisk)).not.toContain('sk-key');
     expect(onDisk.aliases).toEqual({
       'doubao-seedream-3-0-t2i-250415': 'doubao-seedream-5-0',
     });
@@ -1048,14 +1062,16 @@ describe('seedProviderIfMissing', () => {
     });
     expect(wrote).toBe(true);
     const stored = await readStoredJson();
-    expect(stored).toEqual({
+    expect(stored).toMatchObject({
       providers: {
         senseaudio: {
-          apiKey: 'sa-test-key',
+          credentialRef: expect.any(String),
+          apiKeyTail: '-key',
           baseUrl: 'https://api.senseaudio.cn',
         },
       },
     });
+    expect(JSON.stringify(stored)).not.toContain('sa-test-key');
   });
 
   it('no-ops and preserves the stored key when one is already configured', async () => {
@@ -1070,10 +1086,12 @@ describe('seedProviderIfMissing', () => {
     });
     expect(wrote).toBe(false);
     const stored = (await readStoredJson()) as { providers: Record<string, unknown> };
-    expect(stored.providers.senseaudio).toEqual({
-      apiKey: 'pre-existing-key',
+    expect(stored.providers.senseaudio).toMatchObject({
+      credentialRef: expect.any(String),
+      apiKeyTail: '-key',
       baseUrl: 'https://existing.example',
     });
+    await expect(resolveProviderConfig(projectRoot, 'senseaudio')).resolves.toMatchObject({ apiKey: 'pre-existing-key' });
   });
 
   it('preserves every other provider and aliases when seeding', async () => {
@@ -1092,15 +1110,20 @@ describe('seedProviderIfMissing', () => {
       providers: Record<string, unknown>;
       aliases: Record<string, string>;
     };
-    expect(stored.providers.openai).toEqual({
-      apiKey: 'sk-openai',
+    expect(stored.providers.openai).toMatchObject({
+      credentialRef: expect.any(String),
+      apiKeyTail: 'enai',
       baseUrl: 'https://api.openai.com/v1',
     });
-    expect(stored.providers.volcengine).toEqual({
-      apiKey: 'ark-key',
+    expect(stored.providers.volcengine).toMatchObject({
+      credentialRef: expect.any(String),
+      apiKeyTail: '-key',
       baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
     });
-    expect(stored.providers.senseaudio).toEqual({ apiKey: 'sa-new' });
+    expect(stored.providers.senseaudio).toMatchObject({ credentialRef: expect.any(String), apiKeyTail: '-new' });
+    expect(JSON.stringify(stored)).not.toContain('sk-openai');
+    expect(JSON.stringify(stored)).not.toContain('ark-key');
+    expect(JSON.stringify(stored)).not.toContain('sa-new');
     expect(stored.aliases).toEqual({
       'doubao-seedream-3-0-t2i-250415': 'doubao-seedream-5-0',
     });

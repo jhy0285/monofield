@@ -29,13 +29,14 @@
 // the file once or set OD_MEDIA_CONFIG_DIR=<projectRoot>/.od to keep
 // the old location.
 //
-// The file is intentionally simple JSON — no encryption, no schema
-// versioning yet. The daemon listens on 127.0.0.1 only and the workspace
-// is already trusted, so adding a vault here would mostly be theatre.
-// We DO mask keys when reading via the GET endpoint so the UI doesn't
-// echo secrets back into the DOM.
+// Provider secrets are stored in the Desktop OS-backed credential vault.
+// media-config.json contains only non-secret provider metadata and an opaque
+// credential reference. Legacy plaintext keys are migrated on first read;
+// the legacy file is left untouched if the vault is unavailable or rejects
+// the write so a failed migration never destroys credentials.
 
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
+import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { MEDIA_PROVIDERS } from './models.js';
@@ -44,10 +45,25 @@ import { expandHomePrefix } from '../home-expansion.js';
 import { spawnEnvForAgent } from '../runtimes/env.js';
 import { resolveXAIBearer } from '../integrations/xai-credentials.js';
 import { isSandboxModeEnabled } from '../sandbox-mode.js';
+import {
+  credentialVaultKey,
+  deleteCredential,
+  readCredential,
+  writeCredential,
+} from '../credential-vault.js';
+import { hardenCredentialFile } from '../credential-file-security.js';
 
 const PROVIDER_IDS = MEDIA_PROVIDERS.map((p) => p.id);
 type ProviderEntry = { apiKey?: string; baseUrl?: string; model?: string };
-type ProviderMap = Record<string, ProviderEntry>;
+type StoredProviderEntry = {
+  /** Legacy plaintext field. Read only long enough to migrate safely. */
+  apiKey?: string;
+  apiKeyTail?: string;
+  credentialRef?: string;
+  baseUrl?: string;
+  model?: string;
+};
+type StoredProviderMap = Record<string, StoredProviderEntry>;
 type ModelAliasMap = Record<string, string>;
 type JsonRecord = Record<string, unknown>;
 type OAuthCredential = { apiKey: string; source: string };
@@ -177,6 +193,7 @@ function coerceAliasMap(raw: unknown): ModelAliasMap {
 
 async function readStoredFile(projectRoot: string): Promise<JsonRecord> {
   try {
+    await hardenCredentialFile(configFile(projectRoot));
     const raw = await readFile(configFile(projectRoot), 'utf8');
     const parsed = JSON.parse(raw);
     return isRecord(parsed) ? parsed : {};
@@ -186,9 +203,108 @@ async function readStoredFile(projectRoot: string): Promise<JsonRecord> {
   }
 }
 
-async function readStored(projectRoot: string): Promise<ProviderMap> {
+function mediaCredentialRef(projectRoot: string, providerId: string): string {
+  return credentialVaultKey('media', configFile(projectRoot), providerId);
+}
+
+function freshMediaCredentialRef(projectRoot: string, providerId: string): string {
+  return `${mediaCredentialRef(projectRoot, providerId)}:v-${randomBytes(12).toString('hex')}`;
+}
+
+async function bestEffortPrivateMode(target: string, mode: number): Promise<void> {
+  try {
+    await chmod(target, mode);
+  } catch {
+    // Files are created with restrictive modes; tolerate chmod-less volumes.
+  }
+}
+
+function normalizeStoredProviders(raw: unknown): StoredProviderMap {
+  if (!isRecord(raw)) return {};
+  const providers: StoredProviderMap = {};
+  for (const id of PROVIDER_IDS) {
+    const entry = raw[id];
+    if (!isRecord(entry)) continue;
+    const apiKey = typeof entry.apiKey === 'string' && entry.apiKey.trim() ? entry.apiKey.trim() : '';
+    const credentialRef = typeof entry.credentialRef === 'string' && entry.credentialRef.trim()
+      ? entry.credentialRef.trim()
+      : '';
+    const apiKeyTail = typeof entry.apiKeyTail === 'string' ? entry.apiKeyTail.slice(-4) : '';
+    const baseUrl = typeof entry.baseUrl === 'string' ? entry.baseUrl.trim() : '';
+    const model = typeof entry.model === 'string' ? entry.model.trim() : '';
+    if (!apiKey && !credentialRef && !baseUrl && !model) continue;
+    providers[id] = {
+      ...(apiKey ? { apiKey } : {}),
+      ...(credentialRef ? { credentialRef } : {}),
+      ...(apiKeyTail ? { apiKeyTail } : {}),
+      ...(baseUrl ? { baseUrl } : {}),
+      ...(model ? { model } : {}),
+    };
+  }
+  return providers;
+}
+
+async function writeStoredFile(
+  projectRoot: string,
+  providers: StoredProviderMap,
+  aliases?: ModelAliasMap,
+): Promise<void> {
+  const file = configFile(projectRoot);
+  const directory = path.dirname(file);
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  await bestEffortPrivateMode(directory, 0o700);
+  const resolvedAliases = aliases ?? (await readStoredAliases(projectRoot));
+  const body: JsonRecord = { providers };
+  if (Object.keys(resolvedAliases).length > 0) body.aliases = resolvedAliases;
+  const temporary = `${file}.${randomBytes(4).toString('hex')}.tmp`;
+  try {
+    await writeFile(temporary, JSON.stringify(body, null, 2), { encoding: 'utf8', mode: 0o600 });
+    await rename(temporary, file);
+    await bestEffortPrivateMode(file, 0o600);
+  } catch (error) {
+    await rm(temporary, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
+const warnedMediaMigrations = new Set<string>();
+
+async function readStored(projectRoot: string): Promise<StoredProviderMap> {
   const parsed = await readStoredFile(projectRoot);
-  return isRecord(parsed.providers) ? (parsed.providers as ProviderMap) : {};
+  const providers = normalizeStoredProviders(parsed.providers);
+  const legacyEntries = Object.entries(providers).filter(([, entry]) => Boolean(entry.apiKey?.trim()));
+  if (legacyEntries.length === 0) return providers;
+  const nextProviders: StoredProviderMap = { ...providers };
+  const stagedRefs: string[] = [];
+  const replacedRefs: string[] = [];
+  try {
+    for (const [id, entry] of legacyEntries) {
+      const legacy = entry.apiKey!.trim();
+      const ref = freshMediaCredentialRef(projectRoot, id);
+      await writeCredential(ref, legacy);
+      stagedRefs.push(ref);
+      if (entry.credentialRef) replacedRefs.push(entry.credentialRef);
+      nextProviders[id] = {
+        ...entry,
+        credentialRef: ref,
+        apiKeyTail: legacy.slice(-4),
+      };
+      delete nextProviders[id]!.apiKey;
+    }
+    await writeStoredFile(projectRoot, nextProviders, coerceAliasMap(parsed.aliases));
+    await Promise.all(replacedRefs.map((ref) => deleteCredential(ref).catch(() => undefined)));
+    return nextProviders;
+  } catch {
+    await Promise.all(stagedRefs.map((ref) => deleteCredential(ref).catch(() => undefined)));
+    for (const [id] of legacyEntries) {
+      const warningKey = `${configFile(projectRoot)}:${id}`;
+      if (!warnedMediaMigrations.has(warningKey)) {
+        warnedMediaMigrations.add(warningKey);
+        console.warn(`[media-config] credential migration deferred for provider ${id}; legacy value was preserved`);
+      }
+    }
+    return providers;
+  }
 }
 
 async function readStoredAliases(projectRoot: string): Promise<ModelAliasMap> {
@@ -196,24 +312,11 @@ async function readStoredAliases(projectRoot: string): Promise<ModelAliasMap> {
   return coerceAliasMap(parsed.aliases);
 }
 
-async function writeStored(
-  projectRoot: string,
-  providers: ProviderMap,
-  aliases?: ModelAliasMap,
-): Promise<void> {
-  const file = configFile(projectRoot);
-  await mkdir(path.dirname(file), { recursive: true });
-  // Preserve any existing aliases when the caller doesn't pass them.
-  // The Settings UI writes providers only; without this, every
-  // provider edit would silently wipe the user's model aliases (issue
-  // #1277 introduces aliases but the Settings UI surface for editing
-  // them lands in a follow-up PR).
-  const resolvedAliases = aliases ?? (await readStoredAliases(projectRoot));
-  const body: JsonRecord = { providers };
-  if (Object.keys(resolvedAliases).length > 0) {
-    body.aliases = resolvedAliases;
-  }
-  await writeFile(file, JSON.stringify(body, null, 2), 'utf8');
+async function resolvedStoredApiKey(entry: StoredProviderEntry | undefined): Promise<string> {
+  const legacy = entry?.apiKey?.trim();
+  if (legacy) return legacy;
+  if (!entry?.credentialRef) return '';
+  return (await readCredential(entry.credentialRef))?.trim() ?? '';
 }
 
 function readEnvAliases(): ModelAliasMap {
@@ -395,7 +498,8 @@ export async function resolveProviderConfig(projectRoot: string, providerId: str
   const stored = await readStored(projectRoot);
   const entry = stored[providerId] || {};
   const envKey = readEnvKey(providerId);
-  const needsExternalCredential = !envKey && !entry.apiKey;
+  const storedKey = envKey ? '' : await resolvedStoredApiKey(entry);
+  const needsExternalCredential = !envKey && !storedKey;
   const externalCredential = needsExternalCredential
     ? providerId === 'openai'
       ? await resolveOpenAIAuthFileCredential()
@@ -404,7 +508,7 @@ export async function resolveProviderConfig(projectRoot: string, providerId: str
         : null
     : null;
   return {
-    apiKey: envKey || entry.apiKey || externalCredential?.apiKey || '',
+    apiKey: envKey || storedKey || externalCredential?.apiKey || '',
     baseUrl: entry.baseUrl || '',
     ...(typeof entry.model === 'string' && entry.model.trim()
       ? { model: entry.model.trim() }
@@ -434,7 +538,7 @@ export async function readMaskedConfig(projectRoot: string): Promise<MaskedConfi
   for (const id of PROVIDER_IDS) {
     const entry = stored[id] || {};
     const envKey = readEnvKey(id);
-    const hasStoredKey = typeof entry.apiKey === 'string' && entry.apiKey.length > 0;
+    const hasStoredKey = Boolean(entry.credentialRef || entry.apiKey);
     const needsExternalCredential = !envKey && !hasStoredKey;
     const externalCredential = needsExternalCredential
       ? id === 'openai'
@@ -449,7 +553,7 @@ export async function readMaskedConfig(projectRoot: string): Promise<MaskedConfi
       // Show last 4 chars only when stored locally; never echo env-var
       // or borrowed auth-file/OAuth secrets so power users don't
       // accidentally see them in the DOM.
-      apiKeyTail: hasStoredKey && entry.apiKey ? entry.apiKey.slice(-4) : '',
+      apiKeyTail: hasStoredKey ? (entry.apiKeyTail || entry.apiKey?.slice(-4) || '') : '',
       baseUrl: entry.baseUrl || '',
       ...(typeof entry.model === 'string' && entry.model.trim()
         ? { model: entry.model.trim() }
@@ -476,8 +580,11 @@ export async function writeConfig(projectRoot: string, body: unknown) {
   const incoming = isRecord(body) && isRecord(body.providers) ? body.providers : {};
   const force = Boolean(isRecord(body) && body.force === true);
   const prior = await readStored(projectRoot);
-  const next: ProviderMap = {};
-  for (const id of PROVIDER_IDS) {
+  const next: StoredProviderMap = {};
+  const credentialRefsToDelete = new Set<string>();
+  const stagedRefs = new Set<string>();
+  try {
+    for (const id of PROVIDER_IDS) {
     const entry = incoming[id];
     if (!isRecord(entry)) continue;
     const incomingApiKey =
@@ -485,11 +592,8 @@ export async function writeConfig(projectRoot: string, body: unknown) {
         ? entry.apiKey.trim()
         : '';
     const preserveApiKey = entry.preserveApiKey === true;
-    const priorApiKey =
-      typeof prior[id]?.apiKey === 'string' && prior[id].apiKey.trim()
-        ? prior[id].apiKey.trim()
-        : '';
-    const apiKey = incomingApiKey || (preserveApiKey ? priorApiKey : '');
+    const priorEntry = prior[id];
+    const priorHasApiKey = Boolean(priorEntry?.credentialRef || priorEntry?.apiKey);
     const baseUrl =
       typeof entry.baseUrl === 'string' && entry.baseUrl.trim()
         ? entry.baseUrl.trim()
@@ -498,16 +602,48 @@ export async function writeConfig(projectRoot: string, body: unknown) {
       typeof entry.model === 'string' && entry.model.trim()
         ? entry.model.trim()
         : '';
-    if (!apiKey && !baseUrl && !model) continue;
+    const keepPriorCredential = preserveApiKey && priorHasApiKey && !incomingApiKey;
+    if (!incomingApiKey && !keepPriorCredential && priorEntry?.credentialRef) {
+      credentialRefsToDelete.add(priorEntry.credentialRef);
+    }
+    let credentialRef = keepPriorCredential ? priorEntry?.credentialRef : undefined;
+    let apiKeyTail = keepPriorCredential
+      ? (priorEntry?.apiKeyTail || priorEntry?.apiKey?.slice(-4))
+      : undefined;
+    if (keepPriorCredential && !credentialRef && priorEntry?.apiKey) {
+      credentialRef = freshMediaCredentialRef(projectRoot, id);
+      await writeCredential(credentialRef, priorEntry.apiKey);
+      stagedRefs.add(credentialRef);
+      apiKeyTail = priorEntry.apiKey.slice(-4);
+    }
+    if (incomingApiKey) {
+      credentialRef = freshMediaCredentialRef(projectRoot, id);
+      // Store first. If OS encryption is unavailable, the metadata file is
+      // left untouched and the caller receives an explicit error.
+      await writeCredential(credentialRef, incomingApiKey);
+      stagedRefs.add(credentialRef);
+      if (priorEntry?.credentialRef) credentialRefsToDelete.add(priorEntry.credentialRef);
+      apiKeyTail = incomingApiKey.slice(-4);
+    }
+    if (!credentialRef && !baseUrl && !model) continue;
     next[id] = {
-      apiKey,
+      ...(credentialRef ? { credentialRef } : {}),
+      ...(apiKeyTail ? { apiKeyTail } : {}),
       baseUrl,
       ...(model ? { model } : {}),
     };
+    }
+  const retainedRefs = new Set(
+    Object.values(next).map((entry) => entry.credentialRef).filter((ref): ref is string => Boolean(ref)),
+  );
+  for (const entry of Object.values(prior)) {
+    if (entry.credentialRef && !retainedRefs.has(entry.credentialRef)) {
+      credentialRefsToDelete.add(entry.credentialRef);
+    }
   }
   if (Object.keys(next).length === 0) {
     const priorIds = Object.keys(prior).filter(
-      (id) => prior[id] && (prior[id].apiKey || prior[id].baseUrl),
+      (id) => prior[id] && (prior[id].credentialRef || prior[id].apiKey || prior[id].baseUrl),
     );
     if (priorIds.length > 0) {
       if (!force) {
@@ -526,7 +662,12 @@ export async function writeConfig(projectRoot: string, body: unknown) {
       }
     }
   }
-  await writeStored(projectRoot, next);
+    await writeStoredFile(projectRoot, next);
+  } catch (error) {
+    await Promise.all([...stagedRefs].map((ref) => deleteCredential(ref).catch(() => undefined)));
+    throw error;
+  }
+  await Promise.all([...credentialRefsToDelete].map((ref) => deleteCredential(ref).catch(() => undefined)));
   return readMaskedConfig(projectRoot);
 }
 
@@ -562,20 +703,25 @@ export async function seedProviderIfMissing(
   if (readEnvKey(providerId)) return false;
 
   const prior = await readStored(projectRoot);
-  const priorApiKey =
-    typeof prior[providerId]?.apiKey === 'string' && prior[providerId].apiKey.trim()
-      ? prior[providerId].apiKey.trim()
-      : '';
-  if (priorApiKey) return false;
+  const priorEntry = prior[providerId];
+  if (priorEntry?.credentialRef || priorEntry?.apiKey) return false;
 
   const baseUrl = entry.baseUrl?.trim() ?? '';
   const model = entry.model?.trim() ?? '';
-  const next: ProviderMap = { ...prior };
+  const next: StoredProviderMap = { ...prior };
+  const credentialRef = freshMediaCredentialRef(projectRoot, providerId);
+  await writeCredential(credentialRef, apiKey);
   next[providerId] = {
-    apiKey,
+    credentialRef,
+    apiKeyTail: apiKey.slice(-4),
     ...(baseUrl ? { baseUrl } : {}),
     ...(model ? { model } : {}),
   };
-  await writeStored(projectRoot, next);
+  try {
+    await writeStoredFile(projectRoot, next);
+  } catch (error) {
+    await deleteCredential(credentialRef).catch(() => undefined);
+    throw error;
+  }
   return true;
 }

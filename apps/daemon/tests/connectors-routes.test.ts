@@ -3,12 +3,13 @@ import { request as httpRequest, type Server } from 'node:http';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { COMPOSIO_LOGO_CACHE_MAX_ENTRIES } from '../src/connectors/routes.js';
-import { startServer } from '../src/server.js';
+import { startServer as startDaemonServer } from '../src/server.js';
 import { ComposioConnectorProvider, composioConnectorProvider, getStaticComposioCatalogDefinitions } from '../src/connectors/composio.js';
 import type { ConnectorCatalogDefinition, ConnectorDetail } from '../src/connectors/catalog.js';
-import { readComposioConfig, writeComposioConfig, type ComposioConfig } from '../src/connectors/composio-config.js';
+import { readComposioConfig, resolveComposioApiKey, writeComposioConfig, type ComposioConfig } from '../src/connectors/composio-config.js';
 import { deleteConnectorCredentialsByProvider } from '../src/connectors/service.js';
 import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from '../src/tool-tokens.js';
+import { installTestCredentialVault, type TestCredentialVault } from './helpers/credential-vault.js';
 
 type JsonObject = Record<string, any>;
 type StartedServer = { url: string; server: Server };
@@ -47,6 +48,11 @@ const originalFetch = globalThis.fetch;
 let lastComposioLinkRequest: ComposioRequestBody | undefined;
 let lastComposioAuthConfigRequest: ComposioRequestBody | undefined;
 let composioDiscoveryRequestCounts: DiscoveryRequestCounts;
+let credentialVault: TestCredentialVault;
+
+function startServer(options: Parameters<typeof startDaemonServer>[0]) {
+  return startDaemonServer({ ...options, desktopCredentialVault: credentialVault.broker });
+}
 
 function composioJson(body: JsonObject, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -190,6 +196,7 @@ function mockComposioFetch(options: MockComposioFetchOptions = {}): void {
 }
 
 beforeEach(async () => {
+  credentialVault = installTestCredentialVault();
   originalComposioConfig = readComposioConfig();
   lastComposioLinkRequest = undefined;
   lastComposioAuthConfigRequest = undefined;
@@ -205,8 +212,8 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  deleteConnectorCredentialsByProvider('composio');
-  writeComposioConfig(originalComposioConfig ?? { apiKey: '' });
+  await deleteConnectorCredentialsByProvider('composio');
+  await writeComposioConfig({ apiKey: '', authConfigIds: originalComposioConfig.authConfigIds });
   composioConnectorProvider.clearDiscoveryCache();
   await new Promise<void>((resolve, reject) => {
     if (!server) return resolve(undefined);
@@ -216,6 +223,7 @@ afterEach(async () => {
   toolTokenRegistry.clear();
   vi.unstubAllGlobals();
   vi.useRealTimers();
+  credentialVault.restore();
 });
 
 async function jsonFetch<TBody = JsonObject>(url: string, init?: RequestInit): Promise<JsonFetchResponse<TBody>> {
@@ -424,7 +432,7 @@ describe('connector routes', () => {
   });
 
   it('returns static catalog connectors before Composio is configured', async () => {
-    writeComposioConfig({ apiKey: '' });
+    await writeComposioConfig({ apiKey: '' });
     composioConnectorProvider.clearDiscoveryCache();
 
     const response = await jsonFetch(`${baseUrl}/api/connectors`);
@@ -474,7 +482,7 @@ describe('connector routes', () => {
 
     expect(response.status).toBe(403);
     expect(response.body).toContain('request host must be a loopback daemon address');
-    expect(readComposioConfig().apiKey).toBe('cmp_test');
+    await expect(resolveComposioApiKey()).resolves.toBe('cmp_test');
   });
 
   it('clears Composio connector credentials when rotating to a key with the same tail', async () => {
@@ -610,7 +618,7 @@ describe('connector routes', () => {
     const started = await startServer({ port: 0, returnServer: true }) as StartedServer;
     server = started.server;
     baseUrl = started.url;
-    writeComposioConfig({ apiKey: 'cmp_test', authConfigIds: { slack: 'ac_slack_stale' } });
+    await writeComposioConfig({ apiKey: 'cmp_test', authConfigIds: { slack: 'ac_slack_stale' } });
 
     const connect = await jsonFetch(`${baseUrl}/api/connectors/slack/connect`, { method: 'POST' });
 
@@ -621,7 +629,7 @@ describe('connector routes', () => {
   });
 
   it('marks Composio auth as configured from a persisted local auth config id', async () => {
-    writeComposioConfig({ apiKey: 'cmp_test', authConfigIds: { slack: 'ac_slack' } });
+    await writeComposioConfig({ apiKey: 'cmp_test', authConfigIds: { slack: 'ac_slack' } });
 
     const response = await jsonFetch(`${baseUrl}/api/connectors`);
 

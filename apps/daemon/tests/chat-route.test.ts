@@ -3107,6 +3107,30 @@ describe('chat prompt helpers', () => {
     expect(args).not.toContain('/linked/reference');
   });
 
+  it('grants Codex the explicitly selected workspace root when cwd is an active module', () => {
+    const dirs = resolveChatExtraAllowedDirs({
+      agentId: 'codex',
+      skillsDir: '/repo/skills',
+      designSystemsDir: '/repo/design-systems',
+      linkedDirs: ['/linked/reference'],
+      workspaceRootDir: '/work/ose',
+      codexGeneratedImagesDir: null,
+      existsSync: () => true,
+    });
+
+    expect(dirs).toEqual(['/work/ose']);
+    const codex = getAgentDef('codex');
+    if (!codex) throw new Error('Codex agent definition missing');
+    const args = codex.buildArgs('', [], dirs, {}, { cwd: '/work/ose/aauserver' });
+    expect(args).toContain('/work/ose');
+    expect(args).not.toContain('/linked/reference');
+    if (process.platform === 'win32') {
+      expect(args).toContain('shell_environment_policy.set.GIT_CONFIG_COUNT="2"');
+      expect(args).toContain('shell_environment_policy.set.GIT_CONFIG_VALUE_0="/work/ose/aauserver"');
+      expect(args).toContain('shell_environment_policy.set.GIT_CONFIG_VALUE_1="/work/ose"');
+    }
+  });
+
   it('keeps resource and linked dirs for non-Codex agents without the Codex output dir', () => {
     const existingDirs = new Set([
       '/repo/skills',

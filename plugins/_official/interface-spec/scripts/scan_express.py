@@ -2,7 +2,7 @@
 
 Static scanner over JavaScript sources — stdlib only (regex + string-aware
 brace/paren tracking; there is no JS parser in the stdlib). Emits an
-interface-spec.json document (schema v1) that `od docs render-interface-spec`
+interface-spec.json document (schema v1) that `monofield docs render-interface-spec`
 accepts directly.
 
 Handles:

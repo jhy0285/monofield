@@ -62,6 +62,17 @@ export interface DevelopmentServerStatus {
   logs: string[];
 }
 
+export interface DevelopmentServerStopFailure {
+  projectPath: string;
+  error: string;
+}
+
+export interface DevelopmentServersResponse {
+  servers: DevelopmentServerStatus[];
+  /** Failed terminations remain visible so callers never mistake a partial stop for success. */
+  failures?: DevelopmentServerStopFailure[];
+}
+
 export interface DevelopmentServerStartRequest {
   configId: string;
   projectPath?: string;
@@ -70,7 +81,28 @@ export interface DevelopmentServerStartRequest {
     profile?: string;
     /** Additional arguments passed to the application without invoking a shell. */
     applicationArgs?: string[];
+    /** Module-specific local port selected for this process. */
+    port?: number;
+    /** Local readiness/browser URL. Only loopback HTTP(S) URLs are accepted. */
+    url?: string;
+    /**
+     * Environment variables applied to this process only. Callers must not
+     * persist this object in project metadata because it may contain secrets.
+     */
+    environment?: Record<string, string>;
   };
+}
+
+/** Safe, credential-free run settings that may be persisted per workspace module. */
+export interface DevelopmentRunNetworkOverride {
+  /** Detected run configuration selected for this module. */
+  configId?: string;
+  /** Optional Spring profile override for this module. */
+  profile?: string;
+  /** Additional application arguments for this module. */
+  arguments?: string;
+  port?: number;
+  url?: string;
 }
 
 export type ProjectDatabaseContext = {

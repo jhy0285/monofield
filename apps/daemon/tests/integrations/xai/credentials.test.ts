@@ -4,7 +4,8 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { resolveXAIBearer } from '../../../src/integrations/xai-credentials.js';
-import { setXAIToken, type StoredXAIToken } from '../../../src/integrations/xai-tokens.js';
+import { getXAIToken, setXAIToken, type StoredXAIToken } from '../../../src/integrations/xai-tokens.js';
+import { installTestCredentialVault, type TestCredentialVault } from '../../helpers/credential-vault.js';
 
 type FetchInput = Parameters<typeof fetch>[0];
 type FetchInit = Parameters<typeof fetch>[1];
@@ -29,12 +30,15 @@ function fetchAlwaysFails(status = 400, body = '{"error":"invalid_grant"}') {
 
 describe('resolveXAIBearer', () => {
   let dataDir: string;
+  let vault: TestCredentialVault;
 
   beforeEach(async () => {
+    vault = installTestCredentialVault();
     dataDir = await mkdtemp(path.join(tmpdir(), 'od-xai-creds-'));
   });
 
   afterEach(async () => {
+    vault.restore();
     await rm(dataDir, { force: true, recursive: true });
   });
 
@@ -99,14 +103,15 @@ describe('resolveXAIBearer', () => {
       source: 'refreshed',
     });
 
-    const onDisk = JSON.parse(
-      await readFile(path.join(dataDir, 'xai-tokens.json'), 'utf8'),
-    );
-    expect(onDisk.token.accessToken).toBe('new-bearer');
-    expect(onDisk.token.refreshToken).toBe('rt-2');
+    const onDisk = await readFile(path.join(dataDir, 'xai-tokens.json'), 'utf8');
+    expect(onDisk).not.toContain('new-bearer');
+    expect(onDisk).not.toContain('rt-2');
+    const persisted = await getXAIToken(dataDir);
+    expect(persisted?.accessToken).toBe('new-bearer');
+    expect(persisted?.refreshToken).toBe('rt-2');
     // New expiry should be ~ now + 1800s (with some margin for test latency).
     const expectedMin = Date.now() + 1800 * 1000 - 10_000;
-    expect(onDisk.token.expiresAt).toBeGreaterThanOrEqual(expectedMin);
+    expect(persisted?.expiresAt).toBeGreaterThanOrEqual(expectedMin);
   });
 
   it('returns null when the stored token is expired and has no refresh_token', async () => {
@@ -156,13 +161,14 @@ describe('resolveXAIBearer', () => {
     expect(resolved?.accessToken).toBe('new-bearer');
     expect(resolved?.source).toBe('refreshed');
 
-    const onDisk = JSON.parse(
-      await readFile(path.join(dataDir, 'xai-tokens.json'), 'utf8'),
-    );
+    const onDisk = await readFile(path.join(dataDir, 'xai-tokens.json'), 'utf8');
+    expect(onDisk).not.toContain('new-bearer');
+    expect(onDisk).not.toContain('rt-1');
+    const persisted = await getXAIToken(dataDir);
     // Old refresh_token must survive the partial refresh response so
     // the next expiry doesn't kick the user back through Sign in.
-    expect(onDisk.token.refreshToken).toBe('rt-1');
+    expect(persisted?.refreshToken).toBe('rt-1');
     // expires_in not in response → we don't fabricate one.
-    expect(onDisk.token.expiresAt).toBeUndefined();
+    expect(persisted?.expiresAt).toBeUndefined();
   });
 });

@@ -14,8 +14,8 @@
 <p align="center">
   <a href="https://monofield.vercel.app">Website</a> ·
   <a href="https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-setup.exe">Download for Windows</a> ·
-  <a href="docs/brand.md">Brand</a> ·
-  <a href="docs/open-source-compliance.md">Open-source compliance</a>
+  <a href="https://github.com/jhy0285/monofield/releases/latest">Latest release</a> ·
+  <a href="docs/open-source-compliance.md">Open-source notices</a>
 </p>
 
 <p align="center">
@@ -32,107 +32,100 @@
   </a>
 </p>
 
-MonoField is a local-first, open-source AI product workbench. It brings the
-working directory, Git changes, running browser, governed database access,
-project files, brand context, and preferred model into one visible project
-boundary.
-
-The goal is not another chat window. The goal is a continuous path from context
-to a reviewable result:
+MonoField is a local-first desktop workbench for people who need to move from a
+request to a result without losing the project context along the way. The
+working folder, Git changes, run configuration, live browser, governed database
+access, references, and deliverables stay attached to one project.
 
 ```text
-connect                         work                         deliver
-repo · files · browser · DB  →  ask · edit · run · review  →  code · deploy
-brand · rules · references      test · create · validate      HTML · PPTX
-                                                             XLSX · PDF · images
+connect                         work                         prove
+folder · files · browser     →  ask · edit · run          →  diff · build · UI check
+database · rules · brand        compose · review · export    code · XLSX · PPTX · PDF
 ```
 
-> **한국어 소개** — MonoField는 코드베이스, 실행 화면, 승인된 DB, 파일과
-> 원하는 AI 모델을 하나의 프로젝트에 연결합니다. 소프트웨어 개발부터 화면·
-> 인터페이스 명세, 프로토타입, 슬라이드와 문서 export까지 같은 맥락에서 만들고
-> diff·빌드·브라우저·산출물 검증으로 결과를 확인합니다.
+> **한국어 소개** — MonoField는 작업 폴더, Git 변경사항, 실행 화면, 승인된
+> 데이터베이스, 참고 자료와 산출물을 하나의 프로젝트에 연결합니다. 코드 수정부터
+> 인터페이스·화면 명세서, 프로토타입, 슬라이드와 export까지 같은 근거를 사용하고,
+> diff·빌드·브라우저 검증으로 결과를 확인합니다.
 
-## Support MonoField
+## Two ways to work
 
-If MonoField has been useful—or the idea of bringing code, design, and documents
-into one local workspace left an impression—please consider giving the
-[repository a star](https://github.com/jhy0285/monofield). It helps more people
-discover the project and gives us momentum to keep improving it.
-
-MonoField를 유용하게 사용했거나 프로젝트의 방향이 인상 깊었다면
-[GitHub Star](https://github.com/jhy0285/monofield)로 응원해 주세요. 더 많은
-사람이 프로젝트를 발견하고, 꾸준히 개선해 나가는 데 큰 힘이 됩니다.
-
-## Why MonoField
-
-| Field | What stays connected | Evidence you can review |
+| | Software development | Documents / design |
 | --- | --- | --- |
-| **Code** | Selected working directory, Git, build and dev server | Before/after diff, test and build result |
-| **Browser** | Approved in-app tab, DOM marks and visual regions | Running UI, interaction and screenshot verification |
-| **Data** | Encrypted connection, schema and explicit access policy | Read results, write approval and audit history |
-| **Documents** | Code, browser, database, files, dictionaries and brand rules | Editable preview, validation and exported artifact |
+| **Start with** | A codebase or multi-project workspace | A brief, source files, code, browser evidence, or an empty draft |
+| **Work with** | Git diff, discovered run configs, terminal and server logs, in-app browser, governed DB access | Brand systems, dictionaries, references, structured editors, previews and comments |
+| **Deliver** | Reviewed code with build/test and UI evidence | Interface specs, screen specs, responsive pages, prototypes, decks, spreadsheets, PDFs and media |
 
-This makes two ways of working available without splitting the product:
+The two project modes do not lock the conversation. Use **Ask** for explanation,
+analysis, and review; use **Docs** when the task should produce or revise a
+structured deliverable.
 
-- **Software development** — inspect and edit the selected codebase, discover
-  run configurations, keep development servers alive, review Git changes,
-  validate the actual UI in the built-in browser, and use permissioned database
-  operations when the task needs them.
-- **Documents / design production** — create interface and screen
-  specifications, responsive pages, prototypes, wireframes, slide decks,
-  spreadsheets, PDFs, reports, and reusable structured deliverables.
+## What makes it useful
 
-Ask and Docs are task modes, not project silos. A development project can switch
-to Docs to produce a technical specification; a document project can switch to
-Ask for explanation, analysis, or review.
+- **The folder is the execution boundary.** The selected project is the root
+  used by the agent, run configuration, Git view, browser, and database policy.
+- **The result stays reviewable.** Compare before and after, inspect build and
+  test results, then verify the running interaction in an approved browser tab.
+- **Database access is explicit.** Credentials stay in the encrypted Desktop
+  vault; each project or module uses a selected read/write policy and audit
+  trail.
+- **Documents can use real evidence.** Generate interface and screen
+  specifications from selected code, browser state, approved schema, files,
+  dictionaries, and brand rules—then review and export the result.
+- **Guidance is built in.** First-run onboarding is followed by a seven-step
+  development walkthrough or a four-step documents/design walkthrough. Both can
+  be opened again from the product guide.
 
-## Product principles
+## Runtime capability boundary
 
-- **Local-first** — project files stay in the working folder you choose.
-- **Model-independent** — use a local CLI, local model server, BYOK provider,
-  or OpenAI-compatible endpoint.
-- **Visible control** — diffs, build results, browser approvals, database
-  policies, token measurements, and deliverables remain reviewable.
-- **One workspace** — development, design, and documents are capabilities of
-  one project rather than isolated products.
-- **Reusable by teams** — workflows, brand systems, dictionaries, references,
-  and project presets can be distributed through an organization-run library.
+MonoField can connect to supported **local CLI agents** and to **BYOK / OpenAI-
+compatible endpoints**, but these are not identical execution paths.
 
-## Quick start
+- A capable local CLI adapter can work against the selected project root and
+  participate in file edits, terminal commands, Git, browser verification, and
+  governed database workflows.
+- BYOK and OpenAI-compatible endpoints are available for conversation and
+  document generation. They do not automatically inherit Desktop file,
+  terminal, browser, or database tools.
+- Tool and model coverage depends on the installed adapter and its current
+  version. A detected third-party CLI should not be assumed to have full parity
+  with Codex, Claude Code, Gemini CLI, or OpenCode until its capabilities are
+  shown and verified in MonoField.
 
-### Install the Desktop app
+This boundary is displayed because the model is the engine—not the security or
+tooling boundary.
 
-- Microsoft Store — enabled on the [MonoField website](https://monofield.vercel.app)
-  after the public listing is certified
+## Install
+
 - [Windows installer](https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-setup.exe)
 - [Portable package](https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-portable.zip)
 - [Release notes and checksums](https://github.com/jhy0285/monofield/releases/latest)
+- Microsoft Store — shown on the [MonoField website](https://monofield.vercel.app)
+  after the public listing is certified
 
-The Windows installer link downloads the EXE directly from the latest GitHub
-Release. Store packaging and publication steps are documented in
-[docs/windows-store-release.md](docs/windows-store-release.md).
-
-### Requirements
-
-- Windows 10/11 for the current Desktop build
-- Node.js 24
-- pnpm through Corepack
-- At least one supported local CLI agent or an OpenAI-compatible endpoint
+The installer link downloads the EXE directly from the latest GitHub Release.
+The current public Desktop build targets Windows 10/11. Direct-download builds
+are unsigned, so Windows can show an unrecognized-publisher warning; verify the
+download with the release's `SHA256SUMS.txt`. See
+[the user guide](https://monofield.vercel.app/downloads/monofield-user-guide-ko.pdf)
+for illustrated setup and real workflows.
 
 ### Run from source
 
+Requirements: Node.js 24, pnpm 10.33.x, and at least one supported local CLI
+agent for the complete development workflow.
+
 ```powershell
-corepack enable
+# Windows native (run once; Corepack may require elevated Program Files access)
+npm install -g pnpm@10.33.2
 pnpm install
 pnpm build:web
 pnpm dev:desktop
 pnpm tools-dev status --json
 ```
 
-The status command reports the active daemon, web, and Desktop processes. Pick a
-working folder inside MonoField to make it the CLI agent's project root.
-
-Useful focused checks:
+Pick a working folder in MonoField to make it the active project root. Useful
+focused checks:
 
 ```powershell
 pnpm check:contracts
@@ -146,19 +139,18 @@ The product and Desktop app are **MonoField**. The command-line entry point is
 
 ## Security and data boundary
 
-MonoField keeps project data and stored credentials locally by default.
-Credentials are referenced by connection ID and remain in the encrypted Desktop
-vault; they are not inserted into model prompts. Database access is governed by
-the selected policy and sensitive writes require the corresponding permission
-or approval.
+Project files stay in the working folder you choose. Stored credentials are
+referenced by connection ID and remain in the encrypted Desktop vault; they are
+not inserted into model prompts. Database access follows the selected policy,
+and writes require the corresponding permission or approval.
 
-Local-first does **not** mean an external model receives nothing. When you select
-an external runtime, the prompt and the context explicitly sent for that run are
-processed by that provider under its own terms. Review the provider, project
-policy, and selected context before using confidential data.
+Local-first does **not** mean an external provider receives nothing. When you
+choose an external runtime, the prompt and context explicitly sent for that run
+are processed under that provider's terms. Review the provider, project policy,
+and selected context before using confidential data.
 
-See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md) for the full boundary
-and reporting process.
+See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md) for the complete
+boundary and reporting process.
 
 ## Repository map
 
@@ -181,15 +173,21 @@ MonoField is an independent derivative of the Apache-2.0 licensed
 [Open Design](https://github.com/nexu-io/open-design) project. It is not
 affiliated with, endorsed by, or maintained by that project.
 
-The user-facing product identity, workflows, integration layer, document
-systems, browser tooling, database governance, and MonoField modifications are
-maintained in this repository. Required upstream and third-party notices remain
-in [LICENSE](LICENSE), [NOTICE](NOTICE), and
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Required upstream and third-party notices remain in [LICENSE](LICENSE),
+[NOTICE](NOTICE), and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Release
+requirements are documented in
+[docs/open-source-compliance.md](docs/open-source-compliance.md).
 
-For release requirements, see
-[docs/open-source-compliance.md](docs/open-source-compliance.md). For product
-identity rules, see [docs/brand.md](docs/brand.md).
+## If MonoField helps
+
+If the project saved you a tool switch, made a change easier to verify, or gave
+you a useful way to connect code with documents, please
+[star MonoField on GitHub](https://github.com/jhy0285/monofield). It helps other
+people find the project and gives the maintainers a clear signal to keep going.
+
+MonoField가 실제 작업에 도움이 됐거나 방향이 마음에 들었다면
+[GitHub Star](https://github.com/jhy0285/monofield)로 응원해 주세요. 더 많은
+사람이 프로젝트를 발견하고 계속 개선하는 데 큰 힘이 됩니다.
 
 ---
 

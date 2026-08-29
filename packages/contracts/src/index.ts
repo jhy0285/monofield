@@ -6,6 +6,7 @@ export * from './api/amrWallet.js';
 export * from './api/automations.js';
 export * from './api/artifacts.js';
 export * from './api/brands.js';
+export * from './api/byok-credentials.js';
 export * from './api/chat.js';
 export * from './api/token-usage.js';
 export * from './api/community.js';

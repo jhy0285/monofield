@@ -4,18 +4,27 @@ import express from 'express';
 import {
   registerPluginRoutes,
   registerProjectPluginRoutes,
+  summarizeInstalledPlugin,
 } from '../src/routes/plugins/index.js';
 
 const approvedPlugin = {
   id: 'approved-plugin',
   title: 'Approved Plugin',
+  version: '1.0.0',
   sourceKind: 'marketplace',
+  trust: 'trusted',
+  updatedAt: 1,
+  capabilitiesGranted: [],
   manifest: {},
 };
 const blockedPlugin = {
   id: 'blocked-plugin',
   title: 'Blocked Plugin',
+  version: '1.0.0',
   sourceKind: 'github',
+  trust: 'untrusted',
+  updatedAt: 1,
+  capabilitiesGranted: [],
   manifest: {},
 };
 
@@ -35,15 +44,28 @@ function managedDeps() {
   const handleCandidateShareTask = vi.fn();
   const handleProjectShareTask = vi.fn();
   const applyPlugin = vi.fn();
+  const applyBakedPreviews = vi.fn((rows: unknown) => rows);
   const installed = [approvedPlugin, blockedPlugin];
+  const listInstalledPlugins = vi.fn(() => installed);
   const snapshots = new Map([
     ['approved-snapshot', { snapshotId: 'approved-snapshot', pluginId: approvedPlugin.id }],
     ['blocked-snapshot', { snapshotId: 'blocked-snapshot', pluginId: blockedPlugin.id }],
   ]);
   const deps = {
     db: {
-      prepare: () => ({
-        all: () => [...snapshots.keys()].map((id) => ({ id })),
+      prepare: (sql: string) => ({
+        all: () => sql.includes('FROM installed_plugins')
+          ? installed.map((plugin) => ({
+              id: plugin.id,
+              version: plugin.version,
+              updatedAt: plugin.updatedAt,
+              trust: plugin.trust,
+              sourceMarketplaceId: null,
+              sourceMarketplaceEntryVersion: null,
+            }))
+          : sql.includes('FROM plugin_marketplaces')
+            ? []
+            : [...snapshots.keys()].map((id) => ({ id })),
         get: () => undefined,
         run: () => undefined,
       }),
@@ -54,7 +76,7 @@ function managedDeps() {
       PLUGIN_LOCKFILE_PATH: '',
     },
     plugins: {
-      listInstalledPlugins: () => installed,
+      listInstalledPlugins,
       getInstalledPlugin: (_db: unknown, id: string) =>
         installed.find((plugin) => plugin.id === id) ?? null,
       installPlugin: async function* () {},
@@ -88,7 +110,7 @@ function managedDeps() {
       connectorService: {},
       resolvedPortRef: { current: null },
       pluginShareTaskStore: { get: () => null, snapshot: () => null },
-      applyBakedPreviews: (rows: unknown) => rows,
+      applyBakedPreviews,
       sendMulterError: vi.fn(),
       decodeMultipartFilename: (name: string) => name,
       installOrUpgradePlugin: vi.fn(),
@@ -119,6 +141,8 @@ function managedDeps() {
     handleProjectPluginCli,
     handleCandidateShareTask,
     handleProjectShareTask,
+    applyBakedPreviews,
+    listInstalledPlugins,
   };
 }
 
@@ -137,8 +161,58 @@ async function start() {
 }
 
 describe('managed plugin distribution routes', () => {
+  it('builds a localized picker summary without full manifests or asset lists', () => {
+    const summary = summarizeInstalledPlugin({
+      id: 'deck-plugin',
+      title: 'Deck plugin',
+      version: '1.0.0',
+      sourceKind: 'bundled',
+      trust: 'trusted',
+      updatedAt: 7,
+      capabilitiesGranted: [],
+      manifest: {
+        name: 'deck-plugin',
+        version: '1.0.0',
+        description_i18n: { en: 'Deck helper', ko: '덱 도우미' },
+        od: {
+          kind: 'scenario',
+          inputs: [{
+            name: 'payload',
+            type: 'textarea',
+            label: 'A very large input that belongs only in plugin details',
+          }],
+          useCase: {
+            query: { en: 'Create a deck', ko: '덱을 만들어줘' },
+            exampleOutputs: [{ path: 'examples/deck.html', title: 'Deck' }],
+          },
+          context: {
+            assets: ['assets/very-large-reference.bin'],
+            designSystem: { ref: 'brand/default' },
+          },
+        },
+        author: { name: 'Detail-only author', url: 'https://example.invalid/author' },
+        homepage: 'https://example.invalid/plugin',
+      },
+    }, 'ko');
+
+    expect(summary).toMatchObject({
+      id: 'deck-plugin',
+      version: '1.0.0',
+      sourceKind: 'bundled',
+      hasQuery: true,
+      designSystemRef: 'brand/default',
+      exampleOutput: { path: 'examples/deck.html', title: 'Deck' },
+    });
+    expect(summary).not.toHaveProperty('manifest');
+    expect(summary).not.toHaveProperty('assets');
+    expect(summary).not.toHaveProperty('inputs');
+    expect(summary).not.toHaveProperty('author');
+    expect(summary).not.toHaveProperty('homepage');
+    expect(summary).not.toHaveProperty('description');
+  });
+
   it('hides unapproved installed plugins and their older snapshots', async () => {
-    const { baseUrl } = await start();
+    const { baseUrl, applyBakedPreviews } = await start();
 
     const plugins = await fetch(`${baseUrl}/api/plugins`).then((response) => response.json());
     expect(plugins.plugins.map((plugin: { id: string }) => plugin.id)).toEqual([
@@ -146,8 +220,30 @@ describe('managed plugin distribution routes', () => {
     ]);
 
     expect((await fetch(`${baseUrl}/api/plugins/${blockedPlugin.id}`)).status).toBe(404);
+    expect((await fetch(`${baseUrl}/api/plugins/${approvedPlugin.id}`)).status).toBe(200);
+    expect(applyBakedPreviews).toHaveBeenLastCalledWith([approvedPlugin], '');
     expect((await fetch(`${baseUrl}/api/applied-plugins/blocked-snapshot`)).status).toBe(404);
     expect((await fetch(`${baseUrl}/api/applied-plugins/approved-snapshot`)).status).toBe(200);
+  });
+
+  it('reuses compact picker summaries until the installed plugin fingerprint changes', async () => {
+    const { baseUrl, applyBakedPreviews, listInstalledPlugins } = await start();
+    const headers = { 'x-monofield-plugin-view': 'summary' };
+
+    const first = await fetch(`${baseUrl}/api/plugins`, { headers });
+    const etag = first.headers.get('etag');
+    const second = await fetch(`${baseUrl}/api/plugins`, {
+      headers: { ...headers, 'if-none-match': etag ?? '' },
+    });
+
+    expect(first.status).toBe(200);
+    expect(etag).toMatch(/^"[A-Za-z0-9_-]+"$/);
+    await expect(first.json()).resolves.toMatchObject({
+      plugins: [{ version: '1.0.0', sourceKind: 'marketplace' }],
+    });
+    expect(second.status).toBe(304);
+    expect(applyBakedPreviews).toHaveBeenCalledTimes(1);
+    expect(listInstalledPlugins).toHaveBeenCalledTimes(1);
   });
 
   it('blocks unapproved apply, request capability grants, and local trust changes', async () => {

@@ -203,6 +203,9 @@ async function runElectronBuilderRaw(
     electronVersion: config.electronVersion,
     executableName: PRODUCT_NAME,
     extraMetadata: {
+      author: {
+        name: "MonoField contributors",
+      },
       main: "./main.cjs",
       name: "monofield-packaged-app",
       productName: PRODUCT_NAME,

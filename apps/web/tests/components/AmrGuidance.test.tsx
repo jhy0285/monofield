@@ -1,14 +1,10 @@
 // @vitest-environment jsdom
 
 /**
- * Analytics + behaviour coverage for the hosted-AMR nudge component. It fires
- * `surface_view` (element=run_failed_toast) on mount with the full business
- * prop set, and `ui_click` (element=go_amr) + `onActivate` on the link.
- * (Gating — which agents/codes get the nudge — is covered by the
- * `resolveRunFailureUi` resolver test.)
+ * Analytics + behaviour coverage for the failed-run support card.
  */
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../src/analytics/events', async (importOriginal) => {
@@ -16,15 +12,11 @@ vi.mock('../../src/analytics/events', async (importOriginal) => {
   return {
     ...actual,
     trackRunFailedToastSurfaceView: vi.fn(),
-    trackRunFailedToastGoAmrClick: vi.fn(),
   };
 });
 
 import { AmrGuidance } from '../../src/components/AmrGuidance';
-import {
-  trackRunFailedToastGoAmrClick,
-  trackRunFailedToastSurfaceView,
-} from '../../src/analytics/events';
+import { trackRunFailedToastSurfaceView } from '../../src/analytics/events';
 
 beforeAll(() => {
   const store = new Map<string, string>();
@@ -48,7 +40,7 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-function renderGuidance(onActivate = vi.fn()) {
+function renderGuidance() {
   render(
     <AmrGuidance
       errorCode="AGENT_AUTH_REQUIRED"
@@ -57,11 +49,8 @@ function renderGuidance(onActivate = vi.fn()) {
       conversationId="conv-1"
       assistantMessageId="msg-amr"
       runId="run-9"
-      sourceDetail="chat_error_switch_retry_card"
-      onActivate={onActivate}
     />,
   );
-  return onActivate;
 }
 
 describe('AmrGuidance', () => {
@@ -82,15 +71,14 @@ describe('AmrGuidance', () => {
     });
   });
 
-  it('fires ui_click go_amr and calls onActivate on click', () => {
-    const onActivate = renderGuidance();
-    fireEvent.click(screen.getByRole('button'));
-    expect(trackRunFailedToastGoAmrClick).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(trackRunFailedToastGoAmrClick).mock.calls[0]![1]).toMatchObject({
-      page_name: 'chat_panel',
-      area: 'chat_panel',
-      element: 'go_amr',
-    });
-    expect(onActivate).toHaveBeenCalledTimes(1);
+  it('offers direct GitHub issue and problem-report routes', () => {
+    renderGuidance();
+    expect(screen.getByRole('link', { name: 'Open GitHub issue' }).getAttribute('href')).toBe(
+      'https://github.com/jhy0285/monofield/issues/new',
+    );
+    expect(screen.getByRole('link', { name: 'Report a problem' }).getAttribute('href')).toBe(
+      'https://github.com/jhy0285/monofield/issues/new?labels=bug&title=%5BProblem%5D%20',
+    );
+    expect(document.querySelector('a[href^="mailto:"]')).toBeNull();
   });
 });

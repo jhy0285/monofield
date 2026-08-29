@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import express from 'express';
@@ -11,10 +11,15 @@ import {
   describe,
   expect,
   it,
+  vi,
 } from 'vitest';
 
 import { readAppConfig, writeAppConfig } from '../src/app-config.js';
 import { isLocalSameOrigin } from '../src/origin-validation.js';
+import {
+  installTestCredentialVault,
+  type TestCredentialVault,
+} from './helpers/credential-vault.js';
 
 // Default telemetry preference applied when an existing config has no
 // telemetry block (fresh install, pre-disclosure). MonoField ships with
@@ -28,12 +33,15 @@ const DEFAULT_TELEMETRY = {
 
 describe('app-config', () => {
   let dataDir: string;
+  let vault: TestCredentialVault;
 
   beforeEach(async () => {
     dataDir = await mkdtemp(path.join(tmpdir(), 'od-appconfig-'));
+    vault = installTestCredentialVault();
   });
 
   afterEach(async () => {
+    vault.restore();
     await rm(dataDir, { recursive: true, force: true });
   });
 
@@ -428,6 +436,37 @@ describe('app-config', () => {
         'grok-build': { GROK_BIN: '~/bin/grok' },
         reasonix: { REASONIX_BIN: '~/bin/reasonix' },
       });
+      const persisted = await readFile(path.join(dataDir, 'app-config.json'), 'utf8');
+      expect(persisted).not.toContain('sk-proxy-anthropic');
+      expect(persisted).not.toContain('sk-proxy-token');
+      expect(persisted).not.toContain('sk-proxy-openai');
+      expect(persisted).toContain('__MONOFIELD_STORED_CLI_CREDENTIAL__');
+    });
+
+    it('migrates legacy Local CLI credentials vault-first and preserves plaintext on failure', async () => {
+      const file = path.join(dataDir, 'app-config.json');
+      const legacySecret = 'sk-legacy-explicit-4411';
+      await writeFile(file, JSON.stringify({
+        agentCliEnv: { codex: { CODEX_API_KEY: legacySecret } },
+        agentCliEnvIntent: { codex: { apiKeyOverride: true } },
+      }));
+
+      vault.state.failWrites = true;
+      const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      await expect(readAppConfig(dataDir)).resolves.toMatchObject({
+        agentCliEnv: { codex: { CODEX_API_KEY: legacySecret } },
+      });
+      expect(await readFile(file, 'utf8')).toContain(legacySecret);
+      expect(warning.mock.calls.flat().join(' ')).not.toContain(legacySecret);
+
+      vault.state.failWrites = false;
+      await expect(readAppConfig(dataDir)).resolves.toMatchObject({
+        agentCliEnv: { codex: { CODEX_API_KEY: legacySecret } },
+      });
+      const migrated = await readFile(file, 'utf8');
+      expect(migrated).not.toContain(legacySecret);
+      expect(migrated).toContain('__MONOFIELD_STORED_CLI_CREDENTIAL__');
+      warning.mockRestore();
     });
 
     it('drops legacy standalone Claude and Codex auth keys without base URLs or CLI intent', async () => {

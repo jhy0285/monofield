@@ -15,7 +15,11 @@ import {
   computeIncludeStable,
   hashStableInstructions,
   isClaudeResumeFailure,
+  isCopilotResumeFailure,
   isCodexResumeFailure,
+  isCursorResumeFailure,
+  isGeminiResumeFailure,
+  isOpenCodeResumeFailure,
   persistCapturedAgentSession,
   resolveAgentResumeContext,
 } from '../src/agent-session-resume.js';
@@ -253,5 +257,44 @@ describe('isCodexResumeFailure', () => {
     ).toBe(true);
     expect(isCodexResumeFailure('rate limit exceeded')).toBe(false);
     expect(isCodexResumeFailure('')).toBe(false);
+  });
+});
+
+describe('isGeminiResumeFailure', () => {
+  it('matches the local missing-session diagnostic', () => {
+    expect(
+      isGeminiResumeFailure(
+        'Invalid session identifier "dead-session".\nUse --list-sessions to see available sessions, then use --resume {uuid}.',
+      ),
+    ).toBe(true);
+  });
+
+  it('does not clear a valid session for unrelated service failures', () => {
+    expect(isGeminiResumeFailure('429 quota exceeded')).toBe(false);
+    expect(isGeminiResumeFailure('')).toBe(false);
+  });
+});
+
+describe('isOpenCodeResumeFailure', () => {
+  it('matches the installed CLI missing-session error only', () => {
+    expect(isOpenCodeResumeFailure('Error: Session not found')).toBe(true);
+    expect(isOpenCodeResumeFailure('provider unavailable')).toBe(false);
+    expect(isOpenCodeResumeFailure('')).toBe(false);
+  });
+});
+
+describe('isCursorResumeFailure', () => {
+  it('matches a missing chat/session target without matching provider failures', () => {
+    expect(isCursorResumeFailure('Chat session not found: dead-id')).toBe(true);
+    expect(isCursorResumeFailure('Unable to load session dead-id')).toBe(true);
+    expect(isCursorResumeFailure('429 rate limit exceeded')).toBe(false);
+  });
+});
+
+describe('isCopilotResumeFailure', () => {
+  it('matches a missing session/task target without matching provider failures', () => {
+    expect(isCopilotResumeFailure('Session not found: dead-id')).toBe(true);
+    expect(isCopilotResumeFailure('Unable to resume task dead-id')).toBe(true);
+    expect(isCopilotResumeFailure('network unavailable')).toBe(false);
   });
 });

@@ -3,7 +3,7 @@ import type { InstalledPluginRecord } from '@open-design/contracts';
 import { trackPageView } from '../analytics/events';
 import { useAnalytics } from '../analytics/provider';
 import { useI18n } from '../i18n';
-import { listPlugins } from '../state/projects';
+import { getPluginDetails, listPlugins } from '../state/projects';
 import { Icon } from './Icon';
 import { PluginDetailsModal } from './PluginDetailsModal';
 import { PluginsHomeSection } from './PluginsHomeSection';
@@ -15,7 +15,7 @@ interface Props {
 }
 
 export function OpenWorkView({ onUse, onManagePlugins }: Props) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const analytics = useAnalytics();
   const [plugins, setPlugins] = useState<InstalledPluginRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,7 +32,7 @@ export function OpenWorkView({ onUse, onManagePlugins }: Props) {
     let cancelled = false;
     const load = () => {
       setLoading(true);
-      void listPlugins().then((rows) => {
+      void listPlugins({ summary: true, locale }).then((rows) => {
         if (cancelled) return;
         setPlugins(rows);
         setLoading(false);
@@ -44,7 +44,15 @@ export function OpenWorkView({ onUse, onManagePlugins }: Props) {
       cancelled = true;
       window.removeEventListener('open-design:plugins-changed', load);
     };
-  }, []);
+  }, [locale]);
+
+  const openPluginDetails = (record: InstalledPluginRecord) => {
+    setDetailsRecord(record);
+    void getPluginDetails(record.id).then((detail) => {
+      if (!detail) return;
+      setDetailsRecord((current) => current?.id === record.id ? detail : current);
+    });
+  };
 
   const rows = useMemo(
     () => plugins.filter((plugin) => plugin.manifest?.od?.hidden !== true),
@@ -92,7 +100,7 @@ export function OpenWorkView({ onUse, onManagePlugins }: Props) {
           activePluginId={detailsRecord?.id ?? null}
           pendingApplyId={null}
           onUse={(record, action) => onUse(record, action)}
-          onOpenDetails={setDetailsRecord}
+          onOpenDetails={openPluginDetails}
           preferDefaultFacet={false}
           title={t('openWork.catalogTitle')}
           subtitle={t('openWork.catalogSubtitle')}

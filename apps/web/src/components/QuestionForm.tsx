@@ -28,6 +28,16 @@ import {
   isInterfaceSpecManualDraftReady,
 } from './InterfaceSpecManualInput';
 
+const EXPLICIT_SUBMIT_FORM_IDS = new Set([
+  'interface-spec-options',
+  'interface-spec-manual-draft',
+  'interface-spec-source-mode',
+]);
+
+export function questionFormRequiresExplicitSubmit(formId: string | null | undefined): boolean {
+  return typeof formId === 'string' && EXPLICIT_SUBMIT_FORM_IDS.has(formId);
+}
+
 interface Props {
   form: QuestionForm;
   /** Project storage keeps user-selected mapping/dictionary files out of chat text. */
@@ -137,7 +147,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
   }
 
   function handleSkipAll() {
-    if (locked || !onSubmit) return;
+    if (locked || !onSubmit || questionFormRequiresExplicitSubmit(form.id)) return;
     const empty: Record<string, string | string[]> = {};
     onSubmit(formatFormAnswers({ ...form, questions: visibleQuestions }, empty), empty);
   }

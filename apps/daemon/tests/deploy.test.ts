@@ -3,7 +3,7 @@ import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   analyzeDeployPlan,
@@ -42,6 +42,10 @@ import {
 } from '../src/deploy.js';
 import { closeDatabase, getDeployment, insertProject, openDatabase, upsertDeployment } from '../src/db.js';
 import { ensureProject } from '../src/projects.js';
+import {
+  installTestCredentialVault,
+  type TestCredentialVault,
+} from './helpers/credential-vault.js';
 
 async function setupProject() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-test-'));
@@ -57,6 +61,16 @@ afterEach(() => {
 });
 
 describe('deploy config', () => {
+  let vault: TestCredentialVault;
+
+  beforeEach(() => {
+    vault = installTestCredentialVault();
+  });
+
+  afterEach(() => {
+    vault.restore();
+  });
+
   it('stores Vercel credentials in vercel.json and returns only the public mask', async () => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-config-test-'));
     const priorStateRoot = process.env.OD_USER_STATE_DIR;
@@ -78,9 +92,10 @@ describe('deploy config', () => {
         target: 'preview',
       });
       expect(JSON.parse(await readFile(deployConfigPath(), 'utf8'))).toEqual({
-        token: 'vercel-token-secret',
         teamId: 'team_123',
         teamSlug: 'design-team',
+        tokenRef: expect.any(String),
+        tokenTail: 'cret',
       });
 
       const maskedUpdate = await writeVercelConfig({
@@ -116,6 +131,31 @@ describe('deploy config', () => {
     });
   });
 
+  it('migrates legacy deployment tokens vault-first and preserves them on failure', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-config-test-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    try {
+      const file = deployConfigPath(VERCEL_PROVIDER_ID);
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(file, JSON.stringify({ token: 'legacy-vercel-secret', teamId: 'team-1' }));
+      vault.state.failWrites = true;
+
+      await expect(readVercelConfig()).resolves.toMatchObject({ token: 'legacy-vercel-secret' });
+      expect(await readFile(file, 'utf8')).toContain('legacy-vercel-secret');
+
+      vault.state.failWrites = false;
+      await expect(readVercelConfig()).resolves.toMatchObject({ token: 'legacy-vercel-secret' });
+      const migrated = await readFile(file, 'utf8');
+      expect(migrated).not.toContain('legacy-vercel-secret');
+      expect(migrated).toContain('tokenRef');
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
   it('stores Cloudflare Pages credentials separately from vercel.json', async () => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-config-test-'));
     const priorStateRoot = process.env.OD_USER_STATE_DIR;
@@ -139,9 +179,10 @@ describe('deploy config', () => {
         target: 'preview',
       });
       expect(JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), 'utf8'))).toEqual({
-        token: 'cloudflare-token-secret',
         accountId: 'account_123',
         projectName: '',
+        tokenRef: expect.any(String),
+        tokenTail: 'cret',
       });
 
       const maskedUpdate = await writeCloudflarePagesConfig({
@@ -152,9 +193,10 @@ describe('deploy config', () => {
       expect(maskedUpdate.tokenMask).toBe(SAVED_CLOUDFLARE_TOKEN_MASK);
       expect(maskedUpdate.accountId).toBe('account_456');
       expect(JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), 'utf8'))).toEqual({
-        token: 'cloudflare-token-secret',
         accountId: 'account_456',
         projectName: '',
+        tokenRef: expect.any(String),
+        tokenTail: 'cret',
       });
 
       const withDomainHints = await writeCloudflarePagesConfig({

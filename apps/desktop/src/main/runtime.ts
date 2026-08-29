@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { createHmac, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { appendFile, mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { homedir, release } from "node:os";
@@ -14,6 +14,7 @@ import {
   DESKTOP_UPDATE_STATES,
   SIDECAR_MESSAGES,
   normalizeDesktopSidecarMessage,
+  signDesktopImportToken as signSharedDesktopImportToken,
   type DesktopBrowserAutomationInput,
   type DesktopBrowserAutomationResult,
   type DesktopExportArtifactInput,
@@ -212,29 +213,17 @@ export async function fetchResolvedProjectDir(
   return { ok: true, context: { fromTrustedPicker, hasBaseDir, resolvedDir } };
 }
 
-// Mirror of the daemon's token field separator. We avoid `.` because
-// ISO 8601 expiry strings already contain dots (`...:00.000Z`). `~`
-// appears in neither base64url nor ISO 8601, so the three fields are
-// unambiguous when the daemon splits them. Drift between the two
-// constants would silently invalidate every minted token, so the
-// packaged workspace's vitest pins the produced shape.
-const DESKTOP_IMPORT_TOKEN_FIELD_SEP = "~";
-
 /**
  * Pure-function HMAC mint for the `X-OD-Desktop-Import-Token` header.
- * Mirrors `signDesktopImportToken` on the daemon side (PR #974). Kept in
- * a small exported helper so the packaged workspace's vitest suite can
- * pin token-shape contract drift without booting Electron.
+ * Delegates to the shared wire-protocol implementation so Desktop and daemon
+ * cannot silently drift and invalidate every trusted folder selection.
  */
 export function signDesktopImportToken(
   secret: Buffer,
   baseDir: string,
   options: { nonce: string; exp: string },
 ): string {
-  const signature = createHmac("sha256", secret)
-    .update(`${baseDir}\n${options.nonce}\n${options.exp}`)
-    .digest("base64url");
-  return [options.nonce, options.exp, signature].join(DESKTOP_IMPORT_TOKEN_FIELD_SEP);
+  return signSharedDesktopImportToken(secret, baseDir, options);
 }
 
 const PENDING_POLL_MS = 120;

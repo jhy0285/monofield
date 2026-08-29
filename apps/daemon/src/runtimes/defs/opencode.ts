@@ -38,7 +38,7 @@ export const opencodeAgentDef = {
     // avoid Windows `spawn ENAMETOOLONG` while preserving OpenCode's
     // structured stream. A literal `-` is parsed as a positional message by
     // OpenCode 1.14.x and can surface as "Session not found".
-    buildArgs: (_prompt, _imagePaths, _extra, options = {}) => {
+    buildArgs: (_prompt, _imagePaths, _extra, options = {}, runtimeContext = {}) => {
       const args = [
         'run',
         '--format',
@@ -47,11 +47,21 @@ export const opencodeAgentDef = {
       if (options.model && options.model !== 'default') {
         args.push('-m', options.model);
       }
+      const resumeSessionId = runtimeContext.resumeSessionId?.trim();
+      if (resumeSessionId) {
+        args.push('--session', resumeSessionId);
+      }
       return args;
     },
     promptViaStdin: true,
     streamFormat: 'json-event-stream',
     eventParser: 'opencode',
+    // OpenCode generates the first session id itself and includes it as
+    // `sessionID` on JSON events. Capture that id after a successful create
+    // turn, then use `opencode run --session <id>` for later turns so the
+    // daemon does not duplicate the complete rendered transcript each time.
+    resumesSessionViaCli: true,
+    sessionIdFromStream: true,
     // OpenCode reads MCP servers from its layered config (global ~/.config
     // /opencode/opencode.json + project opencode.json + OPENCODE_CONFIG
     // + OPENCODE_CONFIG_CONTENT). The env-var form lets the daemon hand

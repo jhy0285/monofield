@@ -295,6 +295,7 @@ export function resolveChatExtraAllowedDirs({
   skillsDir,
   designSystemsDir,
   linkedDirs = [],
+  workspaceRootDir,
   codexGeneratedImagesDir,
   existsSync = fs.existsSync,
 }: {
@@ -302,16 +303,24 @@ export function resolveChatExtraAllowedDirs({
   skillsDir?: string | null;
   designSystemsDir?: string | null;
   linkedDirs?: Array<string | null | undefined>;
+  /**
+   * Explicitly selected development workspace root when the runtime cwd is a
+   * nested active module. Unlike linked reference folders, this is a user-
+   * authorized read/write boundary and lets one request update sibling
+   * services without changing the fast module-scoped default cwd.
+   */
+  workspaceRootDir?: string | null;
   codexGeneratedImagesDir?: string | null;
   existsSync?: (path: string) => boolean;
 }): string[] {
   const isCodex =
     typeof agentId === 'string' && agentId.trim().toLowerCase() === 'codex';
   const candidates = isCodex
-    ? [codexGeneratedImagesDir]
+    ? [workspaceRootDir, codexGeneratedImagesDir]
     : [
         skillsDir,
         designSystemsDir,
+        workspaceRootDir,
         ...(Array.isArray(linkedDirs) ? linkedDirs : []),
       ];
   return Array.from(

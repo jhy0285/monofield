@@ -47,6 +47,7 @@ const residualSkippedDirectories = new Set([
   ".codex",
   ".cursor",
   ".git",
+  ".monofield",
   ".od",
   ".od-e2e",
   ".opencode",
@@ -143,6 +144,8 @@ const residualAllowedPathPrefixes = [
   "design-templates/hyperframes/scripts/",
   // Vendored upstream Last30Days runtime helper used by the engine (design template).
   "design-templates/last30days/scripts/lib/vendor/",
+  // Executable JavaScript fixtures are input data for the interface scanners.
+  "plugins/_official/interface-spec/fixtures/",
   // Vendored upstream html-ppt runtime assets (lewislulu/html-ppt-skill, design template).
   "design-templates/html-ppt/assets/",
   // Replay-based mock CLIs that impersonate the agent CLIs OD spawns

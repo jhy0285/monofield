@@ -223,7 +223,8 @@ export interface MemoryConfigResponse {
   profileEnabled: boolean;
   rewriteEnabled: boolean;
   verifyEnabled: boolean;
-  extraction: MemoryExtractionConfig | null;
+  /** Secret-safe shape returned by the daemon; raw apiKey is never echoed. */
+  extraction: MemoryExtractionMaskedConfig | null;
 }
 
 // User-supplied override for the LLM extraction model. When `null`/absent,
@@ -279,9 +280,9 @@ export interface ExtractMemoryRequest {
    *  CLI-mode extraction calls leave this empty — the agent-id
    *  constrained branch in `pickProvider()` handles those.
    *
-   *  An empty `apiKey` (or missing field) is treated as "no usable
-   *  BYOK config" and falls through to the legacy provider chain so
-   *  a half-configured BYOK form doesn't silently break extraction. */
+   *  An empty `apiKey` (or missing field) establishes a fail-closed provider
+   *  boundary: extraction is skipped instead of falling through to an
+   *  unrelated host environment or media-provider credential. */
   chatProvider?: {
     provider: MemoryExtractionProvider;
     apiKey?: string;

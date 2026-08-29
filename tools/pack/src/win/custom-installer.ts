@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import type { ToolPackConfig } from "../config.js";
 import { resolveToolPackLauncherLayout } from "../launcher-layout.js";
 import { winResources } from "../resources.js";
+import { versionCoreForAppVersion } from "../versions.js";
 import { PRODUCT_NAME } from "./constants.js";
 import { pathExists } from "./fs.js";
 import { resolveWinInstallIdentity } from "./identity.js";
@@ -425,6 +426,12 @@ async function writeInstallerScript(config: ToolPackConfig, paths: WinPaths, pac
   const nsisLogPath = escapeNsisString(paths.nsisLogPath);
   const runningInstancesScriptPath = join(dirname(paths.installerScriptPath), "running-instances.ps1");
   const launcherRuntimeSyncScriptPath = join(dirname(paths.installerScriptPath), "sync-launcher-runtime.ps1");
+  const versionCore = versionCoreForAppVersion(packagedVersion);
+  const versionParts = /^(\d+)\.(\d+)\.(\d+)$/.exec(versionCore);
+  if (versionParts == null) {
+    throw new Error(`expected Windows installer version core to be X.Y.Z, received ${JSON.stringify(packagedVersion)}`);
+  }
+  const installerNumericVersion = `${versionParts[1]}.${versionParts[2]}.${versionParts[3]}.0`;
 
   await mkdir(dirname(paths.installerScriptPath), { recursive: true });
   await writeFile(runningInstancesScriptPath, createRunningInstancesScript(), "utf8");
@@ -465,6 +472,14 @@ RequestExecutionLevel user
 
 Name "${productName}"
 OutFile "\${OUTPUT_EXE}"
+VIProductVersion "${installerNumericVersion}"
+VIAddVersionKey /LANG=1033 "CompanyName" "MonoField contributors"
+VIAddVersionKey /LANG=1033 "FileDescription" "${productName} installer"
+VIAddVersionKey /LANG=1033 "FileVersion" "${escapeNsisString(packagedVersion)}"
+VIAddVersionKey /LANG=1033 "LegalCopyright" "Copyright (c) 2026 MonoField contributors"
+VIAddVersionKey /LANG=1033 "OriginalFilename" "${PRODUCT_NAME}-setup.exe"
+VIAddVersionKey /LANG=1033 "ProductName" "${productName}"
+VIAddVersionKey /LANG=1033 "ProductVersion" "${escapeNsisString(packagedVersion)}"
 InstallDir "$LOCALAPPDATA\\Programs\\${productName}"
 InstallDirRegKey HKCU "${registryKey}" "InstallLocation"
 Icon "\${APP_ICON}"

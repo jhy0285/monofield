@@ -1,10 +1,17 @@
 import fs from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { hash as blake3Hash } from 'blake3-wasm';
 import { listFiles, readProjectFile, validateProjectPath } from './projects.js';
+import {
+  credentialVaultKey,
+  deleteCredential,
+  readCredential,
+  writeCredential,
+} from './credential-vault.js';
+import { hardenCredentialFile } from './credential-file-security.js';
 
 export const VERCEL_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
@@ -21,6 +28,11 @@ type DeployConfig = {
   accountId?: string | undefined;
   projectName?: string | undefined;
   cloudflarePages?: CloudflarePagesConfigHints | undefined;
+};
+type PersistedDeployConfig = Omit<DeployConfig, 'token'> & {
+  token?: string;
+  tokenRef?: string;
+  tokenTail?: string;
 };
 type CloudflarePagesConfigHints = {
   lastZoneId?: string;
@@ -78,35 +90,76 @@ export function deployConfigPath(providerId: DeployProviderId = VERCEL_PROVIDER_
   return path.join(base, providerId === CLOUDFLARE_PAGES_PROVIDER_ID ? 'cloudflare-pages.json' : 'vercel.json');
 }
 
-export async function readVercelConfig(): Promise<DeployConfig> {
+function deployTokenRef(providerId: DeployProviderId): string {
+  const file = deployConfigPath(providerId);
+  return credentialVaultKey('deploy', file, providerId);
+}
+
+function freshDeployTokenRef(providerId: DeployProviderId): string {
+  return `${deployTokenRef(providerId)}:v-${randomBytes(12).toString('hex')}`;
+}
+
+async function readStoredDeployConfig(providerId: DeployProviderId): Promise<PersistedDeployConfig | null> {
   try {
-    const raw = await readFile(deployConfigPath(VERCEL_PROVIDER_ID), 'utf8');
-    const parsed = JSON.parse(raw);
-    return {
-      token: typeof parsed.token === 'string' ? parsed.token : '',
-      teamId: typeof parsed.teamId === 'string' ? parsed.teamId : '',
-      teamSlug: typeof parsed.teamSlug === 'string' ? parsed.teamSlug : '',
-    };
+    await hardenCredentialFile(deployConfigPath(providerId));
+    return JSON.parse(await readFile(deployConfigPath(providerId), 'utf8')) as PersistedDeployConfig;
   } catch (err) {
-    if (isErrnoException(err) && err.code === 'ENOENT') return { token: '', teamId: '', teamSlug: '' };
+    if (isErrnoException(err) && err.code === 'ENOENT') return null;
     throw err;
   }
 }
 
-export async function readCloudflarePagesConfig(): Promise<DeployConfig> {
-  try {
-    const raw = await readFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), 'utf8');
-    const parsed = JSON.parse(raw);
-    return {
-      token: typeof parsed.token === 'string' ? parsed.token : '',
-      accountId: typeof parsed.accountId === 'string' ? parsed.accountId : '',
-      projectName: typeof parsed.projectName === 'string' ? parsed.projectName : '',
-      cloudflarePages: normalizeCloudflarePagesConfigHints(parsed.cloudflarePages),
-    };
-  } catch (err) {
-    if (isErrnoException(err) && err.code === 'ENOENT') return { token: '', accountId: '', projectName: '', cloudflarePages: {} };
-    throw err;
+async function resolveDeployToken(
+  providerId: DeployProviderId,
+  stored: PersistedDeployConfig,
+): Promise<string> {
+  const legacy = typeof stored.token === 'string' ? stored.token.trim() : '';
+  if (legacy) {
+    const ref = freshDeployTokenRef(providerId);
+    try {
+      await writeCredential(ref, legacy);
+      const migrated: PersistedDeployConfig = {
+        ...stored,
+        tokenRef: ref,
+        tokenTail: legacy.slice(-4),
+      };
+      delete migrated.token;
+      await writeDeployConfigMetadata(deployConfigPath(providerId), migrated);
+      if (stored.tokenRef) await deleteCredential(stored.tokenRef).catch(() => undefined);
+    } catch {
+      await deleteCredential(ref).catch(() => undefined);
+      console.warn('[deploy] Deployment token migration deferred until the encrypted Desktop vault is available.');
+    }
+    return legacy;
   }
+  if (typeof stored.tokenRef !== 'string' || !stored.tokenRef.trim()) return '';
+  try {
+    return (await readCredential(stored.tokenRef))?.trim() ?? '';
+  } catch {
+    console.warn('[deploy] Encrypted deployment token is currently unavailable.');
+    return '';
+  }
+}
+
+export async function readVercelConfig(): Promise<DeployConfig> {
+  const parsed = await readStoredDeployConfig(VERCEL_PROVIDER_ID);
+  if (!parsed) return { token: '', teamId: '', teamSlug: '' };
+  return {
+    token: await resolveDeployToken(VERCEL_PROVIDER_ID, parsed),
+    teamId: typeof parsed.teamId === 'string' ? parsed.teamId : '',
+    teamSlug: typeof parsed.teamSlug === 'string' ? parsed.teamSlug : '',
+  };
+}
+
+export async function readCloudflarePagesConfig(): Promise<DeployConfig> {
+  const parsed = await readStoredDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID);
+  if (!parsed) return { token: '', accountId: '', projectName: '', cloudflarePages: {} };
+  return {
+    token: await resolveDeployToken(CLOUDFLARE_PAGES_PROVIDER_ID, parsed),
+    accountId: typeof parsed.accountId === 'string' ? parsed.accountId : '',
+    projectName: typeof parsed.projectName === 'string' ? parsed.projectName : '',
+    cloudflarePages: normalizeCloudflarePagesConfigHints(parsed.cloudflarePages),
+  };
 }
 
 export async function writeVercelConfig(input: Partial<DeployConfig>) {
@@ -121,7 +174,7 @@ export async function writeVercelConfig(input: Partial<DeployConfig>) {
     teamSlug:
       typeof input?.teamSlug === 'string' ? input.teamSlug.trim() : current.teamSlug,
   };
-  await writeDeployConfigFile(deployConfigPath(VERCEL_PROVIDER_ID), next);
+  await writeDeployConfigFile(VERCEL_PROVIDER_ID, next);
   return publicDeployConfig(next);
 }
 
@@ -144,17 +197,45 @@ export async function writeCloudflarePagesConfig(input: Partial<DeployConfig>) {
   if (Object.keys(cloudflarePages).length > 0) next.cloudflarePages = cloudflarePages;
   if (!next.token) throw new DeployError('Cloudflare API token is required.', 400);
   if (!next.accountId) throw new DeployError('Cloudflare account ID is required.', 400);
-  await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), next);
+  await writeDeployConfigFile(CLOUDFLARE_PAGES_PROVIDER_ID, next);
   return publicCloudflarePagesConfig(next);
 }
 
-async function writeDeployConfigFile(file: string, config: DeployConfig) {
-  await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+async function writeDeployConfigMetadata(file: string, config: PersistedDeployConfig) {
+  const directory = path.dirname(file);
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  try { await chmod(directory, 0o700); } catch (error: unknown) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== 'ENOTSUP' && code !== 'EPERM' && code !== 'EINVAL') throw error;
+  }
+  const temporary = `${file}.${randomBytes(4).toString('hex')}.tmp`;
   try {
-    fs.chmodSync(file, 0o600);
-  } catch {
-    // Best effort on filesystems that do not support chmod.
+    await writeFile(temporary, `${JSON.stringify(config, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+    await rename(temporary, file);
+    await chmod(file, 0o600).catch(() => undefined);
+  } catch (error) {
+    await rm(temporary, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
+async function writeDeployConfigFile(providerId: DeployProviderId, config: DeployConfig) {
+  const prior = await readStoredDeployConfig(providerId);
+  const ref = config.token ? freshDeployTokenRef(providerId) : undefined;
+  if (ref) await writeCredential(ref, config.token);
+  const persisted: PersistedDeployConfig = {
+    ...config,
+    ...(ref ? { tokenRef: ref, tokenTail: config.token.slice(-4) } : {}),
+  };
+  delete persisted.token;
+  try {
+    await writeDeployConfigMetadata(deployConfigPath(providerId), persisted);
+  } catch (error) {
+    if (ref) await deleteCredential(ref).catch(() => undefined);
+    throw error;
+  }
+  if (prior?.tokenRef && prior.tokenRef !== ref) {
+    await deleteCredential(prior.tokenRef).catch(() => undefined);
   }
 }
 

@@ -37,17 +37,19 @@ vi.mock('../../src/providers/registry', async () => {
 vi.mock('../../src/components/DesignBrowserPanel', () => ({
   labelFromUrl: (url: string) => new URL(url).hostname,
   DesignBrowserPanel: ({
+    active,
     initialIconUrl,
     initialTitle,
     initialUrl,
     onOpenPopup,
   }: {
+    active?: boolean;
     initialIconUrl?: string;
     initialTitle?: string;
     initialUrl?: string;
     onOpenPopup?: (url: string) => void;
   }) => (
-    <div data-testid="design-browser-panel" data-initial-icon-url={initialIconUrl ?? ''} data-initial-title={initialTitle ?? ''} data-initial-url={initialUrl ?? ''}>
+    <div data-testid="design-browser-panel" data-active={active ? 'true' : 'false'} data-initial-icon-url={initialIconUrl ?? ''} data-initial-title={initialTitle ?? ''} data-initial-url={initialUrl ?? ''}>
       {onOpenPopup ? (
         <button type="button" data-testid="design-browser-popup" onClick={() => onOpenPopup('https://aop-dev.hellenicrailways.gr/auth/aop-card')}>
           Open popup
@@ -1724,6 +1726,11 @@ describe('FileWorkspace add-module menu', () => {
     expect(browserPanels[0]!.className).not.toContain('active');
     expect(browserPanels[1]!.className).not.toContain('active');
     expect(browserPanels[2]!.className).toContain('active');
+    expect(screen.getAllByTestId('design-browser-panel').map((panel) => panel.getAttribute('data-active'))).toEqual([
+      'false',
+      'false',
+      'true',
+    ]);
     expect(onTabsStateChange).toHaveBeenLastCalledWith({
       tabs: [],
       active: '__browser__:3',

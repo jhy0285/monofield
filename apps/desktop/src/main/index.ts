@@ -13,6 +13,7 @@ import {
   normalizeDesktopSidecarMessage,
   type DesktopBrowserAutomationInput,
   type DesktopClickInput,
+  type DesktopCredentialVaultRequest,
   type DesktopDevelopmentProcessInput,
   type DesktopEvalInput,
   type DesktopExportArtifactInput,
@@ -41,6 +42,8 @@ import { readProcessStamp } from "@open-design/platform";
 
 import { createDesktopRuntime, type DesktopRuntime } from "./runtime.js";
 import { DatabaseBroker } from "./database-broker.js";
+import { CredentialVault } from "./credential-vault.js";
+import { CredentialVaultRequestAuthorizer } from "./credential-vault-auth.js";
 import { DevelopmentProcessBroker } from "./development-process-broker.js";
 import { attachDesktopProcessErrorFilter } from "./uncaught-exception.js";
 import { createDesktopUpdater, createDesktopUpdaterScheduler, type DesktopUpdaterScheduler } from "./updater.js";
@@ -692,6 +695,8 @@ export async function runDesktopMain(
 
   let desktop: DesktopRuntime | null = null;
   const databaseBroker = new DatabaseBroker();
+  const credentialVault = new CredentialVault();
+  const credentialVaultRequestAuthorizer = new CredentialVaultRequestAuthorizer(desktopAuthSecret);
   const developmentProcessBroker = new DevelopmentProcessBroker();
   let disposeMenu: () => void = () => undefined;
   let updateScheduler: DesktopUpdaterScheduler | null = null;
@@ -803,6 +808,10 @@ export async function runDesktopMain(
             return await updater.handle((request.input as DesktopUpdateInput).action);
           case SIDECAR_MESSAGES.DATABASE:
             return await databaseBroker.execute(request.input);
+          case SIDECAR_MESSAGES.CREDENTIAL_VAULT:
+            return await credentialVault.execute(
+              credentialVaultRequestAuthorizer.authorize(request.input as DesktopCredentialVaultRequest),
+            );
           case SIDECAR_MESSAGES.DEVELOPMENT_PROCESS:
             return await developmentProcessBroker.execute(request.input as DesktopDevelopmentProcessInput);
         }

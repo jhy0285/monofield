@@ -76,7 +76,17 @@ Soft rules:
    select → navigate). Prefer `orthogonal` lines for dense screens.
 5. Fill metadata (`levels` = menu hierarchy, `overview` = one or two
    sentences on the screen's purpose).
-6. Self-check against the hard rules, then export.
+6. Self-check against the hard rules.
+7. Generate the deterministic HTML preview with
+   `monofield docs preview-screen-spec --input screen-spec.json` and present it to
+   the user. Do **not** export at this stage.
+8. Ask the user to review the rendered markers, relation lines, descriptions,
+   and checkpoints. Apply their feedback to `screen-spec.json`, then regenerate
+   the preview.
+9. Repeat review and preview until the user explicitly confirms the latest
+   preview.
+10. Only after that confirmation, export the `.pptx` with the deterministic
+    renderer.
 
 ## Preview — 오른쪽 패널에 "이 화면명세서가 이렇게 나온다"
 
@@ -85,7 +95,7 @@ export 전에 HTML 미리보기를 만들어 사용자에게 보여준다. 스�
 PPTX와 동일한 내용으로 렌더된다:
 
 ```bash
-od docs preview-screen-spec --input screen-spec.json [--out preview.html]
+monofield docs preview-screen-spec --input screen-spec.json [--out preview.html]
 ```
 
 - 미리보기는 검증에 막히지 않는다(치명 문제는 배너로 표시).
@@ -94,8 +104,12 @@ od docs preview-screen-spec --input screen-spec.json [--out preview.html]
 
 ## Export
 
+Export is the final, confirmed step. Never export directly after collection or
+self-checking; the latest HTML preview must first be shown to and approved by
+the user.
+
 ```bash
-od docs render-screen-spec --input screen-spec.json
+monofield docs render-screen-spec --input screen-spec.json
 ```
 
 Schema errors appear on stderr as `<path>: <message>` lines — fix exactly
@@ -105,4 +119,5 @@ the output `.pptx` path and screen count as JSON.
 ## Report
 
 When done, report: screen count, callout count per screen, screens missing
-images, the written `screen-spec.json` path, and the rendered `.pptx` path.
+images, the written `screen-spec.json` path, the reviewed HTML preview path,
+and the rendered `.pptx` path.

@@ -1,4 +1,8 @@
 import type { Express, NextFunction, Request, RequestHandler, Response } from 'express';
+import type { InstalledPluginSummary } from '@open-design/contracts';
+import { createHash } from 'node:crypto';
+import { statSync } from 'node:fs';
+import path from 'node:path';
 import type { PluginShareAction } from '../../services/plugin-share-tasks.js';
 
 export interface RegisterPluginEventRoutesDeps {
@@ -18,7 +22,16 @@ interface SqliteDbLike {
 }
 
 interface InstalledPluginLike {
+  id?: string;
   title?: string;
+  version?: string;
+  sourceKind?: string;
+  sourceMarketplaceId?: string;
+  sourceMarketplaceEntryName?: string;
+  sourceMarketplaceEntryVersion?: string;
+  marketplaceTrust?: string;
+  trust?: string;
+  updatedAt?: number;
   manifest?: Record<string, unknown>;
   capabilitiesGranted?: string[];
   appliedPlugin?: { capabilitiesGranted?: string[]; [key: string]: unknown };
@@ -94,6 +107,197 @@ interface PluginRouteHelpers {
   isPluginAllowed?(plugin: InstalledPluginLike): boolean;
 }
 
+function localizedText(value: unknown, locale?: string): string | undefined {
+  if (typeof value === 'string') return value || undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const entries = value as Record<string, unknown>;
+  const language = locale?.split('-')[0];
+  const candidates = [locale, language, 'en'].filter((item): item is string => Boolean(item));
+  for (const candidate of candidates) {
+    const resolved = entries[candidate];
+    if (typeof resolved === 'string' && resolved.length > 0) return resolved;
+  }
+  return Object.values(entries).find((entry): entry is string => (
+    typeof entry === 'string' && entry.length > 0
+  ));
+}
+
+function compactPreview(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const source = value as Record<string, unknown>;
+  const compact: Record<string, unknown> = {};
+  for (const key of ['type', 'poster', 'video', 'gif', 'entry', 'audio', 'motion']) {
+    const field = source[key];
+    if (typeof field !== 'string' || field.length === 0 || field.startsWith('data:')) continue;
+    // A picker only needs a fetchable preview reference. Refuse unexpectedly
+    // large inline-ish values even when they do not use the data: scheme.
+    compact[key] = field.slice(0, 2_048);
+  }
+  if (typeof source.holdMs === 'number' && Number.isFinite(source.holdMs)) {
+    compact.holdMs = source.holdMs;
+  }
+  return Object.keys(compact).length > 0 ? compact : undefined;
+}
+
+function compactText(value: string | undefined, maxLength: number): string | undefined {
+  const normalized = value?.trim();
+  if (!normalized) return undefined;
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+}
+
+function compactStringList(
+  value: unknown,
+  options: { maxItems: number; maxItemLength: number },
+): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const compact = Array.from(new Set(value
+    .filter((entry): entry is string => typeof entry === 'string')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => entry.slice(0, options.maxItemLength))))
+    .slice(0, options.maxItems);
+  return compact.length > 0 ? compact : undefined;
+}
+
+function previewManifestStamp(previewsDir: string): number {
+  try {
+    return statSync(path.join(previewsDir, 'manifest.json')).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Read a cheap revision without parsing every manifest_json cell. A summary
+ * cache hit used to call listInstalledPlugins first, which defeated most of
+ * the cache by JSON-parsing hundreds of full manifests on every navigation.
+ *
+ * Tests/downstream embedders may expose only a minimal SqliteDbLike. In that
+ * case return null and let the compatible record-derived fingerprint path run.
+ */
+function readPluginSummaryRevision(
+  db: SqliteDbLike,
+  previewsDir: string,
+  managedDistributionOnly: boolean,
+): string | null {
+  try {
+    const rows = db.prepare(`
+      SELECT id, version, updated_at AS updatedAt, trust,
+             source_marketplace_id AS sourceMarketplaceId,
+             source_marketplace_entry_version AS sourceMarketplaceEntryVersion
+      FROM installed_plugins
+      ORDER BY id ASC
+    `).all() as Array<Record<string, unknown>>;
+    if (rows.some((row) => (
+      typeof row.id !== 'string'
+      || typeof row.version !== 'string'
+      || typeof row.updatedAt !== 'number'
+      || typeof row.trust !== 'string'
+    ))) return null;
+    const marketplaceRows = managedDistributionOnly
+      ? db.prepare(`
+          SELECT id, refreshed_at AS refreshedAt
+          FROM plugin_marketplaces
+          ORDER BY id ASC
+        `).all() as Array<Record<string, unknown>>
+      : [];
+    return createHash('sha256')
+      .update(JSON.stringify({
+        rows,
+        marketplaceRows,
+        previewManifestStamp: previewManifestStamp(previewsDir),
+      }))
+      .digest('hex');
+  } catch {
+    return null;
+  }
+}
+
+/** Build the intentionally small record used by plugin pickers on Home. */
+export function summarizeInstalledPlugin(
+  plugin: InstalledPluginLike,
+  locale?: string,
+): InstalledPluginSummary {
+  const manifest = plugin.manifest ?? {};
+  const extension = manifest.od && typeof manifest.od === 'object' && !Array.isArray(manifest.od)
+    ? manifest.od as Record<string, unknown>
+    : {};
+  const useCase = extension.useCase && typeof extension.useCase === 'object' && !Array.isArray(extension.useCase)
+    ? extension.useCase as Record<string, unknown>
+    : {};
+  const context = extension.context && typeof extension.context === 'object' && !Array.isArray(extension.context)
+    ? extension.context as Record<string, unknown>
+    : {};
+  const designSystem = context.designSystem && typeof context.designSystem === 'object' && !Array.isArray(context.designSystem)
+    ? context.designSystem as Record<string, unknown>
+    : {};
+  const stages = extension.pipeline && typeof extension.pipeline === 'object' && !Array.isArray(extension.pipeline)
+    ? (extension.pipeline as { stages?: unknown }).stages
+    : undefined;
+  const pipelineAtoms = Array.isArray(stages)
+    ? Array.from(new Set(stages.flatMap((stage) => {
+        if (!stage || typeof stage !== 'object' || Array.isArray(stage)) return [];
+        const atoms = (stage as { atoms?: unknown }).atoms;
+        return Array.isArray(atoms) ? atoms.filter((atom): atom is string => typeof atom === 'string') : [];
+      })))
+    : [];
+  const examples = Array.isArray(useCase.exampleOutputs) ? useCase.exampleOutputs : [];
+  const example = examples.find((entry) => entry && typeof entry === 'object' && !Array.isArray(entry)) as Record<string, unknown> | undefined;
+  const title = localizedText(manifest.title_i18n, locale)
+    ?? (typeof plugin.title === 'string' && plugin.title.length > 0 ? plugin.title : undefined)
+    ?? localizedText(manifest.title, locale)
+    ?? (typeof plugin.id === 'string' ? plugin.id : 'plugin');
+  const name = typeof manifest.name === 'string' && manifest.name.length > 0
+    ? manifest.name
+    : (typeof plugin.id === 'string' && plugin.id.length > 0 ? plugin.id : 'plugin');
+  const id = typeof plugin.id === 'string' ? plugin.id : name;
+  const summary: InstalledPluginSummary = {
+    summary: true,
+    id,
+    title,
+    trust: (typeof plugin.trust === 'string' ? plugin.trust : 'untrusted') as InstalledPluginSummary['trust'],
+    // These two short fields are rendered directly in marketplace cards and
+    // source tabs. Omitting them made every compact record look like a local
+    // 0.0.0 plugin, which was smaller but semantically incorrect.
+    ...(typeof plugin.version === 'string' ? { version: plugin.version } : {}),
+    ...(typeof plugin.sourceKind === 'string'
+      ? { sourceKind: plugin.sourceKind as InstalledPluginSummary['sourceKind'] }
+      : {}),
+    ...(name !== id ? { name } : {}),
+  };
+  const copy = <K extends keyof InstalledPluginSummary>(key: K, value: InstalledPluginSummary[K] | undefined) => {
+    if (value !== undefined) summary[key] = value;
+  };
+  copy('marketplaceTrust', plugin.marketplaceTrust as InstalledPluginSummary['marketplaceTrust']);
+  // Card descriptions and all author/source metadata are detail-only. Rich
+  // cards fetch the one hovered record lazily instead of shipping hundreds of
+  // descriptions during app startup.
+  copy('tags', compactStringList(manifest.tags, { maxItems: 16, maxItemLength: 80 }));
+  for (const key of ['kind', 'taskKind', 'mode', 'scenario', 'surface'] as const) {
+    copy(key, typeof extension[key] === 'string'
+      ? compactText(extension[key] as string, 120)
+      : undefined);
+  }
+  copy('hidden', typeof extension.hidden === 'boolean' ? extension.hidden : undefined);
+  copy('preview', compactPreview(extension.preview));
+  copy('bakedPreview', compactPreview(extension.bakedPreview));
+  copy('hasQuery', localizedText(useCase.query, locale) !== undefined ? true : undefined);
+  copy('pipelineAtoms', compactStringList(pipelineAtoms, { maxItems: 24, maxItemLength: 80 }));
+  copy('designSystemRef', typeof designSystem.ref === 'string'
+    ? compactText(designSystem.ref, 512)
+    : undefined);
+  copy('exampleOutput', example && typeof example.path === 'string'
+    ? {
+        path: example.path.slice(0, 1_024),
+        ...(typeof example.title === 'string'
+          ? { title: compactText(example.title, 160) }
+          : {}),
+      }
+    : undefined);
+  return summary;
+}
+
 export interface RegisterPluginRoutesDeps {
   db: SqliteDbLike;
   paths: { PROJECTS_DIR: string; PLUGIN_REGISTRY_ROOTS: string[]; PLUGIN_LOCKFILE_PATH: string };
@@ -151,6 +355,12 @@ export function registerPluginEventRoutes(app: Express, deps: RegisterPluginEven
 
 export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDeps): void {
   const { db, paths, plugins, helpers } = deps;
+  const summaryCache = new Map<string, {
+    fingerprint: string;
+    plugins: InstalledPluginSummary[];
+    body: string;
+    etag: string;
+  }>();
   const isPluginAllowed = (plugin: InstalledPluginLike): boolean =>
     helpers.isPluginAllowed?.(plugin) !== false;
   const managedPolicyBlocked = (res: Response, message: string) => res.status(403).json({
@@ -164,8 +374,93 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
     return Boolean(plugin && isPluginAllowed(plugin));
   };
 
-  app.get('/api/plugins', async (_req, res) => { try { const visible = plugins.listInstalledPlugins(db).filter(isPluginAllowed); res.json({ plugins: helpers.applyBakedPreviews(visible, helpers.PLUGIN_PREVIEWS_DIR) }); } catch (err) { res.status(500).json({ error: String(err) }); } });
-  app.get('/api/plugins/:id', async (req, res) => { try { const plugin = plugins.getInstalledPlugin(db, req.params.id); if (!plugin || !isPluginAllowed(plugin)) return res.status(404).json({ error: 'plugin not found' }); res.json(plugin); } catch (err) { res.status(500).json({ error: String(err) }); } });
+  app.get('/api/plugins', async (req, res) => {
+    try {
+      const requestedView = typeof req.query.view === 'string'
+        ? req.query.view
+        : req.get('x-monofield-plugin-view');
+      if (requestedView === 'summary') {
+        const locale = typeof req.query.locale === 'string'
+          ? req.query.locale
+          : req.get('x-monofield-locale');
+        const cacheKey = locale?.toLowerCase() || 'default';
+        const fastFingerprint = readPluginSummaryRevision(
+          db,
+          helpers.PLUGIN_PREVIEWS_DIR,
+          helpers.managedDistributionOnly === true,
+        );
+        const cached = summaryCache.get(cacheKey);
+        const sendSummary = (entry: NonNullable<typeof cached>) => {
+          res.vary('x-monofield-plugin-view');
+          res.vary('x-monofield-locale');
+          res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
+          res.setHeader('ETag', entry.etag);
+          const validators = (req.get('if-none-match') ?? '')
+            .split(',')
+            .map((value) => value.trim());
+          if (validators.includes(entry.etag) || validators.includes('*')) {
+            return res.status(304).end();
+          }
+          return res.type('application/json').send(entry.body);
+        };
+        if (cached && fastFingerprint && cached.fingerprint === fastFingerprint) {
+          return sendSummary(cached);
+        }
+        const visible = plugins.listInstalledPlugins(db).filter(isPluginAllowed);
+        const fingerprint = fastFingerprint ?? visible.map((plugin) => [
+          plugin.id,
+          plugin.version,
+          plugin.updatedAt,
+          plugin.trust,
+          plugin.sourceMarketplaceId,
+          plugin.sourceMarketplaceEntryVersion,
+          previewManifestStamp(helpers.PLUGIN_PREVIEWS_DIR),
+        ].join(':')).join('|');
+        const withPreviews = helpers.applyBakedPreviews(
+          visible,
+          helpers.PLUGIN_PREVIEWS_DIR,
+        ) as InstalledPluginLike[];
+        const summaries = withPreviews.map((plugin) => summarizeInstalledPlugin(plugin, locale));
+        const body = JSON.stringify({ plugins: summaries });
+        const entry = {
+          fingerprint,
+          plugins: summaries,
+          body,
+          etag: `"${createHash('sha256').update(body).digest('base64url')}"`,
+        };
+        summaryCache.set(cacheKey, entry);
+        while (summaryCache.size > 8) {
+          const oldest = summaryCache.keys().next().value;
+          if (typeof oldest !== 'string') break;
+          summaryCache.delete(oldest);
+        }
+        return sendSummary(entry);
+      }
+      const visible = plugins.listInstalledPlugins(db).filter(isPluginAllowed);
+      const withPreviews = helpers.applyBakedPreviews(
+        visible,
+        helpers.PLUGIN_PREVIEWS_DIR,
+      ) as InstalledPluginLike[];
+      res.json({ plugins: withPreviews });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+  app.get('/api/plugins/:id', async (req, res) => {
+    try {
+      const plugin = plugins.getInstalledPlugin(db, req.params.id);
+      if (!plugin || !isPluginAllowed(plugin)) {
+        return res.status(404).json({ error: 'plugin not found' });
+      }
+      const [withPreview] = helpers.applyBakedPreviews(
+        [plugin],
+        helpers.PLUGIN_PREVIEWS_DIR,
+      ) as InstalledPluginLike[];
+      return res.json(withPreview ?? plugin);
+    } catch (err) {
+      return res.status(500).json({ error: String(err) });
+    }
+  });
   app.post('/api/plugins/upload-zip', (req, res) => helpers.pluginUpload.single('file')(req, res, async (err: unknown) => { if (err) return helpers.sendMulterError(res, err); try { const file = req.file; if (!file?.buffer) return res.status(400).json({ error: 'file is required' }); const result = await helpers.pluginInstallation.stageUploadedPluginZip(file.buffer, `upload:zip:${helpers.decodeMultipartFilename(file.originalname || 'plugin.zip')}`); res.status((result as { ok?: boolean }).ok ? 200 : 400).json(result); } catch (uploadErr: unknown) { res.status(400).json({ ok: false, warnings: [], message: uploadErr instanceof Error ? uploadErr.message : String(uploadErr), log: [] }); } }));
   app.post('/api/plugins/upload-folder', (req, res) => helpers.pluginUpload.array('files', 500)(req, res, async (err: unknown) => { if (err) return helpers.sendMulterError(res, err); try { const files = Array.isArray(req.files) ? req.files as Array<{ buffer: Buffer; originalname: string }> : []; if (files.length === 0) return res.status(400).json({ error: 'files are required' }); const result = await helpers.pluginInstallation.stageUploadedPluginFolder(files, req.body?.paths); res.status((result as { ok?: boolean } | null)?.ok ? 200 : 400).json(result); } catch (uploadErr: unknown) { res.status(400).json({ ok: false, warnings: [], message: uploadErr instanceof Error ? uploadErr.message : String(uploadErr), log: [] }); } }));
   app.post('/api/plugins/install', async (req, res) => helpers.installOrUpgradePlugin(req, res, 'install'));

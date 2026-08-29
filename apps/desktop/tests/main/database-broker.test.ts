@@ -1,4 +1,4 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -94,7 +94,7 @@ describe("DatabaseBroker access approval", () => {
       label: "Development",
       connectionString: "postgresql://user:pass@localhost:5432/other",
     });
-    expect(changedTarget.id).toBe(initial.id);
+    expect(changedTarget.id).not.toBe(initial.id);
     expect(changedTarget.readApproval).toBe("prompt");
   });
 
@@ -172,9 +172,46 @@ describe("DatabaseBroker access approval", () => {
       reason: "Create a second test case",
     });
 
-    expect(first).toMatchObject({ approved: true, affectedRows: 1, auditId: expect.any(String) });
-    expect(second).toMatchObject({ approved: true, affectedRows: 1, auditId: expect.any(String) });
+    expect(first).toMatchObject({ approved: true, affectedRows: 1, auditId: expect.any(String), auditRecorded: true });
+    expect(second).toMatchObject({ approved: true, affectedRows: 1, auditId: expect.any(String), auditRecorded: true });
     expect(electronState.messageBoxCalls).toBe(2);
+    expect(pgState.clientFactory).toHaveBeenLastCalledWith(expect.objectContaining({
+      options: expect.not.stringContaining('default_transaction_read_only=on'),
+    }));
+  });
+
+  it("reports an audit warning without failing an already committed mutation", async () => {
+    const broker = new DatabaseBroker();
+    const connection = await broker.save({
+      label: "Development",
+      connectionString: "postgresql://user:pass@localhost:5432/app",
+      writePolicy: "approve-each",
+    });
+    pgState.client.query.mockImplementation(async (sql: string) => {
+      if (/^INSERT/i.test(sql)) return { rows: [], rowCount: 1 };
+      return { rows: [], rowCount: null };
+    });
+    // Make the audit target unwritable as a file without changing the broker's
+    // encrypted connection store or mocking the successful database COMMIT.
+    await mkdir(join(electronState.userData, "database-mutations.v1.jsonl"));
+
+    await expect(broker.execute({
+      action: "mutate",
+      connectionId: connection.id,
+      operation: "insert",
+      schema: "public",
+      table: "orders",
+      values: { id: 42 },
+      projectId: "project-1",
+      reason: "Verify post-commit audit failure handling",
+    })).resolves.toMatchObject({
+      approved: true,
+      affectedRows: 1,
+      auditRecorded: false,
+      auditWarning: expect.stringContaining("committed"),
+    });
+    expect(pgState.client.query).toHaveBeenCalledWith("COMMIT");
+    expect(pgState.client.query).not.toHaveBeenCalledWith("ROLLBACK");
   });
 
   it("uses the same access policy for every database target", async () => {
@@ -199,6 +236,60 @@ describe("DatabaseBroker access approval", () => {
       reason: "Verify permission-only enforcement",
     })).resolves.toMatchObject({ approved: true, affectedRows: 1 });
     expect(electronState.messageBoxCalls).toBe(1);
+  });
+
+  it("does not carry always-write approval to a different target that reuses the label", async () => {
+    const broker = new DatabaseBroker();
+    const original = await broker.save({
+      label: "Shared name",
+      connectionString: "postgresql://user:pass@localhost:5432/first",
+      writePolicy: "always",
+    });
+    expect(original.writePolicy).toBe("always");
+
+    const replacement = await broker.save({
+      label: "Shared name",
+      connectionString: "postgresql://user:pass@localhost:5432/second",
+    });
+
+    expect(replacement.id).not.toBe(original.id);
+    expect(replacement.readApproval).toBe("prompt");
+    expect(replacement.writePolicy).toBe("disabled");
+    expect(replacement.accessMode).toBe("read-only");
+    await expect(broker.execute({
+      action: "mutate",
+      connectionId: original.id,
+      operation: "insert",
+      schema: "public",
+      table: "orders",
+      values: { id: 1 },
+      reason: "An old project binding must not reach the replacement database",
+    })).rejects.toThrow("Database connection was not found");
+    expect(pgState.client.connect).not.toHaveBeenCalled();
+  });
+
+  it("requires a fresh confirmation before always-write is granted to a replacement target", async () => {
+    const broker = new DatabaseBroker();
+    await broker.save({
+      label: "Shared name",
+      connectionString: "postgresql://user:pass@localhost:5432/first",
+      writePolicy: "always",
+    });
+    electronState.messageBoxCalls = 0;
+    electronState.approvalResponse = 1;
+
+    await expect(broker.save({
+      label: "Shared name",
+      connectionString: "postgresql://user:pass@localhost:5432/second",
+      writePolicy: "always",
+    })).rejects.toThrow("Always allow writes was not approved");
+    expect(electronState.messageBoxCalls).toBe(1);
+    expect(await broker.list()).toEqual([
+      expect.objectContaining({
+        database: "first",
+        writePolicy: "always",
+      }),
+    ]);
   });
 
   it("asks once when enabling always allow and then skips per-write dialogs", async () => {

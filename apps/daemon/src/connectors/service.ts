@@ -1,7 +1,15 @@
 import fs from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 
 import type { BoundedJsonObject, BoundedJsonValue } from '../live-artifacts/schema.js';
+import {
+  credentialVaultKey,
+  deleteCredential,
+  readCredential,
+  writeCredential,
+} from '../credential-vault.js';
+import { hardenCredentialFileSync } from '../credential-file-security.js';
 
 import {
   classifyConnectorToolSafety,
@@ -145,10 +153,11 @@ export interface ConnectorCredentialRecord {
 }
 
 export interface ConnectorCredentialStore {
-  get(connectorId: string): ConnectorCredentialRecord | undefined;
-  set(record: ConnectorCredentialRecord): void;
-  delete(connectorId: string): void;
-  deleteByProvider(provider: string): void;
+  getSummary(connectorId: string): Omit<ConnectorCredentialRecord, 'credentials'> | undefined;
+  get(connectorId: string): Promise<ConnectorCredentialRecord | undefined>;
+  set(record: ConnectorCredentialRecord): Promise<void>;
+  delete(connectorId: string): Promise<void>;
+  deleteByProvider(provider: string): Promise<string[]>;
 }
 
 export interface ConnectorStatusServiceOptions {
@@ -169,78 +178,214 @@ function cloneCredentialMaterial(credentials: ConnectorCredentialMaterial): Conn
 export class InMemoryConnectorCredentialStore implements ConnectorCredentialStore {
   private readonly records = new Map<string, ConnectorCredentialRecord>();
 
-  get(connectorId: string): ConnectorCredentialRecord | undefined {
+  getSummary(connectorId: string): Omit<ConnectorCredentialRecord, 'credentials'> | undefined {
+    const record = this.records.get(connectorId);
+    if (!record) return undefined;
+    const { credentials: _credentials, ...summary } = record;
+    return { ...summary };
+  }
+
+  async get(connectorId: string): Promise<ConnectorCredentialRecord | undefined> {
     const record = this.records.get(connectorId);
     return record === undefined ? undefined : { ...record, credentials: cloneCredentialMaterial(record.credentials) };
   }
 
-  set(record: ConnectorCredentialRecord): void {
+  async set(record: ConnectorCredentialRecord): Promise<void> {
     this.records.set(record.connectorId, { ...record, credentials: cloneCredentialMaterial(record.credentials) });
   }
 
-  delete(connectorId: string): void {
+  async delete(connectorId: string): Promise<void> {
     this.records.delete(connectorId);
   }
 
-  deleteByProvider(provider: string): void {
+  async deleteByProvider(provider: string): Promise<string[]> {
+    const deleted: string[] = [];
     for (const [connectorId, record] of this.records.entries()) {
-      if (record.credentials.provider === provider) this.records.delete(connectorId);
+      if (record.credentials.provider === provider) {
+        this.records.delete(connectorId);
+        deleted.push(connectorId);
+      }
     }
+    return deleted;
   }
 }
 
+type StoredConnectorCredentialRecord = Omit<ConnectorCredentialRecord, 'credentials'> & {
+  /** Legacy plaintext material. Removed only after a confirmed vault write. */
+  credentials?: ConnectorCredentialMaterial;
+  credentialRef?: string;
+  provider?: string;
+};
+
 export class FileConnectorCredentialStore implements ConnectorCredentialStore {
   private readonly filePath: string;
+  private readonly warnedMigrations = new Set<string>();
 
   constructor(dataDir: string) {
     this.filePath = path.join(dataDir, 'connectors', 'credentials.json');
   }
 
-  get(connectorId: string): ConnectorCredentialRecord | undefined {
-    return this.readRecords()[connectorId];
+  getSummary(connectorId: string): Omit<ConnectorCredentialRecord, 'credentials'> | undefined {
+    const record = this.readRecords()[connectorId];
+    if (!record) return undefined;
+    return {
+      schemaVersion: 1,
+      connectorId: record.connectorId,
+      accountLabel: record.accountLabel,
+      updatedAt: record.updatedAt,
+    };
   }
 
-  set(record: ConnectorCredentialRecord): void {
-    const records = this.readRecords();
-    records[record.connectorId] = { ...record, credentials: cloneCredentialMaterial(record.credentials) };
-    this.writeRecords(records);
+  async get(connectorId: string): Promise<ConnectorCredentialRecord | undefined> {
+    const records = await this.migrateLegacyRecords(this.readRecords());
+    const stored = records[connectorId];
+    if (!stored) return undefined;
+    if (stored.credentials) {
+      return this.materialize(stored, stored.credentials);
+    }
+    if (!records[connectorId]?.credentialRef) return undefined;
+    const raw = await readCredential(records[connectorId]!.credentialRef!);
+    if (!raw) return undefined;
+    let credentials: ConnectorCredentialMaterial;
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('invalid connector credential');
+      credentials = cloneCredentialMaterial(parsed as ConnectorCredentialMaterial);
+    } catch {
+      throw new Error('stored connector credential is invalid');
+    }
+    return this.materialize(records[connectorId]!, credentials);
   }
 
-  delete(connectorId: string): void {
+  async set(record: ConnectorCredentialRecord): Promise<void> {
+    const records = await this.migrateLegacyRecords(this.readRecords());
+    if (Object.values(records).some((entry) => entry.credentials)) {
+      throw new Error('legacy connector credentials could not be migrated atomically');
+    }
+    const priorRef = records[record.connectorId]?.credentialRef;
+    const ref = this.freshCredentialRef(record.connectorId);
+    await writeCredential(ref, JSON.stringify(record.credentials));
+    records[record.connectorId] = {
+      schemaVersion: 1,
+      connectorId: record.connectorId,
+      accountLabel: record.accountLabel,
+      updatedAt: record.updatedAt,
+      credentialRef: ref,
+      provider: typeof record.credentials.provider === 'string' ? record.credentials.provider : '',
+    };
+    try {
+      this.writeRecords(records);
+    } catch (error) {
+      await deleteCredential(ref).catch(() => undefined);
+      throw error;
+    }
+    if (priorRef) await deleteCredential(priorRef).catch(() => undefined);
+  }
+
+  async delete(connectorId: string): Promise<void> {
     const records = this.readRecords();
     if (records[connectorId] === undefined) return;
+    const ref = records[connectorId]?.credentialRef;
     delete records[connectorId];
     this.writeRecords(records);
+    if (ref) await deleteCredential(ref).catch(() => undefined);
   }
 
-  deleteByProvider(provider: string): void {
+  async deleteByProvider(provider: string): Promise<string[]> {
     const records = this.readRecords();
     let changed = false;
+    const deleted: string[] = [];
+    const refs: string[] = [];
     for (const [connectorId, record] of Object.entries(records)) {
-      if (record.credentials.provider === provider) {
+      const storedProvider = record.provider || (typeof record.credentials?.provider === 'string' ? record.credentials.provider : '');
+      if (storedProvider === provider) {
+        if (record.credentialRef) refs.push(record.credentialRef);
         delete records[connectorId];
         changed = true;
+        deleted.push(connectorId);
       }
     }
     if (changed) this.writeRecords(records);
+    await Promise.all(refs.map((ref) => deleteCredential(ref).catch(() => undefined)));
+    return deleted;
   }
 
-  private readRecords(): Record<string, ConnectorCredentialRecord> {
+  private credentialRef(connectorId: string): string {
+    return credentialVaultKey('connector', this.filePath, connectorId);
+  }
+
+  private freshCredentialRef(connectorId: string): string {
+    return `${this.credentialRef(connectorId)}:v-${randomBytes(12).toString('hex')}`;
+  }
+
+  private async migrateLegacyRecords(
+    records: Record<string, StoredConnectorCredentialRecord>,
+  ): Promise<Record<string, StoredConnectorCredentialRecord>> {
+    const legacy = Object.entries(records).filter(([, record]) => Boolean(record.credentials));
+    if (legacy.length === 0) return records;
+    const next = { ...records };
+    const stagedRefs: string[] = [];
+    const replacedRefs: string[] = [];
     try {
+      for (const [connectorId, stored] of legacy) {
+        const ref = this.freshCredentialRef(connectorId);
+        await writeCredential(ref, JSON.stringify(stored.credentials));
+        stagedRefs.push(ref);
+        if (stored.credentialRef) replacedRefs.push(stored.credentialRef);
+        next[connectorId] = {
+          ...stored,
+          credentialRef: ref,
+          provider: String(stored.credentials?.provider ?? ''),
+        };
+        delete next[connectorId]!.credentials;
+      }
+      this.writeRecords(next);
+      await Promise.all(replacedRefs.map((ref) => deleteCredential(ref).catch(() => undefined)));
+      return next;
+    } catch {
+      await Promise.all(stagedRefs.map((ref) => deleteCredential(ref).catch(() => undefined)));
+      for (const [connectorId] of legacy) {
+        if (this.warnedMigrations.has(connectorId)) continue;
+        this.warnedMigrations.add(connectorId);
+        console.warn(`[connectors] credential migration deferred for ${connectorId}; legacy value was preserved`);
+      }
+      return records;
+    }
+  }
+
+  private materialize(record: StoredConnectorCredentialRecord, credentials: ConnectorCredentialMaterial): ConnectorCredentialRecord {
+    return {
+      schemaVersion: 1,
+      connectorId: record.connectorId,
+      accountLabel: record.accountLabel,
+      credentials: cloneCredentialMaterial(credentials),
+      updatedAt: record.updatedAt,
+    };
+  }
+
+  private readRecords(): Record<string, StoredConnectorCredentialRecord> {
+    try {
+      hardenCredentialFileSync(this.filePath);
       const parsed = JSON.parse(fs.readFileSync(this.filePath, 'utf8')) as unknown;
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-      const records: Record<string, ConnectorCredentialRecord> = {};
+      const records: Record<string, StoredConnectorCredentialRecord> = {};
       for (const [connectorId, value] of Object.entries(parsed as Record<string, unknown>)) {
         if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
         const raw = value as Record<string, unknown>;
         if (raw.schemaVersion !== 1 || raw.connectorId !== connectorId || typeof raw.accountLabel !== 'string' || typeof raw.updatedAt !== 'string') continue;
-        if (!raw.credentials || typeof raw.credentials !== 'object' || Array.isArray(raw.credentials)) continue;
+        const credentials = raw.credentials && typeof raw.credentials === 'object' && !Array.isArray(raw.credentials)
+          ? cloneCredentialMaterial(raw.credentials as ConnectorCredentialMaterial)
+          : undefined;
+        const credentialRef = typeof raw.credentialRef === 'string' && raw.credentialRef.trim() ? raw.credentialRef.trim() : undefined;
+        if (!credentials && !credentialRef) continue;
         records[connectorId] = {
           schemaVersion: 1,
           connectorId,
           accountLabel: raw.accountLabel,
-          credentials: cloneCredentialMaterial(raw.credentials as ConnectorCredentialMaterial),
           updatedAt: raw.updatedAt,
+          ...(credentials ? { credentials } : {}),
+          ...(credentialRef ? { credentialRef } : {}),
+          ...(typeof raw.provider === 'string' ? { provider: raw.provider } : {}),
         };
       }
       return records;
@@ -250,13 +395,17 @@ export class FileConnectorCredentialStore implements ConnectorCredentialStore {
     }
   }
 
-  private writeRecords(records: Record<string, ConnectorCredentialRecord>): void {
+  private writeRecords(records: Record<string, StoredConnectorCredentialRecord>): void {
     const dir = path.dirname(this.filePath);
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-    const tempPath = `${this.filePath}.${process.pid}.${Date.now()}.tmp`;
+    try { fs.chmodSync(dir, 0o700); } catch (error: unknown) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== 'ENOTSUP' && code !== 'EPERM' && code !== 'EINVAL') throw error;
+    }
+    const tempPath = `${this.filePath}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`;
     fs.writeFileSync(tempPath, `${JSON.stringify(records, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
     fs.renameSync(tempPath, this.filePath);
-    fs.chmodSync(this.filePath, 0o600);
+    try { fs.chmodSync(this.filePath, 0o600); } catch { /* temp was created 0600 */ }
   }
 }
 
@@ -364,13 +513,9 @@ export class ConnectorStatusService {
     this.credentialStore = credentialStore;
   }
 
-  deleteCredentialsByProvider(provider: string): void {
-    for (const [connectorId, status] of this.statuses.entries()) {
-      if (status.status !== 'connected') continue;
-      const credential = this.getCredential(connectorId);
-      if (credential?.credentials.provider === provider) this.statuses.delete(connectorId);
-    }
-    this.credentialStore?.deleteByProvider(provider);
+  async deleteCredentialsByProvider(provider: string): Promise<void> {
+    const deleted = await this.credentialStore?.deleteByProvider(provider) ?? [];
+    for (const connectorId of deleted) this.statuses.delete(connectorId);
   }
 
   getStatus(definition: ConnectorCatalogDefinition): ConnectorConnectionStatus {
@@ -379,7 +524,7 @@ export class ConnectorStatusService {
     const stored = this.statuses.get(definition.id);
     if (stored) return cloneStatus(stored);
 
-    const credentialRecord = this.getCredential(definition.id);
+    const credentialRecord = this.credentialStore?.getSummary(definition.id);
     if (credentialRecord !== undefined) {
       return { status: 'connected', accountLabel: credentialRecord.accountLabel };
     }
@@ -397,11 +542,11 @@ export class ConnectorStatusService {
     );
   }
 
-  connect(definition: ConnectorCatalogDefinition, accountLabel?: string, credentials?: ConnectorCredentialMaterial): ConnectorConnectionStatus {
+  async connect(definition: ConnectorCatalogDefinition, accountLabel?: string, credentials?: ConnectorCredentialMaterial): Promise<ConnectorConnectionStatus> {
     if (definition.disabled) return { status: 'disabled' };
 
     if (credentials !== undefined) {
-      this.credentialStore?.set({
+      await this.credentialStore?.set({
         schemaVersion: 1,
         connectorId: definition.id,
         accountLabel: accountLabel ?? defaultConnectedAccountLabel(definition),
@@ -419,14 +564,14 @@ export class ConnectorStatusService {
     return cloneStatus(next);
   }
 
-  getCredential(connectorId: string): ConnectorCredentialRecord | undefined {
-    return this.credentialStore?.get(connectorId);
+  async getCredential(connectorId: string): Promise<ConnectorCredentialRecord | undefined> {
+    return await this.credentialStore?.get(connectorId);
   }
 
-  disconnect(definition: ConnectorCatalogDefinition): ConnectorConnectionStatus {
+  async disconnect(definition: ConnectorCatalogDefinition): Promise<ConnectorConnectionStatus> {
     if (definition.disabled) return { status: 'disabled' };
 
-    this.credentialStore?.delete(definition.id);
+    await this.credentialStore?.delete(definition.id);
 
     if (isAutoConnectedConnector(definition)) {
       this.statuses.delete(definition.id);
@@ -451,8 +596,8 @@ export class ConnectorStatusService {
     return cloneStatus(next);
   }
 
-  markAuthenticationExpired(definition: ConnectorCatalogDefinition, lastError: string, accountLabel?: string): ConnectorConnectionStatus {
-    this.credentialStore?.delete(definition.id);
+  async markAuthenticationExpired(definition: ConnectorCatalogDefinition, lastError: string, accountLabel?: string): Promise<ConnectorConnectionStatus> {
+    await this.credentialStore?.delete(definition.id);
     return this.setError(definition, lastError, accountLabel);
   }
 
@@ -566,8 +711,8 @@ export class ConnectorService {
     this.statusService.setCredentialStore(credentialStore);
   }
 
-  deleteCredentialsByProvider(provider: string): void {
-    this.statusService.deleteCredentialsByProvider(provider);
+  async deleteCredentialsByProvider(provider: string): Promise<void> {
+    await this.statusService.deleteCredentialsByProvider(provider);
   }
 
   async listDefinitions(signal?: AbortSignal): Promise<ConnectorCatalogDefinition[]> {
@@ -603,8 +748,8 @@ export class ConnectorService {
     return this.statusService.getStatus(definition);
   }
 
-  getCredential(connectorId: string): ConnectorCredentialRecord | undefined {
-    return this.statusService.getCredential(connectorId);
+  async getCredential(connectorId: string): Promise<ConnectorCredentialRecord | undefined> {
+    return await this.statusService.getCredential(connectorId);
   }
 
   async listConnectors(signal?: AbortSignal): Promise<ConnectorDetail[]> {
@@ -699,7 +844,7 @@ export class ConnectorService {
       }
     }
 
-    const status = this.statusService.connect(detailDefinition, options.accountLabel, options.credentials);
+    const status = await this.statusService.connect(detailDefinition, options.accountLabel, options.credentials);
     if (status.status === 'disabled') {
       throw new ConnectorServiceError('CONNECTOR_DISABLED', 'connector is disabled', 403);
     }
@@ -712,9 +857,9 @@ export class ConnectorService {
       throw new ConnectorServiceError('CONNECTOR_NOT_FOUND', 'connector not found', 404);
     }
     if (definition.authentication === 'composio') {
-      await composioConnectorProvider.disconnect(this.getCredential(connectorId)?.credentials);
+      await composioConnectorProvider.disconnect((await this.getCredential(connectorId))?.credentials);
     }
-    this.statusService.disconnect(definition);
+    await this.statusService.disconnect(definition);
     return this.toDetail(definition);
   }
 
@@ -739,13 +884,13 @@ export class ConnectorService {
     }
     try {
       const completed = await composioConnectorProvider.completeConnection({ definition, state: input.state, ...(input.providerConnectionId === undefined ? {} : { providerConnectionId: input.providerConnectionId }), ...(input.status === undefined ? {} : { status: input.status }), ...(input.signal === undefined ? {} : { signal: input.signal }) });
-      this.statusService.connect(definition, completed.accountLabel, completed.credentials);
+      await this.statusService.connect(definition, completed.accountLabel, completed.credentials);
       return this.toDetail(definition);
     } catch (error) {
       if (
         input.providerConnectionId !== undefined
         && isMissingOrExpiredComposioOAuthState(error)
-        && hasStoredComposioConnection(this.getCredential(input.connectorId), input.providerConnectionId)
+        && hasStoredComposioConnection(await this.getCredential(input.connectorId), input.providerConnectionId)
       ) {
         return this.toDetail(definition);
       }
@@ -816,7 +961,7 @@ export class ConnectorService {
       providerOutput = await this.executeConnectorProviderTool(request, context, definition, tool);
     } catch (error) {
       if (isConnectorAuthStaleError(error, request)) {
-        this.statusService.markAuthenticationExpired(definition, connectorAuthExpiredMessage(definition), connector.accountLabel);
+        await this.statusService.markAuthenticationExpired(definition, connectorAuthExpiredMessage(definition), connector.accountLabel);
       }
       throw error;
     }
@@ -852,7 +997,7 @@ export class ConnectorService {
     const definition = resolvedDefinition ?? await this.getHydratedDefinition(request.connectorId, context.signal);
     const tool = resolvedTool ?? definition?.tools.find((candidate) => candidate.name === request.toolName);
     if (definition?.authentication === 'composio' && tool) {
-      return composioConnectorProvider.execute(definition, tool, request.input, this.getCredential(request.connectorId)?.credentials, context.signal);
+      return composioConnectorProvider.execute(definition, tool, request.input, (await this.getCredential(request.connectorId))?.credentials, context.signal);
     }
 
     throw new ConnectorServiceError('CONNECTOR_EXECUTION_FAILED', 'connector provider is not implemented', 501, {
@@ -922,8 +1067,8 @@ export function configureConnectorCredentialStore(credentialStore: ConnectorCred
   connectorService.setCredentialStore(credentialStore);
 }
 
-export function deleteConnectorCredentialsByProvider(provider: string): void {
-  connectorService.deleteCredentialsByProvider(provider);
+export async function deleteConnectorCredentialsByProvider(provider: string): Promise<void> {
+  await connectorService.deleteCredentialsByProvider(provider);
 }
 
 function summarizeConnectorOutput(output: BoundedJsonValue): string | undefined {

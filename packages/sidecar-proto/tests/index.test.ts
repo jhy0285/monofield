@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   APP_KEYS,
+  authorizeDesktopCredentialVaultCommand,
   DESKTOP_UPDATE_ACTIONS,
   DESKTOP_UPDATE_CHANNELS,
   DESKTOP_UPDATE_MODES,
@@ -14,12 +15,14 @@ import {
   SIDECAR_MESSAGES,
   SIDECAR_SOURCES,
   SIDECAR_STAMP_FIELDS,
+  signDesktopImportToken,
   STAMP_APP_FLAG,
   STAMP_IPC_FLAG,
   STAMP_MODE_FLAG,
   STAMP_NAMESPACE_FLAG,
   STAMP_SOURCE_FLAG,
   type DaemonStatusSnapshot,
+  verifyDesktopCredentialVaultRequest,
 } from "../src/index.js";
 
 const validStamp = {
@@ -105,6 +108,26 @@ describe("open-design sidecar contract", () => {
         type: SIDECAR_MESSAGES.MINT_IMPORT_TOKEN,
       }),
     ).toThrow(/extra/i);
+    expect(() =>
+      normalizeDaemonSidecarMessage({
+        input: { baseDir: "/Users/u/project\nget\ncredential" },
+        type: SIDECAR_MESSAGES.MINT_IMPORT_TOKEN,
+      }),
+    ).toThrow(/control characters/i);
+  });
+
+  it("domain-separates the shared Desktop import-token signature", () => {
+    const token = signDesktopImportToken(
+      Buffer.from("shared-desktop-auth-secret"),
+      "C:/work/project",
+      { exp: "2026-08-29T00:00:30.000Z", nonce: "nonce-1" },
+    );
+    expect(token.split("~")).toHaveLength(3);
+    expect(() => signDesktopImportToken(
+      Buffer.from("shared-desktop-auth-secret"),
+      "C:/work/project\nget\ncredential",
+      { exp: "2026-08-29T00:00:30.000Z", nonce: "nonce-2" },
+    )).toThrow(/control characters/i);
   });
 
   it("rejects register-desktop-auth payloads that are not base64-shaped", () => {
@@ -138,15 +161,46 @@ describe("open-design sidecar contract", () => {
     expect(() => normalizeDesktopSidecarMessage({ input: { selector: "" }, type: SIDECAR_MESSAGES.CLICK })).toThrow();
   });
 
+  it("authenticates credential-vault operations and binds the signature to the value", () => {
+    const secret = Buffer.from("credential-vault-test-secret");
+    const now = Date.parse("2026-08-29T00:00:00.000Z");
+    const expiresAt = new Date(now + 10_000).toISOString();
+    const request = authorizeDesktopCredentialVaultCommand(
+      secret,
+      { action: "set", key: "mcp:test:server", value: "secret-value" },
+      { expiresAt, nonce: "0123456789abcdef0123456789abcdef" },
+    );
+    expect(normalizeDesktopSidecarMessage({ input: request, type: SIDECAR_MESSAGES.CREDENTIAL_VAULT }))
+      .toEqual({ input: request, type: SIDECAR_MESSAGES.CREDENTIAL_VAULT });
+    if (request.action !== "set") throw new Error("unexpected credential-vault request");
+    expect(verifyDesktopCredentialVaultRequest(secret, request, now)).toMatchObject({
+      ok: true,
+      command: { action: "set", key: "mcp:test:server", value: "secret-value" },
+    });
+    expect(verifyDesktopCredentialVaultRequest(secret, { ...request, value: "tampered" }, now))
+      .toEqual({ ok: false, reason: "authorization signature invalid" });
+    expect(verifyDesktopCredentialVaultRequest(secret, request, now + 10_001))
+      .toEqual({ ok: false, reason: "authorization expired" });
+  });
+
+  it("rejects unauthenticated credential-vault operations", () => {
+    expect(() => normalizeDesktopSidecarMessage({
+      input: { action: "get", key: "mcp:test:server" },
+      type: SIDECAR_MESSAGES.CREDENTIAL_VAULT,
+    })).toThrow(/authorization/i);
+  });
+
   it("validates desktop development process ownership messages", () => {
     const start = {
-      input: { action: "start", args: ["-m", "http.server"], command: "C:\\Python\\python.exe", cwd: "C:\\work", ownerPid: 100, port: 8000, projectId: "project-1" },
+      input: { action: "start", args: ["-m", "http.server"], command: "C:\\Python\\python.exe", cwd: "C:\\work", environment: { FEATURE_ORDERS: "true" }, ownerPid: 100, port: 8000, projectId: "project-1" },
       type: SIDECAR_MESSAGES.DEVELOPMENT_PROCESS,
     } as const;
     expect(normalizeDesktopSidecarMessage(start)).toEqual(start);
     expect(normalizeDesktopSidecarMessage({ input: { action: "status", ownerPid: 100, projectId: "project-1" }, type: SIDECAR_MESSAGES.DEVELOPMENT_PROCESS })).toMatchObject({ input: { action: "status" } });
     expect(() => normalizeDesktopSidecarMessage({ ...start, input: { ...start.input, port: 0 } })).toThrow(/between 1 and 65535/i);
     expect(() => normalizeDesktopSidecarMessage({ ...start, input: { ...start.input, args: "-m" } })).toThrow(/array/i);
+    expect(() => normalizeDesktopSidecarMessage({ ...start, input: { ...start.input, environment: { PORT: "9000" } } })).toThrow(/reserved/i);
+    expect(() => normalizeDesktopSidecarMessage({ ...start, input: { ...start.input, environment: { SERVER_PORT: "9000" } } })).toThrow(/reserved/i);
   });
 
   it("accepts only the finite browser automation protocol", () => {
@@ -391,5 +445,32 @@ describe("open-design sidecar contract", () => {
     expect(() => normalizeDesktopSidecarMessage({
       input: { action: "query", connectionId: "db-1", sql: "select * from users" }, type: SIDECAR_MESSAGES.DATABASE,
     })).toThrow(/unsupported desktop database action/);
+  });
+
+  it("permits only bounded credential-vault requests", () => {
+    const authorization = {
+      expiresAt: "2026-08-29T00:00:15.000Z",
+      nonce: "0123456789abcdef0123456789abcdef",
+      signature: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    };
+    expect(normalizeDesktopSidecarMessage({
+      input: { action: "available" },
+      type: SIDECAR_MESSAGES.CREDENTIAL_VAULT,
+    })).toEqual({ input: { action: "available" }, type: "credential-vault" });
+    expect(normalizeDesktopSidecarMessage({
+      input: { action: "set", authorization, key: "media:abc:openai", value: "secret" },
+      type: SIDECAR_MESSAGES.CREDENTIAL_VAULT,
+    })).toEqual({
+      input: { action: "set", authorization, key: "media:abc:openai", value: "secret" },
+      type: "credential-vault",
+    });
+    expect(() => normalizeDesktopSidecarMessage({
+      input: { action: "set", authorization, key: "../escape", value: "secret" },
+      type: SIDECAR_MESSAGES.CREDENTIAL_VAULT,
+    })).toThrow(/invalid format/);
+    expect(() => normalizeDesktopSidecarMessage({
+      input: { action: "get", authorization, key: "media:abc:openai", value: "must-not-pass" },
+      type: SIDECAR_MESSAGES.CREDENTIAL_VAULT,
+    })).toThrow(/unsupported fields/);
   });
 });

@@ -17,7 +17,7 @@ import { listConnectorTools } from './tools/connectors.js';
 import type { ToolTokenGrant } from './tool-tokens.js';
 
 const DEFAULT_CONNECTOR_MEMORY_QUERY =
-  '设计思路 设计偏好 UI UX 视觉风格 品牌 logo 设计系统 OpenDocs';
+  '设计思路 设计偏好 UI UX 视觉风格 品牌 logo 设计系统 MonoField';
 const CONNECTOR_MEMORY_QUERY_VARIANTS = [
   '设计思路',
   '设计偏好',
@@ -38,7 +38,7 @@ const CONNECTOR_MEMORY_QUERY_VARIANTS = [
   'layout',
   'interaction',
   'product design',
-  'OpenDocs',
+  'MonoField',
 ];
 const CONNECTOR_MEMORY_PROJECT_ID = 'memory-connectors';
 const MAX_CONNECTORS_PER_RUN = 5;
@@ -58,18 +58,18 @@ const NOTION_PAGE_BODY_TOOL_NAMES = [
   'notion.notion_get_page',
 ];
 
-const CONNECTOR_MEMORY_SYSTEM_PROMPT = `You are a design-memory extractor for OpenDocs connected-app context.
+const CONNECTOR_MEMORY_SYSTEM_PROMPT = `You are a design-memory extractor for MonoField connected-app context.
 
-You will receive compacted read-only data from apps such as Notion, Figma, Linear, Google Drive, GitHub, and Slack. Propose only durable memories that would improve future OpenDocs design work.
+You will receive compacted read-only data from apps such as Notion, Figma, Linear, Google Drive, GitHub, and Slack. Propose only durable memories that would improve future MonoField design work.
 
 A fact is worth remembering when ALL of these are true:
 - It is about design: visual taste, UI/UX preferences, brand/design-system context, reusable assets or references, product/design decisions, target audience, interface flows, components, layout, typography, color, accessibility, or recurring design workflow.
 - It will plausibly remain useful for at least a week.
-- It would change how OpenDocs creates, critiques, edits, or explains future design artifacts.
+- It would change how MonoField creates, critiques, edits, or explains future design artifacts.
 
 Do NOT save:
 - Generic connector/read summaries, source counts, notifications, repo issue lists, PR/task status, raw search results, raw messages, raw document dumps, or short-lived todo churn.
-- Meta language about extraction or saving, including phrases like "OpenDocs read X", "Found N readable items", "Summary from X", "context summary", or "Save this if it should be reused".
+- Meta language about extraction or saving, including phrases like "MonoField read X", "Found N readable items", "Summary from X", "context summary", or "Save this if it should be reused".
 - Non-design facts that might be useful to a generic assistant but would not affect design output.
 - Secrets, access tokens, private credentials, or sensitive personal content.
 - Anything already captured in existing memory.
@@ -87,14 +87,14 @@ be the remembered fact itself, not an explanation of how it was found.
 
 Type rules:
 - user: who they are, role, expertise, long-term goals
-- feedback: preferences about how OpenDocs should work or answer
+- feedback: preferences about how MonoField should work or answer
 - project: ongoing initiatives, decisions, constraints, or priorities
 - reference: stable pointers to external apps, repos, docs, channels, boards, dashboards`;
 
 const CONNECTOR_MEMORY_META_PATTERNS = [
   /\bsave this\b/i,
   /\bshould be reused as context\b/i,
-  /\bopendesign read\b/i,
+  /\b(?:monofield|open[- ]?design|open[- ]?docs) read\b/i,
   /\bfound \d+ readable items?\b/i,
   /\bfound readable content\b/i,
   /\bsummary from\b/i,
@@ -106,7 +106,7 @@ const CONNECTOR_MEMORY_META_PATTERNS = [
 ];
 
 const CONNECTOR_DESIGN_MEMORY_PATTERNS = [
-  /\bopen[- ]?design\b/i,
+  /\b(?:monofield|open[- ]?design|open[- ]?docs)\b/i,
   /\bdesign(?:er|ing)?\b/i,
   /\bui\b/i,
   /\bux\b/i,
@@ -1282,7 +1282,7 @@ export async function suggestMemoryFromConnectors(
   const drafts = await suggestWithLLM(
     dataDir,
     {
-      userMessage: `Suggest durable OpenDocs memories from connected apps. Search hint: ${options.query?.trim().slice(0, 240) || DEFAULT_CONNECTOR_MEMORY_QUERY}`,
+      userMessage: `Suggest durable MonoField memories from connected apps. Search hint: ${options.query?.trim().slice(0, 240) || DEFAULT_CONNECTOR_MEMORY_QUERY}`,
       assistantMessage: context.connectorContext,
     },
     {
@@ -1331,7 +1331,7 @@ export async function extractMemoryFromConnectors(
   const changed = await extractWithLLM(
     dataDir,
     {
-      userMessage: `Extract durable OpenDocs memory from connected apps. Search hint: ${options.query?.trim().slice(0, 240) || DEFAULT_CONNECTOR_MEMORY_QUERY}`,
+      userMessage: `Extract durable MonoField memory from connected apps. Search hint: ${options.query?.trim().slice(0, 240) || DEFAULT_CONNECTOR_MEMORY_QUERY}`,
       assistantMessage: context.connectorContext,
     },
     {

@@ -43,7 +43,8 @@
 // — produces a record in `memory-extractions.ts` so the settings panel
 // can show running / skipped / success / failed states in real time.
 
-import { MEMORY_TYPES } from '@open-design/contracts';
+import { MEMORY_TYPES, STORED_BYOK_API_KEY } from '@open-design/contracts';
+import { resolveByokApiKey } from './byok-credentials.js';
 import {
   composeMemoryBody,
   listMemoryEntries,
@@ -354,14 +355,17 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
   }
   if (override) {
     const defaults = PROVIDER_DEFAULTS[override.provider];
-    const explicitKey =
+    const storedOrExplicitKey =
       typeof override.apiKey === 'string' && override.apiKey.trim()
         ? override.apiKey.trim()
         : '';
+    const explicitKey = storedOrExplicitKey === STORED_BYOK_API_KEY
+      ? await resolveByokApiKey(dataDir, override.provider, storedOrExplicitKey)
+      : storedOrExplicitKey;
     const envKey = envKeyFor(override.provider);
     let resolvedKey = explicitKey || envKey;
     let credentialSource = explicitKey
-      ? 'memory-config'
+      ? (storedOrExplicitKey === STORED_BYOK_API_KEY ? 'byok-vault' : 'memory-config')
       : (envKey ? 'env' : null);
     // Last-chance: an openai-shaped override (openai or azure) with no
     // explicit/env key can still borrow the media-config OpenAI key the
@@ -493,8 +497,23 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
     && chatProvider.provider
     && PROVIDER_DEFAULTS[chatProvider.provider]
   ) {
-    const apiKey =
+    const suppliedApiKey =
       typeof chatProvider.apiKey === 'string' ? chatProvider.apiKey.trim() : '';
+    let apiKey = suppliedApiKey;
+    if (suppliedApiKey === STORED_BYOK_API_KEY) {
+      try {
+        apiKey = await resolveByokApiKey(
+          dataDir,
+          chatProvider.provider,
+          suppliedApiKey,
+        );
+      } catch {
+        // The vault is the only authority for an opaque marker. If it is
+        // unavailable, remain inside the selected provider boundary and skip
+        // extraction below; never send the marker or borrow a foreign env key.
+        apiKey = '';
+      }
+    }
     if (apiKey) {
       const defaults = PROVIDER_DEFAULTS[chatProvider.provider];
       const baseUrl =
@@ -523,6 +542,12 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
       }
     }
   }
+
+  // A chat-provider snapshot establishes a data boundary even when its key is
+  // missing or cannot be resolved from the Desktop vault. Never fall through
+  // to an unrelated host env/media credential: skipping extraction is safer
+  // than sending the conversation to a provider the user did not select.
+  if (chatProvider) return null;
 
   if (process.env.ANTHROPIC_API_KEY) {
     return {
@@ -1085,7 +1110,7 @@ async function collectProposedEntries(dataDir, input, options) {
     recordSkip({ userMessage, reason: 'memory-disabled', kind: extractionKind });
     return { status: 'skipped', attemptId: null, proposed: [], existingEntries: [] };
   }
-  if (extractionKind !== 'connector' && !cfg.chatExtractionEnabled) {
+  if (extractionKind === 'llm' && !cfg.chatExtractionEnabled) {
     return { status: 'skipped', attemptId: null, proposed: [], existingEntries: [] };
   }
   if (userMessage.length === 0) {

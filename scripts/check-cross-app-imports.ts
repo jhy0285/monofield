@@ -329,6 +329,16 @@ export async function loadAppDirectoryRegistry(
     try {
       manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { name?: unknown };
     } catch (error) {
+      if (
+        error instanceof Error &&
+        "code" in error &&
+        (error as NodeJS.ErrnoException).code === "ENOENT"
+      ) {
+        // Build/cache directories can remain under apps/ without representing
+        // workspace applications. Only directories with a manifest participate
+        // in the cross-app boundary registry.
+        continue;
+      }
       const reason = error instanceof Error ? error.message : String(error);
       throw new Error(`Failed to load app package manifest at ${manifestPath}: ${reason}`);
     }

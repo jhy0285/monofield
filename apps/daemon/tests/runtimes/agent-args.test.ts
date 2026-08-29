@@ -33,16 +33,17 @@ test('cursor-agent omits --trust by default until the --help probe confirms supp
     '--print',
     '--output-format',
     'stream-json',
-    '--stream-partial-output',
     '--force',
-    '--workspace',
-    '/tmp/od-project',
   ]);
   assert.equal(args.includes('--trust'), false);
 });
 
-test('cursor-agent passes --trust once the --help probe detects it', () => {
-  agentCapabilities.set('cursor-agent', { trust: true });
+test('cursor-agent passes optional flags only once the --help probe detects them', () => {
+  agentCapabilities.set('cursor-agent', {
+    streamPartialOutput: true,
+    trust: true,
+    workspace: true,
+  });
   try {
     const args = cursorAgent.buildArgs(
       '',
@@ -56,8 +57,8 @@ test('cursor-agent passes --trust once the --help probe detects it', () => {
       '--print',
       '--output-format',
       'stream-json',
-      '--stream-partial-output',
       '--force',
+      '--stream-partial-output',
       '--trust',
       '--workspace',
       '/tmp/od-project',
@@ -70,6 +71,26 @@ test('cursor-agent passes --trust once the --help probe detects it', () => {
 test('cursor-agent declares the --trust capability probe (issue #4461 root cause)', () => {
   assert.deepEqual(cursorAgent.helpArgs, ['--help']);
   assert.equal(cursorAgent.capabilityFlags?.['--trust'], 'trust');
+  assert.equal(cursorAgent.capabilityFlags?.['--workspace'], 'workspace');
+  assert.equal(
+    cursorAgent.capabilityFlags?.['--stream-partial-output'],
+    'streamPartialOutput',
+  );
+});
+
+test('cursor-agent resumes a captured headless session without replaying the transcript', () => {
+  agentCapabilities.delete('cursor-agent');
+  const args = cursorAgent.buildArgs(
+    'latest turn only',
+    [],
+    [],
+    {},
+    { cwd: '/tmp/od-project', resumeSessionId: 'cursor-session-1' },
+  );
+
+  assert.equal(cursorAgent.resumesSessionViaCli, true);
+  assert.equal(cursorAgent.sessionIdFromStream, true);
+  assert.deepEqual(args.slice(-2), ['--resume', 'cursor-session-1']);
 });
 
 test('opencode args keep the documented run/json argv and ignore unsupported reasoning options', () => {
@@ -137,6 +158,7 @@ test('copilot delivers the prompt via stdin (no -p, no prompt body in argv)', ()
   );
   assert.deepEqual(baseArgs, [
     '--allow-all-tools',
+    '--no-ask-user',
     '--output-format',
     'json',
   ]);
@@ -154,6 +176,7 @@ test('copilot args append model and extra dirs after the base flags without rein
   assert.ok(!args.includes(prompt));
   assert.deepEqual(args, [
     '--allow-all-tools',
+    '--no-ask-user',
     '--output-format',
     'json',
     '--model',
@@ -178,6 +201,37 @@ test('copilot drops empty / non-string entries from extraAllowedDirs without rei
   const addDirIndex = args.indexOf('--add-dir');
   assert.equal(args[addDirIndex + 1], '/tmp/od-skills');
   assert.equal(args.filter((a) => a === '--add-dir').length, 1);
+});
+
+test('copilot creates and resumes deterministic CLI sessions to avoid transcript replay', () => {
+  const newArgs = copilot.buildArgs(
+    'first turn',
+    [],
+    [],
+    {},
+    { newSessionId: '11111111-1111-4111-8111-111111111111' },
+  );
+  assert.equal(copilot.resumesSessionViaCli, true);
+  assert.deepEqual(newArgs.slice(-2), [
+    '--session-id',
+    '11111111-1111-4111-8111-111111111111',
+  ]);
+
+  const resumeArgs = copilot.buildArgs(
+    'latest turn only',
+    [],
+    [],
+    {},
+    {
+      newSessionId: '22222222-2222-4222-8222-222222222222',
+      resumeSessionId: '11111111-1111-4111-8111-111111111111',
+    },
+  );
+  assert.equal(resumeArgs.includes('--session-id'), false);
+  assert.equal(
+    resumeArgs.includes('--resume=11111111-1111-4111-8111-111111111111'),
+    true,
+  );
 });
 
 // Mirror of the Claude Code 200_000-char synthetic-prompt guard: even
@@ -312,33 +366,41 @@ test('pi args combine model, thinking, and extraAllowedDirs', () => {
 });
 
 test('gemini args avoid version-fragile trust flags', () => {
+  agentCapabilities.delete('gemini');
   const args = gemini.buildArgs('', [], [], {});
 
-  assert.deepEqual(args, ['--output-format', 'stream-json', '--yolo']);
+  assert.deepEqual(args, ['--output-format', 'stream-json', '--approval-mode=yolo']);
   assert.equal(args.includes('--skip-trust'), false);
   assert.deepEqual(gemini.env, { GEMINI_CLI_TRUST_WORKSPACE: 'true' });
 });
 
 test('gemini args preserve custom model selection', () => {
+  agentCapabilities.delete('gemini');
   const args = gemini.buildArgs('', [], [], { model: 'gemini-2.5-pro' });
 
   assert.deepEqual(args, [
     '--output-format',
     'stream-json',
-    '--yolo',
+    '--approval-mode=yolo',
     '--model',
     'gemini-2.5-pro',
   ]);
 });
 
-test('gemini picker exposes the Gemini 3 previews and 2.5 family in priority order', () => {
+test('gemini picker exposes auto plus current Gemini 3 and 2.5 families in priority order', () => {
   // Pin the picker contents and ordering so the Settings UI cannot be
   // silently reshaped by a future edit to AGENT_DEFS. Gemini also accepts
   // arbitrary custom ids, which makes it especially easy for a regression
   // here to slip through manual QA. Issue #981.
   assert.deepEqual(gemini.fallbackModels.map((m) => m.id), [
     'default',
-    'gemini-3-pro-preview',
+    'auto',
+    'gemini-3.7-flash',
+    'gemini-3.6-flash',
+    'gemini-3.5-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-3.1-pro-preview',
+    'gemini-3.1-flash-lite',
     'gemini-3-flash-preview',
     'gemini-2.5-pro',
     'gemini-2.5-flash',
@@ -659,16 +721,18 @@ test('antigravity persists model selection to agy settings.json', () => {
   }
 });
 
-// AMR routes model selection through ACP `session/set_model` and only
-// accepts ids that survive the live `vela models` preflight, so a free
-// text id silently fails at spawn. Same custom-model opt-out shape as
-// antigravity — the declarative `supportsCustomModel: false` on the
-// def is the single source of truth the settings UI consults, and the
-// fallback "Custom" item should not appear in the model picker.
-test('amr opts out of the Custom-model picker option', () => {
-  const amr = AGENT_DEFS.find((a) => a.id === 'amr');
-  assert.ok(amr, 'amr def must remain registered');
-  assert.equal(amr.supportsCustomModel, false);
+test('amr stays out of the default local runtime registry', () => {
+  assert.equal(AGENT_DEFS.some((agent) => agent.id === 'amr'), false);
+});
+
+test('gemini falls back to deprecated --yolo only when the installed CLI lacks approval-mode', () => {
+  agentCapabilities.set('gemini', { approvalMode: false });
+  try {
+    const args = gemini.buildArgs('', [], [], {});
+    assert.deepEqual(args, ['--output-format', 'stream-json', '--yolo']);
+  } finally {
+    agentCapabilities.delete('gemini');
+  }
 });
 
 test('kiro fetchModels falls back to fallbackModels when detection fails', async () => {

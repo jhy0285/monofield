@@ -162,3 +162,33 @@ export function isCodexResumeFailure(text: string): boolean {
     || /no rollout found for thread id/i.test(text)
   );
 }
+
+/** True when Gemini CLI cannot resolve a project-scoped `--resume` target. */
+export function isGeminiResumeFailure(text: string): boolean {
+  if (!text) return false;
+  return (
+    /invalid session identifier/i.test(text)
+    || /use --list-sessions to see available sessions/i.test(text)
+  );
+}
+
+/** True when OpenCode cannot resolve `run --session <id>` locally. */
+export function isOpenCodeResumeFailure(text: string): boolean {
+  return Boolean(text && /session not found/i.test(text));
+}
+
+/** True when Cursor Agent cannot load a `--resume <session-id>` target. */
+export function isCursorResumeFailure(text: string): boolean {
+  return Boolean(text && (
+    /(?:chat|session).*(?:not found|does not exist|invalid)/i.test(text)
+    || /unable to (?:find|load|resume).*(?:chat|session)/i.test(text)
+  ));
+}
+
+/** True when GitHub Copilot CLI cannot load a `--resume=<session-id>` target. */
+export function isCopilotResumeFailure(text: string): boolean {
+  return Boolean(text && (
+    /(?:session|task).*(?:not found|does not exist|invalid)/i.test(text)
+    || /unable to (?:find|load|resume).*(?:session|task)/i.test(text)
+  ));
+}

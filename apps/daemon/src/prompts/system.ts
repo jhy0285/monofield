@@ -557,6 +557,11 @@ export interface ComposeInput {
   // workflow; chat mode keeps the same context/tools but answers like a
   // standard multi-turn assistant unless the user explicitly asks to build.
   sessionMode?: ChatSessionMode | undefined;
+  // Structured specification projects have two stable prompt profiles.
+  // `false` is the lightweight explanation/guidance profile; `true` (and
+  // undefined for backwards compatibility) includes collector, renderer,
+  // plugin, and design-system instructions for an explicit artifact turn.
+  structuredArtifactInstructions?: boolean | undefined;
   // Run-scoped media policy. Defaults to enabled when omitted so existing
   // local OD behavior keeps the same media prompt contract.
   mediaExecution?: MediaExecutionPolicy | undefined;
@@ -598,6 +603,7 @@ export function composeSystemPrompt({
   streamFormat,
   locale,
   sessionMode,
+  structuredArtifactInstructions,
   userInstructions,
   projectInstructions,
   mediaExecution,
@@ -623,6 +629,9 @@ export function composeSystemPrompt({
     metadata?.kind === 'interface-spec'
     || metadata?.kind === 'screen-spec'
     || /(?:interface|screen)[\s-]*spec/i.test(skillName ?? '');
+  const isStructuredSpecGuidance =
+    isStructuredSpecificationWorkflow && structuredArtifactInstructions === false;
+  const isLeanResponseMode = isLeanChatMode || isStructuredSpecGuidance;
   const hasConnectedProjectDatabase =
     typeof metadata?.databaseContext?.connectionId === 'string'
     && metadata.databaseContext.connectionId.trim().length > 0;
@@ -655,7 +664,7 @@ export function composeSystemPrompt({
     parts.push('\n\n---\n\n');
   }
 
-  if (resolvedExecutionProfile === 'filesystem' && hasConnectedProjectDatabase) {
+  if (!isStructuredSpecGuidance && resolvedExecutionProfile === 'filesystem' && hasConnectedProjectDatabase) {
     parts.push(DATABASE_DEVELOPMENT_CONTEXT);
     parts.push('\n\n---\n\n');
   }
@@ -683,7 +692,7 @@ export function composeSystemPrompt({
     parts.push('\n\n---\n\n');
   }
 
-  const localePrompt = renderUiLocalePrompt(locale, { lean: isLeanChatMode });
+  const localePrompt = renderUiLocalePrompt(locale, { lean: isLeanResponseMode });
   if (localePrompt) {
     parts.push(localePrompt);
     parts.push('\n\n---\n\n');
@@ -735,19 +744,19 @@ export function composeSystemPrompt({
     // is present. Each loop is independently gated by its config flag; an
     // absent flag defaults ON. The card JSON examples below intentionally
     // use no backticks so they stay literal inside the template strings.
-    if (!isLeanChatMode && (memoryHooks?.rewrite ?? true)) {
+    if (!isLeanResponseMode && (memoryHooks?.rewrite ?? true)) {
       parts.push(
         `\n\n## Intent gateway — turn short asks into a brief\n\nWhen the user's request is short or underspecified AND memory gives you enough to expand it, silently build an internal task brief (task type, audience, files/artifacts in play, delivery preferences, constraints, and what "done" means) before acting. Surface it as ONE collapsed card at the very start of your reply, then continue with the work without waiting for confirmation:\n\n<od-card type="task-brief">\n{ "summary": "<one line restating the expanded intent>", "fields": [ {"label": "Audience", "value": "…"}, {"label": "Deliverable", "value": "…"}, {"label": "Done means", "value": "…"} ] }\n</od-card>\n\nEmit at most one task-brief per turn. Skip it entirely when the request is already explicit or trivial (a greeting, a yes/no, a tiny edit). If you applied memory but skipped the brief, you may instead emit one compact chip: <od-card type="memory-applied">{ "summary": "Applied your profile and 2 rules", "used": [ {"type": "profile", "name": "Work profile"} ] }</od-card>. Never dump the brief as prose — only as the card.\n\nThe task-brief card REPLACES the turn-1 discovery question-form when memory already makes the intent clear — it does NOT replace the rest of the build flow. On every artifact-producing turn you STILL open with a TodoWrite plan (RULE 3) before writing files and update it live as you work, then run the anti-slop / brand self-check before shipping. The brief only expands intent; it is never the deliverable and never stands in for the TodoWrite plan or the self-check. Skipping the discovery form when intent is already understood is correct; skipping TodoWrite or the anti-slop gate is not.`,
       );
     }
 
-    if (!isLeanChatMode && (memoryHooks?.verify ?? true)) {
+    if (!isLeanResponseMode && (memoryHooks?.verify ?? true)) {
       parts.push(
         `\n\n## Self-verify against your verified rules\n\nThe **Verified rules** above are enforceable checks, not soft preferences. After you finish producing or editing an artifact, evaluate it against every active rule, FIX any failure in place before ending your turn, then emit one scorecard:\n\n<od-card type="verify-scorecard">\n{ "status": "pass|partial|fail", "summary": "5/6 checks passed · 1 auto-fixed", "rows": [ {"rule": "<the check>", "status": "pass|fail|fixed", "note": "<what was wrong / what you fixed>"} ] }\n</od-card>\n\nPrefer fixing silently over asking. Leave a row as "fail" only when fixing it needs a decision you genuinely cannot make from the request plus memory. The daemon programmatically checks this scorecard after your turn — a missing scorecard or a rule left uncovered on an artifact turn is recorded as an enforcement failure — so always emit it when verified rules apply. Skip the scorecard entirely only when there are no verified rules or the turn produced no artifact.\n\nThe scorecard is ADDITIVE to — never a replacement for — the rest of the end-of-run flow. On an artifact turn you still run the existing anti-slop / brand self-check (the "N/N brand checks passed" gate) and still close with the normal handoff. Order the end of your turn as: (1) finish the anti-slop / brand self-check and fix any failure in place, (2) emit the verify-scorecard card, (3) close with the normal handoff — a single <artifact> block when this turn wrote a new canonical HTML file, otherwise a brief file-operation summary of what changed and what is still open. The scorecard only checks your verified rules; it does not absorb the anti-slop gate or the end-of-run summary.`,
       );
     }
 
-    if (!isLeanChatMode) {
+    if (!isLeanResponseMode) {
       parts.push(
         `\n\n## Propose new verified rules from corrections\n\nWhen the user corrects your output in a way that implies a reusable, checkable rule, PROPOSE it — never save it silently. Emit a proposal card the user can Keep, Edit, or Discard:\n\n<od-card type="rule-proposal">\n{ "name": "<short name>", "description": "<one line>", "assertion": "<what must hold>", "check": "<how to verify it>", "rationale": "<why you inferred it>" }\n</od-card>\n\nPropose at most one rule per turn, and only when confident it generalizes beyond the current artifact.`,
       );
@@ -766,7 +775,7 @@ export function composeSystemPrompt({
     );
   }
 
-  if (activeDesignSystemBody && activeDesignSystemBody.length > 0) {
+  if (!isStructuredSpecGuidance && activeDesignSystemBody && activeDesignSystemBody.length > 0) {
     const usageBlock =
       designSystemUsageMd && designSystemUsageMd.trim().length > 0
         ? designSystemUsageMd.trim()
@@ -797,29 +806,29 @@ export function composeSystemPrompt({
   // back to the verbatim components.html fixture. Both blocks are
   // individually gated: missing files skip silently, preserving the
   // legacy DESIGN.md-only behaviour for prose-only brands.
-  if (designSystemTokensCss && designSystemTokensCss.trim().length > 0) {
+  if (!isStructuredSpecGuidance && designSystemTokensCss && designSystemTokensCss.trim().length > 0) {
     parts.push(
       `\n\n## Active design system tokens${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nThe block below is this brand's tokens.css contract — every \`:root\` custom property and any scoped override (e.g. \`:root[lang=...]\`) the brand defines. **Paste the unscoped \`:root { ... }\` block verbatim into the artifact's first \`<style>\`** so every \`var(--*)\` reference resolves at runtime.\n\nDo not invent new tokens. Do not redefine these values. Do not write raw hex outside this :root block. The DESIGN.md above is prose; this is the binding contract.\n\n\`\`\`css\n${designSystemTokensCss.trim()}\n\`\`\``,
     );
   }
 
-  if (designSystemComponentsManifest && designSystemComponentsManifest.trim().length > 0) {
+  if (!isStructuredSpecGuidance && designSystemComponentsManifest && designSystemComponentsManifest.trim().length > 0) {
     parts.push(
       `\n\n## Reference component manifest${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nA compact structured summary derived from this brand's components.html fixture. Use it as the component inventory for generated artifacts: match the listed selectors, component groups, class names, token references, focus behavior, and spacing cadence. Prefer these manifest entries over inventing new component shapes.\n\n\`\`\`text\n${designSystemComponentsManifest.trim()}\n\`\`\``,
     );
-  } else if (designSystemFixtureHtml && designSystemFixtureHtml.trim().length > 0) {
+  } else if (!isStructuredSpecGuidance && designSystemFixtureHtml && designSystemFixtureHtml.trim().length > 0) {
     parts.push(
       `\n\n## Reference fixture${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nA self-contained worked artifact in this design system. Match its component shapes (button structure, card structure, type-scale rhythm, focus ring, spacing cadence) when generating new artifacts. Copying fragments is encouraged as long as you keep the \`var(--*)\` references intact — they are already wired to the tokens above.\n\n\`\`\`html\n${designSystemFixtureHtml.trim()}\n\`\`\``,
     );
   }
 
-  if (designSystemPullIndex && designSystemPullIndex.trim().length > 0) {
+  if (!isStructuredSpecGuidance && designSystemPullIndex && designSystemPullIndex.trim().length > 0) {
     parts.push(
       `\n\n## Pull-layer files available on demand${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nThis design-system package declares richer files for inspection, source evidence, or human preview. Keep the push prompt light: use the index below to decide what to read later. When the runtime tool environment is available, read a listed path with \`\"$MONOFIELD_NODE_BIN\" \"$MONOFIELD_BIN\" tools design-systems read --path <path>\`; the daemon will reject paths outside this manifest allowlist.\n\n\`\`\`text\n${designSystemPullIndex.trim()}\n\`\`\``,
     );
   }
 
-  if (craftBody && craftBody.trim().length > 0) {
+  if (!isStructuredSpecGuidance && craftBody && craftBody.trim().length > 0) {
     const sectionLabel =
       Array.isArray(craftSections) && craftSections.length > 0
         ? ` — ${craftSections.join(', ')}`
@@ -829,14 +838,14 @@ export function composeSystemPrompt({
     );
   }
 
-  if (skillBody && skillBody.trim().length > 0) {
+  if (!isStructuredSpecGuidance && skillBody && skillBody.trim().length > 0) {
     const preflight = derivePreflight(skillBody);
     parts.push(
       `\n\n## Active skill${skillName ? ` — ${skillName}` : ''}\n\nFollow this skill's workflow exactly.${preflight}\n\n${skillBody.trim()}`,
     );
   }
 
-  if (pluginBlock && pluginBlock.trim().length > 0) {
+  if (!isStructuredSpecGuidance && pluginBlock && pluginBlock.trim().length > 0) {
     parts.push(pluginBlock);
   }
 
@@ -846,7 +855,7 @@ export function composeSystemPrompt({
   // produces zero extra prompt mass. The active-skill body above
   // remains the precedence carrier; these blocks add the stage-by-
   // stage atom guidance that spec §23.3.2 calls out.
-  if (Array.isArray(activeStageBlocks) && activeStageBlocks.length > 0) {
+  if (!isStructuredSpecGuidance && Array.isArray(activeStageBlocks) && activeStageBlocks.length > 0) {
     for (const block of activeStageBlocks) {
       if (typeof block === 'string' && block.trim().length > 0) {
         parts.push(block);
@@ -854,7 +863,7 @@ export function composeSystemPrompt({
     }
   }
 
-  const metaBlock = isLeanChatMode
+  const metaBlock = isLeanResponseMode
     ? renderLeanProjectContext(metadata)
     : renderMetadataBlock(
         metadata,
@@ -885,9 +894,9 @@ export function composeSystemPrompt({
   const isFreeformProject = activeSkillModes.size === 0 && (!metadata || metadata.kind === 'other');
   const hasSkillSeed =
     !!skillBody && /assets\/template\.html/.test(skillBody);
-  if (isDeckProject && !hasSkillSeed) {
+  if (!isStructuredSpecGuidance && isDeckProject && !hasSkillSeed) {
     parts.push(`\n\n---\n\n${DECK_FRAMEWORK_DIRECTIVE}`);
-  } else if (!isLeanChatMode && isFreeformProject && !hasSkillSeed) {
+  } else if (!isLeanResponseMode && isFreeformProject && !hasSkillSeed) {
     // Freeform / kind=other projects skip the kind picker entirely and
     // land here. If the user's brief is a deck/keynote/slides ("讲解",
     // "presentation", "make a deck"), the agent used to invent its own
@@ -908,14 +917,14 @@ export function composeSystemPrompt({
     || resolvedExclusiveSurface === 'audio';
   if (isMediaSurface) {
     parts.push(renderMediaGenerationContract(mediaExecution));
-  } else if (!isLeanChatMode) {
+  } else if (!isLeanResponseMode) {
     // Non-media projects (prototype, deck, etc.): inject a lightweight hint
     // so the agent uses `od media generate` if the user asks for an image/video
     // mid-session, rather than hunting for provider API keys in the environment.
     parts.push(MEDIA_DISPATCH_HINT);
   }
 
-  if (includeCodexImagegenOverride && shouldAllowCodexImagegenOverride(metadata, mediaExecution)) {
+  if (!isStructuredSpecGuidance && includeCodexImagegenOverride && shouldAllowCodexImagegenOverride(metadata, mediaExecution)) {
     const codexImagegenOverride = renderCodexImagegenOverride(
       agentId,
       metadata,
@@ -936,25 +945,27 @@ export function composeSystemPrompt({
   // the critique flag is a no-op there until a media-aware panel template
   // lands.
   const cfg = critique ?? defaultCritiqueConfig();
-  if (cfg.enabled && critiqueBrand && critiqueSkill && !isMediaSurface) {
+  if (!isStructuredSpecGuidance && cfg.enabled && critiqueBrand && critiqueSkill && !isMediaSurface) {
     parts.push('\n\n' + renderPanelPrompt({ cfg, brand: critiqueBrand, skill: critiqueSkill }));
   }
 
-  if (activeDesignSystemBody && activeDesignSystemBody.length > 0) {
+  if (!isStructuredSpecGuidance && activeDesignSystemBody && activeDesignSystemBody.length > 0) {
     parts.push(ACTIVE_DESIGN_SYSTEM_VISUAL_DIRECTION_OVERRIDE);
   }
 
-  const mcpDirective = renderConnectedExternalMcpDirective(connectedExternalMcp);
+  const mcpDirective = isStructuredSpecGuidance
+    ? ''
+    : renderConnectedExternalMcpDirective(connectedExternalMcp);
   if (mcpDirective) parts.push(mcpDirective);
 
-  if (agentId === 'gemini') {
+  if (!isStructuredSpecGuidance && agentId === 'gemini') {
     parts.push(
       "\n\n---\n\n## Gemini todo tool mapping\n\nWhen an MonoField instruction says to call `TodoWrite`, use Gemini CLI's native `write_todos` tool only if it is present in the current tool list. Pass the full task list as `todos`, with each item using `description` for the task text and `status` set to `pending`, `in_progress`, `completed`, `cancelled`, or `blocked`.\n\nIf `write_todos` is not present, do not simulate it with markdown, plan-mode files, JSON files, TODO files, or shell commands. Continue the work normally without a todo tool.",
     );
   }
 
   if (resolvedExecutionProfile === 'filesystem') {
-    parts.push(isLeanChatMode ? LEAN_FILESYSTEM_WORKFLOW : FILESYSTEM_HANDOFF_OVERRIDE);
+    parts.push(isLeanResponseMode ? LEAN_FILESYSTEM_WORKFLOW : FILESYSTEM_HANDOFF_OVERRIDE);
   }
 
   // Mid-conversation clarification reuses the same `<question-form>` flow as
@@ -962,7 +973,7 @@ export function composeSystemPrompt({
   // questions surface: the chat shows a banner, the form renders in the
   // right-hand Questions tab, and answers return as the next user message.
   // Applies to every agent — question-form is UI-parsed markup, not a tool.
-  if (!isLeanChatMode) {
+  if (!isLeanResponseMode) {
     parts.push(
       "\n\n---\n\n## Clarifying questions mid-conversation\n\nWhen you need a clarification AFTER turn 1 and the natural answer is one of a small finite set of choices (2-4 options per question), emit a `<question-form>` block — the same markup turn-1 discovery uses — instead of writing a bulleted list of options in markdown. The host renders it as a Questions banner the user opens in the side tab; a markdown list renders as plain text and forces the user to type a reply. Use free-form prose questions only when the answer is naturally open-ended, needs more than ~4 options, or is a single yes/no. Do NOT also duplicate the form's questions as markdown text alongside it.\n\n`<question-form>` is assistant text for the MonoField UI, not a native tool call. If you need to clarify direction, emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call. Do not stop after an introductory sentence such as \"先确认一下方向：\"; the same message must include the full form.",
     );

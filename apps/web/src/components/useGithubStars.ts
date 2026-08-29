@@ -96,6 +96,10 @@ export function formatStars(count: number): string {
 }
 
 export const GITHUB_REPO_URL = REPO;
+export const GITHUB_ISSUES_URL = `${REPO}/issues/new`;
+export const GITHUB_SUPPORT_URL = `${GITHUB_ISSUES_URL}?title=%5BSupport%5D%20`;
+export const GITHUB_PROBLEM_REPORT_URL = `${GITHUB_ISSUES_URL}?labels=bug&title=%5BProblem%5D%20`;
+export const GITHUB_FEATURE_REQUEST_URL = `${GITHUB_ISSUES_URL}?labels=enhancement&title=%5BFeature%5D%20`;
 
 export function useGithubStars(): number | null {
   const [count, setCount] = useState<number | null>(() => {

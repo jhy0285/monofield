@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
@@ -22,6 +22,7 @@ import {
 } from '../src/connectors/catalog.js';
 import type { BoundedJsonObject } from '../src/live-artifacts/schema.js';
 import { listConnectorTools } from '../src/tools/connectors.js';
+import { installTestCredentialVault, type TestCredentialVault } from './helpers/credential-vault.js';
 
 function externalConnector(overrides: Partial<ConnectorCatalogDefinition> = {}): ConnectorCatalogDefinition {
   return {
@@ -122,25 +123,32 @@ function githubReadDefinition(): ConnectorCatalogDefinition {
   });
 }
 
-function connectGithub(statusService: ConnectorStatusService): void {
-  statusService.connect(githubReadDefinition(), 'octocat@example.com', {
+async function connectGithub(statusService: ConnectorStatusService): Promise<void> {
+  await statusService.connect(githubReadDefinition(), 'octocat@example.com', {
     provider: 'composio',
     providerConnectionId: 'ca_stale_github',
   });
 }
 
+let credentialVault: TestCredentialVault;
+
+beforeEach(() => {
+  credentialVault = installTestCredentialVault();
+});
+
 afterEach(() => {
+  credentialVault.restore();
   vi.useRealTimers();
 });
 
 describe('connector status service', () => {
-  it('supports available, connected, error, and disabled states', () => {
+  it('supports available, connected, error, and disabled states', async () => {
     const statusService = new ConnectorStatusService();
     const available = externalConnector();
     const disabled = externalConnector({ id: 'disabled_docs', disabled: true });
 
     expect(statusService.getStatus(available)).toEqual({ status: 'available' });
-    expect(statusService.connect(available, 'docs@example.com')).toEqual({
+    await expect(statusService.connect(available, 'docs@example.com')).resolves.toEqual({
       status: 'connected',
       accountLabel: 'docs@example.com',
     });
@@ -149,7 +157,7 @@ describe('connector status service', () => {
       accountLabel: 'docs@example.com',
       lastError: 'OAuth token expired',
     });
-    expect(statusService.disconnect(available)).toEqual({ status: 'available' });
+    await expect(statusService.disconnect(available)).resolves.toEqual({ status: 'available' });
     expect(statusService.getStatus(disabled)).toEqual({ status: 'disabled' });
   });
 
@@ -176,8 +184,9 @@ describe('connector status service', () => {
     expect(serializedDetail).not.toContain('oauth-refresh-token');
 
     const credentialFile = await readFile(path.join(dataDir, 'connectors', 'credentials.json'), 'utf8');
-    expect(credentialFile).toContain('oauth-secret-token');
-    expect(credentialFile).toContain('oauth-refresh-token');
+    expect(credentialFile).not.toContain('oauth-secret-token');
+    expect(credentialFile).not.toContain('oauth-refresh-token');
+    expect(credentialFile).toContain('credentialRef');
 
     await service.disconnect('external_docs');
     await expect(service.getConnector('external_docs')).resolves.toMatchObject({ status: 'available' });
@@ -202,16 +211,16 @@ describe('connector status service', () => {
     });
   });
 
-  it('only clears connected statuses for credentials owned by the reset provider', () => {
+  it('only clears connected statuses for credentials owned by the reset provider', async () => {
     const credentialStore = new InMemoryConnectorCredentialStore();
     const statusService = new ConnectorStatusService({ credentialStore });
     const composioDefinition = externalConnector({ id: 'composio_docs', provider: 'composio' });
     const unrelatedDefinition = externalConnector({ id: 'external_docs', provider: 'example' });
 
-    statusService.connect(composioDefinition, 'composio@example.com', { provider: 'composio', providerConnectionId: 'ca_docs' });
-    statusService.connect(unrelatedDefinition, 'docs@example.com', { provider: 'example', token: 'example-token' });
+    await statusService.connect(composioDefinition, 'composio@example.com', { provider: 'composio', providerConnectionId: 'ca_docs' });
+    await statusService.connect(unrelatedDefinition, 'docs@example.com', { provider: 'example', token: 'example-token' });
 
-    statusService.deleteCredentialsByProvider('composio');
+    await statusService.deleteCredentialsByProvider('composio');
 
     expect(statusService.getStatus(composioDefinition)).toEqual({ status: 'available' });
     expect(statusService.getStatus(unrelatedDefinition)).toEqual({ status: 'connected', accountLabel: 'docs@example.com' });
@@ -498,7 +507,7 @@ describe('connector execution policy', () => {
       minimumApproval: 'auto',
     });
     const statusService = new ConnectorStatusService();
-    statusService.connect(definition, 'docs@example.com', { token: 'secret' });
+    await statusService.connect(definition, 'docs@example.com', { token: 'secret' });
     const service = new OutputTestConnectorService(definition, statusService);
 
     await expect(service.execute(
@@ -521,7 +530,7 @@ describe('connector execution policy', () => {
       minimumApproval: 'auto',
     });
     const statusService = new ConnectorStatusService();
-    statusService.connect(definition, 'docs@example.com', { token: 'secret' });
+    await statusService.connect(definition, 'docs@example.com', { token: 'secret' });
     const service = new OutputTestConnectorService(definition, statusService);
 
     await expect(service.execute(
@@ -583,7 +592,7 @@ describe('connector execution policy', () => {
     const definition = githubReadDefinition();
     const credentialStore = new InMemoryConnectorCredentialStore();
     const statusService = new ConnectorStatusService({ credentialStore });
-    connectGithub(statusService);
+    await connectGithub(statusService);
     const service = new FailingConnectorService(
       definition,
       statusService,
@@ -608,14 +617,14 @@ describe('connector execution policy', () => {
       accountLabel: 'octocat@example.com',
       lastError: 'GitHub authorization expired. Reconnect GitHub.',
     });
-    expect(service.getCredential('github')).toBeUndefined();
+    await expect(service.getCredential('github')).resolves.toBeUndefined();
   });
 
   it('keeps connector credentials when Composio platform auth fails before tool execution', async () => {
     const definition = githubReadDefinition();
     const credentialStore = new InMemoryConnectorCredentialStore();
     const statusService = new ConnectorStatusService({ credentialStore });
-    connectGithub(statusService);
+    await connectGithub(statusService);
     const service = new FailingConnectorService(
       definition,
       statusService,
@@ -633,14 +642,14 @@ describe('connector execution policy', () => {
       status: 'connected',
       accountLabel: 'octocat@example.com',
     });
-    expect(service.getCredential('github')).toBeDefined();
+    await expect(service.getCredential('github')).resolves.toBeDefined();
   });
 
   it('keeps connector credentials when tool execution fails without auth-stale payload', async () => {
     const definition = githubReadDefinition();
     const credentialStore = new InMemoryConnectorCredentialStore();
     const statusService = new ConnectorStatusService({ credentialStore });
-    connectGithub(statusService);
+    await connectGithub(statusService);
     const service = new FailingConnectorService(
       definition,
       statusService,
@@ -663,7 +672,7 @@ describe('connector execution policy', () => {
       status: 'connected',
       accountLabel: 'octocat@example.com',
     });
-    expect(service.getCredential('github')).toBeDefined();
+    await expect(service.getCredential('github')).resolves.toBeDefined();
   });
 
   it('rejects non-auto connector tools during artifact refresh', async () => {

@@ -15,10 +15,17 @@
 // users can copy-paste between MonoField and other tools without
 // translation.
 
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { realpathSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
+import {
+  credentialVaultKey,
+  deleteCredential,
+  readCredential,
+  writeCredential,
+} from './credential-vault.js';
+import { hardenCredentialFile } from './credential-file-security.js';
 
 // Wire-level MCP types. Mirrors `packages/contracts/src/api/mcp.ts` — the
 // daemon and web import-from-contracts side both round-trip the same JSON
@@ -47,6 +54,19 @@ export interface McpServerConfig {
 export interface McpConfig {
   servers: McpServerConfig[];
 }
+
+type StoredMcpServerConfig = Omit<McpServerConfig, 'env' | 'headers'> & {
+  /** Legacy plaintext fields retained only until a successful migration. */
+  env?: Record<string, string>;
+  headers?: Record<string, string>;
+  credentialRef?: string;
+  envKeys?: string[];
+  headerKeys?: string[];
+};
+
+type StoredMcpConfig = { servers: StoredMcpServerConfig[] };
+
+export const MCP_MASKED_SECRET = '••••••••';
 
 export interface McpTemplateField {
   key: string;
@@ -232,11 +252,58 @@ export function sanitizeMcpConfig(raw: unknown): McpConfig {
   return { servers: out };
 }
 
-export async function readMcpConfig(dataDir: string): Promise<McpConfig> {
+function mcpCredentialRef(dataDir: string, serverId: string): string {
+  return credentialVaultKey('mcp', configFile(dataDir), serverId);
+}
+
+function freshMcpCredentialRef(dataDir: string, serverId: string): string {
+  return `${mcpCredentialRef(dataDir, serverId)}:v-${randomBytes(12).toString('hex')}`;
+}
+
+async function bestEffortPrivateMode(target: string, mode: number): Promise<void> {
   try {
+    await chmod(target, mode);
+  } catch {
+    // Files are created with restrictive modes. Some Windows/network
+    // filesystems do not implement chmod; never invalidate a committed ref.
+  }
+}
+
+function sanitizeStoredMcpConfig(raw: unknown): StoredMcpConfig {
+  if (!isPlainObject(raw)) return { servers: [] };
+  const list = Array.isArray(raw.servers) ? raw.servers : [];
+  const seen = new Set<string>();
+  const servers: StoredMcpServerConfig[] = [];
+  for (const entry of list) {
+    const server = sanitizeMcpServer(entry);
+    if (!server || seen.has(server.id)) continue;
+    seen.add(server.id);
+    const rawEntry = isPlainObject(entry) ? entry : {};
+    const credentialRef = typeof rawEntry.credentialRef === 'string' && rawEntry.credentialRef.trim()
+      ? rawEntry.credentialRef.trim()
+      : undefined;
+    const envKeys = Array.isArray(rawEntry.envKeys)
+      ? rawEntry.envKeys.filter((key): key is string => typeof key === 'string' && key.trim().length > 0)
+      : undefined;
+    const headerKeys = Array.isArray(rawEntry.headerKeys)
+      ? rawEntry.headerKeys.filter((key): key is string => typeof key === 'string' && key.trim().length > 0)
+      : undefined;
+    servers.push({
+      ...server,
+      ...(credentialRef ? { credentialRef } : {}),
+      ...(envKeys?.length ? { envKeys: [...new Set(envKeys)] } : {}),
+      ...(headerKeys?.length ? { headerKeys: [...new Set(headerKeys)] } : {}),
+    });
+  }
+  return { servers };
+}
+
+async function readStoredMcpConfig(dataDir: string): Promise<StoredMcpConfig> {
+  try {
+    await hardenCredentialFile(configFile(dataDir));
     const raw = await readFile(configFile(dataDir), 'utf8');
     const parsed: unknown = JSON.parse(raw);
-    return sanitizeMcpConfig(parsed);
+    return sanitizeStoredMcpConfig(parsed);
   } catch (err: unknown) {
     const e = err as { code?: string; name?: string; message?: string };
     if (e.code === 'ENOENT') return { servers: [] };
@@ -246,6 +313,131 @@ export async function readMcpConfig(dataDir: string): Promise<McpConfig> {
     }
     throw err;
   }
+}
+
+async function writeStoredMcpConfig(dataDir: string, config: StoredMcpConfig): Promise<void> {
+  const file = configFile(dataDir);
+  const directory = path.dirname(file);
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  await bestEffortPrivateMode(directory, 0o700);
+  const tmp = file + '.' + randomBytes(4).toString('hex') + '.tmp';
+  try {
+    await writeFile(tmp, JSON.stringify(config, null, 2), { encoding: 'utf8', mode: 0o600 });
+    await rename(tmp, file);
+    await bestEffortPrivateMode(file, 0o600);
+  } catch (error) {
+    await rm(tmp, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
+const warnedMcpMigrations = new Set<string>();
+
+async function migrateLegacyMcpSecrets(dataDir: string, config: StoredMcpConfig): Promise<StoredMcpConfig> {
+  const legacyServers = config.servers.filter((server) => {
+    return Boolean(sanitizeStringMap(server.env) || sanitizeStringMap(server.headers));
+  });
+  if (legacyServers.length === 0) return config;
+
+  const stagedRefs: string[] = [];
+  const replacedRefs: string[] = [];
+  const servers: StoredMcpServerConfig[] = [];
+  try {
+    for (const server of config.servers) {
+      const legacyEnv = sanitizeStringMap(server.env);
+      const legacyHeaders = sanitizeStringMap(server.headers);
+      if (!legacyEnv && !legacyHeaders) {
+        servers.push(server);
+        continue;
+      }
+      const ref = freshMcpCredentialRef(dataDir, server.id);
+      await writeCredential(ref, JSON.stringify({ env: legacyEnv ?? {}, headers: legacyHeaders ?? {} }));
+      stagedRefs.push(ref);
+      if (server.credentialRef) replacedRefs.push(server.credentialRef);
+      const next: StoredMcpServerConfig = {
+        ...server,
+        credentialRef: ref,
+        ...(legacyEnv ? { envKeys: Object.keys(legacyEnv) } : {}),
+        ...(legacyHeaders ? { headerKeys: Object.keys(legacyHeaders) } : {}),
+      };
+      delete next.env;
+      delete next.headers;
+      servers.push(next);
+    }
+    const next = { servers };
+    await writeStoredMcpConfig(dataDir, next);
+    await Promise.all(replacedRefs.map((ref) => deleteCredential(ref).catch(() => undefined)));
+    return next;
+  } catch {
+    await Promise.all(stagedRefs.map((ref) => deleteCredential(ref).catch(() => undefined)));
+    for (const server of legacyServers) {
+      const warningKey = `${configFile(dataDir)}:${server.id}`;
+      if (!warnedMcpMigrations.has(warningKey)) {
+        warnedMcpMigrations.add(warningKey);
+        console.warn(`[mcp-config] credential migration deferred for server ${server.id}; legacy values were preserved`);
+      }
+    }
+    return config;
+  }
+}
+
+function parseMcpCredential(value: string | null): { env?: Record<string, string>; headers?: Record<string, string> } {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!isPlainObject(parsed)) return {};
+    const env = sanitizeStringMap(parsed.env);
+    const headers = sanitizeStringMap(parsed.headers);
+    return {
+      ...(env ? { env } : {}),
+      ...(headers ? { headers } : {}),
+    };
+  } catch {
+    throw new Error('stored MCP credentials are invalid');
+  }
+}
+
+export async function readMcpConfig(dataDir: string): Promise<McpConfig> {
+  const stored = await migrateLegacyMcpSecrets(dataDir, await readStoredMcpConfig(dataDir));
+  const servers: McpServerConfig[] = [];
+  for (const server of stored.servers) {
+    const { credentialRef, envKeys: _envKeys, headerKeys: _headerKeys, ...publicFields } = server;
+    let secrets: { env?: Record<string, string>; headers?: Record<string, string> } = {
+      ...(server.env ? { env: server.env } : {}),
+      ...(server.headers ? { headers: server.headers } : {}),
+    };
+    if (!secrets.env && !secrets.headers && credentialRef) {
+      secrets = parseMcpCredential(await readCredential(credentialRef));
+    }
+    servers.push({
+      ...publicFields,
+      ...(secrets.env ? { env: secrets.env } : {}),
+      ...(secrets.headers ? { headers: secrets.headers } : {}),
+    });
+  }
+  return { servers };
+}
+
+export async function readPublicMcpConfig(dataDir: string): Promise<McpConfig> {
+  const stored = await migrateLegacyMcpSecrets(dataDir, await readStoredMcpConfig(dataDir));
+  return {
+    servers: stored.servers.map((server) => {
+      const { credentialRef: _credentialRef, envKeys, headerKeys, ...publicFields } = server;
+      const effectiveEnvKeys = envKeys ?? Object.keys(server.env ?? {});
+      const effectiveHeaderKeys = headerKeys ?? Object.keys(server.headers ?? {});
+      delete publicFields.env;
+      delete publicFields.headers;
+      return {
+        ...publicFields,
+        ...(effectiveEnvKeys.length > 0
+          ? { env: Object.fromEntries(effectiveEnvKeys.map((key) => [key, MCP_MASKED_SECRET])) }
+          : {}),
+        ...(effectiveHeaderKeys.length > 0
+          ? { headers: Object.fromEntries(effectiveHeaderKeys.map((key) => [key, MCP_MASKED_SECRET])) }
+          : {}),
+      };
+    }),
+  };
 }
 
 const writeLocks = new Map<string, Promise<unknown>>();
@@ -265,13 +457,66 @@ export async function writeMcpConfig(
 }
 
 async function doWrite(dataDir: string, body: unknown): Promise<McpConfig> {
-  const next = sanitizeMcpConfig(body);
-  const file = configFile(dataDir);
-  await mkdir(path.dirname(file), { recursive: true });
-  const tmp = file + '.' + randomBytes(4).toString('hex') + '.tmp';
-  await writeFile(tmp, JSON.stringify(next, null, 2), 'utf8');
-  await rename(tmp, file);
-  return next;
+  const incoming = sanitizeMcpConfig(body);
+  const prior = await readMcpConfig(dataDir);
+  const priorById = new Map(prior.servers.map((server) => [server.id, server]));
+  const priorStored = await migrateLegacyMcpSecrets(dataDir, await readStoredMcpConfig(dataDir));
+  const priorStoredById = new Map(priorStored.servers.map((server) => [server.id, server]));
+  const nextStored: StoredMcpServerConfig[] = [];
+  const retainedRefs = new Set<string>();
+  const stagedRefs = new Set<string>();
+
+  try {
+    for (const server of incoming.servers) {
+    const priorServer = priorById.get(server.id);
+    const replaceMasked = (
+      values: Record<string, string> | undefined,
+      previous: Record<string, string> | undefined,
+    ): Record<string, string> | undefined => {
+      if (!values) return undefined;
+      const next: Record<string, string> = {};
+      for (const [key, value] of Object.entries(values)) {
+        if (value === MCP_MASKED_SECRET) {
+          const preserved = previous?.[key];
+          if (preserved) next[key] = preserved;
+        } else if (value.trim()) {
+          next[key] = value;
+        }
+      }
+      return Object.keys(next).length > 0 ? next : undefined;
+    };
+    const env = replaceMasked(server.env, priorServer?.env);
+    const headers = replaceMasked(server.headers, priorServer?.headers);
+    const { env: _env, headers: _headers, ...publicFields } = server;
+      const hasSecrets = Boolean(env || headers);
+      const priorStoredServer = priorStoredById.get(server.id);
+      const credentialsChanged = JSON.stringify({ env: env ?? {}, headers: headers ?? {} })
+        !== JSON.stringify({ env: priorServer?.env ?? {}, headers: priorServer?.headers ?? {} });
+      let credentialRef = hasSecrets ? priorStoredServer?.credentialRef : undefined;
+      if (hasSecrets && (!credentialRef || credentialsChanged)) {
+        credentialRef = freshMcpCredentialRef(dataDir, server.id);
+        await writeCredential(credentialRef, JSON.stringify({ env: env ?? {}, headers: headers ?? {} }));
+        stagedRefs.add(credentialRef);
+      }
+      if (credentialRef) retainedRefs.add(credentialRef);
+      nextStored.push({
+        ...publicFields,
+        ...(credentialRef ? { credentialRef } : {}),
+        ...(env ? { envKeys: Object.keys(env) } : {}),
+        ...(headers ? { headerKeys: Object.keys(headers) } : {}),
+      });
+    }
+
+    await writeStoredMcpConfig(dataDir, { servers: nextStored });
+  } catch (error) {
+    await Promise.all([...stagedRefs].map((ref) => deleteCredential(ref).catch(() => undefined)));
+    throw error;
+  }
+  const staleRefs = priorStored.servers
+    .map((server) => server.credentialRef)
+    .filter((ref): ref is string => Boolean(ref) && !retainedRefs.has(ref!));
+  await Promise.all(staleRefs.map((ref) => deleteCredential(ref).catch(() => undefined)));
+  return readMcpConfig(dataDir);
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -336,6 +581,61 @@ export function buildClaudeMcpJson(
     }
   }
   return { mcpServers: out };
+}
+
+export interface ExternalizedClaudeMcpConfig {
+  config: unknown;
+  env: Record<string, string>;
+}
+
+/**
+ * Keep MCP credentials out of the daemon-managed `.mcp.json` file. Claude's
+ * MCP config supports `${VAR}` expansion, so env/header values can live only
+ * in the launched child's environment while the on-disk config contains
+ * opaque references. This covers both user-supplied stdio env values and
+ * HTTP headers (including the OAuth Authorization header added above).
+ */
+export function externalizeClaudeMcpSecrets(config: unknown): ExternalizedClaudeMcpConfig {
+  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+    return { config, env: {} };
+  }
+  const source = config as { mcpServers?: unknown };
+  if (!source.mcpServers || typeof source.mcpServers !== 'object' || Array.isArray(source.mcpServers)) {
+    return { config, env: {} };
+  }
+
+  const env: Record<string, string> = {};
+  let nextSecret = 1;
+  const externalizeValues = (value: unknown): unknown => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+    const output: Record<string, unknown> = {};
+    for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+      if (typeof raw !== 'string' || raw.length === 0) {
+        output[key] = raw;
+        continue;
+      }
+      const envName = `MONOFIELD_MCP_SECRET_${nextSecret}`;
+      nextSecret += 1;
+      env[envName] = raw;
+      output[key] = `\${${envName}}`;
+    }
+    return output;
+  };
+
+  const mcpServers: Record<string, unknown> = {};
+  for (const [serverId, rawEntry] of Object.entries(source.mcpServers as Record<string, unknown>)) {
+    if (!rawEntry || typeof rawEntry !== 'object' || Array.isArray(rawEntry)) {
+      mcpServers[serverId] = rawEntry;
+      continue;
+    }
+    const entry = rawEntry as Record<string, unknown>;
+    mcpServers[serverId] = {
+      ...entry,
+      ...(entry.env ? { env: externalizeValues(entry.env) } : {}),
+      ...(entry.headers ? { headers: externalizeValues(entry.headers) } : {}),
+    };
+  }
+  return { config: { ...source, mcpServers }, env };
 }
 
 /** Build a headers object that includes the daemon-issued bearer token when

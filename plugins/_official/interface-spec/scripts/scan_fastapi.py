@@ -2,7 +2,7 @@
 
 AST-based (not regex): parses route decorators, endpoint signatures, and
 pydantic models to emit an interface-spec.json document (schema v1) that
-`od docs render-interface-spec` accepts directly.
+`monofield docs render-interface-spec` accepts directly.
 
 Handles:
   - @app/@router .get/.post/.put/.patch/.delete("path", response_model=Model)

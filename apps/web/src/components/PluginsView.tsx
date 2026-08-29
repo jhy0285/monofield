@@ -26,6 +26,7 @@ import {
   applyPlugin,
   installPluginSource,
   getPluginMarketplaceInstallMode,
+  isVisiblePlugin,
   listPluginMarketplaces,
   listPlugins,
   refreshPluginMarketplace,
@@ -156,13 +157,12 @@ export function PluginsView({
 
   async function refresh() {
     setLoading(true);
-    const [rows, allRows, catalogs, installMode] = await Promise.all([
-      listPlugins(),
+    const [allRows, catalogs, installMode] = await Promise.all([
       listPlugins({ includeHidden: true }),
       listPluginMarketplaces(),
       getPluginMarketplaceInstallMode(),
     ]);
-    setPlugins(rows);
+    setPlugins(allRows.filter(isVisiblePlugin));
     setAllInstalledPlugins(allRows);
     setMarketplaces(catalogs);
     setManagedInstallOnly(installMode === 'managed');

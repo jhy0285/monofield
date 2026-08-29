@@ -5,6 +5,7 @@ import {
   isDocumentHowToRequest,
   isInterfaceSpecGenerationRequest,
   isManualInterfaceSpecGenerationRequest,
+  isStructuredSpecificationArtifactRequest,
 } from '../src/api/interface-spec-intent.js';
 
 describe('interface-spec intent routing', () => {
@@ -39,5 +40,35 @@ describe('interface-spec intent routing', () => {
     expect(
       classifyInterfaceSpecSourceIntent('기존 코드베이스 없이 신규 API 명세서를 만들어줘'),
     ).toBe('manual');
+  });
+
+  it('routes only explicit structured-spec work to the heavyweight prompt profile', () => {
+    expect(
+      isStructuredSpecificationArtifactRequest('인터페이스 명세서가 뭐야?', 'interface-spec'),
+    ).toBe(false);
+    expect(
+      isStructuredSpecificationArtifactRequest('화면 명세서 작성 방법을 설명해줘', 'screen-spec'),
+    ).toBe(false);
+    expect(
+      isStructuredSpecificationArtifactRequest('주문 API 인터페이스 명세서를 만들어줘', 'interface-spec'),
+    ).toBe(true);
+    expect(
+      isStructuredSpecificationArtifactRequest('이 화면 명세서를 검증해줘', 'screen-spec'),
+    ).toBe(true);
+    expect(
+      isStructuredSpecificationArtifactRequest('현재 초안을 수정해줘', 'screen-spec'),
+    ).toBe(true);
+    expect(
+      isStructuredSpecificationArtifactRequest('결과 미리 보기', 'interface-spec'),
+    ).toBe(true);
+    expect(
+      isStructuredSpecificationArtifactRequest('일반적인 작성 원칙을 알려줘', 'screen-spec'),
+    ).toBe(false);
+    expect(
+      isStructuredSpecificationArtifactRequest(
+        '[form answers — interface-spec-options]\n{"scope":"all"}',
+        'interface-spec',
+      ),
+    ).toBe(true);
   });
 });

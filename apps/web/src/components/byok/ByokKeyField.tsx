@@ -2,6 +2,7 @@ import { useState, type Ref } from 'react';
 import { API_KEY_PLACEHOLDERS } from '../../state/apiProtocols';
 import type { ApiProtocol } from '../../types';
 import { cleanByokApiKey } from './validation';
+import { isStoredByokApiKey } from '@open-design/contracts';
 
 interface ByokKeyFieldProps {
   apiKey: string;
@@ -11,6 +12,7 @@ interface ByokKeyFieldProps {
   labels: {
     apiHint: string;
     apiKeyCleaned: string;
+    clear: string;
     apiKey: string;
     apiKeyGetLink: string;
     apiKeyInvalid: string;
@@ -44,6 +46,7 @@ export function ByokKeyField({
   onToggleShowApiKey,
 }: ByokKeyFieldProps) {
   const [apiKeyCleanedNotice, setApiKeyCleanedNotice] = useState(false);
+  const stored = isStoredByokApiKey(apiKey);
   const fieldClassName =
     requiresApiKey && !apiKey.trim()
       ? 'field settings-byok-required-empty'
@@ -89,14 +92,24 @@ export function ByokKeyField({
           ref={inputRef}
           aria-label={labels.apiKey}
           type={showApiKey ? 'text' : 'password'}
-          placeholder={API_KEY_PLACEHOLDERS[apiProtocol]}
-          value={apiKey}
+          placeholder={stored ? '••••••••' : API_KEY_PLACEHOLDERS[apiProtocol]}
+          value={stored ? '' : apiKey}
           aria-invalid={showApiKeyInvalid || undefined}
           onChange={(e) => handleChange(e.target.value)}
           onBlur={handleBlur}
           onFocus={onFocus}
           autoFocus
         />
+        {stored ? (
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => onChange('')}
+            title={labels.clear}
+          >
+            {labels.clear}
+          </button>
+        ) : null}
         <button
           type="button"
           className="ghost icon-btn"

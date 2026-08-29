@@ -4,7 +4,11 @@ import { useT } from '../i18n';
 import { useAnalytics } from '../analytics/provider';
 import { trackQuestionsFormClick, trackQuestionsFormSurfaceView } from '../analytics/events';
 import type { QuestionForm } from '../artifacts/question-form';
-import { QuestionFormView, type QuestionFormHandle } from './QuestionForm';
+import {
+  QuestionFormView,
+  questionFormRequiresExplicitSubmit,
+  type QuestionFormHandle,
+} from './QuestionForm';
 
 // Surface one new question every this many ms. The agent often emits the whole
 // form artifact in a single chunk, so we can't rely on the parse count
@@ -212,7 +216,7 @@ export function QuestionsPanel({
   // `ready` (from QuestionForm) and gates Continue via `canContinue`.
   const canSubmit = !!form && interactive && !building && !submitDisabled;
   const canContinue = canSubmit && ready;
-  const canSkip = canSubmit;
+  const canSkip = canSubmit && !questionFormRequiresExplicitSubmit(form?.id);
 
   // Auto-skip countdown. It only runs while the form is actionable; pausing
   // (busy turn, re-stream) resets it so we never auto-submit a half-ready form.
@@ -220,7 +224,7 @@ export function QuestionsPanel({
   const autoFiredRef = useRef(false);
 
   useEffect(() => {
-    if (!canSubmit) {
+    if (!canSkip) {
       setRemaining(SKIP_COUNTDOWN_SECONDS);
       autoFiredRef.current = false;
       return;
@@ -229,12 +233,12 @@ export function QuestionsPanel({
       setRemaining((s) => Math.max(0, s - 1));
     }, 1000);
     return () => window.clearInterval(id);
-  }, [canSubmit]);
+  }, [canSkip]);
 
   // When the countdown elapses, continue with the current selections (anything
   // untouched submits as skipped) and let generation proceed.
   useEffect(() => {
-    if (canSubmit && remaining <= 0 && !autoFiredRef.current) {
+    if (canSkip && remaining <= 0 && !autoFiredRef.current) {
       autoFiredRef.current = true;
       // Either branch reports as skip_source=countdown; answered_count tells
       // apart a countdown submit that carried picks from a pure skip.
@@ -244,7 +248,7 @@ export function QuestionsPanel({
       if (ready) formRef.current?.submit();
       else formRef.current?.skipAll();
     }
-  }, [canSubmit, ready, remaining]);
+  }, [canSkip, ready, remaining]);
 
   const countdown = `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}`;
 

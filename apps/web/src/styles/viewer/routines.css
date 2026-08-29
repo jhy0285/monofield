@@ -1979,9 +1979,17 @@
   }
 }
 .app .df-pagination {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 0 0 12px;
   color: var(--text-muted);
+}
+.app .df-pagination label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .app .df-pagination-start {
   border-bottom: 1px solid var(--border-soft);

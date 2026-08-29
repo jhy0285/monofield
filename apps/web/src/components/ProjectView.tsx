@@ -57,6 +57,7 @@ import { claimRunTurnIndex } from '../analytics/identity';
 import { useCoalescedCallback } from '../hooks/useCoalescedCallback';
 import {
   composeSystemPrompt,
+  isStructuredSpecificationArtifactRequest,
   type AudioVoiceOption,
   type MemorySystemPromptResponse,
   type ResearchOptions,
@@ -2350,14 +2351,23 @@ export function ProjectView({
 
   const composedSystemPrompt = useCallback(async (
     sessionModeOverride: ChatSessionMode = activeSessionMode,
+    turnPrompt = '',
   ): Promise<string> => {
+    const structuredArtifactInstructions =
+      project.metadata?.kind === 'interface-spec'
+      || project.metadata?.kind === 'screen-spec'
+        ? isStructuredSpecificationArtifactRequest(
+            turnPrompt,
+            project.metadata.kind,
+          )
+        : true;
     let skillBody: string | undefined;
     let skillName: string | undefined;
     let skillMode: SkillSummary['mode'] | undefined;
     let designSystemBody: string | undefined;
     let designSystemTitle: string | undefined;
 
-    if (project.skillId) {
+    if (structuredArtifactInstructions && project.skillId) {
       // project.skillId can resolve to either root after the
       // skills/design-templates split; check both lists so a template-backed
       // project keeps composing its template body when running in API mode.
@@ -2379,7 +2389,7 @@ export function ProjectView({
         }
       }
     }
-    if (projectDesignSystemId) {
+    if (structuredArtifactInstructions && projectDesignSystemId) {
       const summary = designSystems.find((d) => d.id === projectDesignSystemId);
       designSystemTitle = summary?.title;
       const cached = designCache.current.get(projectDesignSystemId);
@@ -2395,7 +2405,7 @@ export function ProjectView({
     }
     let template: ProjectTemplate | undefined;
     const tplId = project.metadata?.templateId;
-    if (project.metadata?.kind === 'template' && tplId) {
+    if (structuredArtifactInstructions && project.metadata?.kind === 'template' && tplId) {
       const cached = templateCache.current.get(tplId);
       if (cached) {
         template = cached;
@@ -2454,6 +2464,7 @@ export function ProjectView({
       audioVoiceOptionsError: audioVoiceOptionsLookupError,
       streamFormat: config.mode === 'api' ? 'plain' : undefined,
       sessionMode: sessionModeOverride,
+      structuredArtifactInstructions,
       locale,
       userInstructions: config.customInstructions,
     });
@@ -4597,7 +4608,7 @@ export function ProjectView({
             // on the next event.
           }
         }
-        const systemPrompt = await composedSystemPrompt(runSessionMode);
+        const systemPrompt = await composedSystemPrompt(runSessionMode, userText);
         const apiHistory = await historyWithApiAttachmentContext(
           historyWithCommentAttachmentContext(
             historyWithWorkspaceContext(nextHistory, userMsg.id, runContext),

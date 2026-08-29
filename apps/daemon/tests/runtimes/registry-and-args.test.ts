@@ -273,6 +273,18 @@ test('codex args keep workspace-write sandbox on Windows by default', () => {
       ]);
       assert.equal(args.includes('workspace-write'), true);
       assert.equal(args.includes('sandbox_workspace_write.network_access=true'), true);
+      assert.equal(
+        args.includes('shell_environment_policy.set.GIT_CONFIG_COUNT="1"'),
+        true,
+      );
+      assert.equal(
+        args.includes('shell_environment_policy.set.GIT_CONFIG_KEY_0="safe.directory"'),
+        true,
+      );
+      assert.equal(
+        args.includes('shell_environment_policy.set.GIT_CONFIG_VALUE_0="/tmp/od-project"'),
+        true,
+      );
       assert.equal(args.some((arg) => arg.includes('default_permissions')), false);
     });
   });
@@ -665,6 +677,57 @@ test('codex combines future live models with reviewed recommendations', () => {
       'o4-mini',
     ],
   );
+});
+
+test('gemini probes auth configuration without making a model request', async () => {
+  assert.deepEqual(gemini.authProbe, {
+    args: ['--list-sessions', '--output-format', 'json'],
+    timeoutMs: 15_000,
+  });
+
+  const dir = mkdtempSync(join(tmpdir(), 'od-agents-gemini-auth-'));
+  try {
+    await withEnvSnapshot(
+      ['PATH', 'OD_AGENT_HOME', 'GEMINI_BIN', 'GEMINI_API_KEY', 'GOOGLE_API_KEY'],
+      async () => {
+        writeAgentFixture(
+          dir,
+          'gemini',
+          `#!/bin/sh
+if [ "$1" = "--version" ]; then echo "0.56.0"; exit 0; fi
+if [ "$1" = "--list-sessions" ]; then echo 'Please set an Auth method in ~/.gemini/settings.json' >&2; exit 41; fi
+exit 0
+`,
+          `@echo off
+if "%~1"=="--version" (
+  echo 0.56.0
+  exit /b 0
+)
+if "%~1"=="--list-sessions" (
+  echo Please set an Auth method in %%USERPROFILE%%\.gemini\settings.json 1>&2
+  exit /b 41
+)
+exit /b 0
+`,
+        );
+        process.env.OD_AGENT_HOME = dir;
+        process.env.PATH = dir;
+        delete process.env.GEMINI_BIN;
+        delete process.env.GEMINI_API_KEY;
+        delete process.env.GOOGLE_API_KEY;
+
+        const agents = await detectAgents();
+        const detected = agents.find((agent) => agent.id === 'gemini');
+
+        assert.ok(detected);
+        assert.equal(detected.available, true);
+        assert.equal(detected.authStatus, 'missing');
+        assert.match(detected.authMessage ?? '', /Gemini CLI is installed/);
+      },
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('copilot reads current model ids from help and retains reviewed fallbacks', () => {

@@ -37,6 +37,15 @@ import { proxyDispatcherRequestInit, validateBaseUrlResolved } from '../connecti
 import { googleStreamGenerateContentUrl } from '../integrations/google-models.js';
 import { createRoleMarkerGuard } from '../role-marker-guard.js';
 import { authorizeReasoningEgress, sendReasoningEgressDenial } from '../reasoning-egress.js';
+import {
+  STORED_BYOK_API_KEY,
+  type SaveByokCredentialsRequest,
+} from '@open-design/contracts';
+import {
+  readPublicByokCredentials,
+  resolveByokApiKey,
+  writeByokCredentials,
+} from '../byok-credentials.js';
 
 // Allowlist for the `/feedback` route. Mirrors the
 // ChatMessageFeedbackReasonCode union in packages/contracts/src/api/chat.ts.
@@ -95,6 +104,59 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       return false;
     }
   };
+
+  const byokProtocolForRequest = (requestPath: string, body: Record<string, unknown>): string | null => {
+    if (typeof body.protocol === 'string' && body.protocol.trim()) return body.protocol.trim();
+    const proxy = /^\/api\/proxy\/([a-z0-9_-]+)\/stream$/i.exec(requestPath);
+    if (proxy?.[1]) return proxy[1];
+    const finalize = /\/finalize\/([a-z0-9_-]+)$/i.exec(requestPath);
+    if (finalize?.[1]) return finalize[1];
+    if (/\/handoff$/i.test(requestPath)) return 'anthropic';
+    return null;
+  };
+
+  // The renderer persists only this non-secret marker. Resolve it inside the
+  // daemon immediately before an authenticated upstream call so raw keys never
+  // cross a GET response or live in browser storage.
+  app.use(async (req, res, next) => {
+    const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body)
+      ? req.body as Record<string, unknown>
+      : null;
+    if (!body || body.apiKey !== STORED_BYOK_API_KEY) return next();
+    const protocol = byokProtocolForRequest(req.path, body);
+    if (!protocol) return sendApiError(res, 400, 'BAD_REQUEST', 'stored BYOK credential protocol is missing');
+    try {
+      const apiKey = await resolveByokApiKey(ctx.paths.RUNTIME_DATA_DIR, protocol, body.apiKey);
+      if (!apiKey) return sendApiError(res, 400, 'BAD_REQUEST', 'stored BYOK credential is unavailable');
+      req.body = { ...body, apiKey };
+      return next();
+    } catch {
+      return sendApiError(res, 503, 'CREDENTIAL_VAULT_UNAVAILABLE', 'stored BYOK credential is unavailable');
+    }
+  });
+
+  app.get('/api/byok/credentials', async (_req, res) => {
+    try {
+      res.json(await readPublicByokCredentials(ctx.paths.RUNTIME_DATA_DIR));
+    } catch {
+      sendApiError(res, 500, 'CREDENTIAL_METADATA_READ_FAILED', 'BYOK credential metadata could not be read');
+    }
+  });
+
+  app.put('/api/byok/credentials', ctx.http.requireLocalDaemonRequest, async (req, res) => {
+    const credentials = req.body?.credentials;
+    if (!credentials || typeof credentials !== 'object' || Array.isArray(credentials)) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'credentials must be an object');
+    }
+    try {
+      res.json(await writeByokCredentials(
+        ctx.paths.RUNTIME_DATA_DIR,
+        { credentials } as SaveByokCredentialsRequest,
+      ));
+    } catch {
+      return sendApiError(res, 503, 'CREDENTIAL_VAULT_UNAVAILABLE', 'BYOK credential could not be stored securely');
+    }
+  });
 
   // Run lifecycle routes live in `routes/runs.ts`; this file owns feedback,
   // connection tests, critique handoff, and provider proxy routes.

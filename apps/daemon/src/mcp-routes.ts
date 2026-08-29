@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { SIDECAR_ENV } from '@open-design/sidecar-proto';
 import { buildMcpInstallPayload, type McpInstallPayload } from './mcp-install-info.js';
 import { installCodexMcp, probeCodexInstall, uninstallCodexMcp } from './codex-cli.js';
-import { MCP_TEMPLATES, buildAcpMcpServers, buildClaudeMcpJson, isManagedProjectCwd, readMcpConfig, writeMcpConfig } from './mcp-config.js';
+import { MCP_TEMPLATES, buildAcpMcpServers, buildClaudeMcpJson, isManagedProjectCwd, readMcpConfig, readPublicMcpConfig, writeMcpConfig } from './mcp-config.js';
 import { beginAuth, exchangeCodeForToken, refreshAccessToken } from './mcp-oauth.js';
 import { clearToken, getToken, isTokenExpired, readAllTokens, setToken } from './mcp-tokens.js';
 import type { RouteDeps } from './server-context.js';
@@ -163,7 +163,7 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
-      const cfg = await readMcpConfig(RUNTIME_DATA_DIR);
+      const cfg = await readPublicMcpConfig(RUNTIME_DATA_DIR);
       res.json({ servers: cfg.servers, templates: MCP_TEMPLATES });
     } catch (err: any) {
       res
@@ -177,7 +177,8 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
-      const cfg = await writeMcpConfig(RUNTIME_DATA_DIR, req.body);
+      await writeMcpConfig(RUNTIME_DATA_DIR, req.body);
+      const cfg = await readPublicMcpConfig(RUNTIME_DATA_DIR);
       res.json({ servers: cfg.servers, templates: MCP_TEMPLATES });
     } catch (err: any) {
       res

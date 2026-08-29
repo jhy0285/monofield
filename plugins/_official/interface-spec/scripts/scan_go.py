@@ -3,7 +3,7 @@
 Regex + brace tracking (Go has no stdlib AST binding for Python): parses
 route registrations, router groups, struct definitions with json/binding
 tags, and handler bodies to emit an interface-spec.json document
-(schema v1) that `od docs render-interface-spec` accepts directly.
+(schema v1) that `monofield docs render-interface-spec` accepts directly.
 
 Handles:
   - gin  `r.GET("/path", handler)` (POST/PUT/PATCH/DELETE/...)

@@ -1,7 +1,11 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
-import type { DevelopmentWorkspaceProject } from '@open-design/contracts';
+import type {
+  DevelopmentWorkspaceProject,
+  ProjectDatabaseContext,
+  ProjectMetadata,
+} from '@open-design/contracts';
 
 const PROJECT_MARKERS = new Set([
   '.git',
@@ -39,6 +43,7 @@ const CACHE_TTL_MS = 5 * 60_000;
 type CacheEntry = { expiresAt: number; value: DevelopmentWorkspaceProject[] };
 const discoveryCache = new Map<string, CacheEntry>();
 const discoveryInFlight = new Map<string, Promise<DevelopmentWorkspaceProject[]>>();
+const discoveryGeneration = new Map<string, number>();
 
 function relativePath(root: string, target: string): string {
   return path.relative(root, target).replace(/\\/g, '/') || '.';
@@ -50,6 +55,48 @@ function safeWorkspacePath(value: string): string | null {
   if (path.posix.isAbsolute(normalized) || normalized.split('/').includes('..')) return null;
   if (/[*?{}[\]]/.test(normalized)) return null;
   return normalized;
+}
+
+function validDatabaseContext(value: ProjectDatabaseContext | null | undefined): ProjectDatabaseContext | null {
+  const connectionId = typeof value?.connectionId === 'string' ? value.connectionId.trim() : '';
+  if (!connectionId) return null;
+  return {
+    connectionId,
+    ...(typeof value?.label === 'string' && value.label.trim() ? { label: value.label.trim() } : {}),
+    useForDevelopment: value?.useForDevelopment === true,
+  };
+}
+
+/**
+ * Resolve the database bound to the currently selected workspace module.
+ *
+ * Once the per-module map exists it is authoritative, including when the
+ * active module has no entry. Falling back to the legacy top-level value in
+ * that case could grant service B the database/write policy selected for A.
+ */
+export function activeDevelopmentDatabaseContext(
+  metadata: ProjectMetadata | null | undefined,
+): ProjectDatabaseContext | null {
+  if (!metadata) return null;
+  if (metadata.workMode !== 'development') return validDatabaseContext(metadata.databaseContext);
+  const scoped = metadata.development?.databaseContextsByProject;
+  if (scoped !== undefined) {
+    const activeProjectPath = safeWorkspacePath(metadata.development?.activeProjectPath ?? '.') ?? '.';
+    return validDatabaseContext(scoped[activeProjectPath]);
+  }
+  return validDatabaseContext(metadata.databaseContext);
+}
+
+/** Present the active module's scoped binding through the legacy prompt/API field. */
+export function metadataWithActiveDevelopmentDatabaseContext(
+  metadata: ProjectMetadata | null | undefined,
+): ProjectMetadata | null | undefined {
+  if (!metadata || metadata.workMode !== 'development') return metadata;
+  const databaseContext = activeDevelopmentDatabaseContext(metadata);
+  const { databaseContext: _legacyDatabaseContext, ...metadataWithoutDatabase } = metadata;
+  return databaseContext
+    ? { ...metadataWithoutDatabase, databaseContext }
+    : metadataWithoutDatabase;
 }
 
 async function readText(target: string, maxBytes = 512 * 1024): Promise<string> {
@@ -220,7 +267,6 @@ async function scanDevelopmentProjects(root: string): Promise<DevelopmentWorkspa
     return left.path.localeCompare(right.path);
   });
   const result = value.length > 0 ? value : [{ path: '.', label: path.basename(root), markers: [] }];
-  discoveryCache.set(root, { expiresAt: Date.now() + CACHE_TTL_MS, value: result });
   return result;
 }
 
@@ -228,12 +274,22 @@ export async function discoverDevelopmentProjects(workspaceRoot: string, refresh
   const root = path.resolve(workspaceRoot);
   const cached = discoveryCache.get(root);
   if (!refresh && cached && cached.expiresAt > Date.now()) return cached.value;
-  const running = discoveryInFlight.get(root);
+  if (refresh) discoveryGeneration.set(root, (discoveryGeneration.get(root) ?? 0) + 1);
+  const generation = discoveryGeneration.get(root) ?? 0;
+  const inFlightKey = `${root}\0${generation}`;
+  const running = discoveryInFlight.get(inFlightKey);
   if (running) return running;
-  const scan = scanDevelopmentProjects(root).finally(() => {
-    if (discoveryInFlight.get(root) === scan) discoveryInFlight.delete(root);
-  });
-  discoveryInFlight.set(root, scan);
+  const scan = scanDevelopmentProjects(root)
+    .then((value) => {
+      if ((discoveryGeneration.get(root) ?? 0) === generation) {
+        discoveryCache.set(root, { expiresAt: Date.now() + CACHE_TTL_MS, value });
+      }
+      return value;
+    })
+    .finally(() => {
+      if (discoveryInFlight.get(inFlightKey) === scan) discoveryInFlight.delete(inFlightKey);
+    });
+  discoveryInFlight.set(inFlightKey, scan);
   return scan;
 }
 
@@ -242,6 +298,9 @@ export async function resolveDevelopmentProjectRoot(workspaceRoot: string, reque
   const projects = await discoverDevelopmentProjects(root, refresh);
   const safeRequested = requestedPath == null ? null : safeWorkspacePath(requestedPath);
   if (requestedPath != null && safeRequested == null) throw Object.assign(new Error('Invalid development project path'), { status: 400 });
+  if (safeRequested && !projects.some((candidate) => candidate.path === safeRequested)) {
+    throw Object.assign(new Error(`Development project was not found: ${safeRequested}`), { status: 404 });
+  }
   const runnableMarker = (candidate: DevelopmentWorkspaceProject) => candidate.markers.some((marker) => marker !== '.git');
   const rootProject = projects.find((candidate) => candidate.path === '.');
   const project = (safeRequested ? projects.find((candidate) => candidate.path === safeRequested) : null)

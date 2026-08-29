@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { cp, lstat, mkdir, readFile, readdir, readlink, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { withDirectoryLock } from "./lock.js";
 
@@ -90,6 +91,25 @@ async function pathExists(path: string): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+async function renameCacheEntry(stagingPath: string, entryPath: string): Promise<void> {
+  const attempts = process.platform === "win32" ? 8 : 1;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      await rename(stagingPath, entryPath);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException | null)?.code;
+      const transient = code === "EPERM" || code === "EACCES" || code === "EBUSY";
+      if (!transient || attempt + 1 >= attempts) throw error;
+      // Windows Defender, Explorer and search indexers can briefly retain a
+      // handle after the staging tree has been populated. Keep the cache
+      // publication atomic, but give those external readers a bounded window
+      // to release the handle instead of making an otherwise valid build fail.
+      await delay(Math.min(25 * (2 ** attempt), 250));
+    }
   }
 }
 
@@ -312,7 +332,7 @@ export class ToolPackCache {
           };
           await writeManifest(join(stagingPath, "manifest.json"), builtManifest);
           await rm(entryPath, { force: true, recursive: true });
-          await rename(stagingPath, entryPath);
+          await renameCacheEntry(stagingPath, entryPath);
           for (const aliasKey of aliases) {
             const aliasPath = aliasPathForKey(aliasKey);
             await mkdir(dirname(aliasPath), { recursive: true });

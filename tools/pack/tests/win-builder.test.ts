@@ -161,6 +161,15 @@ describe("Windows pack artifact boundaries", () => {
     expect(source).not.toContain('"-ms=off"');
   });
 
+  it("ships MonoField publisher and version metadata in Windows app and installer builds", async () => {
+    const builderSource = await readFile(new URL("../src/win/builder.ts", import.meta.url), "utf8");
+    const installerSource = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
+    expect(builderSource).toContain('name: "MonoField contributors"');
+    expect(installerSource).toContain('VIProductVersion "${installerNumericVersion}"');
+    expect(installerSource).toContain('"CompanyName" "MonoField contributors"');
+    expect(installerSource).toContain('"ProductVersion" "${escapeNsisString(packagedVersion)}"');
+  });
+
   it("invalidates Windows payload caches when the archive method changes", async () => {
     const builderSource = await readFile(new URL("../src/win/builder.ts", import.meta.url), "utf8");
     const payloadSource = await readFile(new URL("../src/win/payload.ts", import.meta.url), "utf8");

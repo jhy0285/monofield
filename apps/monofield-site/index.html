@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#08090a" />
-    <meta name="description" content="MonoField is a local-first workspace for code, design, and documents. Open a folder, review changes, run the project, verify the screen, and deliver from one workspace." />
+    <meta name="description" content="MonoField is a local-first desktop workbench for software development and documents/design. Keep the folder, diff, build, browser, governed data, and deliverables in one project." />
     <meta property="og:title" content="MonoField — code / design / documents" />
     <meta property="og:description" content="One field. Every kind of work." />
     <meta property="og:type" content="website" />
@@ -65,7 +65,7 @@
             <span aria-hidden="true">↗</span>
           </a>
         </div>
-        <p class="hero-note" data-en="The EXE downloads directly from the latest GitHub Release · Local-first · Apache-2.0" data-ko="EXE는 최신 GitHub Release에서 바로 다운로드됩니다 · 로컬 우선 · Apache-2.0">The EXE downloads directly from the latest GitHub Release · Local-first · Apache-2.0</p>
+        <p class="hero-note" data-en="Latest GitHub Release · unsigned direct build with SHA-256 checksums · local-first · Apache-2.0" data-ko="최신 GitHub Release · SHA-256 체크섬을 제공하는 미서명 직접 배포본 · 로컬 우선 · Apache-2.0">Latest GitHub Release · unsigned direct build with SHA-256 checksums · local-first · Apache-2.0</p>
       </section>
 
       <section class="app-showcase" id="product" aria-labelledby="app-showcase-title">
@@ -77,18 +77,18 @@
 
         <div class="mode-showcase">
           <div class="mode-switcher" role="tablist" aria-label="Project mode preview">
-            <button class="project-mode-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="mode-development" data-project-mode="development">
+            <button class="project-mode-tab is-active" id="project-mode-tab-development" type="button" role="tab" aria-selected="true" aria-controls="mode-development" data-project-mode="development" tabindex="0">
               <span data-en="Software development" data-ko="소프트웨어 개발">Software development</span>
               <small data-en="CODE · BUILD · VERIFY" data-ko="코드 · 빌드 · 검증">CODE · BUILD · VERIFY</small>
             </button>
-            <button class="project-mode-tab" type="button" role="tab" aria-selected="false" aria-controls="mode-creative" data-project-mode="creative">
+            <button class="project-mode-tab" id="project-mode-tab-creative" type="button" role="tab" aria-selected="false" aria-controls="mode-creative" data-project-mode="creative" tabindex="-1">
               <span data-en="Documents / design" data-ko="문서/디자인 제작">Documents / design</span>
               <small data-en="COMPOSE · REVIEW · EXPORT" data-ko="제작 · 검토 · 내보내기">COMPOSE · REVIEW · EXPORT</small>
             </button>
           </div>
 
-          <div class="project-mode-panel is-active" id="mode-development" role="tabpanel" data-project-mode-panel="development">
-            <div class="mode-demo-meta"><span data-en="Guided product demo" data-ko="제품 기능 데모">Guided product demo</span><small data-en="A staged project using MonoField's actual workspace structure and implemented controls." data-ko="MonoField의 실제 작업 구조와 구현된 기능을 샘플 프로젝트에 구성했습니다.">A staged project using MonoField's actual workspace structure and implemented controls.</small></div>
+          <div class="project-mode-panel is-active" id="mode-development" role="tabpanel" aria-labelledby="project-mode-tab-development" data-project-mode-panel="development">
+            <div class="mode-demo-meta"><span data-en="Software development" data-ko="소프트웨어 개발">Software development</span><small data-en="A realistic project view built from MonoField's implemented workspace, run, diff, browser, database, and review controls." data-ko="MonoField에 구현된 워크스페이스, 실행, diff, 브라우저, 데이터베이스, 검토 기능으로 구성한 실제형 프로젝트 화면입니다.">A realistic project view built from MonoField's implemented workspace, run, diff, browser, database, and review controls.</small></div>
             <div class="product-demo-window demo-development" aria-label="MonoField software development demo">
               <header class="demo-appbar">
                 <strong><img src="/mark.svg?v=monofield-m1" width="15" height="15" alt=""> monofield</strong>
@@ -138,8 +138,8 @@
             <footer class="mode-demo-caption"><span data-en="Mark the target. Change the code. Build and verify the interaction." data-ko="대상을 표시하고, 코드를 수정하고, 빌드와 실제 동작을 검증합니다.">Mark the target. Change the code. Build and verify the interaction.</span><b>folder → diff → build → browser → data</b></footer>
           </div>
 
-          <div class="project-mode-panel" id="mode-creative" role="tabpanel" data-project-mode-panel="creative" hidden>
-            <div class="mode-demo-meta"><span data-en="Guided product demo" data-ko="제품 기능 데모">Guided product demo</span><small data-en="References, structured generation, preview, review, comments, validation, and export in one project." data-ko="참고 자료, 구조화 생성, 미리보기, 검토, 댓글, 검증, export를 한 프로젝트에서 보여줍니다.">References, structured generation, preview, review, comments, validation, and export in one project.</small></div>
+          <div class="project-mode-panel" id="mode-creative" role="tabpanel" aria-labelledby="project-mode-tab-creative" data-project-mode-panel="creative" hidden>
+            <div class="mode-demo-meta"><span data-en="Documents / design" data-ko="문서/디자인 제작">Documents / design</span><small data-en="A realistic document project with references, structured generation, preview, review, comments, validation, and export." data-ko="참고 자료, 구조화 생성, 미리보기, 검토, 댓글, 검증, export를 연결한 실제형 문서 프로젝트 화면입니다.">A realistic document project with references, structured generation, preview, review, comments, validation, and export.</small></div>
             <div class="product-demo-window demo-creative" aria-label="MonoField documents and design demo">
               <header class="demo-appbar"><strong><img src="/mark.svg?v=monofield-m1" width="15" height="15" alt=""> monofield</strong><span class="demo-home">⌂ <b data-en="Home" data-ko="홈">Home</b></span><span class="demo-project-tab"><i></i><b>Order API specification</b><small>C:\work\commerce</small><em>×</em></span><span class="demo-new-tab">＋</span><span class="demo-appbar-space"></span><button type="button">Codex⌄</button><button type="button" aria-label="Settings">⚙</button></header>
               <div class="demo-appbody">
@@ -197,7 +197,7 @@
             <div class="why-visual why-output"><div class="output-source"><small>PROJECT EVIDENCE</small><strong>commerce-platform</strong><span>code · browser · schema</span></div><i>→</i><div class="output-stack"><span><b>.TS</b><em>Implementation</em></span><span><b>.XLSX</b><em>Interface spec</em></span><span><b>.PPTX</b><em>Screen spec / deck</em></span><span><b>.HTML</b><em>Prototype</em></span></div><footer>ONE SOURCE · MULTIPLE DELIVERABLES</footer></div>
           </article>
           <article>
-            <div class="why-copy"><span>04</span><h3 data-en="Switch the runtime. Keep the project." data-ko="CLI를 바꿔도, 프로젝트는 그대로입니다.">Switch the runtime. Keep the project.</h3><p data-en="Connect Claude Code, Codex CLI, Gemini CLI, OpenCode, Cursor Agent, or an OpenAI-compatible endpoint. Choose the runtime for each task without moving the project." data-ko="Claude Code, Codex CLI, Gemini CLI, OpenCode, Cursor Agent 또는 OpenAI-compatible endpoint를 연결합니다. 프로젝트를 옮기지 않고 작업마다 실행 런타임을 선택합니다.">Connect Claude Code, Codex CLI, Gemini CLI, OpenCode, Cursor Agent, or an OpenAI-compatible endpoint. Choose the runtime for each task without moving the project.</p></div>
+            <div class="why-copy"><span>04</span><h3 data-en="Choose the engine. See the boundary." data-ko="엔진은 선택하고, 권한은 구분합니다.">Choose the engine. See the boundary.</h3><p data-en="Supported local CLI adapters can work against the selected project root. Tool coverage depends on the adapter and installation. BYOK endpoints cover chat and document generation; they do not automatically inherit terminal, browser, or database tools." data-ko="지원되는 로컬 CLI 어댑터는 선택한 프로젝트 루트에서 작업합니다. 도구 범위는 설치된 어댑터마다 다릅니다. BYOK endpoint는 질문과 문서 생성에 사용하며 터미널, 브라우저, 데이터베이스 도구를 자동으로 상속하지 않습니다.">Supported local CLI adapters can work against the selected project root. Tool coverage depends on the adapter and installation. BYOK endpoints cover chat and document generation; they do not automatically inherit terminal, browser, or database tools.</p></div>
             <div class="why-visual why-boundary"><div class="runtime-list"><header><small>AVAILABLE RUNTIMES</small><span>detected</span></header><p class="is-active"><b>Codex CLI</b><em>connected</em></p><p><b>Claude Code</b><em>CLI</em></p><p><b>Gemini CLI</b><em>CLI</em></p><p><b>OpenCode</b><em>CLI</em></p><p><b>Compatible API</b><em>BYOK</em></p></div><i>choose per task →</i><div class="runtime-project"><small>ACTIVE PROJECT</small><strong>commerce-platform</strong><span>same folder</span><span>same browser</span><span>same history</span></div></div>
           </article>
         </div>
@@ -217,13 +217,13 @@
             <div class="runtime-pill">codex · local CLI</div>
           </div>
           <div class="workspace-tabs" role="tablist" aria-label="Workspace preview">
-            <button class="workspace-tab is-active" type="button" data-panel="code" role="tab" aria-selected="true">Code <b>12</b></button>
-            <button class="workspace-tab" type="button" data-panel="browser" role="tab" aria-selected="false">Browser <b>live</b></button>
-            <button class="workspace-tab" type="button" data-panel="data" role="tab" aria-selected="false">Database <b>read</b></button>
-            <button class="workspace-tab" type="button" data-panel="docs" role="tab" aria-selected="false">Documents <b>3</b></button>
+            <button class="workspace-tab is-active" id="field-tab-code" type="button" data-panel="code" role="tab" aria-controls="field-panel-code" aria-selected="true" tabindex="0">Code <b>12</b></button>
+            <button class="workspace-tab" id="field-tab-browser" type="button" data-panel="browser" role="tab" aria-controls="field-panel-browser" aria-selected="false" tabindex="-1">Browser <b>live</b></button>
+            <button class="workspace-tab" id="field-tab-data" type="button" data-panel="data" role="tab" aria-controls="field-panel-data" aria-selected="false" tabindex="-1">Database <b>read</b></button>
+            <button class="workspace-tab" id="field-tab-docs" type="button" data-panel="docs" role="tab" aria-controls="field-panel-docs" aria-selected="false" tabindex="-1">Documents <b>3</b></button>
           </div>
 
-          <div class="workspace-panel is-active" data-workspace-panel="code">
+          <div class="workspace-panel is-active" id="field-panel-code" data-workspace-panel="code" role="tabpanel" aria-labelledby="field-tab-code">
             <aside class="file-rail" aria-label="Changed files">
               <div class="rail-title">CHANGES <span>2</span></div>
               <button class="file-row is-active" type="button"><em>M</em><span>OrderService.ts</span><small>+18 −4</small></button>
@@ -248,7 +248,7 @@
             </div>
           </div>
 
-          <div class="workspace-panel" data-workspace-panel="browser">
+          <div class="workspace-panel" id="field-panel-browser" data-workspace-panel="browser" role="tabpanel" aria-labelledby="field-tab-browser" hidden>
             <div class="browser-preview">
               <div class="browser-bar"><span>←</span><span>→</span><span>↻</span><div><i></i> localhost:3000/orders</div><b>Approved</b></div>
               <div class="browser-page">
@@ -259,7 +259,7 @@
             <div class="activity-strip"><span class="cursor-dot"></span><b>Browser pointer</b><span>hover → click → type → verify</span><em>live</em></div>
           </div>
 
-          <div class="workspace-panel" data-workspace-panel="data">
+          <div class="workspace-panel" id="field-panel-data" data-workspace-panel="data" role="tabpanel" aria-labelledby="field-tab-data" hidden>
             <div class="data-table">
               <div class="data-toolbar"><div><span class="status-dot"></span><strong>commerce-dev</strong><small>Encrypted credential · Desktop vault</small></div><button type="button">Read only⌄</button></div>
               <div class="schema-row schema-head"><span>table</span><span>purpose</span><span>rows sampled</span><span>access</span></div>
@@ -270,7 +270,7 @@
             </div>
           </div>
 
-          <div class="workspace-panel" data-workspace-panel="docs">
+          <div class="workspace-panel" id="field-panel-docs" data-workspace-panel="docs" role="tabpanel" aria-labelledby="field-tab-docs" hidden>
             <div class="document-preview">
               <aside><small>OUTPUT</small><button class="is-active" type="button">Interface spec.xlsx</button><button type="button">Screen spec.xlsx</button><button type="button">Release brief.pptx</button></aside>
               <div class="sheet"><div class="sheet-title"><div><small>IF-ORD-001</small><h3>Create order</h3></div><span>POST</span></div><div class="sheet-grid"><b>Endpoint</b><span>/api/orders</span><b>Auth</b><span>Bearer</span><b>Request</b><span>customerId, items[]</span><b>Response</b><span>orderId, status</span></div><div class="sheet-status">Validated against code + browser + approved schema</div></div>
@@ -338,12 +338,12 @@
         <div class="guide-copy">
           <p class="section-index">07 / USER GUIDE</p>
           <h2 id="guide-title" data-en="Start with a guided walkthrough." data-ko="처음부터, 순서대로 시작하세요.">Start with a guided walkthrough.</h2>
-          <p data-en="The app opens a four-step tutorial after first-time setup. The full guide covers software development, browser and database policies, documents / design, interface specifications, screen specifications, security, and troubleshooting." data-ko="앱을 처음 설정하면 4단계 튜토리얼이 이어집니다. 전체 가이드에서는 소프트웨어 개발, 브라우저와 DB 정책, 문서/디자인 제작, 인터페이스·화면 명세서, 보안과 문제 해결까지 설명합니다.">The app opens a four-step tutorial after first-time setup. The full guide covers software development, browser and database policies, documents / design, interface specifications, screen specifications, security, and troubleshooting.</p>
+          <p data-en="First-run onboarding introduces both ways of working. Inside a project, a seven-step development walkthrough covers run configuration, Git, browser verification, and governed data; a four-step documents/design walkthrough covers source context, preview, review tools, and export. Every guide can be opened again when you need it." data-ko="첫 실행 안내에서 두 가지 작업 방식을 익힙니다. 프로젝트 안에서는 7단계 개발 가이드가 실행 구성, Git, 브라우저 검증, 통제된 데이터를 안내하고, 4단계 문서/디자인 가이드가 자료 연결, 미리보기, 검토 도구, export를 안내합니다. 모든 가이드는 필요할 때 다시 열 수 있습니다.">First-run onboarding introduces both ways of working. Inside a project, a seven-step development walkthrough covers run configuration, Git, browser verification, and governed data; a four-step documents/design walkthrough covers source context, preview, review tools, and export. Every guide can be opened again when you need it.</p>
           <ol class="guide-outline">
-            <li><span>01</span><b data-en="Choose how you want to work" data-ko="작업 방식 선택">Choose how you want to work</b></li>
-            <li><span>02</span><b data-en="Connect only the project evidence you need" data-ko="필요한 프로젝트 근거만 연결">Connect only the project evidence you need</b></li>
-            <li><span>03</span><b data-en="Ask in one sentence" data-ko="한 문장으로 요청">Ask in one sentence</b></li>
-            <li><span>04</span><b data-en="Review, verify, and deliver" data-ko="검토·검증 후 전달">Review, verify, and deliver</b></li>
+            <li><span>01</span><b data-en="First run · choose a project mode and folder" data-ko="첫 실행 · 작업 방식과 폴더 선택">First run · choose a project mode and folder</b></li>
+            <li><span>02</span><b data-en="Development · seven practical steps" data-ko="개발 · 실제 흐름을 따라가는 7단계">Development · seven practical steps</b></li>
+            <li><span>03</span><b data-en="Documents/design · four practical steps" data-ko="문서/디자인 · 제작 흐름을 따라가는 4단계">Documents/design · four practical steps</b></li>
+            <li><span>04</span><b data-en="Illustrated workflows · setup to troubleshooting" data-ko="화면 중심 안내 · 설정부터 문제 해결까지">Illustrated workflows · setup to troubleshooting</b></li>
           </ol>
           <div class="guide-actions">
             <a class="button button-primary" href="/downloads/monofield-user-guide-ko.pdf" download>
@@ -353,10 +353,10 @@
               <span data-en="Download editable DOCX" data-ko="편집 가능한 DOCX 다운로드">Download editable DOCX</span><span aria-hidden="true">↓</span>
             </a>
           </div>
-          <p class="guide-meta" data-en="Korean · 8 pages · PDF and DOCX" data-ko="한국어 · 8페이지 · PDF와 DOCX">Korean · 8 pages · PDF and DOCX</p>
+          <p class="guide-meta" data-en="Korean · illustrated walkthrough · PDF and editable DOCX" data-ko="한국어 · 화면 중심 가이드 · PDF와 편집 가능한 DOCX">Korean · illustrated walkthrough · PDF and editable DOCX</p>
         </div>
         <a class="guide-preview" href="/downloads/monofield-user-guide-ko.pdf" aria-label="Open the MonoField user guide PDF">
-          <img src="/monofield-user-guide-cover.png" alt="MonoField user guide cover" width="1020" height="1320" loading="lazy" />
+          <img src="/monofield-user-guide-cover.png" alt="MonoField user guide cover" width="1403" height="993" loading="lazy" />
           <span><b>MONOFIELD / USER GUIDE</b><em data-en="Open PDF ↗" data-ko="PDF 열기 ↗">Open PDF ↗</em></span>
         </a>
       </section>
@@ -364,10 +364,11 @@
       <section class="closing-section">
         <p class="eyebrow">monofield</p>
         <h2 data-en="Bring the whole project into one workspace" data-ko="프로젝트 전체를 하나의 공간으로">Bring the whole project into one workspace</h2>
+        <p class="closing-copy" data-en="If MonoField helps you finish or verify real work, star the project so more people can find it." data-ko="MonoField가 실제 작업을 끝내고 검증하는 데 도움이 됐다면, 더 많은 사람이 발견할 수 있도록 Star로 응원해 주세요.">If MonoField helps you finish or verify real work, star the project so more people can find it.</p>
         <div class="hero-actions">
           <a class="button button-primary button-store" data-store-download hidden href="#"><span data-en="Get it from Microsoft" data-ko="Microsoft Store에서 받기">Get it from Microsoft</span><span aria-hidden="true">↗</span></a>
           <a class="button button-primary button-direct" data-direct-download data-store-fallback-primary href="https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-setup.exe"><span data-en="Direct EXE download" data-ko="EXE 직접 다운로드">Direct EXE download</span><span aria-hidden="true">↘</span></a>
-          <a class="button button-quiet" href="https://github.com/jhy0285/monofield"><span>GitHub</span><span aria-hidden="true">↗</span></a>
+          <a class="button button-quiet" href="https://github.com/jhy0285/monofield"><span data-en="Star on GitHub" data-ko="GitHub에서 Star">Star on GitHub</span><span aria-hidden="true">☆</span></a>
         </div>
       </section>
     </main>

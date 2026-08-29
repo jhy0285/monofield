@@ -1,10 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
+import { signDesktopImportToken as signSharedDesktopImportToken } from "@open-design/sidecar-proto";
 
-import { mintHomeWorkingDirToken } from "../../src/main/runtime.js";
+import {
+  mintHomeWorkingDirToken,
+  signDesktopImportToken,
+} from "../../src/main/runtime.js";
 
 const SECRET = Buffer.from("test-desktop-auth-secret");
 
 describe("mintHomeWorkingDirToken", () => {
+  it("uses the shared domain-separated import-token wire format", () => {
+    const options = { exp: "2026-08-29T00:00:30.000Z", nonce: "nonce-1" };
+    expect(signDesktopImportToken(SECRET, "C:/work/project", options))
+      .toBe(signSharedDesktopImportToken(SECRET, "C:/work/project", options));
+    expect(() => signDesktopImportToken(SECRET, "C:/work/project\nget", options))
+      .toThrow(/control characters/i);
+  });
+
   it("runs the desktop-auth handshake before minting the token", async () => {
     const calls: string[] = [];
     const registerDesktopAuth = vi.fn(async () => {

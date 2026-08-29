@@ -42,6 +42,12 @@ export const cursorAgentDef = {
       // "unknown option '--trust'" and exit 1, which kills Test and task
       // execution (issue #4461). Gate on the probe like claude/codebuddy do.
       '--trust': 'trust',
+      // These flags have existed in multiple Cursor CLI releases but are not
+      // part of every public parameter surface. The child process already
+      // starts in runtimeContext.cwd, and stream-json still emits a terminal
+      // result without partial mode, so both are safe optional enhancements.
+      '--workspace': 'workspace',
+      '--stream-partial-output': 'streamPartialOutput',
     },
     // `cursor-agent models` prints account-bound model ids per line. When
     // the user isn't authed it prints "No models available for this
@@ -79,26 +85,38 @@ export const cursorAgentDef = {
         '--print',
         '--output-format',
         'stream-json',
-        '--stream-partial-output',
         '--force',
       );
+      if (caps.streamPartialOutput) {
+        args.push('--stream-partial-output');
+      }
       // `--trust` grants workspace trust in headless runs, but only newer
       // cursor-agent builds accept it; older ones exit 1 with "unknown option"
       // (issue #4461). Pass it only when the `--help` probe saw it.
       if (caps.trust) {
         args.push('--trust');
       }
-      if (runtimeContext.cwd) {
+      if (caps.workspace && runtimeContext.cwd) {
         args.push('--workspace', runtimeContext.cwd);
       }
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
+      }
+      const resumeSessionId = runtimeContext.resumeSessionId?.trim();
+      if (resumeSessionId) {
+        args.push('--resume', resumeSessionId);
       }
       return args;
     },
     promptViaStdin: true,
     streamFormat: 'json-event-stream',
     eventParser: 'cursor-agent',
+    // Cursor chooses the session id on the first headless turn and emits it
+    // on every stream-json event. Capture that id, then resume it on later
+    // turns so MonoField sends only the new user message instead of replaying
+    // the full rendered conversation.
+    resumesSessionViaCli: true,
+    sessionIdFromStream: true,
     // `cursor-agent status` is a cheap, side-effect-free auth check. Declaring
     // it here is what makes detection surface an "auth required" badge for
     // Cursor Agent (the generalized probe only runs for adapters that opt in).

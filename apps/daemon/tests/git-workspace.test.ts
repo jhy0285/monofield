@@ -92,6 +92,18 @@ describe('Git workspace reader', () => {
       expect.objectContaining({ path: 'same.ts', status: 'modified' }),
     ]);
   });
+
+  test('reuses a short status snapshot and bypasses it for an explicit refresh', async () => {
+    await gitWorkspaceStatus(root, null, { refresh: true });
+    const cachedPath = join(root, 'cache-refresh.txt');
+    await writeFile(cachedPath, 'new\n', 'utf8');
+
+    expect((await gitWorkspaceStatus(root)).files.some((file) => file.path === 'cache-refresh.txt')).toBe(false);
+    expect((await gitWorkspaceStatus(root, null, { refresh: true })).files.some((file) => file.path === 'cache-refresh.txt')).toBe(true);
+
+    await rm(cachedPath, { force: true });
+    await gitWorkspaceStatus(root, null, { refresh: true });
+  });
 });
 
 describe('Git workspace branch mutations', () => {

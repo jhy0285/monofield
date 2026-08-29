@@ -2472,9 +2472,11 @@ function MediaProjectOptions(props:
     }
 ) {
   const t = useT();
-  const aihubmixImageModels = useAIHubMixImageModels();
-  const aihubmixVideoModels = useAIHubMixVideoModels();
-  const aihubmixAudioModels = useAIHubMixAudioModels();
+  // MediaProjectOptions renders one surface at a time.  Avoid fetching all
+  // three remote catalogues whenever the panel is opened.
+  const aihubmixImageModels = useAIHubMixImageModels(props.surface === 'image');
+  const aihubmixVideoModels = useAIHubMixVideoModels(props.surface === 'video');
+  const aihubmixAudioModels = useAIHubMixAudioModels(props.surface === 'audio');
 
   if (props.surface === 'image') {
     return (

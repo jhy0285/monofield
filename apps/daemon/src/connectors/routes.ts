@@ -5,7 +5,7 @@ import type { Express, Request, RequestHandler, Response } from 'express';
 import { checkConnectorAccess, type ToolTokenGrant } from '../tool-tokens.js';
 import { validateBoundedJsonObject } from '../live-artifacts/schema.js';
 import { executeConnectorTool, listConnectorTools } from '../tools/connectors.js';
-import { readComposioConfig, readPublicComposioConfig, writeComposioConfig } from './composio-config.js';
+import { readPublicComposioConfig, resolveComposioApiKey, writeComposioConfig } from './composio-config.js';
 import type { ConnectorToolUseCase } from './catalog.js';
 import { connectorService, ConnectorService, ConnectorServiceError, deleteConnectorCredentialsByProvider } from './service.js';
 
@@ -567,22 +567,22 @@ export function registerConnectorRoutes(app: Express, options: RegisterConnector
     }
   });
 
-  app.get('/api/connectors/composio/config', (_req: Request, res: Response) => {
+  app.get('/api/connectors/composio/config', async (_req: Request, res: Response) => {
     try {
-      res.json(readPublicComposioConfig());
+      res.json(await readPublicComposioConfig());
     } catch (err) {
       res.status(500).json({ error: String(err instanceof Error ? err.message : err) });
     }
   });
 
-  app.put('/api/connectors/composio/config', requireLocalDaemonRequest, (req: Request, res: Response) => {
+  app.put('/api/connectors/composio/config', requireLocalDaemonRequest, async (req: Request, res: Response) => {
     try {
-      const before = readComposioConfig();
-      const cfg = writeComposioConfig(req.body);
-      const after = readComposioConfig();
+      const beforeApiKey = await resolveComposioApiKey();
+      const cfg = await writeComposioConfig(req.body);
+      const afterApiKey = await resolveComposioApiKey();
       options.composio?.clearDiscoveryCache();
-      if (!cfg.configured || (before.apiKey && before.apiKey !== after.apiKey)) {
-        deleteConnectorCredentialsByProvider('composio');
+      if (!cfg.configured || (beforeApiKey && beforeApiKey !== afterApiKey)) {
+        await deleteConnectorCredentialsByProvider('composio');
       }
       res.json(cfg);
     } catch (err) {

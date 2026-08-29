@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { cp, mkdir } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { basename, dirname, extname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 function resolveToolsPackRoot(startDir: string): string {
@@ -79,6 +79,55 @@ const BUNDLED_LEGAL_FILES = [
   "THIRD_PARTY_NOTICES.md",
 ] as const;
 
+// Resource trees intentionally include runtime Markdown (SKILL.md, DESIGN.md,
+// and linked references) and runnable examples used by the template/plugin
+// catalogues. Only strip directory classes and file types that are exclusively
+// development or generated baggage in these trees.
+const DEVELOPMENT_ONLY_RESOURCE_DIRECTORIES = new Set([
+  "__snapshots__",
+  "__tests__",
+  "__pycache__",
+  "coverage",
+  "docs",
+  "fixtures",
+  "logs",
+  "screenshots",
+  "snapshots",
+  "spec",
+  "specs",
+  "test",
+  "tests",
+]);
+
+const DEVELOPMENT_ONLY_RESOURCE_EXTENSIONS = new Set([".log", ".map", ".pyc", ".pyo"]);
+
+const DEVELOPMENT_ONLY_RESOURCE_FILE_NAMES = new Set([
+  ".clawscan-allow",
+  ".ds_store",
+  ".gitignore",
+  "agents.md",
+  "thumbs.db",
+]);
+
+export function shouldBundleRuntimeResource(sourceRoot: string, sourcePath: string): boolean {
+  const relativePath = relative(sourceRoot, sourcePath);
+  if (relativePath.length === 0) return true;
+
+  const segments = relativePath.split(/[\\/]+/).map((segment) => segment.toLowerCase());
+  if (segments.some((segment) => DEVELOPMENT_ONLY_RESOURCE_DIRECTORIES.has(segment))) {
+    return false;
+  }
+
+  const fileName = basename(sourcePath).toLowerCase();
+  if (DEVELOPMENT_ONLY_RESOURCE_FILE_NAMES.has(fileName)) return false;
+  // A catalogue root README documents this repository's source tree. Nested
+  // READMEs remain available because individual templates can use them as
+  // runtime instructions or example content.
+  if (segments.length === 1 && /^readme(?:\..+)?\.md$/.test(fileName)) return false;
+
+  return !DEVELOPMENT_ONLY_RESOURCE_EXTENSIONS.has(extname(fileName));
+}
+
 export async function copyBundledResourceTrees({
   workspaceRoot,
   resourceRoot,
@@ -89,7 +138,9 @@ export async function copyBundledResourceTrees({
   await mkdir(resourceRoot, { recursive: true });
 
   for (const entry of BUNDLED_RESOURCE_TREES) {
-    await cp(join(workspaceRoot, entry.from), join(resourceRoot, entry.to), {
+    const sourceRoot = join(workspaceRoot, entry.from);
+    await cp(sourceRoot, join(resourceRoot, entry.to), {
+      filter: (sourcePath) => shouldBundleRuntimeResource(sourceRoot, sourcePath),
       recursive: true,
     });
   }

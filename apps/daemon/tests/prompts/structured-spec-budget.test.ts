@@ -21,4 +21,44 @@ describe('structured specification prompt budget', () => {
       expect(scoped.length).toBeLessThan(generic.length - 35_000);
     },
   );
+
+  it.each(['interface-spec', 'screen-spec'] as const)(
+    'lazy-loads %s artifact instructions for guidance turns with a stable fingerprint',
+    (kind) => {
+      const largeSkillBody = `# Deterministic collector\n\n${'artifact-only-rule\n'.repeat(4_000)}`;
+      const base = {
+        sessionMode: 'docs' as const,
+        locale: 'ko',
+        metadata: { kind },
+        skillName: kind === 'interface-spec' ? 'Interface Spec' : 'Screen Spec',
+        skillBody: largeSkillBody,
+        designSystemBody: 'design-only-rule\n'.repeat(1_000),
+        pluginBlock: 'plugin-only-rule\n'.repeat(1_000),
+        activeStageBlocks: ['stage-only-rule\n'.repeat(1_000)],
+      };
+      const guidance = composeSystemPrompt({
+        ...base,
+        structuredArtifactInstructions: false,
+      });
+      const repeatedGuidance = composeSystemPrompt({
+        ...base,
+        structuredArtifactInstructions: false,
+      });
+      const artifact = composeSystemPrompt({
+        ...base,
+        structuredArtifactInstructions: true,
+      });
+
+      expect(guidance).toBe(repeatedGuidance);
+      expect(guidance).toContain('# Docs mode');
+      expect(guidance).toContain('# Structured specification workflow');
+      expect(guidance).not.toContain('artifact-only-rule');
+      expect(guidance).not.toContain('design-only-rule');
+      expect(guidance).not.toContain('plugin-only-rule');
+      expect(guidance).not.toContain('stage-only-rule');
+      expect(artifact).toContain('artifact-only-rule');
+      expect(artifact.length - guidance.length).toBeGreaterThan(70_000);
+      expect(guidance.length).toBeLessThan(12_000);
+    },
+  );
 });

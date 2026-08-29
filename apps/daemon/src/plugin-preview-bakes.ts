@@ -12,7 +12,7 @@
 // `<project>/.od/plugin-previews`). CI bakes them and uploads to R2; the daemon
 // serves whatever is present locally at `/api/plugin-previews/<file>`.
 
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 export const PLUGIN_PREVIEWS_ROUTE = '/api/plugin-previews';
@@ -44,7 +44,12 @@ export function resolvePluginPreviewsDir(projectRoot: string): string {
   return path.join(projectRoot, 'data', 'plugin-previews');
 }
 
-let cache: { dir: string; mtimeMs: number; previews: Record<string, BakeEntry> } | null = null;
+let cache: {
+  dir: string;
+  mtimeMs: number;
+  previews: Record<string, BakeEntry>;
+  blocks?: Record<string, BakedPreviewBlock>;
+} | null = null;
 
 function loadManifest(dir: string): Record<string, BakeEntry> {
   const manifestPath = path.join(dir, 'manifest.json');
@@ -67,8 +72,11 @@ function loadManifest(dir: string): Record<string, BakeEntry> {
 }
 
 export function bakedPreviewBlock(id: string, dir: string): BakedPreviewBlock | null {
-  const entry = loadManifest(dir)[id];
+  const previews = loadManifest(dir);
+  const entry = previews[id];
   if (!entry || !entry.video || !entry.poster) return null;
+  if (cache?.dir === dir && cache.blocks) return cache.blocks[id] ?? null;
+  const blocks: Record<string, BakedPreviewBlock> = {};
   // Resolve where the clip is fetchable from, in priority order:
   //   1. an explicit OD_PLUGIN_PREVIEWS_BASE_URL override;
   //   2. the daemon's own /api/plugin-previews route when the clips are on disk
@@ -77,14 +85,40 @@ export function bakedPreviewBlock(id: string, dir: string): BakedPreviewBlock | 
   //      web deployment, so neither needs any config: the checked-in manifest
   //      names the clips and they're served from R2's CDN.
   const envBase = process.env.OD_PLUGIN_PREVIEWS_BASE_URL?.replace(/\/+$/, '');
-  const onDisk =
-    existsSync(path.join(dir, entry.video)) && existsSync(path.join(dir, entry.poster));
-  const base = envBase || (onDisk ? PLUGIN_PREVIEWS_ROUTE : DEFAULT_PUBLIC_BASE);
-  return {
-    poster: `${base}/${entry.poster}`,
-    video: `${base}/${entry.video}`,
-    ...(typeof entry.holdMs === 'number' ? { holdMs: entry.holdMs } : {}),
-  };
+  // A production manifest commonly contains hundreds of CDN entries while
+  // the local directory contains only manifest.json. Calling existsSync twice
+  // per entry made the first picker request spend hundreds of milliseconds in
+  // filesystem probes. Read the directory once and fall back to existsSync
+  // only for the uncommon nested relative path.
+  let localFiles = new Set<string>();
+  if (!envBase) {
+    try {
+      localFiles = new Set(readdirSync(dir, { withFileTypes: true })
+        .filter((item) => item.isFile())
+        .map((item) => item.name));
+    } catch {
+      localFiles = new Set();
+    }
+  }
+  const localAssetExists = (relativePath: string) => (
+    !relativePath.includes('/') && !relativePath.includes('\\')
+      ? localFiles.has(relativePath)
+      : existsSync(path.join(dir, relativePath))
+  );
+  for (const [pluginId, candidate] of Object.entries(previews)) {
+    if (!candidate.video || !candidate.poster) continue;
+    const onDisk = !envBase
+      && localAssetExists(candidate.video)
+      && localAssetExists(candidate.poster);
+    const base = envBase || (onDisk ? PLUGIN_PREVIEWS_ROUTE : DEFAULT_PUBLIC_BASE);
+    blocks[pluginId] = {
+      poster: `${base}/${candidate.poster}`,
+      video: `${base}/${candidate.video}`,
+      ...(typeof candidate.holdMs === 'number' ? { holdMs: candidate.holdMs } : {}),
+    };
+  }
+  if (cache?.dir === dir) cache.blocks = blocks;
+  return blocks[id] ?? null;
 }
 
 // Attach the baked clip under `manifest.od.bakedPreview` (a SEPARATE field —
@@ -98,8 +132,14 @@ export function applyBakedPreviews<T extends { id: string; manifest?: unknown }>
 ): T[] {
   const previews = loadManifest(dir);
   if (Object.keys(previews).length === 0) return records;
+  // Resolve all blocks in one directory read before walking records. Reading
+  // through bakedPreviewBlock for every record would still stat manifest.json
+  // hundreds of times even though the resolved block map is already cached.
+  const firstId = Object.keys(previews)[0];
+  if (firstId) bakedPreviewBlock(firstId, dir);
+  const blocks = cache?.dir === dir ? cache.blocks : undefined;
   return records.map((rec) => {
-    const block = bakedPreviewBlock(rec.id, dir);
+    const block = blocks?.[rec.id];
     if (!block) return rec;
     const manifest = { ...((rec.manifest ?? {}) as Record<string, unknown>) };
     const od = { ...((manifest.od ?? {}) as Record<string, unknown>) };

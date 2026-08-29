@@ -1,5 +1,5 @@
 import type http from 'node:http';
-import { createHmac, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -356,11 +356,7 @@ describe('verifyDesktopImportToken (pure helper)', () => {
   const VALID_EXP = '2026-05-08T20:00:30.000Z';
 
   function mint(baseDir: string, nonce: string, exp: string): string {
-    const sig = createHmac('sha256', SECRET).update(`${baseDir}\n${nonce}\n${exp}`).digest('base64url');
-    // `~` field separator mirrors the daemon's
-    // DESKTOP_IMPORT_TOKEN_FIELD_SEP — ISO 8601 expiries embed `.` so
-    // a `.` separator would split into four parts on parse.
-    return [nonce, exp, sig].join('~');
+    return signDesktopImportToken(SECRET, baseDir, { nonce, exp });
   }
 
   it('accepts a freshly minted token bound to the same baseDir', () => {
@@ -386,6 +382,23 @@ describe('verifyDesktopImportToken (pure helper)', () => {
     );
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toMatch(/signature/i);
+  });
+
+  it('rejects newline-delimited baseDir values before signing or verification', () => {
+    const malicious = 'monofield-desktop-credential-vault-v1\nget\nkey\nhash';
+    expect(() => signDesktopImportToken(SECRET, malicious, {
+      nonce: 'nonce-domain-separation',
+      exp: VALID_EXP,
+    })).toThrow(/control characters/i);
+    const result = verifyDesktopImportToken(
+      SECRET,
+      malicious,
+      'nonce-domain-separation~2026-05-08T20:00:30.000Z~invalid',
+      NOW,
+      new Map(),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/baseDir invalid/i);
   });
 
   it('rejects malformed tokens', () => {

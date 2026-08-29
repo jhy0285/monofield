@@ -103,15 +103,15 @@ describe('DesignFilesPanel sections', () => {
     vi.useRealTimers();
   });
 
-  it('does not show grouping, sort, filter, or pagination chrome', () => {
+  it('keeps grouping, sort, and filter chrome hidden while paging large workspaces', () => {
     renderPanel(generateFiles(60));
 
     expect(screen.queryByRole('group', { name: 'Group by' })).toBeNull();
     expect(document.querySelector('.df-table')).toBeNull();
     expect(document.querySelector('.df-th-sortable')).toBeNull();
     expect(document.querySelector('.df-kind-filter')).toBeNull();
-    expect(document.querySelector('.df-pagination')).toBeNull();
-    expect(document.querySelector('.df-page-btn')).toBeNull();
+    expect(document.querySelector('.df-pagination')).toBeTruthy();
+    expect(document.querySelectorAll('.df-page-btn').length).toBe(2);
   });
 
   it('renders a single-line toolbar with file actions and no up/refresh buttons', () => {
@@ -205,16 +205,23 @@ describe('DesignFilesPanel sections', () => {
 describe('DesignFilesPanel large list', () => {
   afterEach(() => cleanup());
 
-  it('renders all rows at once (no pagination)', () => {
+  it('pages large workspaces instead of mounting every file row at once', () => {
     const { container } = renderPanel(generateFiles(500));
-    expect(container.querySelectorAll('.df-file-row').length).toBe(500);
+    expect(container.querySelectorAll('.df-file-row').length).toBe(30);
+    expect(container.querySelector('.df-page-info')?.textContent).toContain('1–30');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+    expect(container.querySelectorAll('.df-file-row').length).toBe(30);
+    expect(container.querySelector('.df-page-info')?.textContent).toContain('31–60');
   });
 
-  it('renders 500 files within a reasonable time', () => {
-    const files = generateFiles(500);
+  it('renders a very large file index within a reasonable time', () => {
+    const files = generateFiles(10_000);
     const start = performance.now();
     renderPanel(files);
     const elapsed = performance.now() - start;
+    expect(document.querySelectorAll('.df-file-row').length).toBe(30);
     expect(elapsed).toBeLessThan(2000);
   });
 });

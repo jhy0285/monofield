@@ -328,7 +328,7 @@ describe('FileViewer preview scale', () => {
 });
 
 describe('FileViewer JSON artifacts', () => {
-  it('pretty-prints valid JSON in the text viewer', async () => {
+  it('preserves valid JSON source in the editable text viewer', async () => {
     const file = baseFile({
       name: 'data.json',
       path: 'data.json',
@@ -337,17 +337,17 @@ describe('FileViewer JSON artifacts', () => {
     });
     vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
-      if (url === '/api/projects/project-1/raw/data.json') {
+      if (url.startsWith('/api/projects/project-1/raw/data.json')) {
         return new Response('{"title":"Launch Metrics","stats":{"views":42,"active":true}}');
       }
       return new Response('', { status: 404 });
     }));
 
-    const { container } = render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
+    render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
 
     await waitFor(() => {
-      expect(container.querySelector('.lines')?.textContent).toBe(
-        '{\n  "title": "Launch Metrics",\n  "stats": {\n    "views": 42,\n    "active": true\n  }\n}',
+      expect((screen.getByTestId('text-editor-input') as HTMLTextAreaElement).value).toBe(
+        '{"title":"Launch Metrics","stats":{"views":42,"active":true}}',
       );
     });
   });
@@ -362,16 +362,16 @@ describe('FileViewer JSON artifacts', () => {
     const rawJson = '{"id":9007199254740993,"name":"large"}';
     vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
-      if (url === '/api/projects/project-1/raw/data.json') {
+      if (url.startsWith('/api/projects/project-1/raw/data.json')) {
         return new Response(rawJson);
       }
       return new Response('', { status: 404 });
     }));
 
-    const { container } = render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
+    render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
 
     await waitFor(() => {
-      const displayedText = container.querySelector('.lines')?.textContent ?? '';
+      const displayedText = (screen.getByTestId('text-editor-input') as HTMLTextAreaElement).value;
       expect(displayedText).toBe(rawJson);
       expect(displayedText).toContain('9007199254740993');
       expect(displayedText).not.toContain('9007199254740992');
@@ -388,16 +388,16 @@ describe('FileViewer JSON artifacts', () => {
     const rawJson = '{"ratio":0.1234567890123456789,"name":"precise"}';
     vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
-      if (url === '/api/projects/project-1/raw/data.json') {
+      if (url.startsWith('/api/projects/project-1/raw/data.json')) {
         return new Response(rawJson);
       }
       return new Response('', { status: 404 });
     }));
 
-    const { container } = render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
+    render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
 
     await waitFor(() => {
-      const displayedText = container.querySelector('.lines')?.textContent ?? '';
+      const displayedText = (screen.getByTestId('text-editor-input') as HTMLTextAreaElement).value;
       expect(displayedText).toBe(rawJson);
       expect(displayedText).toContain('0.1234567890123456789');
       expect(displayedText).not.toContain('0.12345678901234568');
@@ -414,16 +414,16 @@ describe('FileViewer JSON artifacts', () => {
     const rawJson = '{"ratio":1.234567890123456789e2,"name":"precise"}';
     vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
-      if (url === '/api/projects/project-1/raw/data.json') {
+      if (url.startsWith('/api/projects/project-1/raw/data.json')) {
         return new Response(rawJson);
       }
       return new Response('', { status: 404 });
     }));
 
-    const { container } = render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
+    render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
 
     await waitFor(() => {
-      const displayedText = container.querySelector('.lines')?.textContent ?? '';
+      const displayedText = (screen.getByTestId('text-editor-input') as HTMLTextAreaElement).value;
       expect(displayedText).toBe(rawJson);
       expect(displayedText).toContain('1.234567890123456789e2');
       expect(displayedText).not.toContain('123.45678901234568');
@@ -440,16 +440,16 @@ describe('FileViewer JSON artifacts', () => {
     const rawJson = '{"delta":-0}';
     vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
-      if (url === '/api/projects/project-1/raw/data.json') {
+      if (url.startsWith('/api/projects/project-1/raw/data.json')) {
         return new Response(rawJson);
       }
       return new Response('', { status: 404 });
     }));
 
-    const { container } = render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
+    render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
 
     await waitFor(() => {
-      const displayedText = container.querySelector('.lines')?.textContent ?? '';
+      const displayedText = (screen.getByTestId('text-editor-input') as HTMLTextAreaElement).value;
       expect(displayedText).toBe(rawJson);
       expect(displayedText).toContain('-0');
       expect(displayedText).not.toContain('{"delta":0}');
@@ -3000,14 +3000,14 @@ describe('FileViewer SVG artifacts', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: /download/i }));
-    fireEvent.click(screen.getByRole('menuitem', { name: /save as template/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /save as (?:project )?(?:template|preset)/i }));
 
     expect(screen.getByRole('dialog')).toBeTruthy();
     const backdrop = document.body.querySelector('.viewer-modal-backdrop');
     expect(backdrop).toBeTruthy();
     expect(backdrop?.parentElement).toBe(document.body);
     expect(view.container.querySelector('.viewer-modal-backdrop')).toBeNull();
-    const nameInput = screen.getByLabelText(/template name/i) as HTMLInputElement;
+    const nameInput = screen.getByLabelText(/(?:template|preset) name/i) as HTMLInputElement;
     expect(nameInput.value).toBe('landing-page');
     fireEvent.change(nameInput, { target: { value: 'Landing Page' } });
     fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
@@ -5759,7 +5759,7 @@ describe('LiveArtifactViewer', () => {
     const css = readExpandedIndexCss();
     const rule = css.match(/\.viewer\s+\.present-exit-btn:focus-visible\s*\{[^}]+\}/)?.[0] ?? '';
 
-    expect(rule).toContain('outline: 2px solid var(--accent)');
+    expect(rule).toContain('outline: 2px solid var(--focus-ring)');
     expect(rule).toContain('outline-offset: 2px');
   });
 

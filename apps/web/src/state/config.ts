@@ -19,6 +19,13 @@ import {
   DEFAULT_SUCCESS_SOUND_ID,
 } from '../utils/notifications';
 import { randomUUID } from '../utils/uuid';
+import {
+  STORED_AGENT_CLI_CREDENTIAL,
+  STORED_BYOK_API_KEY,
+  isStoredAgentCliCredential,
+  isStoredByokApiKey,
+  type PublicByokCredentialsResponse,
+} from '@open-design/contracts';
 
 const STORAGE_KEY = 'open-design:config';
 const CONFIG_MIGRATION_VERSION = 1;
@@ -514,6 +521,107 @@ export type DaemonMediaProvidersFetchResult =
     status: 'error';
   };
 
+export async function fetchByokCredentialsFromDaemon(): Promise<PublicByokCredentialsResponse | null> {
+  try {
+    const response = await fetch('/api/byok/credentials');
+    if (!response.ok) return null;
+    return await response.json() as PublicByokCredentialsResponse;
+  } catch {
+    return null;
+  }
+}
+
+function apiKeyForProtocol(config: AppConfig, protocol: ApiProtocol): string {
+  if ((config.apiProtocol ?? 'anthropic') === protocol) return config.apiKey ?? '';
+  return config.apiProtocolConfigs?.[protocol]?.apiKey ?? '';
+}
+
+export function hasPlaintextByokCredential(config: AppConfig): boolean {
+  const values = [
+    config.apiKey,
+    ...Object.values(config.apiProtocolConfigs ?? {}).map((entry) => entry?.apiKey ?? ''),
+  ];
+  return values.some((value) => Boolean(value.trim()) && !isStoredByokApiKey(value));
+}
+
+export function shouldSyncByokCredentials(next: AppConfig, current: AppConfig): boolean {
+  if (hasPlaintextByokCredential(next)) return true;
+  const protocols = new Set<ApiProtocol>([
+    (next.apiProtocol ?? 'anthropic') as ApiProtocol,
+    (current.apiProtocol ?? 'anthropic') as ApiProtocol,
+    ...Object.keys(next.apiProtocolConfigs ?? {}) as ApiProtocol[],
+    ...Object.keys(current.apiProtocolConfigs ?? {}) as ApiProtocol[],
+  ]);
+  return [...protocols].some((protocol) =>
+    isStoredByokApiKey(apiKeyForProtocol(current, protocol))
+    && !apiKeyForProtocol(next, protocol).trim(),
+  );
+}
+
+export function markByokCredentialsStored(config: AppConfig): AppConfig {
+  const mark = (value: string | undefined): string =>
+    value?.trim() ? STORED_BYOK_API_KEY : '';
+  const apiProtocolConfigs = Object.fromEntries(
+    Object.entries(config.apiProtocolConfigs ?? {}).map(([protocol, entry]) => [
+      protocol,
+      entry ? { ...entry, apiKey: mark(entry.apiKey) } : entry,
+    ]),
+  ) as AppConfig['apiProtocolConfigs'];
+  return {
+    ...config,
+    apiKey: mark(config.apiKey),
+    apiProtocolConfigs,
+  };
+}
+
+export function mergeDaemonByokCredentials(
+  config: AppConfig,
+  daemon: PublicByokCredentialsResponse | null,
+): AppConfig {
+  if (!daemon) return config;
+  const activeProtocol = config.apiProtocol ?? 'anthropic';
+  const protocolIds = new Set<string>([
+    activeProtocol,
+    ...Object.keys(config.apiProtocolConfigs ?? {}),
+    ...Object.keys(daemon.credentials ?? {}),
+  ]);
+  const apiProtocolConfigs = { ...(config.apiProtocolConfigs ?? {}) };
+  let activeApiKey = config.apiKey;
+  for (const rawProtocol of protocolIds) {
+    const protocol = rawProtocol as ApiProtocol;
+    const local = apiKeyForProtocol(config, protocol);
+    const nextKey = local.trim() && !isStoredByokApiKey(local)
+      ? local
+      : daemon.credentials?.[protocol]?.configured
+        ? STORED_BYOK_API_KEY
+        : '';
+    if (protocol === activeProtocol) activeApiKey = nextKey;
+    const prior = apiProtocolConfigs[protocol];
+    if (prior) apiProtocolConfigs[protocol] = { ...prior, apiKey: nextKey };
+  }
+  return { ...config, apiKey: activeApiKey, apiProtocolConfigs };
+}
+
+export async function syncByokCredentialsToDaemon(
+  config: AppConfig,
+): Promise<PublicByokCredentialsResponse> {
+  const activeProtocol = config.apiProtocol ?? 'anthropic';
+  const credentials: Record<string, string> = Object.fromEntries(
+    Object.entries(config.apiProtocolConfigs ?? {}).map(([protocol, entry]) => [
+      protocol,
+      entry?.apiKey ?? '',
+    ]),
+  );
+  credentials[activeProtocol] = config.apiKey ?? '';
+  const response = await fetch('/api/byok/credentials', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ credentials }),
+  });
+  if (!response.ok) throw new Error('BYOK credential save failed');
+  return await response.json() as PublicByokCredentialsResponse;
+}
+
 interface MediaProviderDaemonWriteEntry {
   apiKey?: string;
   preserveApiKey?: boolean;
@@ -689,22 +797,102 @@ const AGENT_CLI_SECRET_ENV_KEYS = new Set([
   'ANTHROPIC_AUTH_TOKEN',
   'CODEX_API_KEY',
   'OPENAI_API_KEY',
+  'VELA_RUNTIME_KEY',
 ]);
 
-function sanitizeAgentCliEnv(agentCliEnv: AppConfig['agentCliEnv']): AppConfig['agentCliEnv'] {
+export function hasPlaintextAgentCliCredential(config: AppConfig): boolean {
+  return Object.values(config.agentCliEnv ?? {}).some((env) =>
+    Object.entries(env ?? {}).some(([key, value]) =>
+      AGENT_CLI_SECRET_ENV_KEYS.has(key)
+      && typeof value === 'string'
+      && value.trim().length > 0
+      && !isStoredAgentCliCredential(value),
+    ),
+  );
+}
+
+export function markAgentCliCredentialsStored(config: AppConfig): AppConfig {
+  if (!config.agentCliEnv) return config;
+  let changed = false;
+  const agentCliEnv = Object.fromEntries(Object.entries(config.agentCliEnv).map(([agentId, env]) => [
+    agentId,
+    Object.fromEntries(Object.entries(env ?? {}).map(([key, value]) => {
+      if (
+        AGENT_CLI_SECRET_ENV_KEYS.has(key)
+        && typeof value === 'string'
+        && value.trim()
+        && !isStoredAgentCliCredential(value)
+      ) {
+        changed = true;
+        return [key, STORED_AGENT_CLI_CREDENTIAL];
+      }
+      return [key, value];
+    })),
+  ]));
+  return changed ? { ...config, agentCliEnv } : config;
+}
+
+function sanitizeAgentCliEnv(
+  agentCliEnv: AppConfig['agentCliEnv'],
+  preserveLegacyPlaintext: boolean,
+): AppConfig['agentCliEnv'] {
   if (!agentCliEnv) return agentCliEnv;
   const sanitized: NonNullable<AppConfig['agentCliEnv']> = {};
   for (const [agentId, env] of Object.entries(agentCliEnv)) {
     const safeEnv = Object.fromEntries(
-      Object.entries(env ?? {}).filter(([key]) => !AGENT_CLI_SECRET_ENV_KEYS.has(key)),
+      Object.entries(env ?? {}).filter(([key, value]) =>
+        !AGENT_CLI_SECRET_ENV_KEYS.has(key)
+        || isStoredAgentCliCredential(value)
+        || preserveLegacyPlaintext,
+      ),
     );
     sanitized[agentId] = safeEnv;
   }
   return sanitized;
 }
 
-export function saveConfig(config: AppConfig): void {
-  const sanitized: AppConfig = { ...config, agentCliEnv: sanitizeAgentCliEnv(config.agentCliEnv) };
+function sanitizeMediaProvidersForBrowserStorage(
+  providers: AppConfig['mediaProviders'],
+): AppConfig['mediaProviders'] {
+  if (!providers) return providers;
+  return Object.fromEntries(Object.entries(providers).map(([id, entry]) => {
+    const apiKey = entry?.apiKey?.trim() ?? '';
+    return [id, {
+      ...entry,
+      apiKey: '',
+      apiKeyConfigured: Boolean(entry?.apiKeyConfigured || apiKey),
+      apiKeyTail: entry?.apiKeyTail?.trim() || apiKey.slice(-4),
+    }];
+  }));
+}
+
+export function saveConfig(
+  config: AppConfig,
+  options?: {
+    preserveLegacyAgentCliPlaintext?: boolean;
+    preserveLegacyByokPlaintext?: boolean;
+  },
+): void {
+  const byokSafe = options?.preserveLegacyByokPlaintext ? config : markByokCredentialsStored(config);
+  const credentialSafe = options?.preserveLegacyAgentCliPlaintext
+    ? byokSafe
+    : markAgentCliCredentialsStored(byokSafe);
+  const sanitized: AppConfig = {
+    ...credentialSafe,
+    agentCliEnv: sanitizeAgentCliEnv(
+      credentialSafe.agentCliEnv,
+      options?.preserveLegacyAgentCliPlaintext === true,
+    ),
+    mediaProviders: sanitizeMediaProvidersForBrowserStorage(credentialSafe.mediaProviders),
+    composio: credentialSafe.composio
+      ? {
+          ...credentialSafe.composio,
+          apiKey: '',
+          apiKeyConfigured: Boolean(credentialSafe.composio.apiKeyConfigured || credentialSafe.composio.apiKey?.trim()),
+          apiKeyTail: credentialSafe.composio.apiKeyTail?.trim() || credentialSafe.composio.apiKey?.trim().slice(-4) || '',
+        }
+      : credentialSafe.composio,
+  };
   for (const key of DAEMON_OWNED_KEYS) {
     delete (sanitized as unknown as Record<string, unknown>)[key];
   }
@@ -736,8 +924,20 @@ export function mergeDaemonConfig(
       ...daemonConfig.agentModels,
     };
   }
-  next.agentCliEnv = daemonConfig.agentCliEnv ?? {};
-  next.agentCliEnvIntent = daemonConfig.agentCliEnvIntent ?? {};
+  if (daemonConfig.agentCliEnv !== undefined) {
+    next.agentCliEnv = daemonConfig.agentCliEnv;
+    next.agentCliEnvIntent = daemonConfig.agentCliEnvIntent ?? {};
+  } else if (!hasPlaintextAgentCliCredential(localConfig)) {
+    // A stale non-secret marker must not resurrect a credential that was
+    // cleared in the Desktop vault. Raw legacy values are retained only long
+    // enough for the vault-first migration attempted during bootstrap.
+    next.agentCliEnv = {};
+  }
+  if (daemonConfig.agentCliEnvIntent !== undefined) {
+    next.agentCliEnvIntent = daemonConfig.agentCliEnvIntent;
+  } else if (daemonConfig.agentCliEnv === undefined && !hasPlaintextAgentCliCredential(localConfig)) {
+    next.agentCliEnvIntent = {};
+  }
   if (daemonConfig.disabledSkills !== undefined) {
     next.disabledSkills = daemonConfig.disabledSkills;
   }
@@ -873,7 +1073,10 @@ export async function syncMediaProvidersToDaemon(
 
 export async function fetchDaemonConfig(): Promise<AppConfigPrefs | null> {
   try {
-    const res = await fetch('/api/app-config');
+    // Custom pet sprites can be hundreds of kilobytes. The compact response
+    // keeps the persisted data URL in the daemon and exposes a same-origin
+    // image route to the UI instead of retransmitting base64 on every load.
+    const res = await fetch('/api/app-config?compact=1');
     if (!res.ok) return null;
     const data = await res.json();
     return data?.config ?? null;

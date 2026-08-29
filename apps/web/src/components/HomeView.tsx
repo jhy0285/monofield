@@ -40,6 +40,7 @@ import {
 import {
   applyPlugin,
   createProject,
+  getPluginDetails,
   listPlugins,
   patchProject,
   renderPluginBriefTemplate,
@@ -346,7 +347,11 @@ export function HomeView({
   const [elevenLabsVoicesLoading, setElevenLabsVoicesLoading] = useState(false);
   // Live AIHubMix image catalogue merged into the home media composer's model
   // picker (replaces the static aihubmix seeds when the fetch resolves).
-  const aihubmixImageModels = useAIHubMixImageModels();
+  // The public AIHubMix catalogue is only needed while the image composer is
+  // actually open.  Home is mounted for the lifetime of the shell, so an
+  // unconditional hook here made every ordinary development/document session
+  // pay for an unrelated network request during startup.
+  const aihubmixImageModels = useAIHubMixImageModels(active?.mediaSurface === 'image');
   const composerImageModels = useMemo(
     () => mergeAihubmixImageModels(IMAGE_MODELS, aihubmixImageModels),
     [aihubmixImageModels],
@@ -387,7 +392,7 @@ export function HomeView({
   useEffect(() => {
     let cancelled = false;
     const load = () => {
-      void listPlugins().then((rows) => {
+      void listPlugins({ summary: true, locale }).then((rows) => {
         if (cancelled) return;
         setPlugins(rows);
         setPluginsLoading(false);
@@ -399,6 +404,16 @@ export function HomeView({
       cancelled = true;
       window.removeEventListener('open-design:plugins-changed', load);
     };
+  }, [locale]);
+
+  const openPluginDetails = useCallback((record: InstalledPluginRecord) => {
+    // Open immediately from the compact Home record, then hydrate the rich
+    // manifest only for the one plugin whose details the user requested.
+    setDetailsRecord(record);
+    void getPluginDetails(record.id).then((detail) => {
+      if (!detail) return;
+      setDetailsRecord((current) => current?.id === record.id ? detail : current);
+    });
   }, []);
 
   useEffect(() => {
@@ -908,6 +923,11 @@ export function HomeView({
     action: PluginUseAction = 'use',
     inputs?: Record<string, unknown>,
   ) {
+    const isSummary = (record.manifest?.od as Record<string, unknown> | undefined)?.summary === true;
+    if (isSummary && action === 'use-with-query') {
+      const detail = await getPluginDetails(record.id);
+      if (detail) return routePluginUse(detail, action, inputs);
+    }
     trackCommunityGalleryClick(analytics.track, {
       page_name: 'home',
       area: 'community_gallery',
@@ -1786,7 +1806,7 @@ export function HomeView({
         onAddPlugin={onBrowseRegistry}
         onAddConnector={onOpenIntegrations}
         onAddMcp={onOpenMcp}
-        onOpenPluginDetails={setDetailsRecord}
+        onOpenPluginDetails={openPluginDetails}
         pluginInputFields={(active?.inputFields ?? []).filter(
           (field) => !ARTIFACT_FOOTER_FIELD_NAMES.has(field.name),
         )}

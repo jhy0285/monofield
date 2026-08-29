@@ -104,10 +104,10 @@ export const DETAIL_SHEET_LAYOUT = {
   navigation: { cell: 'A5', text: '목록', targetSheet: '인터페이스 목록' },
   fieldBindings: [
     { labelCell: 'A6', label: '인터페이스 ID', valueCell: 'B6', valueKey: 'interfaceId' },
-    { labelCell: 'C6', label: '인터페이스 설명', valueCell: 'D6', valueKey: 'interfaceName' },
+    { labelCell: 'C6', label: '인터페이스 설명', valueCell: 'D6', valueKey: 'businessPurpose' },
     { labelCell: 'A7', label: '인터페이스 명', valueCell: 'B7', valueKey: 'interfaceName' },
     { labelCell: 'A8', label: '인터페이스 URL', valueCell: 'B8', valueKey: 'apiKey' },
-  ] as ReadonlyArray<{ labelCell: string; label: string; valueCell: string; valueKey: 'interfaceId' | 'interfaceName' | 'apiKey' }>,
+  ] as ReadonlyArray<{ labelCell: string; label: string; valueCell: string; valueKey: 'interfaceId' | 'interfaceName' | 'businessPurpose' | 'apiKey' }>,
   mergeRanges: ['A4:H4', 'C6:C8', 'D6:H8', 'A10:H10'],
   requestSection: { titleCell: 'A10', title: 'REQUEST', headerRow: 11, dataStartRow: 12 },
   authHeaderRow: {

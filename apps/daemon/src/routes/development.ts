@@ -16,6 +16,7 @@ import {
   gitWorkspaceBranches,
   gitWorkspaceDiff,
   gitWorkspaceDirtyState,
+  gitWorkspaceRootPath,
   gitWorkspaceStatus,
   switchGitWorkspaceBranch,
 } from '../git-workspace.js';
@@ -31,21 +32,42 @@ function projectRoot(deps: DevelopmentRouteDeps, projectId: string): string {
   return resolveProjectDir(deps.paths.PROJECTS_DIR, projectId, project.metadata);
 }
 
-function selectedProjectPath(deps: DevelopmentRouteDeps, projectId: string, requested?: unknown): string | null {
-  if (typeof requested === 'string' && requested.trim()) return requested;
+function explicitProjectPath(requested?: unknown): string | null {
+  return typeof requested === 'string' && requested.trim() ? requested : null;
+}
+
+function storedProjectPath(deps: DevelopmentRouteDeps, projectId: string): string | null {
   const project = getProject(deps.db, projectId);
   const stored = project?.metadata?.development?.activeProjectPath;
   return typeof stored === 'string' && stored.trim() ? stored : null;
 }
 
-async function activeProjectRoot(deps: DevelopmentRouteDeps, projectId: string, requested?: unknown): Promise<string> {
+function selectedProjectPath(deps: DevelopmentRouteDeps, projectId: string, requested?: unknown): string | null {
+  return explicitProjectPath(requested) ?? storedProjectPath(deps, projectId);
+}
+
+async function selectedProject(
+  deps: DevelopmentRouteDeps,
+  projectId: string,
+  requested?: unknown,
+): Promise<Awaited<ReturnType<typeof resolveDevelopmentProjectRoot>>> {
   const workspaceRoot = projectRoot(deps, projectId);
-  return (await resolveDevelopmentProjectRoot(workspaceRoot, selectedProjectPath(deps, projectId, requested))).root;
+  const explicit = explicitProjectPath(requested);
+  const stored = explicit == null ? storedProjectPath(deps, projectId) : null;
+  try {
+    return await resolveDevelopmentProjectRoot(workspaceRoot, explicit ?? stored);
+  } catch (error) {
+    if (explicit != null || stored == null || Number((error as { status?: number } | null)?.status) !== 404) throw error;
+    return await resolveDevelopmentProjectRoot(workspaceRoot, null);
+  }
+}
+
+async function activeProjectRoot(deps: DevelopmentRouteDeps, projectId: string, requested?: unknown): Promise<string> {
+  return (await selectedProject(deps, projectId, requested)).root;
 }
 
 async function activeProjectPath(deps: DevelopmentRouteDeps, projectId: string, requested?: unknown): Promise<string> {
-  const workspaceRoot = projectRoot(deps, projectId);
-  return (await resolveDevelopmentProjectRoot(workspaceRoot, selectedProjectPath(deps, projectId, requested))).project.path;
+  return (await selectedProject(deps, projectId, requested)).project.path;
 }
 
 function sendError(res: any, error: unknown): void {
@@ -60,12 +82,22 @@ function workingTreeStrategy(input: unknown): GitWorkingTreeStrategy {
 }
 
 async function requireStoppedDevelopmentServer(deps: DevelopmentRouteDeps, projectId: string, requested?: unknown): Promise<void> {
-  const status = await deps.developmentServers.statusAsync(
-    projectId,
-    await activeProjectPath(deps, projectId, requested),
-  );
-  if (status.pid || status.state === 'starting' || status.state === 'ready') {
-    throw Object.assign(new Error('Stop the development server before changing branches.'), { status: 409 });
+  const workspaceRoot = projectRoot(deps, projectId);
+  const targetRoot = gitWorkspaceRootPath(await activeProjectRoot(deps, projectId, requested));
+  const key = (value: string) => {
+    const normalized = value.replace(/\\/g, '/');
+    return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+  };
+  const statuses = await deps.developmentServers.statusesAsync(projectId, true);
+  for (const status of statuses) {
+    if (!status.pid && status.state !== 'starting' && status.state !== 'ready') continue;
+    const runningProject = await resolveDevelopmentProjectRoot(workspaceRoot, status.projectPath ?? null);
+    if (key(gitWorkspaceRootPath(runningProject.root)) === key(targetRoot)) {
+      throw Object.assign(
+        new Error(`Stop the running development server (${status.projectPath ?? '.'}) before changing branches in this Git worktree.`),
+        { status: 409 },
+      );
+    }
   }
 }
 
@@ -75,11 +107,17 @@ export function registerDevelopmentRoutes(app: Express, deps: DevelopmentRouteDe
     try {
       const refresh = ['1', 'true', 'yes'].includes(String(req.query.refresh ?? '').toLowerCase());
       res.set('Cache-Control', 'no-store');
-      res.json(await detectDevelopmentRunConfigs(
+      const configs = await detectDevelopmentRunConfigs(
         projectRoot(deps, req.params.id),
         selectedProjectPath(deps, req.params.id, req.query.projectPath),
         refresh,
-      ));
+        explicitProjectPath(req.query.projectPath) == null && storedProjectPath(deps, req.params.id) != null,
+      );
+      res.json(configs);
+      // Git is intentionally lazy. Starting two Git processes after every
+      // server selection competes with config/status loading on large Windows
+      // workspaces even when the Changes view is closed. The Changes panel
+      // owns its own loading state and warms these caches only when requested.
     }
     catch (error) { sendError(res, error); }
   });
@@ -89,6 +127,8 @@ export function registerDevelopmentRoutes(app: Express, deps: DevelopmentRouteDe
       res.json(await deps.developmentServers.statusAsync(
         req.params.id,
         await activeProjectPath(deps, req.params.id, req.query.projectPath),
+        false,
+        projectRoot(deps, req.params.id),
       ));
     }
     catch (error) { sendError(res, error); }
@@ -97,7 +137,16 @@ export function registerDevelopmentRoutes(app: Express, deps: DevelopmentRouteDe
     try {
       projectRoot(deps, req.params.id);
       res.set('Cache-Control', 'no-store');
-      res.json({ servers: deps.developmentServers.statuses(req.params.id) });
+      const refresh = ['1', 'true', 'yes'].includes(String(req.query.refresh ?? '').toLowerCase());
+      const includeLogs = !['0', 'false', 'no'].includes(String(req.query.logs ?? '').toLowerCase());
+      const servers = await deps.developmentServers.statusesAsync(
+        req.params.id,
+        refresh,
+        projectRoot(deps, req.params.id),
+      );
+      res.json({
+        servers: includeLogs ? servers : servers.map((server) => ({ ...server, logs: [] })),
+      });
     }
     catch (error) { sendError(res, error); }
   });
@@ -125,20 +174,27 @@ export function registerDevelopmentRoutes(app: Express, deps: DevelopmentRouteDe
     catch (error) { sendError(res, error); }
   });
   app.post('/api/projects/:id/development/server/stop-all', gate, async (req, res) => {
-    try { projectRoot(deps, req.params.id); res.json({ servers: await deps.developmentServers.stopAll(req.params.id) }); }
+    try { projectRoot(deps, req.params.id); res.json(await deps.developmentServers.stopAll(req.params.id)); }
     catch (error) { sendError(res, error); }
   });
   app.get('/api/projects/:id/development/git/status', gate, async (req, res) => {
     res.set('Cache-Control', 'no-store');
     try {
       const branch = typeof req.query.branch === 'string' ? req.query.branch : null;
-      res.json(await gitWorkspaceStatus(await activeProjectRoot(deps, req.params.id, req.query.projectPath), branch));
+      const refresh = ['1', 'true', 'yes'].includes(String(req.query.refresh ?? '').toLowerCase());
+      res.json(await gitWorkspaceStatus(await activeProjectRoot(deps, req.params.id, req.query.projectPath), branch, { refresh }));
     }
     catch (error) { sendError(res, error); }
   });
   app.get('/api/projects/:id/development/git/branches', gate, async (req, res) => {
     res.set('Cache-Control', 'no-store');
-    try { res.json(await gitWorkspaceBranches(await activeProjectRoot(deps, req.params.id, req.query.projectPath))); }
+    try {
+      const refresh = ['1', 'true', 'yes'].includes(String(req.query.refresh ?? '').toLowerCase());
+      res.json(await gitWorkspaceBranches(
+        await activeProjectRoot(deps, req.params.id, req.query.projectPath),
+        { refresh },
+      ));
+    }
     catch (error) { sendError(res, error); }
   });
   app.get('/api/projects/:id/development/git/dirty', gate, async (req, res) => {

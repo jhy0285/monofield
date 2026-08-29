@@ -1,0 +1,319 @@
+name: release-windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag, or commit to release
+        required: true
+        default: main
+        type: string
+      release_version:
+        description: Stable MonoField version (must match the checked-out workspace)
+        required: true
+        type: string
+      signed:
+        description: Sign the Windows executable and installer
+        required: true
+        default: false
+        type: boolean
+      publish:
+        description: Publish a GitHub Release after build and smoke verification
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-windows-${{ inputs.release_version }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and verify Windows release
+    runs-on: windows-2025
+    timeout-minutes: 120
+    outputs:
+      release_commit: ${{ steps.release.outputs.release_commit }}
+      release_version: ${{ steps.release.outputs.release_version }}
+
+    steps:
+      - name: Checkout requested release source
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+
+      - name: Validate release request
+        id: release
+        shell: pwsh
+        env:
+          PUBLISH_RELEASE: ${{ inputs.publish }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          SIGN_RELEASE: ${{ inputs.signed }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = $env:RELEASE_VERSION.Trim()
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            throw "release_version must be a stable x.y.z version; got '$version'"
+          }
+          if ($env:PUBLISH_RELEASE -eq "true" -and $env:SIGN_RELEASE -ne "true") {
+            throw "public GitHub releases must use signed=true"
+          }
+          if ($env:PUBLISH_RELEASE -eq "true" -and $env:RELEASE_REPOSITORY -ne "jhy0285/monofield") {
+            throw "public releases may only be published from jhy0285/monofield"
+          }
+
+          $versionFiles = @(
+            "package.json",
+            "apps/desktop/package.json",
+            "apps/packaged/package.json",
+            "tools/pack/package.json",
+            "tools/release/package.json"
+          )
+          foreach ($file in $versionFiles) {
+            $packageVersion = [string]((Get-Content -LiteralPath $file -Raw -Encoding utf8 | ConvertFrom-Json).version)
+            if ($packageVersion -ne $version) {
+              throw "$file version '$packageVersion' does not match release_version '$version'"
+            }
+          }
+
+          $commit = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $commit -notmatch '^[0-9a-f]{40}$') {
+            throw "unable to resolve the checked-out release commit"
+          }
+          "release_commit=$commit" >> $env:GITHUB_OUTPUT
+          "release_version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Test packaging and updater release contracts
+        shell: pwsh
+        run: |
+          pnpm --filter @open-design/tools-pack test -- tests/resources.test.ts tests/package-file-patterns.test.ts tests/release-workflows.test.ts tests/win-resources.test.ts tests/win-sign.test.ts tests/win-targets.test.ts
+          if ($LASTEXITCODE -ne 0) { throw "tools-pack release contract tests failed" }
+          pnpm --filter @open-design/desktop exec vitest run -c vitest.config.ts --maxWorkers=1 tests/main/updater.test.ts tests/main/updater-host-boundary.test.ts
+          if ($LASTEXITCODE -ne 0) { throw "desktop updater contract tests failed" }
+
+      - name: Import Windows signing certificate
+        if: ${{ inputs.signed }}
+        shell: pwsh
+        env:
+          OD_WIN_SIGN_CERT_PASSWORD: ${{ secrets.OD_WIN_SIGN_CERT_PASSWORD }}
+          OD_WIN_SIGN_CERT_PFX_BASE64: ${{ secrets.OD_WIN_SIGN_CERT_PFX_BASE64 }}
+          OD_WIN_SIGN_CERT_SHA1: ${{ secrets.OD_WIN_SIGN_CERT_SHA1 }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          foreach ($name in @("OD_WIN_SIGN_CERT_PASSWORD", "OD_WIN_SIGN_CERT_PFX_BASE64", "OD_WIN_SIGN_CERT_SHA1")) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+              throw "$name is required when signed=true"
+            }
+          }
+
+          $thumbprint = $env:OD_WIN_SIGN_CERT_SHA1.Replace(" ", "").ToUpperInvariant()
+          if ($thumbprint -notmatch '^[0-9A-F]{40}$') {
+            throw "OD_WIN_SIGN_CERT_SHA1 must be a 40-character SHA1 thumbprint"
+          }
+          $pfxPath = Join-Path $env:RUNNER_TEMP "monofield-signing.pfx"
+          try {
+            [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:OD_WIN_SIGN_CERT_PFX_BASE64))
+            $password = ConvertTo-SecureString -String $env:OD_WIN_SIGN_CERT_PASSWORD -AsPlainText -Force
+            $certificate = Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $password |
+              Where-Object { $_.Thumbprint -eq $thumbprint } |
+              Select-Object -First 1
+            if ($null -eq $certificate) {
+              throw "the imported PFX does not contain OD_WIN_SIGN_CERT_SHA1"
+            }
+          } finally {
+            Remove-Item -LiteralPath $pfxPath -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Build, validate payload, and run packaged smoke
+        shell: pwsh
+        env:
+          OD_WIN_SIGN_CERT_SHA1: ${{ secrets.OD_WIN_SIGN_CERT_SHA1 }}
+          RELEASE_BRANCH: ${{ inputs.ref }}
+          RELEASE_CHANNEL: stable
+          RELEASE_COMMIT: ${{ steps.release.outputs.release_commit }}
+          SIGN_MODE: ${{ inputs.signed && 'on' || 'off' }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $workRoot = Join-Path $env:RUNNER_TEMP "monofield-release-work"
+          & .\tools\release\scripts\build-platform.ps1 `
+            -ReleaseTarget win_x64 `
+            -ReleaseNamespace default `
+            -ReleaseVersion "${{ steps.release.outputs.release_version }}" `
+            -SmokeMode full `
+            -BuildTarget all `
+            -SignMode $env:SIGN_MODE `
+            -WorkRoot $workRoot `
+            -ToolsPackDir (Join-Path $workRoot "tools-pack") `
+            -CacheDir (Join-Path $env:RUNNER_TEMP "monofield-tools-pack-cache") `
+            -BuildJsonPath (Join-Path $workRoot "build.json") `
+            -IndexPath (Join-Path $workRoot "build-index.json") `
+            -ReportRoot (Join-Path $workRoot "report") `
+            -OutputsPath (Join-Path $workRoot "build-outputs.json")
+
+      - name: Stage immutable release evidence
+        shell: pwsh
+        env:
+          RELEASE_COMMIT: ${{ steps.release.outputs.release_commit }}
+          RELEASE_VERSION: ${{ steps.release.outputs.release_version }}
+          SIGNED_RELEASE: ${{ inputs.signed }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $workRoot = Join-Path $env:RUNNER_TEMP "monofield-release-work"
+          $evidenceRoot = Join-Path $env:RUNNER_TEMP "monofield-release-evidence"
+          $assetsRoot = Join-Path $evidenceRoot "assets"
+          Remove-Item -LiteralPath $evidenceRoot -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $assetsRoot, (Join-Path $evidenceRoot "pack") | Out-Null
+
+          $buildJsonPath = Join-Path $workRoot "build.json"
+          $build = Get-Content -LiteralPath $buildJsonPath -Raw -Encoding utf8 | ConvertFrom-Json
+          $artifacts = @(
+            [ordered]@{ role = "installer"; source = [string]$build.installerPath; name = "MonoField-default-setup.exe" },
+            [ordered]@{ role = "payload"; source = [string]$build.payloadPath; name = "MonoField-default-payload.7z" },
+            [ordered]@{ role = "portable"; source = [string]$build.portableZipPath; name = "MonoField-default-portable.zip" },
+            [ordered]@{ role = "feed"; source = [string]$build.latestYmlPath; name = "latest.yml" }
+          )
+
+          $manifestArtifacts = @()
+          $checksumLines = @()
+          foreach ($artifact in $artifacts) {
+            if ([string]::IsNullOrWhiteSpace($artifact.source) -or -not (Test-Path -LiteralPath $artifact.source -PathType Leaf)) {
+              throw "missing $($artifact.role) artifact at '$($artifact.source)'"
+            }
+            $destination = Join-Path $assetsRoot $artifact.name
+            Copy-Item -LiteralPath $artifact.source -Destination $destination
+            $hash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash.ToUpperInvariant()
+            $checksumLines += "$hash  $($artifact.name)"
+            $manifestArtifacts += [ordered]@{
+              bytes = (Get-Item -LiteralPath $destination).Length
+              name = $artifact.name
+              role = $artifact.role
+              sha256 = $hash
+            }
+          }
+          [IO.File]::WriteAllText(
+            (Join-Path $assetsRoot "SHA256SUMS.txt"),
+            ($checksumLines -join "`n") + "`n",
+            [Text.UTF8Encoding]::new($false)
+          )
+
+          if ($env:SIGNED_RELEASE -eq "true") {
+            $installer = Join-Path $assetsRoot "MonoField-default-setup.exe"
+            $signature = Get-AuthenticodeSignature -LiteralPath $installer
+            if ($signature.Status -ne "Valid") {
+              throw "signed installer Authenticode status is $($signature.Status): $($signature.StatusMessage)"
+            }
+          }
+
+          Copy-Item -LiteralPath $buildJsonPath -Destination (Join-Path $evidenceRoot "pack\build.json")
+          Copy-Item -LiteralPath (Join-Path $workRoot "build-index.json") -Destination (Join-Path $evidenceRoot "pack\build-index.json")
+          if (Test-Path -LiteralPath (Join-Path $workRoot "report")) {
+            Copy-Item -LiteralPath (Join-Path $workRoot "report") -Destination (Join-Path $evidenceRoot "report") -Recurse
+          }
+
+          $manifest = [ordered]@{
+            artifacts = $manifestArtifacts
+            releaseCommit = $env:RELEASE_COMMIT
+            releaseVersion = $env:RELEASE_VERSION
+            schemaVersion = 1
+            signed = $env:SIGNED_RELEASE -eq "true"
+            tag = "v$env:RELEASE_VERSION"
+            updaterMetadataUrl = "https://api.github.com/repos/${{ github.repository }}/releases/latest"
+          }
+          $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $evidenceRoot "release-manifest.json") -Encoding utf8
+
+          "## Windows release evidence" >> $env:GITHUB_STEP_SUMMARY
+          "" >> $env:GITHUB_STEP_SUMMARY
+          "| Artifact | Bytes | SHA-256 |" >> $env:GITHUB_STEP_SUMMARY
+          "| --- | ---: | --- |" >> $env:GITHUB_STEP_SUMMARY
+          foreach ($artifact in $manifestArtifacts) {
+            "| ``$($artifact.name)`` | $($artifact.bytes) | ``$($artifact.sha256)`` |" >> $env:GITHUB_STEP_SUMMARY
+          }
+
+      - name: Upload verified release evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: monofield-windows-${{ steps.release.outputs.release_version }}-${{ github.run_id }}
+          path: ${{ runner.temp }}\monofield-release-evidence
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+  publish:
+    name: Publish GitHub Release
+    if: ${{ inputs.publish }}
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download verified release evidence
+        uses: actions/download-artifact@v8
+        with:
+          name: monofield-windows-${{ needs.build.outputs.release_version }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/monofield-release-evidence
+
+      - name: Verify release evidence
+        shell: bash
+        env:
+          EVIDENCE_ROOT: ${{ runner.temp }}/monofield-release-evidence
+          RELEASE_COMMIT: ${{ needs.build.outputs.release_commit }}
+          RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
+        run: |
+          set -euo pipefail
+          manifest="$EVIDENCE_ROOT/release-manifest.json"
+          assets="$EVIDENCE_ROOT/assets"
+          jq -e --arg version "$RELEASE_VERSION" --arg commit "$RELEASE_COMMIT" \
+            '.schemaVersion == 1 and .releaseVersion == $version and .releaseCommit == $commit and .signed == true and .tag == ("v" + $version)' \
+            "$manifest" >/dev/null
+          test -f "$assets/MonoField-default-setup.exe"
+          test -f "$assets/MonoField-default-payload.7z"
+          test -f "$assets/MonoField-default-portable.zip"
+          test -f "$assets/latest.yml"
+          test -f "$assets/SHA256SUMS.txt"
+          test "$(find "$assets" -maxdepth 1 -type f | wc -l)" -eq 5
+          (cd "$assets" && sha256sum --check --strict SHA256SUMS.txt)
+
+      - name: Publish immutable GitHub Release
+        shell: bash
+        env:
+          ASSETS_ROOT: ${{ runner.temp }}/monofield-release-evidence/assets
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_COMMIT: ${{ needs.build.outputs.release_commit }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
+        run: |
+          set -euo pipefail
+          tag="v$RELEASE_VERSION"
+          tag_commit="$(gh api "repos/$RELEASE_REPOSITORY/commits/$tag" --jq '.sha' 2>/dev/null || true)"
+          if [ -n "$tag_commit" ] && [ "$tag_commit" != "$RELEASE_COMMIT" ]; then
+            echo "refusing to publish $tag because it points to $tag_commit instead of $RELEASE_COMMIT" >&2
+            exit 1
+          fi
+          existing="$(gh release view "$tag" --repo "$RELEASE_REPOSITORY" --json isDraft,targetCommitish 2>/dev/null || true)"
+          if [ -z "$existing" ]; then
+            gh release create "$tag" \
+              --repo "$RELEASE_REPOSITORY" \
+              --target "$RELEASE_COMMIT" \
+              --title "MonoField $RELEASE_VERSION" \
+              --generate-notes \
+              --draft
+          else
+            draft="$(jq -r '.isDraft' <<<"$existing")"
+            target="$(jq -r '.targetCommitish' <<<"$existing")"
+            if [ "$draft" != "true" ] || [ "$target" != "$RELEASE_COMMIT" ]; then
+              echo "refusing to replace an existing published release or a draft for another commit" >&2
+              exit 1
+            fi
+          fi
+
+          gh release upload "$tag" "$ASSETS_ROOT"/* --repo "$RELEASE_REPOSITORY" --clobber
+          gh release edit "$tag" --repo "$RELEASE_REPOSITORY" --draft=false --latest

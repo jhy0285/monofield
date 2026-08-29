@@ -3,18 +3,29 @@ import {
   buildMediaProvidersForDaemonSave,
   DEFAULT_CONFIG,
   fetchMediaProvidersFromDaemon,
+  fetchByokCredentialsFromDaemon,
+  hasPlaintextAgentCliCredential,
+  hasPlaintextByokCredential,
   isStoredMediaProviderEntryEmpty,
   isStoredMediaProviderEntryPresent,
   loadConfig,
   mergeDaemonConfig,
   mergeDaemonMediaProviders,
+  mergeDaemonByokCredentials,
+  markAgentCliCredentialsStored,
+  markByokCredentialsStored,
   saveConfig,
   shouldSyncLocalMediaProvidersToDaemon,
   syncComposioConfigToDaemon,
   syncConfigToDaemon,
   syncMediaProvidersToDaemon,
+  syncByokCredentialsToDaemon,
 } from '../../src/state/config';
 import type { AppConfig } from '../../src/types';
+import {
+  STORED_AGENT_CLI_CREDENTIAL,
+  STORED_BYOK_API_KEY,
+} from '@open-design/contracts';
 
 const store = new Map<string, string>();
 const originalFetch = globalThis.fetch;
@@ -238,6 +249,20 @@ describe('mergeDaemonConfig', () => {
 
     expect(merged.agentId).toBe('codex');
     expect(merged.agentCliEnv).toEqual({});
+  });
+
+  it('retains only legacy plaintext CLI credentials long enough for vault migration', () => {
+    const legacy = {
+      ...DEFAULT_CONFIG,
+      agentCliEnv: {
+        codex: { CODEX_API_KEY: 'legacy-cli-secret' },
+      },
+    };
+    expect(mergeDaemonConfig(legacy, {}).agentCliEnv).toEqual(legacy.agentCliEnv);
+    expect(mergeDaemonConfig({
+      ...legacy,
+      agentCliEnv: { codex: { CODEX_API_KEY: STORED_AGENT_CLI_CREDENTIAL } },
+    }, {}).agentCliEnv).toEqual({});
   });
 
   it('uses daemon CLI env prefs instead of merging with stale local entries', () => {
@@ -1126,6 +1151,43 @@ describe('loadConfig', () => {
 });
 
 describe('saveConfig', () => {
+  it('keeps BYOK, media, and Composio plaintext out of browser storage', () => {
+    saveConfig({
+      ...DEFAULT_CONFIG,
+      apiKey: 'sk-ant-browser-secret',
+      apiProtocolConfigs: {
+        openai: {
+          apiKey: 'sk-openai-browser-secret',
+          baseUrl: 'https://api.openai.com/v1',
+          model: 'gpt-5',
+        },
+      },
+      mediaProviders: {
+        openai: { apiKey: 'media-browser-secret', baseUrl: 'https://api.openai.com/v1' },
+      },
+      composio: { apiKey: 'composio-browser-secret' },
+    });
+
+    const raw = store.get('open-design:config') ?? '';
+    expect(raw).not.toContain('sk-ant-browser-secret');
+    expect(raw).not.toContain('sk-openai-browser-secret');
+    expect(raw).not.toContain('media-browser-secret');
+    expect(raw).not.toContain('composio-browser-secret');
+    const saved = JSON.parse(raw);
+    expect(saved.apiKey).toBe(STORED_BYOK_API_KEY);
+    expect(saved.apiProtocolConfigs.openai.apiKey).toBe(STORED_BYOK_API_KEY);
+    expect(saved.mediaProviders.openai).toMatchObject({ apiKey: '', apiKeyConfigured: true, apiKeyTail: 'cret' });
+    expect(saved.composio).toMatchObject({ apiKey: '', apiKeyConfigured: true, apiKeyTail: 'cret' });
+  });
+
+  it('preserves a legacy BYOK plaintext value only when vault migration explicitly failed', () => {
+    saveConfig(
+      { ...DEFAULT_CONFIG, apiKey: 'legacy-only-copy' },
+      { preserveLegacyByokPlaintext: true },
+    );
+    expect(JSON.parse(store.get('open-design:config') ?? '{}').apiKey).toBe('legacy-only-copy');
+  });
+
   it('keeps daemon-owned privacy fields out of localStorage', () => {
     saveConfig({
       ...DEFAULT_CONFIG,
@@ -1140,8 +1202,8 @@ describe('saveConfig', () => {
     expect(saved.telemetry).toBeUndefined();
   });
 
-  it('keeps CLI API key env values out of localStorage while preserving intent and non-secret env', () => {
-    saveConfig({
+  it('keeps CLI API key env values out of localStorage while preserving safe markers and non-secret env', () => {
+    const config = {
       ...DEFAULT_CONFIG,
       agentCliEnv: {
         claude: {
@@ -1161,14 +1223,22 @@ describe('saveConfig', () => {
         claude: { apiKeyOverride: true },
         codex: { apiKeyOverride: true },
       },
-    });
+    };
+    expect(hasPlaintextAgentCliCredential(config)).toBe(true);
+    const marked = markAgentCliCredentialsStored(config);
+    expect(hasPlaintextAgentCliCredential(marked)).toBe(false);
+    saveConfig(config);
 
     const saved = JSON.parse(store.get('open-design:config') ?? '{}');
     expect(saved.agentCliEnv.claude).toEqual({
+      ANTHROPIC_API_KEY: STORED_AGENT_CLI_CREDENTIAL,
+      ANTHROPIC_AUTH_TOKEN: STORED_AGENT_CLI_CREDENTIAL,
       ANTHROPIC_BASE_URL: 'https://proxy.example/anthropic',
       CLAUDE_CONFIG_DIR: '~/.claude-2',
     });
     expect(saved.agentCliEnv.codex).toEqual({
+      CODEX_API_KEY: STORED_AGENT_CLI_CREDENTIAL,
+      OPENAI_API_KEY: STORED_AGENT_CLI_CREDENTIAL,
       OPENAI_BASE_URL: 'https://proxy.example/openai',
       CODEX_HOME: '~/.codex-alt',
     });
@@ -1176,5 +1246,50 @@ describe('saveConfig', () => {
       claude: { apiKeyOverride: true },
       codex: { apiKeyOverride: true },
     });
+  });
+
+  it('preserves a legacy Local CLI plaintext value only when vault migration explicitly failed', () => {
+    saveConfig({
+      ...DEFAULT_CONFIG,
+      agentCliEnv: { codex: { CODEX_API_KEY: 'legacy-cli-only-copy' } },
+    }, { preserveLegacyAgentCliPlaintext: true });
+
+    expect(JSON.parse(store.get('open-design:config') ?? '{}').agentCliEnv.codex.CODEX_API_KEY)
+      .toBe('legacy-cli-only-copy');
+  });
+});
+
+describe('BYOK credential daemon bridge', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.stubGlobal('fetch', originalFetch);
+  });
+
+  it('sends plaintext only to the local save endpoint and normalizes confirmed state to markers', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      credentials: { anthropic: { configured: true, apiKeyTail: '1234' } },
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const config = { ...DEFAULT_CONFIG, apiKey: 'sk-ant-secret-1234' };
+
+    await syncByokCredentialsToDaemon(config);
+    expect(fetchMock).toHaveBeenCalledWith('/api/byok/credentials', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ credentials: { anthropic: 'sk-ant-secret-1234' } }),
+    }));
+    expect(hasPlaintextByokCredential(config)).toBe(true);
+    expect(markByokCredentialsStored(config).apiKey).toBe(STORED_BYOK_API_KEY);
+  });
+
+  it('hydrates only markers from the daemon and never requests raw values', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      credentials: { anthropic: { configured: true, apiKeyTail: '9876' } },
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const publicConfig = await fetchByokCredentialsFromDaemon();
+    expect(fetchMock).toHaveBeenCalledWith('/api/byok/credentials');
+    expect(JSON.stringify(publicConfig)).not.toContain('secret');
+    expect(mergeDaemonByokCredentials(DEFAULT_CONFIG, publicConfig).apiKey).toBe(STORED_BYOK_API_KEY);
   });
 });

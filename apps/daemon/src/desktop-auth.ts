@@ -1,10 +1,14 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual } from 'node:crypto';
+import {
+  createDesktopImportTokenSignature,
+  DESKTOP_IMPORT_TOKEN_FIELD_SEPARATOR,
+  signDesktopImportToken as signSharedDesktopImportToken,
+} from '@open-design/sidecar-proto';
 
 let desktopAuthSecret: Buffer | null = null;
 let desktopAuthEverRegistered = (process.env.MONOFIELD_REQUIRE_DESKTOP_AUTH ?? process.env.OD_REQUIRE_DESKTOP_AUTH) === '1';
 export const consumedImportNonces = new Map<string, number>();
 const DESKTOP_IMPORT_TOKEN_TTL_MS = 60_000;
-const DESKTOP_IMPORT_TOKEN_FIELD_SEP = '~';
 
 export function setDesktopAuthSecret(secret: Buffer | null): void {
   desktopAuthSecret = secret;
@@ -50,10 +54,7 @@ export function signDesktopImportToken(
   baseDir: string,
   options: { nonce: string; exp: string },
 ): string {
-  const signature = createHmac('sha256', secret)
-    .update(`${baseDir}\n${options.nonce}\n${options.exp}`)
-    .digest('base64url');
-  return [options.nonce, options.exp, signature].join(DESKTOP_IMPORT_TOKEN_FIELD_SEP);
+  return signSharedDesktopImportToken(secret, baseDir, options);
 }
 
 export type DesktopImportTokenVerification =
@@ -70,7 +71,7 @@ export function verifyDesktopImportToken(
   if (typeof token !== 'string' || token.length === 0) {
     return { ok: false, reason: 'token missing' };
   }
-  const parts = token.split(DESKTOP_IMPORT_TOKEN_FIELD_SEP);
+  const parts = token.split(DESKTOP_IMPORT_TOKEN_FIELD_SEPARATOR);
   if (parts.length !== 3) {
     return { ok: false, reason: 'token shape invalid' };
   }
@@ -90,9 +91,12 @@ export function verifyDesktopImportToken(
   if (expMs - now > DESKTOP_IMPORT_TOKEN_TTL_MS * 2) {
     return { ok: false, reason: 'token expiry exceeds permitted window' };
   }
-  const expected = createHmac('sha256', secret)
-    .update(`${baseDir}\n${nonce}\n${expISO}`)
-    .digest('base64url');
+  let expected: string;
+  try {
+    expected = createDesktopImportTokenSignature(secret, baseDir, { nonce, exp: expISO });
+  } catch {
+    return { ok: false, reason: 'baseDir invalid' };
+  }
   if (!timingSafeStringEquals(expected, signature)) {
     return { ok: false, reason: 'token signature invalid' };
   }

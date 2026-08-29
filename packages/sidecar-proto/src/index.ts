@@ -1,3 +1,5 @@
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+
 import { RELEASE_CHANNELS, type ReleaseChannel } from "@open-design/release";
 
 export const APP_KEYS = Object.freeze({
@@ -84,6 +86,7 @@ export const SIDECAR_MESSAGES = Object.freeze({
   BROWSER_AUTOMATION: "browser-automation",
   CLICK: "click",
   CONSOLE: "console",
+  CREDENTIAL_VAULT: "credential-vault",
   DATABASE: "database",
   DEVELOPMENT_PROCESS: "development-process",
   EVAL: "eval",
@@ -490,8 +493,70 @@ export type DesktopDatabaseRequest =
     };
 
 export type DesktopDatabaseMessage = { input: DesktopDatabaseRequest; type: typeof SIDECAR_MESSAGES.DATABASE };
+export type DesktopCredentialVaultCommand =
+  | { action: "available" }
+  | { action: "get"; key: string }
+  | { action: "set"; key: string; value: string }
+  | { action: "delete"; key: string };
+export type DesktopCredentialVaultAuthorization = {
+  expiresAt: string;
+  nonce: string;
+  signature: string;
+};
+export type DesktopCredentialVaultRequest =
+  | { action: "available" }
+  | ((Exclude<DesktopCredentialVaultCommand, { action: "available" }>) & {
+      authorization: DesktopCredentialVaultAuthorization;
+    });
+export type DesktopCredentialVaultResult =
+  | { action: "available"; available: boolean }
+  | { action: "get"; value: string | null }
+  | { action: "set"; stored: true }
+  | { action: "delete"; deleted: boolean };
+
+export const DESKTOP_IMPORT_TOKEN_AUTH_DOMAIN = "monofield-desktop-import-token-v1";
+export const DESKTOP_IMPORT_TOKEN_FIELD_SEPARATOR = "~";
+
+function desktopImportTokenAuthorizationPayload(
+  baseDir: string,
+  options: { exp: string; nonce: string },
+): string {
+  // The Desktop auth secret also protects other IPC capabilities. Domain
+  // separation and control-character rejection prevent a chosen folder path
+  // from being interpreted as another protocol's signed payload.
+  if (/[\r\n\0]/u.test(baseDir)) {
+    throw new Error("desktop import baseDir contains invalid control characters");
+  }
+  return [DESKTOP_IMPORT_TOKEN_AUTH_DOMAIN, baseDir, options.nonce, options.exp].join("\n");
+}
+
+export function createDesktopImportTokenSignature(
+  secret: Buffer,
+  baseDir: string,
+  options: { exp: string; nonce: string },
+): string {
+  return createHmac("sha256", secret)
+    .update(desktopImportTokenAuthorizationPayload(baseDir, options))
+    .digest("base64url");
+}
+
+export function signDesktopImportToken(
+  secret: Buffer,
+  baseDir: string,
+  options: { exp: string; nonce: string },
+): string {
+  return [
+    options.nonce,
+    options.exp,
+    createDesktopImportTokenSignature(secret, baseDir, options),
+  ].join(DESKTOP_IMPORT_TOKEN_FIELD_SEPARATOR);
+}
+export type DesktopCredentialVaultMessage = {
+  input: DesktopCredentialVaultRequest;
+  type: typeof SIDECAR_MESSAGES.CREDENTIAL_VAULT;
+};
 export type DesktopDevelopmentProcessInput =
-  | { action: "start"; args: string[]; command: string; cwd: string; ownerPid: number; port: number; projectId: string; windowsVerbatimArguments?: boolean }
+  | { action: "start"; args: string[]; command: string; cwd: string; environment?: Record<string, string>; ownerPid: number; port: number; projectId: string; windowsVerbatimArguments?: boolean }
   | { action: "status"; ownerPid: number; projectId: string }
   | { action: "terminate"; ownerPid: number; projectId: string };
 export type DesktopDevelopmentProcessResult = {
@@ -571,6 +636,7 @@ export type DesktopSidecarMessage =
   | DesktopEvalMessage
   | DesktopScreenshotMessage
   | DesktopConsoleMessage
+  | DesktopCredentialVaultMessage
   | DesktopDatabaseMessage
   | DesktopDevelopmentProcessMessage
   | DesktopBrowserAutomationMessage
@@ -764,7 +830,11 @@ function normalizeRegisterDesktopAuthInput(input: unknown): RegisterDesktopAuthI
 function normalizeMintImportTokenInput(input: unknown): MintImportTokenInput {
   const value = assertObject(input, "mint-import-token input");
   assertKnownKeys(value, ["baseDir"], "mint-import-token input");
-  return { baseDir: normalizeNonEmptyString(value.baseDir, "mint-import-token baseDir") };
+  const baseDir = normalizeNonEmptyString(value.baseDir, "mint-import-token baseDir");
+  if (/[\r\n\0]/u.test(baseDir)) {
+    throw new Error("mint-import-token baseDir contains invalid control characters");
+  }
+  return { baseDir };
 }
 
 function normalizeBoolean(value: unknown, label: string): boolean {
@@ -1017,6 +1087,118 @@ function normalizeDesktopDatabaseInput(input: unknown): DesktopDatabaseRequest {
   throw new Error(`unsupported desktop database action: ${action}`);
 }
 
+const CREDENTIAL_VAULT_KEY_PATTERN = /^[a-z0-9][a-z0-9._:/-]{0,255}$/i;
+const CREDENTIAL_VAULT_MAX_VALUE_CHARS = 1_048_576;
+const CREDENTIAL_VAULT_AUTH_TTL_MS = 15_000;
+const CREDENTIAL_VAULT_AUTH_FIELD_SEPARATOR = "\n";
+const CREDENTIAL_VAULT_AUTH_NONCE_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
+const CREDENTIAL_VAULT_AUTH_SIGNATURE_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+const DEVELOPMENT_ENVIRONMENT_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const DEVELOPMENT_ENVIRONMENT_RESERVED_KEYS = new Set([
+  "ASPNETCORE_URLS",
+  "BROWSER",
+  "GRADIO_SERVER_PORT",
+  "PORT",
+  "SERVER_PORT",
+  "STREAMLIT_SERVER_PORT",
+]);
+
+function normalizeDesktopCredentialVaultInput(input: unknown): DesktopCredentialVaultRequest {
+  const value = assertObject(input, "desktop credential vault input");
+  const action = normalizeNonEmptyString(value.action, "desktop credential vault action");
+  if (action === "available") {
+    assertKnownKeys(value, ["action"], "desktop credential vault input");
+    return { action };
+  }
+  if (action !== "get" && action !== "set" && action !== "delete") {
+    throw new Error("desktop credential vault action must be available, get, set, or delete");
+  }
+  const knownKeys = action === "set"
+    ? ["action", "authorization", "key", "value"]
+    : ["action", "authorization", "key"];
+  assertKnownKeys(value, knownKeys, "desktop credential vault input");
+  const key = normalizeNonEmptyString(value.key, "desktop credential vault key");
+  if (!CREDENTIAL_VAULT_KEY_PATTERN.test(key)) {
+    throw new Error("desktop credential vault key has an invalid format");
+  }
+  const authInput = assertObject(value.authorization, "desktop credential vault authorization");
+  assertKnownKeys(authInput, ["expiresAt", "nonce", "signature"], "desktop credential vault authorization");
+  const expiresAt = normalizeNonEmptyString(authInput.expiresAt, "desktop credential vault authorization expiresAt");
+  const nonce = normalizeNonEmptyString(authInput.nonce, "desktop credential vault authorization nonce");
+  const signature = normalizeNonEmptyString(authInput.signature, "desktop credential vault authorization signature");
+  if (!CREDENTIAL_VAULT_AUTH_NONCE_PATTERN.test(nonce)) {
+    throw new Error("desktop credential vault authorization nonce has an invalid format");
+  }
+  if (!CREDENTIAL_VAULT_AUTH_SIGNATURE_PATTERN.test(signature)) {
+    throw new Error("desktop credential vault authorization signature has an invalid format");
+  }
+  const authorization = { expiresAt, nonce, signature };
+  if (action === "set") {
+    if (typeof value.value !== "string" || value.value.length > CREDENTIAL_VAULT_MAX_VALUE_CHARS) {
+      throw new Error(`desktop credential vault value must be a string of at most ${CREDENTIAL_VAULT_MAX_VALUE_CHARS} characters`);
+    }
+    return { action, authorization, key, value: value.value };
+  }
+  return { action, authorization, key };
+}
+
+function desktopCredentialVaultAuthorizationPayload(
+  command: Exclude<DesktopCredentialVaultCommand, { action: "available" }>,
+  authorization: Pick<DesktopCredentialVaultAuthorization, "expiresAt" | "nonce">,
+): string {
+  const valueHash = createHash("sha256")
+    .update(command.action === "set" ? command.value : "", "utf8")
+    .digest("base64url");
+  return [
+    "monofield-desktop-credential-vault-v1",
+    command.action,
+    command.key,
+    valueHash,
+    authorization.nonce,
+    authorization.expiresAt,
+  ].join(CREDENTIAL_VAULT_AUTH_FIELD_SEPARATOR);
+}
+
+export function authorizeDesktopCredentialVaultCommand(
+  secret: Buffer,
+  command: Exclude<DesktopCredentialVaultCommand, { action: "available" }>,
+  options: { expiresAt: string; nonce: string },
+): DesktopCredentialVaultRequest {
+  const signature = createHmac("sha256", secret)
+    .update(desktopCredentialVaultAuthorizationPayload(command, options))
+    .digest("base64url");
+  return { ...command, authorization: { ...options, signature } } as DesktopCredentialVaultRequest;
+}
+
+export type DesktopCredentialVaultAuthorizationVerification =
+  | { ok: true; command: Exclude<DesktopCredentialVaultCommand, { action: "available" }>; expiresAt: number; nonce: string }
+  | { ok: false; reason: string };
+
+export function verifyDesktopCredentialVaultRequest(
+  secret: Buffer,
+  request: Exclude<DesktopCredentialVaultRequest, { action: "available" }>,
+  now = Date.now(),
+): DesktopCredentialVaultAuthorizationVerification {
+  const expiresAt = Date.parse(request.authorization.expiresAt);
+  if (!Number.isFinite(expiresAt)) return { ok: false, reason: "authorization expiry invalid" };
+  if (expiresAt <= now) return { ok: false, reason: "authorization expired" };
+  if (expiresAt - now > CREDENTIAL_VAULT_AUTH_TTL_MS * 2) {
+    return { ok: false, reason: "authorization expiry exceeds permitted window" };
+  }
+  const command = request.action === "set"
+    ? { action: request.action, key: request.key, value: request.value }
+    : { action: request.action, key: request.key };
+  const expected = createHmac("sha256", secret)
+    .update(desktopCredentialVaultAuthorizationPayload(command, request.authorization))
+    .digest("base64url");
+  const actual = Buffer.from(request.authorization.signature, "utf8");
+  const expectedBuffer = Buffer.from(expected, "utf8");
+  if (actual.length !== expectedBuffer.length || !timingSafeEqual(actual, expectedBuffer)) {
+    return { ok: false, reason: "authorization signature invalid" };
+  }
+  return { ok: true, command, expiresAt, nonce: request.authorization.nonce };
+}
+
 function normalizeDesktopDevelopmentProcessInput(input: unknown): DesktopDevelopmentProcessInput {
   const value = assertObject(input, "desktop development process input");
   const action = normalizeNonEmptyString(value.action, "desktop development process action");
@@ -1035,7 +1217,7 @@ function normalizeDesktopDevelopmentProcessInput(input: unknown): DesktopDevelop
     assertKnownKeys(value, ["action", "ownerPid", "projectId"], "desktop development process input");
     return { action, ownerPid, projectId };
   }
-  assertKnownKeys(value, ["action", "args", "command", "cwd", "ownerPid", "port", "projectId", "windowsVerbatimArguments"], "desktop development process input");
+  assertKnownKeys(value, ["action", "args", "command", "cwd", "environment", "ownerPid", "port", "projectId", "windowsVerbatimArguments"], "desktop development process input");
   const command = normalizeNonEmptyString(value.command, "desktop development process command");
   const cwd = normalizeNonEmptyString(value.cwd, "desktop development process cwd");
   if (!Array.isArray(value.args) || value.args.length > 64 || value.args.some((arg) => typeof arg !== "string" || arg.length > 4_096)) {
@@ -1047,7 +1229,33 @@ function normalizeDesktopDevelopmentProcessInput(input: unknown): DesktopDevelop
   if (value.windowsVerbatimArguments != null && typeof value.windowsVerbatimArguments !== "boolean") {
     throw new Error("desktop development process windowsVerbatimArguments must be a boolean");
   }
-  return { action, args: value.args as string[], command, cwd, ownerPid, port: value.port, projectId, ...(value.windowsVerbatimArguments == null ? {} : { windowsVerbatimArguments: value.windowsVerbatimArguments }) };
+  let environment: Record<string, string> | undefined;
+  if (value.environment != null) {
+    const source = assertObject(value.environment, "desktop development process environment");
+    const entries = Object.entries(source);
+    if (entries.length > 64) throw new Error("desktop development process environment must contain at most 64 values");
+    environment = {};
+    for (const [key, envValue] of entries) {
+      if (!DEVELOPMENT_ENVIRONMENT_KEY_PATTERN.test(key) || DEVELOPMENT_ENVIRONMENT_RESERVED_KEYS.has(key.toUpperCase())) {
+        throw new Error(`desktop development process environment key ${key} is invalid or reserved`);
+      }
+      if (typeof envValue !== "string" || envValue.length > 8_192 || envValue.includes("\0")) {
+        throw new Error("desktop development process environment values must be strings of at most 8192 characters");
+      }
+      environment[key] = envValue;
+    }
+  }
+  return {
+    action,
+    args: value.args as string[],
+    command,
+    cwd,
+    ...(environment && Object.keys(environment).length > 0 ? { environment } : {}),
+    ownerPid,
+    port: value.port,
+    projectId,
+    ...(value.windowsVerbatimArguments == null ? {} : { windowsVerbatimArguments: value.windowsVerbatimArguments }),
+  };
 }
 
 function normalizeMessageType(value: unknown, label: string): string {
@@ -1116,6 +1324,9 @@ export function normalizeDesktopSidecarMessage(input: unknown): DesktopSidecarMe
     case SIDECAR_MESSAGES.UPDATE:
       assertKnownKeys(value, ["input", "type"], "desktop sidecar message");
       return { input: normalizeDesktopUpdateInput(value.input), type };
+    case SIDECAR_MESSAGES.CREDENTIAL_VAULT:
+      assertKnownKeys(value, ["input", "type"], "desktop sidecar message");
+      return { input: normalizeDesktopCredentialVaultInput(value.input), type };
     case SIDECAR_MESSAGES.DATABASE:
       assertKnownKeys(value, ["input", "type"], "desktop sidecar message");
       return { input: normalizeDesktopDatabaseInput(value.input), type };

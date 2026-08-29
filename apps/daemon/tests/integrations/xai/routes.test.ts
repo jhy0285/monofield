@@ -63,6 +63,7 @@ import {
   XAI_OAUTH_AUTHORIZATION_ENDPOINT,
   XAI_OAUTH_TOKEN_ENDPOINT,
 } from '../../../src/integrations/xai-oauth.js';
+import { installTestCredentialVault, type TestCredentialVault } from '../../helpers/credential-vault.js';
 
 interface TestApp {
   baseUrl: string;
@@ -136,8 +137,10 @@ describe('xai-routes', () => {
   const realFetch = globalThis.fetch;
   const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
   const originalDataDir = process.env.OD_DATA_DIR;
+  let vault: TestCredentialVault;
 
   beforeEach(async () => {
+    vault = installTestCredentialVault();
     projectRoot = await mkdtemp(path.join(tmpdir(), 'od-xai-routes-'));
     delete process.env.OD_MEDIA_CONFIG_DIR;
     delete process.env.OD_DATA_DIR;
@@ -156,6 +159,7 @@ describe('xai-routes', () => {
     else process.env.OD_MEDIA_CONFIG_DIR = originalMediaConfigDir;
     if (originalDataDir == null) delete process.env.OD_DATA_DIR;
     else process.env.OD_DATA_DIR = originalDataDir;
+    vault.restore();
     await rm(projectRoot, { recursive: true, force: true });
   });
 

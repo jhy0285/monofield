@@ -2,10 +2,10 @@
  * Thin wrapper over @anthropic-ai/sdk. Minimal analog of
  * packages/providers/src/index.ts in the reference repo.
  *
- * Runs in the browser with dangerouslyAllowBrowser — this is a BYOK local-
- * first tool, so the key is the user's and never leaves their machine. If
- * you later move to a server-hosted build, drop that flag and proxy through
- * your own backend.
+ * Legacy/in-memory raw keys can still use the browser SDK, but persisted BYOK
+ * keys are represented by an opaque marker and resolved by the local daemon
+ * immediately before the upstream request. They are never returned by a GET
+ * endpoint or stored as plaintext in normal browser storage.
  */
 import Anthropic from '@anthropic-ai/sdk';
 import { effectiveMaxTokens } from '../state/maxTokens';
@@ -23,6 +23,7 @@ import {
   normalizeProviderTokenUsage,
   type TokenUsageMetrics,
 } from '@open-design/contracts';
+import { isStoredByokApiKey } from '@open-design/contracts';
 
 // Re-export for convenience
 export { isOpenAICompatible } from './openai-compatible';
@@ -76,7 +77,7 @@ export async function streamMessage(
     return streamMessageOpenAI(cfg, system, history, signal, handlers);
   }
 
-  if (usesAnthropicProxy(cfg)) {
+  if (usesAnthropicProxy(cfg) || isStoredByokApiKey(cfg.apiKey)) {
     return streamMessageAnthropicProxy(cfg, system, history, signal, handlers, context);
   }
 

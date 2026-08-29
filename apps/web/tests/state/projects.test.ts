@@ -9,6 +9,7 @@ import {
   installGeneratedPluginFolder,
   listProjects,
   listPlugins,
+  pluginRecordHasQuery,
   pickLocalFolderPath,
   publishGeneratedPluginToGitHub,
 } from '../../src/state/projects';
@@ -158,6 +159,51 @@ describe('listPlugins', () => {
     const rows = await listPlugins({ includeHidden: true });
 
     expect(rows.map((row) => row.id)).toEqual(['od-default', 'od-new-generation']);
+  });
+
+  it('requests and normalizes the compact picker payload when summary mode is enabled', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(
+      JSON.stringify({
+        plugins: [{
+          summary: true,
+          id: 'sample-plugin',
+          title: '샘플 플러그인',
+          version: '1.0.0',
+          sourceKind: 'bundled',
+          trust: 'trusted',
+          capabilitiesGranted: [],
+          updatedAt: 1,
+          name: 'sample-plugin',
+          description: '간단한 설명',
+          kind: 'scenario',
+          hasQuery: true,
+          exampleOutput: { path: 'examples/index.html' },
+        }],
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const rows = await listPlugins({ summary: true, locale: 'ko' });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/plugins', {
+      headers: {
+        'x-monofield-plugin-view': 'summary',
+        'x-monofield-locale': 'ko',
+      },
+    });
+    expect(rows[0]).toMatchObject({
+      id: 'sample-plugin',
+      manifest: {
+        description: '간단한 설명',
+        od: {
+          kind: 'scenario',
+          preview: { type: 'html', entry: 'examples/index.html' },
+        },
+      },
+    });
+    expect(pluginRecordHasQuery(rows[0]!)).toBe(true);
+    expect(rows[0]?.manifest.od?.useCase?.query).toBeUndefined();
   });
 });
 

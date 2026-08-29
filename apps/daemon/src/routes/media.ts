@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import type { Express } from 'express';
-import type { MediaExecutionPolicy } from '@open-design/contracts';
+import type { AppConfigPrefs, MediaExecutionPolicy } from '@open-design/contracts';
 import { defaultMediaExecutionPolicy, mediaPolicyDenial } from '../media/policy.js';
 import type { RouteDeps } from '../server-context.js';
 import { proxyDispatcherRequestInit } from '../connectionTest.js';
@@ -12,8 +12,74 @@ import {
 } from '../integrations/aihubmix.js';
 import { isSandboxModeEnabled } from '../sandbox-mode.js';
 import type { ToolTokenGrant } from '../tool-tokens.js';
+import { maskAgentCliCredentials } from '../app-config.js';
 
 const LONG_MEDIA_PROXY_TIMEOUT_MS = 10 * 60 * 1000;
+const PET_IMAGE_ROUTE = '/api/app-config/pet-image';
+
+function isHostedPetImageUrl(value: unknown): boolean {
+  return typeof value === 'string' && (
+    value === PET_IMAGE_ROUTE || value.startsWith(`${PET_IMAGE_ROUTE}?`)
+  );
+}
+
+export function compactAppConfigForTransport(config: AppConfigPrefs): AppConfigPrefs {
+  const masked = maskAgentCliCredentials(config);
+  const pet = masked.pet;
+  if (!pet) return masked;
+  const imageUrl = pet.custom.imageUrl;
+  if (typeof imageUrl !== 'string' || !imageUrl.startsWith('data:image/')) return masked;
+  return {
+    ...masked,
+    pet: {
+      ...pet,
+      custom: {
+        ...pet.custom,
+        imageUrl: PET_IMAGE_ROUTE,
+      },
+    },
+  };
+}
+
+export function restoreHostedPetImageInPatch(
+  patch: Record<string, unknown>,
+  existing: AppConfigPrefs,
+): Record<string, unknown> {
+  const pet = patch.pet;
+  if (!pet || typeof pet !== 'object' || Array.isArray(pet)) return patch;
+  const custom = (pet as { custom?: unknown }).custom;
+  if (!custom || typeof custom !== 'object' || Array.isArray(custom)) return patch;
+  const incomingImage = (custom as { imageUrl?: unknown }).imageUrl;
+  if (!isHostedPetImageUrl(incomingImage)) return patch;
+  const storedImage = existing.pet?.custom?.imageUrl;
+  const nextCustom = { ...custom as Record<string, unknown> };
+  if (typeof storedImage === 'string' && storedImage.startsWith('data:image/')) {
+    nextCustom.imageUrl = storedImage;
+  } else {
+    delete nextCustom.imageUrl;
+  }
+  return {
+    ...patch,
+    pet: {
+      ...pet as Record<string, unknown>,
+      custom: nextCustom,
+    },
+  };
+}
+
+export function decodePetImageDataUrl(
+  value: unknown,
+): { mimeType: string; bytes: Buffer } | null {
+  if (typeof value !== 'string') return null;
+  const match = value.match(/^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) return null;
+  try {
+    const bytes = Buffer.from(match[2]!, 'base64');
+    return bytes.length > 0 ? { mimeType: match[1]!, bytes } : null;
+  } catch {
+    return null;
+  }
+}
 
 // Short in-memory cache for the AIHubMix media catalogue so the picker can
 // refresh without hammering the upstream public endpoint. Keyed by
@@ -343,11 +409,35 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     }
     try {
       const config = await readAppConfig(RUNTIME_DATA_DIR);
-      res.json({ config });
+      res.json({
+        // Credentials are always masked. Compact mode additionally hosts a
+        // large custom pet image instead of retransmitting its base64 bytes.
+        config: req.query.compact === '1'
+          ? compactAppConfigForTransport(config)
+          : maskAgentCliCredentials(config),
+      });
     } catch (err: any) {
       res
         .status(500)
         .json({ error: String(err && err.message ? err.message : err) });
+    }
+  });
+
+  app.get(PET_IMAGE_ROUTE, async (req, res) => {
+    if (!isLocalSameOrigin(req, getResolvedPort())) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const config = await readAppConfig(RUNTIME_DATA_DIR);
+      const image = decodePetImageDataUrl(config.pet?.custom?.imageUrl);
+      if (!image) return res.status(404).json({ error: 'pet image not found' });
+      res.setHeader('Content-Type', image.mimeType);
+      res.setHeader('Content-Length', String(image.bytes.length));
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.send(image.bytes);
+    } catch (err: any) {
+      res.status(500).json({ error: String(err && err.message ? err.message : err) });
     }
   });
 
@@ -356,9 +446,14 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
-      const config = await writeAppConfig(RUNTIME_DATA_DIR, req.body);
+      const existing = await readAppConfig(RUNTIME_DATA_DIR);
+      const patch = restoreHostedPetImageInPatch(
+        req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {},
+        existing,
+      );
+      const config = await writeAppConfig(RUNTIME_DATA_DIR, patch);
       orbitService.configure(config.orbit);
-      res.json({ config });
+      res.json({ config: compactAppConfigForTransport(config) });
     } catch (err: any) {
       res
         .status(500)

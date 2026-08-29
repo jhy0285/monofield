@@ -23,13 +23,17 @@ afterEach(async () => {
 });
 
 describe('browser use diagnostics', () => {
-  it('detects Browser Use prompts from the Open Design Browser menu', () => {
+  it('detects Browser Use prompts from the MonoField Browser menu', () => {
     expect(isBrowserUseRequested('hello')).toBe(false);
     expect(isBrowserUseRequested('@agent-browser\n\nBrowser tab context:')).toBe(true);
     expect(isBrowserUseRequested('Use the selected MonoField Browser tab as the bound target.')).toBe(true);
     expect(isBrowserUseRequested('MonoField browser automation session: browser_session_1234567890')).toBe(true);
     expect(browserAutomationSessionId('MonoField browser automation session: browser_session_1234567890'))
       .toBe('browser_session_1234567890');
+    expect(browserAutomationSessionId('Open Agent browser automation session: legacy_session_1234567890'))
+      .toBe('legacy_session_1234567890');
+    expect(browserAutomationSessionId('Open Docs browser automation session: legacy_docs_session_1234'))
+      .toBe('legacy_docs_session_1234');
   });
 
   it('returns a missing-registry snapshot without reading socket contents', () => {
@@ -102,23 +106,26 @@ describe('browser use diagnostics', () => {
     })).toBeNull();
   });
 
-  it('marks an explicitly approved desktop session available for any CLI agent', () => {
-    const state = buildBrowserUseRunState({
-      requested: true,
-      agentId: 'claude',
-      sessionId: 'browser_session_1234567890',
-      diagnostics: collectBrowserUseDiscoveryFacts({ registryPath: join(tempDir, 'missing') }),
-    });
-    expect(state).toMatchObject({
-      requested: true,
-      available: true,
-      sessionId: 'browser_session_1234567890',
-    });
-    const prompt = renderBrowserUseUnavailablePrompt(state);
-    expect(prompt).toContain('browser snapshot --session browser_session_1234567890');
-    expect(prompt).toContain('Do not launch another browser');
-    expect(prompt).toContain('visible native pointer');
-  });
+  it.each(['claude', 'gemini', 'opencode', 'cursor-agent', 'copilot'])(
+    'marks an explicitly approved desktop session available for the %s CLI agent',
+    (agentId) => {
+      const state = buildBrowserUseRunState({
+        requested: true,
+        agentId,
+        sessionId: 'browser_session_1234567890',
+        diagnostics: collectBrowserUseDiscoveryFacts({ registryPath: join(tempDir, 'missing') }),
+      });
+      expect(state).toMatchObject({
+        requested: true,
+        available: true,
+        sessionId: 'browser_session_1234567890',
+      });
+      const prompt = renderBrowserUseUnavailablePrompt(state);
+      expect(prompt).toContain('browser snapshot --session browser_session_1234567890');
+      expect(prompt).toContain('Do not launch another browser');
+      expect(prompt).toContain('visible native pointer');
+    },
+  );
 
   it('renders a prompt guard that blocks raw Chrome fallback', () => {
     const state = buildBrowserUseRunState({

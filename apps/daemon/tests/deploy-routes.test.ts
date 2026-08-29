@@ -13,13 +13,23 @@ import {
 } from '../src/deploy.js';
 import { ensureProject } from '../src/projects.js';
 import { startServer } from '../src/server.js';
+import {
+  installTestCredentialVault,
+  type TestCredentialVault,
+} from './helpers/credential-vault.js';
 
 describe('deploy provider routes', () => {
   let server: http.Server;
   let baseUrl: string;
+  let vault: TestCredentialVault;
 
   beforeAll(async () => {
-    const started = await startServer({ port: 0, returnServer: true }) as {
+    vault = installTestCredentialVault();
+    const started = await startServer({
+      port: 0,
+      returnServer: true,
+      desktopCredentialVault: vault.broker,
+    }) as {
       url: string;
       server: http.Server;
     };
@@ -27,7 +37,10 @@ describe('deploy provider routes', () => {
     server = started.server;
   });
 
-  afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  afterAll(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    vault.restore();
+  });
 
   it('dispatches deploy config reads and writes by providerId', async () => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-config-'));
@@ -64,9 +77,10 @@ describe('deploy provider routes', () => {
         projectName: '',
       });
       expect(JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), 'utf8'))).toEqual({
-        token: 'cloudflare-token-secret',
         accountId: 'account_123',
         projectName: '',
+        tokenRef: expect.any(String),
+        tokenTail: 'cret',
       });
 
       const maskedResp = await fetch(`${baseUrl}/api/deploy/config`, {
@@ -87,9 +101,10 @@ describe('deploy provider routes', () => {
         projectName: '',
       });
       expect(JSON.parse(await readFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), 'utf8'))).toEqual({
-        token: 'cloudflare-token-secret',
         accountId: 'account_456',
         projectName: '',
+        tokenRef: expect.any(String),
+        tokenTail: 'cret',
       });
     } finally {
       if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;

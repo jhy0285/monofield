@@ -19,17 +19,21 @@ import {
   setXAIToken,
   type StoredXAIToken,
 } from '../../../src/integrations/xai-tokens.js';
+import { installTestCredentialVault, type TestCredentialVault } from '../../helpers/credential-vault.js';
 
 const isPosix = process.platform !== 'win32';
 
 describe('xai-tokens persistence', () => {
   let dataDir: string;
+  let vault: TestCredentialVault;
 
   beforeEach(async () => {
+    vault = installTestCredentialVault();
     dataDir = await mkdtemp(path.join(tmpdir(), 'od-xai-tokens-'));
   });
 
   afterEach(async () => {
+    vault.restore();
     await rm(dataDir, { force: true, recursive: true });
   });
 
@@ -126,14 +130,9 @@ describe('xai-tokens persistence', () => {
     const raw = JSON.parse(
       await readFile(path.join(dataDir, 'xai-tokens.json'), 'utf8'),
     );
-    expect(raw.token).toEqual({
-      accessToken: 'a',
-      tokenType: 'Bearer',
-      savedAt: 100,
-    });
-    expect('refreshToken' in raw.token).toBe(false);
-    expect('scope' in raw.token).toBe(false);
-    expect('expiresAt' in raw.token).toBe(false);
+    expect(raw.credentialRef).toEqual(expect.any(String));
+    expect(JSON.stringify(raw)).not.toContain('"accessToken"');
+    expect(JSON.stringify(raw)).not.toContain('"a"');
   });
 
   it('serializes concurrent setXAIToken calls (lock test)', async () => {

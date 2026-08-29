@@ -6,7 +6,10 @@ import {
   type OpenDesignHostDatabaseConnection,
   type OpenDesignHostDatabaseWritePolicy,
 } from '@open-design/host';
-import type { AmrWalletSnapshot } from '@open-design/contracts';
+import {
+  STORED_AGENT_CLI_CREDENTIAL,
+  type AmrWalletSnapshot,
+} from '@open-design/contracts';
 import { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 import {
   agentIdToTracking,
@@ -805,6 +808,7 @@ const AGENT_CLI_AUTH_ENV_KEYS = new Set([
   'ANTHROPIC_AUTH_TOKEN',
   'CODEX_API_KEY',
   'OPENAI_API_KEY',
+  'VELA_RUNTIME_KEY',
 ]);
 const AGENT_CLI_BASE_URL_ENV_KEYS = new Set(['ANTHROPIC_BASE_URL', 'OPENAI_BASE_URL']);
 
@@ -4290,44 +4294,62 @@ export function SettingsDialog({
                     <div className="agent-cli-env-body">
                       <p className="hint">{t('settings.cliEnvHint')}</p>
                       <div className="agent-cli-env-grid">
-                        {cliEnvFields.map((field) => (
-                          <label
-                            className="field"
-                            key={`${field.agentId}:${field.envKey}`}
-                          >
-                            <span className="field-label">
-                              {t(field.labelKey)}
-                              {'labelSuffix' in field
-                                ? ` (${field.labelSuffix})`
-                                : ''}
-                            </span>
-                            <input
-                              type={
-                                'secret' in field && field.secret
-                                  ? 'password'
-                                  : 'text'
-                              }
-                              value={
-                                cfg.agentCliEnv?.[field.agentId]?.[
-                                  field.envKey
-                                ] ?? ''
-                              }
-                              placeholder={field.placeholder}
-                              spellCheck={false}
-                              autoComplete="off"
-                              onChange={(e) =>
-                                setCfg((c) =>
-                                  updateAgentCliEnvValue(
-                                    c,
-                                    field.agentId,
-                                    field.envKey,
-                                    e.target.value,
-                                  ),
-                                )
-                              }
-                            />
-                          </label>
-                        ))}
+                        {cliEnvFields.map((field) => {
+                          const currentValue = cfg.agentCliEnv?.[field.agentId]?.[field.envKey] ?? '';
+                          const storedSecret = 'secret' in field
+                            && field.secret
+                            && currentValue === STORED_AGENT_CLI_CREDENTIAL;
+                          return (
+                            <label
+                              className="field"
+                              key={`${field.agentId}:${field.envKey}`}
+                            >
+                              <span className="field-label">
+                                {t(field.labelKey)}
+                                {'labelSuffix' in field
+                                  ? ` (${field.labelSuffix})`
+                                  : ''}
+                              </span>
+                              <div className="field-row">
+                                <input
+                                  type={
+                                    'secret' in field && field.secret
+                                      ? 'password'
+                                      : 'text'
+                                  }
+                                  value={storedSecret ? '' : currentValue}
+                                  placeholder={storedSecret ? '••••••••' : field.placeholder}
+                                  spellCheck={false}
+                                  autoComplete="off"
+                                  onChange={(e) =>
+                                    setCfg((c) =>
+                                      updateAgentCliEnvValue(
+                                        c,
+                                        field.agentId,
+                                        field.envKey,
+                                        e.target.value,
+                                      ),
+                                    )
+                                  }
+                                />
+                                {storedSecret ? (
+                                  <button
+                                    type="button"
+                                    className="ghost"
+                                    onClick={() => setCfg((c) => updateAgentCliEnvValue(
+                                      c,
+                                      field.agentId,
+                                      field.envKey,
+                                      '',
+                                    ))}
+                                  >
+                                    {t('common.clear')}
+                                  </button>
+                                ) : null}
+                              </div>
+                            </label>
+                          );
+                        })}
                       </div>
                     </div>
                   </details>
@@ -4444,6 +4466,7 @@ export function SettingsDialog({
                   apiHint: t('settings.apiHint'),
                   apiKey: t('settings.apiKey'),
                   apiKeyCleaned: t('settings.apiKeyCleaned'),
+                  clear: t('common.clear'),
                   apiKeyGetLink: t('settings.apiKeyGetLink', {
                     host: apiKeyConsoleLink.host,
                   }),

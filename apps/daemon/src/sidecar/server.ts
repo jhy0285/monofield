@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 
 import {
+  authorizeDesktopCredentialVaultCommand,
   APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_ENV,
@@ -14,6 +15,8 @@ import {
   type DesktopExportPdfInput,
   type DesktopExportPdfResult,
   type DesktopDatabaseRequest,
+  type DesktopCredentialVaultCommand,
+  type DesktopCredentialVaultResult,
   type DesktopDevelopmentProcessInput,
   type DesktopDevelopmentProcessResult,
   type MintImportTokenResult,
@@ -139,6 +142,27 @@ export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarS
     desktopDatabaseBroker: async (input: DesktopDatabaseRequest): Promise<unknown> => {
       const desktopIpc = resolveAppIpcPath({ app: APP_KEYS.DESKTOP, contract: OPEN_DESIGN_SIDECAR_CONTRACT, namespace: runtime.namespace });
       return await requestJsonIpc<unknown>(desktopIpc, { input, type: SIDECAR_MESSAGES.DATABASE }, { timeoutMs: 600_000 });
+    },
+    desktopCredentialVault: async (input: DesktopCredentialVaultCommand): Promise<DesktopCredentialVaultResult> => {
+      const desktopIpc = resolveAppIpcPath({ app: APP_KEYS.DESKTOP, contract: OPEN_DESIGN_SIDECAR_CONTRACT, namespace: runtime.namespace });
+      const request = input.action === 'available'
+        ? input
+        : (() => {
+            const secret = getDesktopAuthSecret();
+            if (!secret || !isDesktopAuthRegistered()) {
+              throw new Error('Desktop credential vault authorization is unavailable');
+            }
+            const expiresAt = new Date(Date.now() + 15_000).toISOString();
+            return authorizeDesktopCredentialVaultCommand(secret, input, {
+              expiresAt,
+              nonce: randomBytes(16).toString('base64url'),
+            });
+          })();
+      return await requestJsonIpc<DesktopCredentialVaultResult>(
+        desktopIpc,
+        { input: request, type: SIDECAR_MESSAGES.CREDENTIAL_VAULT },
+        { timeoutMs: 15_000 },
+      );
     },
     desktopDevelopmentProcessBroker: async (input: DesktopDevelopmentProcessInput): Promise<DesktopDevelopmentProcessResult> => {
       const desktopIpc = resolveAppIpcPath({ app: APP_KEYS.DESKTOP, contract: OPEN_DESIGN_SIDECAR_CONTRACT, namespace: runtime.namespace });

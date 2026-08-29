@@ -52,7 +52,7 @@ export function InlinePluginsRail(props: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    void listPlugins().then((rows) => {
+    void listPlugins({ summary: true, locale }).then((rows) => {
       if (cancelled) return;
       setPlugins(filterPlugins(rows, props.filter));
     });
@@ -64,6 +64,7 @@ export function InlinePluginsRail(props: Props) {
     props.filter?.mode,
     props.filter?.kinds?.join(','),
     props.filter?.pluginIds?.join(','),
+    locale,
   ]);
 
   const onClick = async (record: InstalledPluginRecord) => {

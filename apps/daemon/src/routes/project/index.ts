@@ -2486,7 +2486,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           const body = { file: meta };
           return res.json(body);
         }
-        const { name, content, encoding, artifactManifest, artifact, overwrite } = req.body || {};
+        const { name, content, encoding, artifactManifest, artifact, overwrite, expectedContentSha256 } = req.body || {};
         if (typeof name !== 'string' || typeof content !== 'string') {
           return sendApiError(
             res,
@@ -2509,6 +2509,15 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
             );
           }
         }
+        if (expectedContentSha256 !== undefined
+          && (typeof expectedContentSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(expectedContentSha256))) {
+          return sendApiError(
+            res,
+            400,
+            'BAD_REQUEST',
+            'expectedContentSha256 must be a lowercase SHA-256 digest',
+          );
+        }
         const buf =
           encoding === 'base64'
             ? Buffer.from(content, 'base64')
@@ -2529,6 +2538,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
               {
                 artifactManifest,
                 ...(overwrite === false ? { overwrite: false } : {}),
+                ...(expectedContentSha256 ? { expectedContentSha256 } : {}),
               },
               uploadProject?.metadata,
             );
@@ -2553,6 +2563,9 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         }
         if (err?.code === 'EEXIST') {
           return sendApiError(res, 409, 'FILE_EXISTS', 'file already exists');
+        }
+        if (err?.code === 'ESTALE') {
+          return sendApiError(res, 409, 'FILE_CHANGED', 'The file changed after it was loaded. Review the latest disk version before overwriting.');
         }
         if (err?.code === 'ARTIFACT_MANIFEST_REQUIRED') {
           return sendApiError(res, 400, 'ARTIFACT_MANIFEST_REQUIRED', err.message);

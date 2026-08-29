@@ -5,7 +5,11 @@ import type {
   ProjectContextMcpServerRef,
   ProjectContextPluginRef,
 } from './context.js';
-import type { ProjectDatabaseContext, ProjectWorkMode } from './development.js';
+import type {
+  DevelopmentRunNetworkOverride,
+  ProjectDatabaseContext,
+  ProjectWorkMode,
+} from './development.js';
 
 export type ProjectKind =
   | 'prototype'
@@ -105,6 +109,10 @@ export interface ProjectMetadata {
     runProfile?: string;
     /** Additional application arguments appended to the detected run configuration. */
     runArguments?: string;
+    /** Credential-free run settings keyed by workspace-relative module path. */
+    runOverridesByProject?: Record<string, DevelopmentRunNetworkOverride>;
+    /** Credential-free encrypted-connection references keyed by workspace-relative module path. */
+    databaseContextsByProject?: Record<string, ProjectDatabaseContext>;
     /** Active runnable module inside a multi-project workspace, relative to baseDir. */
     activeProjectPath?: string;
     autoVerify?: boolean;

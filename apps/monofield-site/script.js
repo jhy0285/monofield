@@ -63,41 +63,43 @@
     applyLanguage();
   });
 
-  const tabs = Array.from(document.querySelectorAll('.workspace-tab'));
-  const panels = Array.from(document.querySelectorAll('[data-workspace-panel]'));
+  function setupTabs(tabSelector, panelSelector, tabTargetAttribute, panelTargetAttribute) {
+    const tabs = Array.from(document.querySelectorAll(tabSelector));
+    const panels = Array.from(document.querySelectorAll(panelSelector));
 
-  tabs.forEach((tab) => {
-    tab.addEventListener('click', () => {
-      const target = tab.getAttribute('data-panel');
+    function activateTab(tab, moveFocus = false) {
+      const target = tab.getAttribute(tabTargetAttribute);
       tabs.forEach((candidate) => {
         const active = candidate === tab;
         candidate.classList.toggle('is-active', active);
         candidate.setAttribute('aria-selected', String(active));
+        candidate.setAttribute('tabindex', active ? '0' : '-1');
       });
       panels.forEach((panel) => {
-        panel.classList.toggle('is-active', panel.getAttribute('data-workspace-panel') === target);
-      });
-    });
-  });
-
-  const projectModeTabs = Array.from(document.querySelectorAll('[data-project-mode]'));
-  const projectModePanels = Array.from(document.querySelectorAll('[data-project-mode-panel]'));
-
-  projectModeTabs.forEach((tab) => {
-    tab.addEventListener('click', () => {
-      const target = tab.getAttribute('data-project-mode');
-      projectModeTabs.forEach((candidate) => {
-        const active = candidate === tab;
-        candidate.classList.toggle('is-active', active);
-        candidate.setAttribute('aria-selected', String(active));
-      });
-      projectModePanels.forEach((panel) => {
-        const active = panel.getAttribute('data-project-mode-panel') === target;
+        const active = panel.getAttribute(panelTargetAttribute) === target;
         panel.classList.toggle('is-active', active);
         panel.hidden = !active;
       });
+      if (moveFocus) tab.focus();
+    }
+
+    tabs.forEach((tab, index) => {
+      tab.addEventListener('click', () => activateTab(tab));
+      tab.addEventListener('keydown', (event) => {
+        let nextIndex = null;
+        if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length;
+        if (event.key === 'ArrowLeft') nextIndex = (index - 1 + tabs.length) % tabs.length;
+        if (event.key === 'Home') nextIndex = 0;
+        if (event.key === 'End') nextIndex = tabs.length - 1;
+        if (nextIndex === null) return;
+        event.preventDefault();
+        activateTab(tabs[nextIndex], true);
+      });
     });
-  });
+  }
+
+  setupTabs('.workspace-tab', '[data-workspace-panel]', 'data-panel', 'data-workspace-panel');
+  setupTabs('[data-project-mode]', '[data-project-mode-panel]', 'data-project-mode', 'data-project-mode-panel');
 
   configureDistributionLinks();
   applyLanguage();

@@ -7,10 +7,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   applyDevelopmentRunOverrides,
+  desktopDevelopmentProcessKey,
   DevelopmentServerService,
   detectDevelopmentRunConfigs,
   selectExecutableCandidate,
+  validatedDevelopmentEnvironment,
 } from '../src/development-server.js';
+import { resolveDevelopmentProjectRoot } from '../src/development-projects.js';
 
 const temporaryRoots: string[] = [];
 
@@ -25,6 +28,47 @@ afterEach(async () => {
 });
 
 describe('development run configuration detection', () => {
+  it('reserves every environment variable owned by the run-port broker', () => {
+    expect(validatedDevelopmentEnvironment({ FEATURE_ORDERS: 'true' })).toEqual({ FEATURE_ORDERS: 'true' });
+    for (const key of ['PORT', 'BROWSER', 'SERVER_PORT', 'ASPNETCORE_URLS', 'GRADIO_SERVER_PORT', 'STREAMLIT_SERVER_PORT']) {
+      expect(() => validatedDevelopmentEnvironment({ [key]: '9000' })).toThrow(/reserved/i);
+    }
+  });
+
+  it('uses bridge-safe, distinct process keys for sibling workspace modules', () => {
+    const first = desktopDevelopmentProcessKey('project-modules', 'services/api-a');
+    const second = desktopDevelopmentProcessKey('project-modules', 'services/api-b');
+    expect(first).toMatch(/^[A-Za-z0-9._-]{1,128}$/);
+    expect(second).toMatch(/^[A-Za-z0-9._-]{1,128}$/);
+    expect(first).not.toBe(second);
+    expect(desktopDevelopmentProcessKey('project-modules', '.')).toBe('project-modules');
+  });
+
+  it('includes the normalized workspace and process cwd in the Desktop process identity', () => {
+    const first = desktopDevelopmentProcessKey(
+      'project-folder-switch',
+      '.',
+      'C:\\work\\workspace-a',
+      'C:\\work\\workspace-a\\server',
+    );
+    const equivalent = desktopDevelopmentProcessKey(
+      'project-folder-switch',
+      '.',
+      'C:\\work\\workspace-a\\.',
+      'C:\\work\\workspace-a\\server\\.',
+    );
+    const second = desktopDevelopmentProcessKey(
+      'project-folder-switch',
+      '.',
+      'C:\\work\\workspace-b',
+      'C:\\work\\workspace-b\\server',
+    );
+
+    expect(first).toBe(equivalent);
+    expect(first).not.toBe(second);
+    expect(first).toMatch(/^[A-Za-z0-9._-]{1,128}$/);
+  });
+
   it('prefers an executable Windows command shim over an extensionless npm shim', () => {
     expect(selectExecutableCandidate([
       'C:\\nvm4w\\nodejs\\npm',
@@ -52,15 +96,46 @@ describe('development run configuration detection', () => {
       profile: 'local',
       port: 8080,
       url: 'http://127.0.0.1:8080',
-    }, { profile: 'prod', applicationArgs: ['--feature=orders', '--dry-run'] });
+    }, {
+      profile: 'prod',
+      applicationArgs: ['--feature=orders', '--dry-run'],
+      port: 9180,
+      url: 'http://localhost:9180/orders',
+    });
 
     expect(overridden.profile).toBe('prod');
     expect(overridden.args).toEqual([
       'spring-boot:run',
       '-Dspring-boot.run.profiles=prod',
-      '-Dspring-boot.run.arguments=--feature=orders --dry-run',
+      '-Dspring-boot.run.arguments=--server.port=9180 --feature=orders --dry-run',
     ]);
     expect(overridden.id).not.toBe('spring-local');
+    expect(overridden.port).toBe(9180);
+    expect(overridden.url).toBe('http://localhost:9180/orders');
+  });
+
+  it.each([
+    { command: 'mvn', baseArgs: ['spring-boot:run'], prefix: '-Dspring-boot.run.arguments=' },
+    { command: 'gradle', baseArgs: ['bootRun'], prefix: '--args=' },
+  ])('preserves quoted and empty Spring application argv boundaries for $command', ({ command, baseArgs, prefix }) => {
+    const overridden = applyDevelopmentRunOverrides({
+      id: `spring-${command}`,
+      label: `Spring Boot · ${command}`,
+      kind: 'java',
+      framework: 'Spring Boot',
+      cwd: '.',
+      command,
+      args: baseArgs,
+      source: command === 'mvn' ? 'pom.xml' : 'build.gradle',
+      port: 8080,
+      url: 'http://127.0.0.1:8080',
+    }, {
+      applicationArgs: ['--label=Order service', '', '--json={"name":"A B"}', 'C:\\Program Files\\MonoField'],
+    });
+
+    expect(overridden.args.find((value) => value.startsWith(prefix))).toBe(
+      `${prefix}"--label=Order service" "" "--json={\\"name\\":\\"A B\\"}" "C:\\\\Program Files\\\\MonoField"`,
+    );
   });
 
   it('bypasses the workspace discovery cache for an explicit refresh', async () => {
@@ -80,6 +155,28 @@ describe('development run configuration detection', () => {
     expect(cached.projects?.map((project) => project.path)).not.toContain('service-b');
     const refreshed = await detectDevelopmentRunConfigs(root, null, true);
     expect(refreshed.projects?.map((project) => project.path)).toContain('service-b');
+  });
+
+  it('rejects an explicitly selected module that was not discovered instead of running the first server', async () => {
+    const root = await temporaryRoot();
+    const serviceRoot = path.join(root, 'aauserver');
+    await fs.mkdir(serviceRoot);
+    await fs.writeFile(path.join(serviceRoot, 'pom.xml'), '<project />');
+
+    await expect(resolveDevelopmentProjectRoot(root, 'aopserver'))
+      .rejects.toThrow('Development project was not found: aopserver');
+  });
+
+  it('falls back from a missing stored module only when the caller explicitly allows it', async () => {
+    const root = await temporaryRoot();
+    const serviceRoot = path.join(root, 'aauserver');
+    await fs.mkdir(serviceRoot);
+    await fs.writeFile(path.join(serviceRoot, 'pom.xml'), '<project />');
+
+    await expect(detectDevelopmentRunConfigs(root, 'removed-server'))
+      .rejects.toThrow('Development project was not found: removed-server');
+    const fallback = await detectDevelopmentRunConfigs(root, 'removed-server', false, true);
+    expect(fallback.activeProjectPath).toBe('aauserver');
   });
 
   it('reuses detected run configurations until an explicit refresh', async () => {
@@ -354,7 +451,14 @@ describe('development run configuration detection', () => {
 
     const stopped = await service.stop('project-fast-stop');
     expect(stopped).toMatchObject({ state: 'idle', pid: null, error: null });
-    expect(broker).toHaveBeenCalledWith(expect.objectContaining({ action: 'terminate', projectId: 'project-fast-stop' }));
+    const startInput = broker.mock.calls
+      .map(([input]) => input)
+      .find((input) => input.action === 'start');
+    expect(startInput?.projectId).toMatch(/^mf-/);
+    expect(broker).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'terminate',
+      projectId: startInput?.projectId,
+    }));
   });
 
   it.runIf(process.platform === 'win32')('keeps the captured failure reason when the desktop broker later has no error', async () => {
@@ -364,7 +468,12 @@ describe('development run configuration detection', () => {
     }));
     const detected = await detectDevelopmentRunConfigs(root);
     let statusCalls = 0;
-    const broker = vi.fn(async (input: { action: 'start' | 'status' | 'terminate'; projectId: string }) => {
+    const broker = vi.fn(async (input: {
+      action: 'start' | 'status' | 'terminate';
+      environment?: Record<string, string>;
+      port?: number;
+      projectId: string;
+    }) => {
       if (input.action === 'start') {
         return { accepted: true as const, action: input.action, error: null, logs: [], pid: 4513, projectId: input.projectId, running: true };
       }
@@ -402,7 +511,12 @@ describe('development run configuration detection', () => {
 
     let pid = 6100;
     const running = new Map<string, number>();
-    const broker = vi.fn(async (input: { action: 'start' | 'status' | 'terminate'; projectId: string }) => {
+    const broker = vi.fn(async (input: {
+      action: 'start' | 'status' | 'terminate';
+      environment?: Record<string, string>;
+      port?: number;
+      projectId: string;
+    }) => {
       if (input.action === 'start') { pid += 1; running.set(input.projectId, pid); }
       if (input.action === 'terminate') running.delete(input.projectId);
       return {
@@ -417,11 +531,42 @@ describe('development run configuration detection', () => {
     });
     const service = new DevelopmentServerService(broker);
 
-    const first = await service.start('project-modules', root, firstDetected.configs[0]!.id, 'service-a');
-    const second = await service.start('project-modules', root, secondDetected.configs[0]!.id, 'service-b');
+    const first = await service.start('project-modules', root, firstDetected.configs[0]!.id, 'service-a', {
+      port: 63982,
+      url: 'http://127.0.0.1:63982/service-a',
+      environment: { FEATURE_SERVICE_A: 'true' },
+    });
+    const second = await service.start('project-modules', root, secondDetected.configs[0]!.id, 'service-b', {
+      port: 63983,
+      url: 'http://127.0.0.1:63983/service-b',
+    });
 
-    expect(first).toMatchObject({ projectPath: 'service-a', pid: 6101 });
-    expect(second).toMatchObject({ projectPath: 'service-b', pid: 6102 });
+    expect(first).toMatchObject({
+      projectPath: 'service-a',
+      pid: 6101,
+      url: 'http://127.0.0.1:63982/service-a',
+      config: { args: ['run', 'dev', '--', '--port', '63982'], port: 63982 },
+    });
+    expect(second).toMatchObject({
+      projectPath: 'service-b',
+      pid: 6102,
+      url: 'http://127.0.0.1:63983/service-b',
+      config: { args: ['run', 'dev', '--', '--port', '63983'], port: 63983 },
+    });
+    const startedProcessKeys = broker.mock.calls
+      .map(([input]) => input)
+      .filter((input) => input.action === 'start')
+      .map((input) => input.projectId);
+    expect(startedProcessKeys).toHaveLength(2);
+    expect(startedProcessKeys[0]).toMatch(/^[A-Za-z0-9._-]{1,128}$/);
+    expect(new Set(startedProcessKeys)).toHaveProperty('size', 2);
+    const startInputs = broker.mock.calls
+      .map(([input]) => input)
+      .filter((input) => input.action === 'start');
+    expect(startInputs.map((input) => input.port)).toEqual([63982, 63983]);
+    expect(startInputs[0]?.args.join(' ')).toContain('--port 63982');
+    expect(startInputs[1]?.args.join(' ')).toContain('--port 63983');
+    expect(startInputs[0]).toMatchObject({ environment: { FEATURE_SERVICE_A: 'true' } });
     expect(broker.mock.calls.map(([input]) => input.action).filter((action) => action !== 'status'))
       .toEqual(['start', 'start']);
     expect(await service.statusAsync('project-modules', 'service-a')).toMatchObject({
@@ -438,6 +583,200 @@ describe('development run configuration detection', () => {
     expect(await service.statusAsync('project-modules', 'service-a')).toMatchObject({ pid: 6101 });
     expect(await service.statusAsync('project-modules', 'service-b')).toMatchObject({ state: 'idle', pid: null });
     await service.stopAll('project-modules');
+  });
+
+  it.runIf(process.platform === 'win32')('restarts instead of reusing a process when the same project id moves to another workspace root', async () => {
+    const firstRoot = await temporaryRoot();
+    const secondRoot = await temporaryRoot();
+    for (const root of [firstRoot, secondRoot]) {
+      await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({
+        scripts: { dev: 'node server.js --port 63871' },
+      }));
+      await fs.writeFile(path.join(root, 'server.js'), 'setInterval(() => {}, 1000);\n');
+    }
+    const firstDetected = await detectDevelopmentRunConfigs(firstRoot);
+    const secondDetected = await detectDevelopmentRunConfigs(secondRoot);
+    expect(firstDetected.configs[0]?.id).toBe(secondDetected.configs[0]?.id);
+
+    let pid = 8100;
+    const running = new Map<string, number>();
+    const broker = vi.fn(async (input: { action: 'start' | 'status' | 'terminate'; projectId: string }) => {
+      if (input.action === 'start') running.set(input.projectId, ++pid);
+      if (input.action === 'terminate') running.delete(input.projectId);
+      return {
+        accepted: true as const,
+        action: input.action,
+        error: null,
+        logs: [],
+        pid: running.get(input.projectId) ?? null,
+        projectId: input.projectId,
+        running: running.has(input.projectId),
+      };
+    });
+    const service = new DevelopmentServerService(broker);
+
+    const first = await service.start('project-folder-switch', firstRoot, firstDetected.configs[0]!.id, null, {
+      port: 63871,
+      url: 'http://127.0.0.1:63871',
+    });
+    const second = await service.start('project-folder-switch', secondRoot, secondDetected.configs[0]!.id, null, {
+      port: 63872,
+      url: 'http://127.0.0.1:63872',
+    });
+
+    expect(first.pid).toBe(8101);
+    expect(second.pid).toBe(8102);
+    expect(second.url).toBe('http://127.0.0.1:63872');
+    const lifecycle = broker.mock.calls
+      .map(([input]) => input)
+      .filter((input) => input.action !== 'status');
+    expect(lifecycle.map((input) => input.action)).toEqual(['start', 'terminate', 'start']);
+    expect(lifecycle[0]?.projectId).not.toBe(lifecycle[2]?.projectId);
+    await service.stopAll('project-folder-switch');
+  });
+
+  it.runIf(process.platform === 'win32')('reports every stop-all failure together with the still-running status', async () => {
+    const root = await temporaryRoot();
+    await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ scripts: { dev: 'node server.js --port 63873' } }));
+    const detected = await detectDevelopmentRunConfigs(root);
+    const broker = vi.fn(async (input: { action: 'start' | 'status' | 'terminate'; projectId: string }) => {
+      if (input.action === 'terminate') throw new Error('taskkill denied');
+      return {
+        accepted: true as const,
+        action: input.action,
+        error: null,
+        logs: [],
+        pid: 8201,
+        projectId: input.projectId,
+        running: true,
+      };
+    });
+    const service = new DevelopmentServerService(broker);
+    await service.start('project-stop-all-failure', root, detected.configs[0]!.id, null, {
+      port: 63873,
+      url: 'http://127.0.0.1:63873',
+    });
+
+    const result = await service.stopAll('project-stop-all-failure');
+
+    expect(result.failures).toEqual([expect.objectContaining({
+      projectPath: '.',
+      error: 'taskkill denied',
+    })]);
+    expect(result.servers).toEqual([expect.objectContaining({ pid: 8201, state: 'starting' })]);
+  });
+
+  it.runIf(process.platform === 'win32')('restarts a module when its session environment is cleared', async () => {
+    const root = await temporaryRoot();
+    await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({
+      scripts: { dev: 'node server.js --port 63981' },
+    }));
+    const detected = await detectDevelopmentRunConfigs(root);
+    let pid = 7200;
+    let runningPid: number | null = null;
+    const broker = vi.fn(async (input: {
+      action: 'start' | 'status' | 'terminate';
+      environment?: Record<string, string>;
+      projectId: string;
+    }) => {
+      if (input.action === 'start') runningPid = ++pid;
+      if (input.action === 'terminate') runningPid = null;
+      return {
+        accepted: true as const,
+        action: input.action,
+        error: null,
+        logs: [],
+        pid: runningPid,
+        projectId: input.projectId,
+        running: runningPid != null,
+      };
+    });
+    const service = new DevelopmentServerService(broker);
+
+    await service.start('project-env-clear', root, detected.configs[0]!.id, null, {
+      environment: { FEATURE_ORDERS: 'enabled' },
+    });
+    const restarted = await service.start('project-env-clear', root, detected.configs[0]!.id);
+
+    expect(restarted.pid).toBe(7202);
+    expect(broker.mock.calls
+      .map(([input]) => input.action)
+      .filter((action) => action !== 'status'))
+      .toEqual(['start', 'terminate', 'start']);
+    const startInputs = broker.mock.calls
+      .map(([input]) => input)
+      .filter((input) => input.action === 'start');
+    expect(startInputs[0]?.environment).toEqual({ FEATURE_ORDERS: 'enabled' });
+    expect(startInputs[1]?.environment).toBeUndefined();
+    await service.stopAll('project-env-clear');
+  });
+
+  it('does not restore a stale desktop PID when a status response finishes after stop', async () => {
+    if (process.platform !== 'win32') return;
+    const root = await temporaryRoot();
+    await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ scripts: { dev: 'node server.js --port 63991' } }));
+    await fs.writeFile(path.join(root, 'server.js'), 'setInterval(() => {}, 1000);\n');
+    const detected = await detectDevelopmentRunConfigs(root);
+    let resolveStatus: ((value: {
+      accepted: true;
+      action: 'status';
+      error: null;
+      logs: string[];
+      pid: number;
+      projectId: string;
+      running: true;
+    }) => void) | null = null;
+    let notifyStatusStarted: (() => void) | null = null;
+    const statusStarted = new Promise<void>((resolve) => { notifyStatusStarted = resolve; });
+    const broker = vi.fn(async (input: { action: 'start' | 'status' | 'terminate'; projectId: string }) => {
+      if (input.action === 'status') {
+        notifyStatusStarted?.();
+        return await new Promise<{
+          accepted: true;
+          action: 'status';
+          error: null;
+          logs: string[];
+          pid: number;
+          projectId: string;
+          running: true;
+        }>((resolve) => { resolveStatus = resolve; });
+      }
+      return {
+        accepted: true as const,
+        action: input.action,
+        error: null,
+        logs: [],
+        pid: input.action === 'start' ? 7311 : null,
+        projectId: input.projectId,
+        running: input.action === 'start',
+      };
+    });
+    const service = new DevelopmentServerService(broker);
+
+    await service.start('project-stop-race', root, detected.configs[0]!.id);
+    await statusStarted;
+    await service.stop('project-stop-race');
+    const settleStatus = resolveStatus as unknown as (value: {
+      accepted: true;
+      action: 'status';
+      error: null;
+      logs: string[];
+      pid: number;
+      projectId: string;
+      running: true;
+    }) => void;
+    settleStatus({
+      accepted: true,
+      action: 'status',
+      error: null,
+      logs: ['old process still running'],
+      pid: 7311,
+      projectId: 'project-stop-race',
+      running: true,
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(service.status('project-stop-race')).toMatchObject({ state: 'idle', pid: null });
   });
 
   it('refuses to treat an unrelated process on the detected port as the selected server', async () => {

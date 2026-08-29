@@ -154,7 +154,11 @@ function handleOpenCodeEvent(obj: unknown, onEvent: StreamEventHandler, state: P
   const part = isRecord(obj.part) ? obj.part : {};
 
   if (obj.type === 'step_start') {
-    onEvent({ type: 'status', label: 'running' });
+    onEvent({
+      type: 'status',
+      label: 'running',
+      ...(typeof obj.sessionID === 'string' ? { sessionId: obj.sessionID } : {}),
+    });
     return true;
   }
 
@@ -598,6 +602,7 @@ function handleCursorEvent(obj: unknown, onEvent: StreamEventHandler, state: Par
       type: 'status',
       label: 'initializing',
       model: typeof obj.model === 'string' ? obj.model : undefined,
+      ...(typeof obj.session_id === 'string' ? { sessionId: obj.session_id } : {}),
     });
     return true;
   }

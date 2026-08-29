@@ -34,6 +34,24 @@ const GENERATION_PATTERNS = [
   /generate|create|build|scan|collect|produce|export|render|workbook|xlsx/i,
 ];
 
+const ARTIFACT_CHANGE_PATTERNS = [
+  /수정(?:해|하|할|해줘)/i,
+  /변경(?:해|하|할|해줘)/i,
+  /검증(?:해|하|할|해줘)/i,
+  /확인(?:해|하|할|해줘)/i,
+  /미리\s*보기|프리뷰/i,
+  /저장(?:해|하|할|해줘)/i,
+  /edit|modify|update|revise|validate|verify|preview|save/i,
+];
+
+const SCREEN_SPEC_PATTERNS = [
+  /화면\s*명세/i,
+  /screen\s*spec/i,
+  /화면\s*설명서/i,
+];
+
+const STRUCTURED_SPEC_FORM_ANSWER = /\[form answers\s*[—-]\s*(?:interface|screen)-spec-[^\]]+\]/i;
+
 const INTERFACE_SPEC_PATTERNS = [
   /인터페이스\s*명세/i,
   /interface\s*spec/i,
@@ -98,4 +116,39 @@ export function isManualInterfaceSpecGenerationRequest(
     isInterfaceSpecGenerationRequest(input) &&
     classifyInterfaceSpecSourceIntent(input) === 'manual'
   );
+}
+
+export type StructuredSpecificationKind = 'interface-spec' | 'screen-spec';
+
+/**
+ * Return true only when this turn needs the heavyweight collector / renderer
+ * instructions for a structured specification.  The result is intentionally
+ * a two-value routing profile rather than a hash of the raw user text: all
+ * guidance turns share one stable system prompt fingerprint and all artifact
+ * turns share the other, preserving provider prompt-cache reuse.
+ *
+ * Form answers count as artifact work because the UI wraps deterministic
+ * collector submissions with the form id.  Explanations and how-to questions
+ * never do, even when they contain words such as "interface spec".
+ */
+export function isStructuredSpecificationArtifactRequest(
+  input: string | null | undefined,
+  kind: StructuredSpecificationKind | null | undefined,
+): boolean {
+  const text = typeof input === 'string' ? input.trim() : '';
+  if (!text || (kind !== 'interface-spec' && kind !== 'screen-spec')) return false;
+  if (STRUCTURED_SPEC_FORM_ANSWER.test(text)) return true;
+  if (isDocumentHowToRequest(text)) return false;
+
+  // The project kind already supplies the artifact noun. Requiring the user
+  // to repeat "interface spec" / "screen spec" on every follow-up would
+  // incorrectly send terse edits such as "현재 초안 수정해줘" through the
+  // guidance profile. Keep only the cross-kind guard that prevents a screen
+  // specification request inside an interface project from starting the
+  // interface collector.
+  if (kind === 'interface-spec' && SCREEN_SPEC_PATTERNS.some((pattern) => pattern.test(text))) {
+    return false;
+  }
+  return [...GENERATION_PATTERNS, ...ARTIFACT_CHANGE_PATTERNS]
+    .some((pattern) => pattern.test(text));
 }

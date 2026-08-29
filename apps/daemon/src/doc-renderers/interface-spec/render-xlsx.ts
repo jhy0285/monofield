@@ -619,7 +619,12 @@ function writeDetailSheet(
     hyperlink: sheetLocation(layout.navigation.targetSheet),
   };
 
-  const valueMap = { interfaceId, interfaceName, apiKey: endpointApiKey(ep) };
+  const valueMap = {
+    interfaceId,
+    interfaceName,
+    businessPurpose: ep.businessPurpose?.trim() || interfaceName,
+    apiKey: endpointApiKey(ep),
+  };
   for (const binding of layout.fieldBindings) {
     ws.getCell(binding.labelCell).value = binding.label;
     ws.getCell(binding.valueCell).value = valueMap[binding.valueKey];
@@ -904,6 +909,10 @@ export async function renderInterfaceSpecXlsx(
   writeListSheetScaffold(listWs, listMerged);
 
   const generatedWs = wb.addWorksheet(GENERATED_LIST_SHEET_TITLE);
+  // Keep the flat list for deterministic machine import/export compatibility,
+  // but do not present it as a second user-facing interface list. The styled
+  // `인터페이스 목록` sheet above is the workbook's review surface.
+  generatedWs.state = 'hidden';
   writeGeneratedListSheetScaffold(generatedWs);
 
   const usedTitles = new Set(wb.worksheets.map((ws) => ws.name));

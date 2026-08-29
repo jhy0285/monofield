@@ -127,7 +127,7 @@ describe('SettingsDialog API protocol switching', () => {
       apiProtocol: 'openai',
       apiKey: '',
       baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-4o',
+      model: 'gpt-5.6-terra',
       apiProviderBaseUrl: 'https://api.openai.com/v1',
     });
   });
@@ -138,7 +138,7 @@ describe('SettingsDialog API protocol switching', () => {
       apiProtocol: 'google',
       apiKey: '',
       baseUrl: 'https://generativelanguage.googleapis.com',
-      model: 'gemini-3.5-flash',
+      model: 'gemini-3.7-flash',
       apiProviderBaseUrl: 'https://generativelanguage.googleapis.com',
     });
   });

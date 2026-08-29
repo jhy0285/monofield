@@ -168,22 +168,19 @@ The adapter declares which strategy to use via `capabilities().nativeSkillLoadin
 
 ### 5.5 Cursor Agent
 
-- Invocation: `cursor-agent --workspace <dir> "<prompt>"` (rough; verify with CLI docs at implementation time).
-- Streaming: yes, JSON lines.
-- Skill loading: no native skill concept. We write a `.cursorrules` file into the artifact dir before running. The rules file contains the skill's SKILL.md body (minus front-matter).
-- Surgical edits: Cursor's inline edit tool is strong; map our `refine` call to its edit protocol.
-- **Gotcha:** Cursor Agent operates on workspaces, not single files. Constrain the workspace to the artifact dir to prevent over-broad changes.
+- Invocation: `cursor-agent --print --output-format stream-json --force`, with the composed prompt delivered over stdin. MonoField adds `--workspace <cwd>`, `--trust`, and `--stream-partial-output` only when the installed CLI's `--help` probe confirms those flags.
+- Streaming: Cursor stream-json is normalized into the shared event stream; emitted session ids are captured and later turns use `--resume <session-id>` instead of replaying the full transcript.
+- Skill loading: project instructions and prompt injection. The selected working folder remains the default project root.
+- **Gotcha:** Installing the Cursor editor is not enough. MonoField needs the separate `cursor-agent` executable on its inherited `PATH`, and `cursor-agent status` must report a usable login.
 
 ### 5.6 Gemini CLI
 
-- Invocation: `gemini` with the composed prompt delivered via **stdin** (no `-p` flag).
-  Gemini CLI enters headless mode automatically when stdin is a pipe and no `-p` flag is
-  supplied — verified with `gemini@0.1.x`.
+- Invocation: `gemini --output-format stream-json --yolo` with the composed prompt delivered via **stdin** (no `-p` flag).
+  Gemini CLI enters headless mode when stdin is a pipe. MonoField creates and resumes project-scoped sessions with `--session-id` / `--resume` when supported by the current adapter contract.
 - Trust: `GEMINI_CLI_TRUST_WORKSPACE=true` is set in the spawned process instead of
   passing `--skip-trust`, which is version-fragile across Gemini CLI releases.
 - Streaming: yes, `--output-format stream-json` to stdout.
-- Skill loading: prompt injection only.
-- Surgical edits: regenerate whole file.
+- Skill loading: prompt injection plus explicitly allowed project support directories.
 - **Gotcha — `spawn ENAMETOOLONG` on Windows:** Passing the full composed prompt as a
   `-p <string>` CLI argument hits Windows' `CreateProcess` hard limit of ~32 KB for the
   entire command line. The fix is to set `promptViaStdin: true` in the agent definition
@@ -194,15 +191,17 @@ The adapter declares which strategy to use via `capabilities().nativeSkillLoadin
 
 ### 5.7 OpenCode / OpenClaw
 
-- Less-matured CLIs. Targeting P2. Expect bumps; adapter implementations will likely be the thinnest possible "shell out, parse output, synthesize events" approach.
+- OpenCode uses `opencode run --format json`, reads the prompt from stdin, captures the emitted session id, and resumes later turns without transcript replay. External support directories and enabled MCP configuration are passed through the adapter-owned environment contract.
+- OpenClaw remains a separate adapter with its own capability and authentication checks; do not infer OpenCode support from an OpenClaw installation or vice versa.
 
 ### 5.8 GitHub Copilot CLI
 
-- Invocation: `copilot -p "<prompt>" --allow-all-tools --output-format json --add-dir <skills> --add-dir <design-systems>`. `--allow-all-tools` is mandatory in non-interactive mode — without it the CLI blocks waiting for human approval on every tool call. Unlike Codex (where `exec` is a dedicated headless subcommand with auto-approve baked in) or Claude Code (which inherits its permission policy from `~/.claude/settings.json`), Copilot's `-p` mode always prompts unless this flag is passed explicitly. `--add-dir` (repeatable) widens the path-level sandbox so Copilot can read skill seeds and design-system specs that live outside the project cwd.
+- Invocation: `copilot --allow-all-tools --no-ask-user --output-format json`, with the composed prompt delivered via stdin. Omitting `-p` is intentional: `-p -` sends a literal dash, while putting the composed prompt in argv can exceed Windows command-line limits. `--add-dir` (repeatable) exposes only the support directories selected for the run.
 - Streaming: `--output-format json` emits JSONL with the same expressive shape as Claude Code's stream-json (`assistant.reasoning_delta`, `assistant.message_delta`, `tool.execution_start/complete`, `result`). `apps/daemon/src/copilot-stream.ts` maps these onto the same UI events as `claude-stream.ts`.
 - Skill loading: prompt injection only. Github Copilot's tool catalog includes a `skill` tool — native format worth reverse-engineering later.
 - Surgical edits: dedicated `edit` tool.
 - Detection assumes Copilot is already authenticated, via one of: `copilot login` (subcommand, OAuth device flow), the interactive `/login` slash command inside `copilot` with no args.
+- Sessions: MonoField creates a deterministic `--session-id` and uses `--resume=<id>` on follow-up turns, avoiding full transcript replay.
 
 ### 5.9 Qoder CLI
 
@@ -254,7 +253,13 @@ The web UI reads `agents.capabilities()` and disables features that the active a
 | Resume interrupted run | `resume: true` | "Cancel + restart" only |
 | Skill picker shows skill with `od.capabilities_required` | all listed caps | Skill greyed out with reason |
 
-This is how we avoid "works on my Claude Code, breaks on your Gemini" — we detect, degrade, and document.
+The working folder, Git, development-process broker, database policy, terminal,
+and approved in-app browser are MonoField capabilities. An approved browser
+session is therefore available to every supported local CLI adapter. Adapter
+capabilities still control model-specific behavior such as stream richness,
+native image input, session resume, and usage reporting. BYOK/API chat is not a
+local code-agent runtime and does not receive project file, terminal, or browser
+automation tools.
 
 ## 7. Agent switching
 
@@ -299,14 +304,20 @@ Web UI mirrors this in an agent-selector dropdown, with unauthenticated agents s
 
 ## 10. Authorization boundaries
 
-We inherit the underlying agent's permission model rather than building our own. This means:
+MonoField combines its own project and host boundaries with the underlying
+agent's permission model. This means:
 
-- **Claude Code** respects its own `--allowed-tools` and `--permission-mode` flags. OD passes through user preferences.
-- **Codex / Cursor** sandbox by workspace; OD always sets cwd to the artifact dir so nothing outside is visible by default.
+- **Claude Code** runs headlessly with the adapter's non-interactive permission mode in the selected project root. Organization-level Claude policies still apply; users should treat the run like the equivalent direct CLI invocation.
+- **Codex / Cursor** start in the selected project root. Any additional readable directory must come from an explicit adapter grant; the exact sandbox remains owned by the installed CLI.
+- **Gemini / Copilot / OpenCode** run headlessly in the selected project root with adapter-specific non-interactive approval flags. Users should apply the same trust judgment they would when running those flags directly.
 - **Qoder CLI** runs with `--permission-mode bypass_permissions` for non-interactive web execution and is scoped by the daemon's cwd plus explicit absolute `--add-dir` entries.
-- **API fallback** is the one case we own. We implement a whitelist: only `Read`, `Write`, `Edit` tools, all rooted at the artifact cwd. Network access is off.
+- **BYOK/API chat** is intentionally chat-only in the current product. It does not receive local file, terminal, database, or browser-automation tools.
+- **In-app browser automation** is always bound to a user-approved tab and origin. Approval remains host-owned; changing models does not widen it.
 
-The daemon never grants more authority to an agent than it had on its own. We don't run the agent in a privileged mode "for convenience."
+The daemon does not silently switch agents or widen the selected project,
+database policy, or browser origin. Non-interactive flags are visible adapter
+behavior and must be treated with the same trust posture as running that CLI
+directly.
 
 ## 11. Adapter source layout
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   MONOFIELD_PLUGIN_SPEC_VERSION,
+  InstalledPluginSummarySchema,
   MarketplacePluginEntrySchema,
   PluginManifestSchema,
   resolveLocalizedText,
@@ -23,6 +24,25 @@ describe('plugin manifest localized text', () => {
     });
 
     expect(manifest.od?.useCase?.query).toBe('Make a {{topic}} brief.');
+  });
+
+  it('validates lightweight plugin picker summaries independently of full manifests', () => {
+    const summary = InstalledPluginSummarySchema.parse({
+      summary: true,
+      id: 'sample-plugin',
+      title: 'Sample plugin',
+      version: '1.0.0',
+      sourceKind: 'bundled',
+      trust: 'trusted',
+      capabilitiesGranted: [],
+      updatedAt: 1,
+      name: 'sample-plugin',
+      hasQuery: true,
+      inputs: [{ name: 'topic', type: 'string' }],
+    });
+
+    expect(summary.hasQuery).toBe(true);
+    expect(summary).not.toHaveProperty('manifest');
   });
 
   it('normalizes the canonical monofield namespace for the runtime', () => {

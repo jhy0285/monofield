@@ -78,16 +78,16 @@ function installActionText(t: Translator, model: UpdaterModel, installBusy: bool
   return installBusy ? t('updater.opening') : t('updater.openInstaller');
 }
 
-function channelLabelFor(channel: string | null | undefined): string | null {
+function channelLabelFor(t: Translator, channel: string | null | undefined): string | null {
   switch (channel) {
     case 'beta':
-      return 'Beta channel';
+      return t('updater.channelBeta');
     case 'prerelease':
-      return 'Prerelease channel';
+      return t('updater.channelPrerelease');
     case 'preview':
-      return 'Preview channel';
+      return t('updater.channelPreview');
     case 'stable':
-      return 'Stable channel';
+      return t('updater.channelStable');
     default:
       return null;
   }
@@ -160,22 +160,26 @@ export function UpdaterPopup() {
   useEffect(() => {
     let mounted = true;
     const timer = window.setTimeout(() => {
-      void Promise.all([fetchAppVersionInfo(), fetchLatestGithubReleaseInfo()]).then(
-        ([current, latest]) => {
-          if (!mounted || !current?.packaged || !latest || latest.stale) return;
-          const version = latest.tagName.replace(/^v/i, '');
-          if (!version || !isNewerRelease(current.version, version)) return;
-          const release = { ...latest, currentVersion: current.version, version };
-          setManualRelease(release);
-          try {
-            if (window.localStorage.getItem(UPDATE_DISMISSED_STORAGE_KEY) !== version) {
-              setPanelOpen(true);
-            }
-          } catch {
+      // Browser/dev sessions can never install a Desktop release. Resolve the
+      // local app state first and only contact GitHub for a packaged build.
+      // This removes an unnecessary startup request (and noisy 502s when the
+      // release endpoint is unavailable) from the normal web development path.
+      void fetchAppVersionInfo().then(async (current) => {
+        if (!mounted || !current?.packaged) return;
+        const latest = await fetchLatestGithubReleaseInfo();
+        if (!mounted || !latest || latest.stale) return;
+        const version = latest.tagName.replace(/^v/i, '');
+        if (!version || !isNewerRelease(current.version, version)) return;
+        const release = { ...latest, currentVersion: current.version, version };
+        setManualRelease(release);
+        try {
+          if (window.localStorage.getItem(UPDATE_DISMISSED_STORAGE_KEY) !== version) {
             setPanelOpen(true);
           }
-        },
-      );
+        } catch {
+          setPanelOpen(true);
+        }
+      });
     }, RELEASE_CHECK_DELAY_MS);
     return () => {
       mounted = false;
@@ -198,11 +202,11 @@ export function UpdaterPopup() {
   const canStartInstall = ready || installState === 'recoverable';
   const showControl = ready || installState !== 'idle';
   const controlLabel = manualReady
-    ? t('updater.download')
+    ? t('updater.openReleasePage')
     : model.updateKind === 'payload'
       ? t('updater.installRestart')
       : t('updater.openInstaller');
-  const channelLabel = channelLabelFor(displayModel.status?.channel);
+  const channelLabel = channelLabelFor(t, displayModel.status?.channel);
   const analytics = useAnalytics();
   const appVersionBefore = useAppVersion();
   const versionProps = useMemo(
@@ -428,7 +432,7 @@ export function UpdaterPopup() {
                 }}
               >
                 {manualReady
-                  ? t('updater.download')
+                  ? t('updater.openReleasePage')
                   : installActionText(t, displayModel, installBusy)}
               </button>
             </div>

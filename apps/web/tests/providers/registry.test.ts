@@ -17,12 +17,108 @@ import {
   fetchPluginPreviewHtml,
   fetchProjectDesignSystemPackageAudit,
   fetchProjectFileText,
+  fetchProjectFiles,
+  fetchProjectFolders,
   fetchSkillExample,
   isDeployProviderId,
+  isSelectedAgentDetectionPending,
   updateDeployConfig,
   uploadProjectFiles,
   writeProjectTextFileDetailed,
 } from '../../src/providers/registry';
+
+describe('selected agent readiness', () => {
+  it('unblocks as soon as the selected streamed adapter arrives', () => {
+    expect(isSelectedAgentDetectionPending({
+      catalogLoading: true,
+      mode: 'daemon',
+      agentId: 'codex',
+      agents: [{ id: 'codex' }],
+    })).toBe(false);
+  });
+
+  it('keeps a local route pending until its selected adapter arrives', () => {
+    expect(isSelectedAgentDetectionPending({
+      catalogLoading: true,
+      mode: 'daemon',
+      agentId: 'codex',
+      agents: [{ id: 'claude' }],
+    })).toBe(true);
+  });
+
+  it('never blocks BYOK on the local adapter catalog', () => {
+    expect(isSelectedAgentDetectionPending({
+      catalogLoading: true,
+      mode: 'api',
+      agentId: null,
+      agents: [],
+    })).toBe(false);
+  });
+});
+
+describe('project listing request coalescing', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('shares concurrent file and folder traversals and briefly reuses their result', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      const payload = url.endsWith('/folders')
+        ? { folders: [{ name: 'src', path: 'src' }] }
+        : { files: [{ name: 'README.md', path: 'README.md', size: 12 }] };
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const projectId = 'coalesced-project-listing';
+    const [filesA, filesB, filesC, foldersA, foldersB] = await Promise.all([
+      fetchProjectFiles(projectId),
+      fetchProjectFiles(projectId),
+      fetchProjectFiles(projectId),
+      fetchProjectFolders(projectId),
+      fetchProjectFolders(projectId),
+    ]);
+
+    expect(filesA).toEqual(filesB);
+    expect(filesB).toEqual(filesC);
+    expect(foldersA).toEqual(foldersB);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    await fetchProjectFiles(projectId);
+    await fetchProjectFolders(projectId);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('invalidates a cached file traversal after a successful write', async () => {
+    let fileReads = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if ((init?.method ?? 'GET') === 'POST') {
+        return new Response(JSON.stringify({ file: { name: 'notes.md', path: 'notes.md', size: 4 } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      fileReads += 1;
+      return new Response(JSON.stringify({ files: [{ name: `read-${fileReads}.md`, path: `read-${fileReads}.md`, size: 4 }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const projectId = 'invalidated-project-listing';
+    expect((await fetchProjectFiles(projectId))[0]?.name).toBe('read-1.md');
+    expect((await fetchProjectFiles(projectId))[0]?.name).toBe('read-1.md');
+    await expect(writeProjectTextFileDetailed(projectId, 'notes.md', 'note')).resolves.toMatchObject({ ok: true });
+    expect((await fetchProjectFiles(projectId))[0]?.name).toBe('read-2.md');
+    expect(fileReads).toBe(2);
+  });
+});
 
 function agentStreamResponse(text: string): Response {
   const encoder = new TextEncoder();
@@ -150,6 +246,31 @@ describe('writeProjectTextFileDetailed', () => {
       code: 'ARTIFACT_REGRESSION',
       message: 'new artifact is smaller than the prior version',
     });
+  });
+
+  it('passes the optimistic content revision to the daemon write boundary', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      file: { name: 'src/app.ts', path: 'src/app.ts', type: 'file', size: 5, mtime: 1 },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    const expectedContentSha256 = 'a'.repeat(64);
+
+    await expect(writeProjectTextFileDetailed(
+      'project-1',
+      'src/app.ts',
+      'after',
+      { expectedContentSha256 },
+    )).resolves.toMatchObject({ ok: true });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/projects/project-1/files', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'src/app.ts',
+        content: 'after',
+        artifactManifest: undefined,
+        expectedContentSha256,
+      }),
+    }));
   });
 });
 
@@ -703,7 +824,7 @@ describe('connectConnector', () => {
       await expect(connectConnector('github')).resolves.toEqual({
         connector: { id: 'github', name: 'GitHub', status: 'available', tools: [] },
         auth: { kind: 'redirect_required', redirectUrl: 'https://example.com/oauth' },
-        error: 'Popup blocked. Allow popups for Open Design and try again.',
+        error: 'Popup blocked. Allow popups for MonoField and try again.',
       });
     } finally {
       restoreHost();

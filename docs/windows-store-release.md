@@ -34,7 +34,7 @@ $env:MONOFIELD_WINDOWS_STORE_PUBLISHER_DISPLAY_NAME = "<Publisher display name>"
 pnpm tools-pack win build `
   --to store `
   --portable `
-  --app-version 0.11.3 `
+  --app-version 0.11.5 `
   --json
 ```
 

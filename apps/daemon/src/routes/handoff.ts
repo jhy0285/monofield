@@ -1,5 +1,6 @@
 import type { Express } from 'express';
 import type { RouteDeps } from '../server-context.js';
+import { resolveByokApiKey } from '../byok-credentials.js';
 
 export interface RegisterHandoffRoutesDeps
   extends RouteDeps<
@@ -27,7 +28,7 @@ export interface RegisterHandoffRoutesDeps
 export function registerHandoffRoutes(app: Express, ctx: RegisterHandoffRoutesDeps) {
   const { db } = ctx;
   const { sendApiError } = ctx.http;
-  const { PROJECTS_DIR } = ctx.paths;
+  const { PROJECTS_DIR, RUNTIME_DATA_DIR } = ctx.paths;
   const { getProject } = ctx.projectStore;
   const { getConversation } = ctx.conversations;
   const { isSafeId, validateExternalApiBaseUrl } = ctx.validation;
@@ -40,12 +41,14 @@ export function registerHandoffRoutes(app: Express, ctx: RegisterHandoffRoutesDe
   } = ctx.handoff;
 
   app.post('/api/projects/:id/handoff', async (req, res) => {
-    const { conversationId, apiKey, baseUrl, model, maxTokens } = req.body || {};
+    const { conversationId, apiKey: suppliedApiKey, baseUrl, model, maxTokens } = req.body || {};
+    let apiKey = typeof suppliedApiKey === 'string' ? suppliedApiKey : '';
     try {
       if (!isSafeId(req.params.id)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
       }
 
+      apiKey = await resolveByokApiKey(RUNTIME_DATA_DIR, 'anthropic', suppliedApiKey);
       if (typeof apiKey !== 'string' || !apiKey.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'apiKey is required');
       }

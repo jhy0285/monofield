@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import type { BoundedJsonObject, BoundedJsonValue } from '../live-artifacts/schema.js';
 import { defineConnectorTool, type ConnectorCatalogDefinition, type ConnectorCatalogToolDefinition } from './catalog.js';
-import { deleteComposioAuthConfigId, readComposioConfig, setComposioAuthConfigId } from './composio-config.js';
+import { deleteComposioAuthConfigId, hasStoredComposioApiKey, readComposioConfig, resolveComposioApiKey, setComposioAuthConfigId } from './composio-config.js';
 import { COMPOSIO_CURATION_OVERLAY } from './composio-curation.js';
 import { getComposioToolkitMetadata } from './composio-descriptions.js';
 import { ConnectorServiceError, type ConnectorCredentialMaterial } from './service.js';
@@ -453,7 +453,7 @@ export class ComposioConnectorProvider {
   private refreshTimeout: NodeJS.Timeout | undefined;
 
   isConfigured(definition: ConnectorCatalogDefinition): boolean {
-    return Boolean(this.getApiKey() && (this.getPersistedAuthConfigId(definition.id) || this.discoveredAuthConfigIds?.[definition.id]));
+    return Boolean(hasStoredComposioApiKey() && (this.getPersistedAuthConfigId(definition.id) || this.discoveredAuthConfigIds?.[definition.id]));
   }
 
   clearDiscoveryCache(): void {
@@ -542,8 +542,8 @@ export class ComposioConnectorProvider {
   }
 
   private async fetchDefinitions(signal?: AbortSignal, hydrateTools = false): Promise<ConnectorCatalogDefinition[]> {
-    const apiKey = this.getApiKey();
-    const authConfigs = apiKey ? await this.listAuthConfigsSafe(signal) : [];
+    const configured = hasStoredComposioApiKey();
+    const authConfigs = configured ? await this.listAuthConfigsSafe(signal) : [];
     const configuredByConnectorId = new Map<string, { authConfigId: string; toolkitSlug: string }>();
     const discoveredAuthConfigIds: Record<string, string> = {};
     for (const item of authConfigs) {
@@ -560,13 +560,13 @@ export class ComposioConnectorProvider {
       if (!configuredByConnectorId.has(connectorId)) configuredByConnectorId.set(connectorId, local);
     }
     this.discoveredAuthConfigIds = discoveredAuthConfigIds;
-    const toolkits = apiKey ? await this.listToolkitsSafe(signal) : [];
+    const toolkits = configured ? await this.listToolkitsSafe(signal) : [];
     const toolkitBySlug = new Map(toolkits.map((toolkit) => [normalizeComposioSlug(getString(toolkit.slug) ?? ''), toolkit]));
     const definitions = await mapWithConcurrency(STATIC_COMPOSIO_CATALOG, 8, async (staticDefinition) => {
       const configuredEntry = configuredByConnectorId.get(staticDefinition.id);
       const toolkitSlug = configuredEntry?.toolkitSlug ?? staticDefinition.providerConnectorId ?? staticDefinition.id;
       const toolkit = toolkitBySlug.get(normalizeComposioSlug(toolkitSlug));
-      return this.definitionFromToolkit(staticDefinition, toolkitSlug, toolkit, Boolean(apiKey && hydrateTools), signal);
+      return this.definitionFromToolkit(staticDefinition, toolkitSlug, toolkit, Boolean(configured && hydrateTools), signal);
     });
     return definitions;
   }
@@ -582,7 +582,7 @@ export class ComposioConnectorProvider {
   }
 
   private async refreshCatalogInBackground(): Promise<void> {
-    if (!this.getApiKey()) return;
+    if (!hasStoredComposioApiKey()) return;
     try {
       await this.refreshCatalog();
     } catch {
@@ -605,7 +605,7 @@ export class ComposioConnectorProvider {
     }
     this.persistedDefinitions = parsed.definitions.map((definition) => cloneConnectorDefinition(definition));
     this.persistedFetchedAt = parsed.fetchedAt;
-    if (this.isPersistedCatalogStale() && this.getApiKey()) this.scheduleCatalogRefresh(0);
+    if (this.isPersistedCatalogStale() && hasStoredComposioApiKey()) this.scheduleCatalogRefresh(0);
   }
 
   private setPersistedDefinitions(definitions: ConnectorCatalogDefinition[], fetchedAt: string): void {
@@ -771,7 +771,7 @@ export class ComposioConnectorProvider {
 
   async disconnect(credentials: ConnectorCredentialMaterial | undefined, signal?: AbortSignal): Promise<void> {
     const providerConnectionId = credentials ? getString(credentials.providerConnectionId) : undefined;
-    if (!providerConnectionId || !this.getApiKey()) return;
+    if (!providerConnectionId || !hasStoredComposioApiKey()) return;
     const response = await this.request(`/api/v3/connected_accounts/${encodeURIComponent(providerConnectionId)}`, { method: 'DELETE', ...(signal === undefined ? {} : { signal }) });
     if (!response.ok && response.status !== 404) {
       throw new ConnectorServiceError('CONNECTOR_EXECUTION_FAILED', `Composio disconnect failed with HTTP ${response.status}`, 502, { httpStatus: response.status });
@@ -958,7 +958,7 @@ export class ComposioConnectorProvider {
   }
 
   private async discoverAuthConfigIds(signal?: AbortSignal): Promise<Record<string, string>> {
-    if (!this.getApiKey()) return {};
+    if (!hasStoredComposioApiKey()) return {};
     const items = await this.listAuthConfigsSafe(signal);
     const discovered: Record<string, string> = {};
     for (const item of items) {
@@ -1152,7 +1152,7 @@ export class ComposioConnectorProvider {
   }
 
   private async request(path: string, input: { method: string; body?: string; signal?: AbortSignal }): Promise<Response> {
-    const apiKey = this.getApiKey();
+    const apiKey = await resolveComposioApiKey();
     if (!apiKey) {
       throw new ConnectorServiceError('CONNECTOR_EXECUTION_FAILED', 'Composio provider is not configured', 503, { setting: 'apiKey' });
     }
@@ -1169,10 +1169,6 @@ export class ComposioConnectorProvider {
       ...(input.body ? { body: input.body } : {}),
       signal,
     });
-  }
-
-  private getApiKey(): string | undefined {
-    return readComposioConfig().apiKey || undefined;
   }
 
   private getBaseUrl(): string {

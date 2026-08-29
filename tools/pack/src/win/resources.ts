@@ -11,7 +11,9 @@ import {
 } from "../vela-cli.js";
 import type { WinPaths, ResourceTreeCacheMetadata } from "./types.js";
 
-const RESOURCE_TREE_CACHE_SCHEMA_VERSION = 7;
+// Bump when copyBundledResourceTrees changes what is materialized. This keeps a
+// previously cached, unfiltered runtime tree from leaking back into a release.
+const RESOURCE_TREE_CACHE_SCHEMA_VERSION = 9;
 
 async function createResourceTreeCacheKey(config: ToolPackConfig): Promise<string> {
   const velaCliBin = await resolveOptionalVelaCliBinary({

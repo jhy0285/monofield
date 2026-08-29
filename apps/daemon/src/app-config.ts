@@ -18,10 +18,26 @@
 // this machine.
 
 import { readFileSync } from 'node:fs';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
+import {
+  STORED_AGENT_CLI_CREDENTIAL,
+  isStoredAgentCliCredential as isBaseStoredAgentCliCredential,
+} from '@open-design/contracts';
 import { expandHomePrefix } from './home-expansion.js';
+import {
+  hardenCredentialFile,
+  hardenCredentialFileSync,
+} from './credential-file-security.js';
+import {
+  credentialVaultKey,
+  credentialVaultKeyCandidates,
+  deleteCredential,
+  legacyCredentialVaultKey,
+  readCredential,
+  writeCredential,
+} from './credential-vault.js';
 
 import {
   readInstallationFile,
@@ -254,6 +270,10 @@ const AGENT_CLI_AUTH_ENV_KEYS: ReadonlyMap<string, {
   auth: ReadonlySet<string>;
   baseUrl: ReadonlySet<string>;
 }> = new Map([
+  ['amr', {
+    auth: new Set(['VELA_RUNTIME_KEY']),
+    baseUrl: new Set(['VELA_LINK_URL']),
+  }],
   ['claude', {
     auth: new Set(['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN']),
     baseUrl: new Set(['ANTHROPIC_BASE_URL']),
@@ -263,6 +283,78 @@ const AGENT_CLI_AUTH_ENV_KEYS: ReadonlyMap<string, {
     baseUrl: new Set(['OPENAI_BASE_URL']),
   }],
 ]);
+
+function isAgentCliCredentialKey(agentId: string, envKey: string): boolean {
+  return AGENT_CLI_AUTH_ENV_KEYS.get(agentId)?.auth.has(envKey) === true;
+}
+
+function agentCliCredentialRef(dataDir: string, agentId: string, envKey: string): string {
+  return credentialVaultKey('agent-cli-env', configFile(dataDir), `${agentId}.${envKey}`);
+}
+
+const STORED_AGENT_CLI_CREDENTIAL_REF_PREFIX = `${STORED_AGENT_CLI_CREDENTIAL}:ref:`;
+
+function isStoredAgentCliCredential(value: unknown): value is string {
+  return isBaseStoredAgentCliCredential(value)
+    || (typeof value === 'string' && value.startsWith(STORED_AGENT_CLI_CREDENTIAL_REF_PREFIX));
+}
+
+function markerForAgentCliCredentialRef(ref: string): string {
+  return `${STORED_AGENT_CLI_CREDENTIAL_REF_PREFIX}${ref}`;
+}
+
+function refFromAgentCliCredentialMarker(value: unknown): string | null {
+  if (typeof value !== 'string' || !value.startsWith(STORED_AGENT_CLI_CREDENTIAL_REF_PREFIX)) return null;
+  const ref = value.slice(STORED_AGENT_CLI_CREDENTIAL_REF_PREFIX.length).trim();
+  return ref || null;
+}
+
+function freshAgentCliCredentialRef(dataDir: string, agentId: string, envKey: string): string {
+  return `${agentCliCredentialRef(dataDir, agentId, envKey)}:v-${randomBytes(12).toString('hex')}`;
+}
+
+async function readAgentCliCredential(
+  dataDir: string,
+  agentId: string,
+  envKey: string,
+  marker: string,
+): Promise<string | null> {
+  const explicitRef = refFromAgentCliCredentialMarker(marker);
+  if (explicitRef) return await readCredential(explicitRef);
+  for (const ref of credentialVaultKeyCandidates('agent-cli-env', configFile(dataDir), `${agentId}.${envKey}`)) {
+    const value = await readCredential(ref);
+    if (value != null) return value;
+  }
+  return null;
+}
+
+function cloneAgentCliEnv(value: AgentCliEnvPrefs | undefined): AgentCliEnvPrefs | undefined {
+  if (!value) return undefined;
+  return Object.fromEntries(
+    Object.entries(value).map(([agentId, env]) => [agentId, { ...env }]),
+  );
+}
+
+/**
+ * Never send Local CLI authentication material over the app-config API.
+ * The marker is deliberately non-secret and tells Settings that a value can
+ * be preserved or explicitly cleared without making it recoverable in the UI.
+ */
+export function maskAgentCliCredentials(config: AppConfigPrefs): AppConfigPrefs {
+  if (!config.agentCliEnv) return config;
+  let changed = false;
+  const agentCliEnv = cloneAgentCliEnv(config.agentCliEnv)!;
+  for (const [agentId, env] of Object.entries(agentCliEnv)) {
+    for (const envKey of Object.keys(env)) {
+      if (!isAgentCliCredentialKey(agentId, envKey)) continue;
+      if (env[envKey] !== STORED_AGENT_CLI_CREDENTIAL) {
+        env[envKey] = STORED_AGENT_CLI_CREDENTIAL;
+        changed = true;
+      }
+    }
+  }
+  return changed ? { ...config, agentCliEnv } : config;
+}
 
 function isValidAgentModelEntry(v: unknown): v is AgentModelPrefs {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
@@ -467,7 +559,9 @@ export function agentCliEnvForAgent(
   if (!prefs || typeof agentId !== 'string') return {};
   const env = prefs[agentId];
   if (!env || typeof env !== 'object' || Array.isArray(env)) return {};
-  return { ...env };
+  return Object.fromEntries(
+    Object.entries(env).filter(([, value]) => !isStoredAgentCliCredential(value)),
+  );
 }
 
 function normalizeAgentCliEnvPrefs(prefs: AppConfigPrefs): AppConfigPrefs {
@@ -725,8 +819,114 @@ function applyTelemetryDefaults(prefs: AppConfigPrefs): AppConfigPrefs {
   return prefs;
 }
 
+async function persistAppConfigFile(dataDir: string, config: AppConfigPrefs): Promise<void> {
+  const file = configFile(dataDir);
+  const directory = path.dirname(file);
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  try {
+    await chmod(directory, 0o700);
+  } catch (error: unknown) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== 'ENOTSUP' && code !== 'EPERM' && code !== 'EINVAL') throw error;
+  }
+  const tmp = `${file}.${randomBytes(4).toString('hex')}.tmp`;
+  try {
+    await writeFile(tmp, JSON.stringify(config, null, 2), { encoding: 'utf8', mode: 0o600 });
+    await rename(tmp, file);
+    try {
+      await chmod(file, 0o600);
+    } catch {
+      // The temp file was created 0600; tolerate chmod-less volumes.
+    }
+  } catch (error) {
+    await rm(tmp, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
+function dropEmptyAgentCliEnvEntries(config: AppConfigPrefs): AppConfigPrefs {
+  if (!config.agentCliEnv) return config;
+  const agentCliEnv = cloneAgentCliEnv(config.agentCliEnv)!;
+  for (const [agentId, env] of Object.entries(agentCliEnv)) {
+    if (Object.keys(env).length === 0) delete agentCliEnv[agentId];
+  }
+  if (Object.keys(agentCliEnv).length > 0) return { ...config, agentCliEnv };
+  const next = { ...config };
+  delete next.agentCliEnv;
+  return next;
+}
+
+function replaceAgentCliEnv(
+  config: AppConfigPrefs,
+  agentCliEnv: AgentCliEnvPrefs | undefined,
+): AppConfigPrefs {
+  const next = { ...config };
+  if (agentCliEnv) next.agentCliEnv = agentCliEnv;
+  else delete next.agentCliEnv;
+  return next;
+}
+
+async function resolveStoredAgentCliCredentials(
+  dataDir: string,
+  config: AppConfigPrefs,
+): Promise<AppConfigPrefs> {
+  if (!config.agentCliEnv) return config;
+  const runtime = cloneAgentCliEnv(config.agentCliEnv)!;
+  const persisted = cloneAgentCliEnv(config.agentCliEnv)!;
+  const stagedRefs: string[] = [];
+  let migratedLegacy = false;
+  let unavailableStoredCredential = false;
+
+  try {
+    for (const [agentId, env] of Object.entries(runtime)) {
+      for (const [envKey, value] of Object.entries(env)) {
+        if (!isAgentCliCredentialKey(agentId, envKey)) continue;
+        if (isStoredAgentCliCredential(value)) {
+          try {
+            const secret = (await readAgentCliCredential(dataDir, agentId, envKey, value))?.trim() ?? '';
+            if (secret) {
+              env[envKey] = secret;
+            } else {
+              delete env[envKey];
+              unavailableStoredCredential = true;
+            }
+          } catch {
+            delete env[envKey];
+            unavailableStoredCredential = true;
+          }
+          continue;
+        }
+
+        // Legacy app-config.json stored the CLI credential in plaintext. Stage
+        // every value under a fresh ref, then scrub all plaintext in one
+        // atomic metadata rename. A single failure rolls the entire batch back.
+        const ref = freshAgentCliCredentialRef(dataDir, agentId, envKey);
+        await writeCredential(ref, value);
+        stagedRefs.push(ref);
+        persisted[agentId]![envKey] = markerForAgentCliCredentialRef(ref);
+        migratedLegacy = true;
+      }
+    }
+
+    if (migratedLegacy) {
+      await persistAppConfigFile(dataDir, { ...config, agentCliEnv: persisted });
+    }
+  } catch {
+    await Promise.all(stagedRefs.map((ref) => deleteCredential(ref).catch(() => undefined)));
+    console.warn('[app-config] Local CLI credential migration is waiting for the encrypted Desktop vault.');
+    return dropEmptyAgentCliEnvEntries({ ...config, agentCliEnv: runtime });
+  }
+  if (unavailableStoredCredential) {
+    console.warn('[app-config] One or more encrypted Local CLI credentials are currently unavailable.');
+  }
+  return dropEmptyAgentCliEnvEntries({ ...config, agentCliEnv: runtime });
+}
+
 export async function readAppConfig(dataDir: string): Promise<AppConfigPrefs> {
-  const base = await readAppConfigFileOnly(dataDir);
+  const base = await resolveStoredAgentCliCredentials(
+    dataDir,
+    await readAppConfigFileOnly(dataDir),
+  );
   // Channel-root installation file is the new authoritative source for the
   // identity bits that must survive a namespace-scoped data-dir wipe. It
   // lives outside `<namespace>/data/` so a reinstall of the same channel
@@ -781,6 +981,7 @@ export function readAppConfigSync(dataDir: string): AppConfigPrefs {
 
 function readAppConfigFileOnlySync(dataDir: string): AppConfigPrefs {
   try {
+    hardenCredentialFileSync(configFile(dataDir));
     const parsed: unknown = JSON.parse(
       readFileSync(configFile(dataDir), 'utf8'),
     );
@@ -798,6 +999,7 @@ function readAppConfigFileOnlySync(dataDir: string): AppConfigPrefs {
 
 async function readAppConfigFileOnly(dataDir: string): Promise<AppConfigPrefs> {
   try {
+    await hardenCredentialFile(configFile(dataDir));
     const raw = await readFile(configFile(dataDir), 'utf8');
     const parsed: unknown = JSON.parse(raw);
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
@@ -834,11 +1036,155 @@ export async function writeAppConfig(
   }
 }
 
+async function prepareAgentCliCredentialsForWrite(input: {
+  dataDir: string;
+  existingRuntime: AppConfigPrefs;
+  existingPersisted: AppConfigPrefs;
+  next: AppConfigPrefs;
+  partial: Record<string, unknown>;
+}): Promise<{
+  persisted: AppConfigPrefs;
+  runtime: AppConfigPrefs;
+  refsToDelete: string[];
+  stagedRefs: string[];
+}> {
+  const runtimeEnv = cloneAgentCliEnv(input.next.agentCliEnv);
+  let persistedEnv = cloneAgentCliEnv(input.next.agentCliEnv);
+  const partialHasAgentEnv = Object.prototype.hasOwnProperty.call(input.partial, 'agentCliEnv');
+  const partialEnv = partialHasAgentEnv ? validateAgentCliEnv(input.partial.agentCliEnv) : undefined;
+  const refsToDelete = new Set<string>();
+  const clearRefs = new Set<string>();
+  const stagedRefs: string[] = [];
+  let migrationFailed = false;
+  let hasExplicitNewSecret = false;
+
+  const agents = new Set([
+    ...Object.keys(input.existingPersisted.agentCliEnv ?? {}),
+    ...Object.keys(input.next.agentCliEnv ?? {}),
+  ]);
+  for (const agentId of agents) {
+    const keys = new Set([
+      ...Object.keys(input.existingPersisted.agentCliEnv?.[agentId] ?? {}),
+      ...Object.keys(input.next.agentCliEnv?.[agentId] ?? {}),
+    ]);
+    for (const envKey of keys) {
+      if (!isAgentCliCredentialKey(agentId, envKey)) continue;
+      const nextValue = input.next.agentCliEnv?.[agentId]?.[envKey];
+      const persistedBefore = input.existingPersisted.agentCliEnv?.[agentId]?.[envKey];
+      const runtimeBefore = input.existingRuntime.agentCliEnv?.[agentId]?.[envKey];
+      const previousRef = refFromAgentCliCredentialMarker(persistedBefore)
+        ?? (isBaseStoredAgentCliCredential(persistedBefore)
+          ? legacyCredentialVaultKey('agent-cli-env', configFile(input.dataDir), `${agentId}.${envKey}`)
+          : null);
+      const explicitlySupplied = partialHasAgentEnv
+        ? partialEnv?.[agentId]?.[envKey]
+        : undefined;
+
+      if (!nextValue) {
+        if (previousRef) {
+          refsToDelete.add(previousRef);
+          clearRefs.add(previousRef);
+        }
+        continue;
+      }
+
+      if (isStoredAgentCliCredential(nextValue)) {
+        if (isStoredAgentCliCredential(persistedBefore)) {
+          if (runtimeBefore && !isStoredAgentCliCredential(runtimeBefore)) {
+            runtimeEnv![agentId]![envKey] = runtimeBefore;
+          } else {
+            delete runtimeEnv?.[agentId]?.[envKey];
+          }
+          persistedEnv![agentId]![envKey] = persistedBefore!;
+          continue;
+        }
+
+        // A transport marker can refer to a legacy plaintext value when the
+        // previous migration was deferred. Encrypt that value first; if the
+        // Desktop vault is still unavailable, preserve the legacy copy rather
+        // than replacing it with an unusable marker.
+        if (runtimeBefore && !isStoredAgentCliCredential(runtimeBefore)) {
+          try {
+            const ref = freshAgentCliCredentialRef(input.dataDir, agentId, envKey);
+            await writeCredential(ref, runtimeBefore);
+            stagedRefs.push(ref);
+            runtimeEnv![agentId]![envKey] = runtimeBefore;
+            persistedEnv![agentId]![envKey] = markerForAgentCliCredentialRef(ref);
+          } catch {
+            migrationFailed = true;
+            runtimeEnv![agentId]![envKey] = runtimeBefore;
+            persistedEnv![agentId]![envKey] = runtimeBefore;
+          }
+        } else {
+          delete runtimeEnv?.[agentId]?.[envKey];
+          delete persistedEnv?.[agentId]?.[envKey];
+        }
+        continue;
+      }
+
+      if (isStoredAgentCliCredential(persistedBefore) && explicitlySupplied === undefined) {
+        // The runtime view is hydrated, but this write did not touch the CLI
+        // credential. Keep the existing reference without another vault IPC.
+        persistedEnv![agentId]![envKey] = persistedBefore!;
+        continue;
+      }
+
+      const isNewSecret = explicitlySupplied === nextValue
+        && !isStoredAgentCliCredential(explicitlySupplied);
+      hasExplicitNewSecret ||= isNewSecret;
+      try {
+        const ref = freshAgentCliCredentialRef(input.dataDir, agentId, envKey);
+        await writeCredential(ref, nextValue);
+        stagedRefs.push(ref);
+        if (previousRef) refsToDelete.add(previousRef);
+        persistedEnv![agentId]![envKey] = markerForAgentCliCredentialRef(ref);
+      } catch (error) {
+        if (isNewSecret) {
+          await Promise.all(stagedRefs.map((ref) => deleteCredential(ref).catch(() => undefined)));
+          throw error;
+        }
+        // Existing legacy plaintext must remain recoverable when migration is
+        // impossible (for example, a standalone web daemon without Electron).
+        persistedEnv![agentId]![envKey] = nextValue;
+        migrationFailed = true;
+      }
+    }
+  }
+
+  if (migrationFailed) {
+    await Promise.all(stagedRefs.map((ref) => deleteCredential(ref).catch(() => undefined)));
+    if (hasExplicitNewSecret) {
+      throw new Error('Local CLI credentials could not be stored atomically');
+    }
+    // Do not partially scrub a legacy file. Restore every pre-existing
+    // credential field while allowing unrelated preference edits to persist.
+    for (const [agentId, env] of Object.entries(input.existingPersisted.agentCliEnv ?? {})) {
+      for (const [envKey, value] of Object.entries(env)) {
+        if (!isAgentCliCredentialKey(agentId, envKey)) continue;
+        persistedEnv ??= {};
+        persistedEnv[agentId] ??= {};
+        persistedEnv[agentId]![envKey] = value;
+      }
+    }
+    console.warn('[app-config] Local CLI credential migration is waiting for the encrypted Desktop vault.');
+  }
+
+  const runtime = dropEmptyAgentCliEnvEntries(replaceAgentCliEnv(input.next, runtimeEnv));
+  const persisted = dropEmptyAgentCliEnvEntries(replaceAgentCliEnv(input.next, persistedEnv));
+  return {
+    persisted,
+    runtime,
+    refsToDelete: [...(migrationFailed ? clearRefs : refsToDelete)],
+    stagedRefs: migrationFailed ? [] : stagedRefs,
+  };
+}
+
 async function doWrite(
   dataDir: string,
   partial: Record<string, unknown>,
 ): Promise<AppConfigPrefs> {
   const existing = await readAppConfig(dataDir);
+  const existingPersisted = await readAppConfigFileOnly(dataDir);
   const next: Record<string, unknown> = { ...existing };
   for (const key of Object.keys(partial)) {
     if (!ALLOWED_KEYS.has(key as keyof AppConfigPrefs)) continue;
@@ -848,18 +1194,29 @@ async function doWrite(
     ? inferAgentCliEnvIntentForExplicitEnvWrite(next as AppConfigPrefs)
     : next as AppConfigPrefs;
   const normalizedNext = normalizeAgentCliEnvPrefs(nextWithInferredIntent);
-  const file = configFile(dataDir);
-  await mkdir(path.dirname(file), { recursive: true });
-  const tmp = file + '.' + randomBytes(4).toString('hex') + '.tmp';
-  await writeFile(tmp, JSON.stringify(normalizedNext, null, 2), 'utf8');
-  await rename(tmp, file);
+  const secured = await prepareAgentCliCredentialsForWrite({
+    dataDir,
+    existingRuntime: existing,
+    existingPersisted,
+    next: normalizedNext,
+    partial,
+  });
+  try {
+    await persistAppConfigFile(dataDir, secured.persisted);
+  } catch (error) {
+    await Promise.all(secured.stagedRefs.map((ref) => deleteCredential(ref).catch(() => undefined)));
+    throw error;
+  }
+  await Promise.all(
+    secured.refsToDelete.map((ref) => deleteCredential(ref).catch(() => undefined)),
+  );
   // Mirror the identity bits to the channel-root installation file so they
   // survive a namespace-scoped data-dir wipe. Only fires when the caller
   // explicitly touched `installationId` (avoiding noisy writes on every
   // unrelated app-config update). A write failure here doesn't roll back
   // the app-config write; the next read merges them transparently.
   if (Object.prototype.hasOwnProperty.call(partial, 'installationId')) {
-    const id = normalizedNext.installationId;
+    const id = secured.persisted.installationId;
     // Caller explicitly touched installationId; mirror the outcome
     // (including the clear case) to installation.json so a future read
     // doesn't keep serving the old value out of the channel-root file.
@@ -874,5 +1231,5 @@ async function doWrite(
       // app-config write already succeeded.
     }
   }
-  return normalizedNext;
+  return secured.runtime;
 }

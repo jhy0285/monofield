@@ -99,6 +99,8 @@ export const InterfaceEndpointSchema = z.object({
   interfaceId: z.string().default(''),
   /** Human-readable Korean interface name (e.g. "사용자 조회"). */
   interfaceName: z.string().default(''),
+  /** Business purpose / processing rules supplied for a manually designed endpoint. */
+  businessPurpose: z.string().optional(),
   businessCode: z.string().default(''),
   channel: z.string().default(''),
   owner: z.string().default(''),
@@ -277,6 +279,31 @@ export function createInterfaceSpecDocumentFromManualDraft(
     };
   }
 
+  const submittedReviewStage =
+    value && typeof value === 'object' && 'reviewStage' in value
+      ? (value as { reviewStage?: unknown }).reviewStage
+      : undefined;
+  if (
+    parsed.data.reviewStage !== 'review' ||
+    (parsed.data.assistMode === 'ai' && submittedReviewStage !== 'review')
+  ) {
+    return {
+      ok: false,
+      error: 'Manual interface-spec draft must be reviewed before conversion.',
+    };
+  }
+
+  const unacceptedSuggestion = parsed.data.endpoints.find((endpoint) =>
+    (endpoint.requestMode !== 'none' && endpoint.requestFields.some((field) => field.suggested === true)) ||
+    (endpoint.responseMode !== 'none' && endpoint.responseFields.some((field) => field.suggested === true)),
+  );
+  if (unacceptedSuggestion) {
+    return {
+      ok: false,
+      error: 'Manual interface-spec draft contains unaccepted AI suggestions.',
+    };
+  }
+
   const doc = InterfaceSpecDocumentSchema.parse({
     schemaVersion: INTERFACE_SPEC_SCHEMA_VERSION,
     kind: 'interface-spec',
@@ -300,6 +327,7 @@ export function createInterfaceSpecDocumentFromManualDraft(
       path: endpoint.path,
       interfaceId: endpoint.interfaceId.trim().toUpperCase(),
       interfaceName: endpoint.interfaceName,
+      businessPurpose: endpoint.businessPurpose,
       authRequired: endpoint.auth !== 'none',
       ...(endpoint.auth === 'none' ? {} : { auth: { type: endpoint.auth } }),
       requestFields: (endpoint.requestMode === 'none' ? [] : endpoint.requestFields).map((field) => ({
@@ -415,18 +443,23 @@ export function validateInterfaceSpecDocument(doc: InterfaceSpecDocument): Inter
       ['response', endpoint.responseFields],
     ] as const) {
       const paths = new Set(fields.map((f) => f.path).filter((p): p is string => Boolean(p)));
-      const fieldNames = new Set<string>();
+      const fieldPaths = new Set<string>();
       for (const field of fields) {
-        const fieldName = field.nameEn.trim().toLowerCase();
-        if (fieldNames.has(fieldName)) {
+        // A nested payload may legitimately reuse a leaf name at multiple
+        // levels (`id` and `items.id`, for example).  Treat the full JSON
+        // path as the field identity and fall back to nameEn for older flat
+        // documents that predate explicit paths.
+        const rawFieldPath = field.path?.trim() || field.nameEn.trim();
+        const canonicalFieldPath = rawFieldPath.toLowerCase();
+        if (fieldPaths.has(canonicalFieldPath)) {
           issues.push({
             severity: 'warning',
             code: 'duplicate-field-name',
-            message: `Endpoint "${key}" has duplicate ${fieldKind} field "${field.nameEn}".`,
+            message: `Endpoint "${key}" has duplicate ${fieldKind} field path "${rawFieldPath}".`,
             endpointIndex: index,
           });
         }
-        fieldNames.add(fieldName);
+        fieldPaths.add(canonicalFieldPath);
         if (!field.dataType.trim() || field.required === 'TBD') {
           issues.push({
             severity: 'warning',

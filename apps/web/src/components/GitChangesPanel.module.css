@@ -120,6 +120,21 @@
 .dirtyPrompt span { color: var(--text-muted); font-size: 10px; }
 .dirtyPrompt .primaryAction { border-color: var(--accent); background: var(--accent); color: var(--accent-contrast); }
 .notice { padding: 7px 12px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--green) 8%, var(--bg-panel)); color: var(--text); font-size: 11px; }
+.loadingState,
+.diffLoading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 88px;
+  gap: 8px;
+  padding: 18px;
+  color: var(--text-muted);
+  font: 600 11px/1.35 var(--sans);
+}
+.loadingState { flex: 1 1 auto; }
+.diffLoading { min-height: 0; }
+.loadingState svg,
+.diffLoading svg { color: var(--blue); animation: gitLoadingSpin 800ms linear infinite; }
 
 .scope {
   display: flex;
@@ -328,6 +343,13 @@
 .patchMeta { color: var(--text-faint); }
 .message { display: grid; place-items: center; min-height: 120px; padding: 24px; color: var(--text-muted); font-size: 12px; text-align: center; }
 .warning { padding: 7px 12px; border-bottom: 1px solid var(--border); color: var(--amber, var(--text-muted)); font-size: 11px; }
+
+@keyframes gitLoadingSpin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .loadingState svg,
+  .diffLoading svg { animation: none; }
+}
 
 @media (max-width: 760px) {
   .content { grid-template-columns: 150px 1fr; }

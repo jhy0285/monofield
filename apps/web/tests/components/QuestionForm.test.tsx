@@ -590,7 +590,7 @@ describe('QuestionFormView', () => {
           ],
         }), { status: 200 });
       }
-      if (path === '/api/projects/project-1/files') {
+      if (path === '/api/projects/project-code-candidates-1/files') {
         return new Response(JSON.stringify({ files: [{ path: 'src/orders.ts', name: 'orders.ts' }] }), { status: 200 });
       }
       if (path.includes('/raw/src/orders.ts')) {
@@ -615,7 +615,7 @@ describe('QuestionFormView', () => {
             title: 'Database context',
             questions: [{ id: 'db', label: 'Database', type: 'database-context', sampleRows: 5 }],
           }}
-          projectId="project-1"
+          projectId="project-code-candidates-1"
           interactive
           onSubmit={vi.fn()}
         />,
@@ -643,7 +643,7 @@ describe('QuestionFormView', () => {
       if (path.includes('/schemas')) {
         return new Response(JSON.stringify({ tables: [{ schema: 'abtdb', table: 'tbadm001' }] }), { status: 200 });
       }
-      if (path === '/api/projects/project-1/files') {
+      if (path === '/api/projects/project-artifact-1/files') {
         return new Response(JSON.stringify({ files: [{ path: 'db-candidates.json', name: 'db-candidates.json' }] }), { status: 200 });
       }
       if (path.includes('/raw/db-candidates.json')) {
@@ -655,7 +655,7 @@ describe('QuestionFormView', () => {
       render(
         <QuestionFormView
           form={{ id: 'database-candidate-artifact', title: 'Database context', questions: [{ id: 'db', label: 'Database', type: 'database-context' }] }}
-          projectId="project-1"
+          projectId="project-artifact-1"
           interactive
           onSubmit={vi.fn()}
         />,
@@ -843,6 +843,9 @@ describe('QuestionFormView', () => {
     );
 
     expect((screen.getByLabelText('인터페이스 1 Path') as HTMLInputElement).value).toBe('/api/orders');
+    fireEvent.change(screen.getByLabelText('인터페이스 1 업무 목적'), {
+      target: { value: '고객과 상품 목록으로 주문을 생성합니다.' },
+    });
     expect(screen.getByRole('button', { name: /기본 SI 표준/ }).getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(screen.getAllByRole('button', { name: '+ 필드 추가' })[0]!);
     fireEvent.change(screen.getByLabelText('REQUEST 1 영문명'), { target: { value: 'customerId' } });
@@ -857,6 +860,7 @@ describe('QuestionFormView', () => {
       interfaceId: 'IF-ORD-001',
       method: 'POST',
       auth: 'bearer',
+      businessPurpose: '고객과 상품 목록으로 주문을 생성합니다.',
       requestFields: [{ nameEn: 'customerId', minSize: '1', maxSize: '36', required: 'TBD' }],
     });
   });
@@ -925,6 +929,61 @@ describe('QuestionFormView', () => {
     fireEvent.click(submit);
     const submitted = JSON.parse(String(onSubmit.mock.calls[0]?.[1]?.draft));
     expect(submitted.endpoints[0].requestFields[0].suggested).toBe(false);
+  });
+
+  it('switches manual request/response sections back to AI while preserving none', () => {
+    const draft = {
+      documentName: '주문 API 인터페이스 명세서',
+      version: '1.0',
+      department: '',
+      assistMode: 'manual' as const,
+      reviewStage: 'review' as const,
+      businessContext: '',
+      referenceFiles: [],
+      templatePreset: 'si-standard' as const,
+      endpoints: [{
+        id: 'endpoint-1',
+        interfaceName: '주문 생성',
+        interfaceId: '',
+        method: 'POST',
+        path: '/api/orders',
+        auth: 'undecided' as const,
+        businessPurpose: '',
+        requestMode: 'manual' as const,
+        responseMode: 'none' as const,
+        requestFields: [],
+        responseFields: [],
+      }],
+    };
+    const onSubmit = vi.fn();
+    render(
+      <QuestionFormView
+        form={{
+          id: 'interface-spec-manual-draft',
+          title: '신규 인터페이스 명세서',
+          submitLabel: '자료 분석하고 AI 초안 만들기',
+          questions: [{
+            id: 'draft',
+            label: '명세서 초안',
+            type: 'interface-spec-manual',
+            required: true,
+            defaultValue: JSON.stringify(draft),
+            interfaceSpecDraft: draft,
+          }],
+        }}
+        interactive
+        onSubmit={onSubmit}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^AI 초안\s*자료와 업무 설명/ }));
+    fireEvent.click(screen.getByRole('button', { name: '자료 분석하고 AI 초안 만들기' }));
+    const submitted = JSON.parse(String(onSubmit.mock.calls[0]?.[1]?.draft));
+    expect(submitted).toMatchObject({
+      assistMode: 'ai',
+      reviewStage: 'intake',
+      endpoints: [{ requestMode: 'ai', responseMode: 'none' }],
+    });
   });
 
   it('uploads and classifies multiple manual interface-spec reference files', async () => {

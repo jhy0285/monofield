@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
@@ -8,11 +8,23 @@ import {
   deleteComposioAuthConfigId,
   readComposioConfig,
   readPublicComposioConfig,
+  resolveComposioApiKey,
   setComposioAuthConfigId,
   writeComposioConfig,
 } from '../src/connectors/composio-config.js';
 import { composioConnectorProvider, getStaticComposioCatalogDefinitions } from '../src/connectors/composio.js';
 import type { ConnectorCatalogDefinition } from '../src/connectors/catalog.js';
+import { installTestCredentialVault, type TestCredentialVault } from './helpers/credential-vault.js';
+
+let credentialVault: TestCredentialVault;
+
+beforeEach(() => {
+  credentialVault = installTestCredentialVault();
+});
+
+afterEach(() => {
+  credentialVault.restore();
+});
 
 async function useTempComposioStore(): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), 'od-composio-config-'));
@@ -44,7 +56,7 @@ describe('composio config', () => {
   it('stores Composio settings in the configured data directory', async () => {
     const dir = await useTempComposioStore();
 
-    const publicConfig = writeComposioConfig({
+    const publicConfig = await writeComposioConfig({
       apiKey: 'cmp_secret_1234',
     });
 
@@ -52,22 +64,23 @@ describe('composio config', () => {
       configured: true,
       apiKeyTail: '1234',
     });
-    expect(readComposioConfig()).toMatchObject({ apiKey: 'cmp_secret_1234', authConfigIds: {} });
-    await expect(readFile(path.join(dir, 'connectors', 'composio-config.json'), 'utf8')).resolves.toContain('cmp_secret_1234');
+    expect(readComposioConfig()).toEqual({ authConfigIds: {} });
+    await expect(resolveComposioApiKey()).resolves.toBe('cmp_secret_1234');
+    await expect(readFile(path.join(dir, 'connectors', 'composio-config.json'), 'utf8')).resolves.not.toContain('cmp_secret_1234');
   });
 
   it('preserves and updates persisted auth config ids', async () => {
     await useTempComposioStore();
-    writeComposioConfig({ apiKey: 'stored_secret', authConfigIds: { github: 'ac_github' } });
+    await writeComposioConfig({ apiKey: 'stored_secret', authConfigIds: { github: 'ac_github' } });
 
-    writeComposioConfig({});
+    await writeComposioConfig({});
     setComposioAuthConfigId('slack', 'ac_slack');
     deleteComposioAuthConfigId('github');
 
     expect(readComposioConfig()).toEqual({
-      apiKey: 'stored_secret',
       authConfigIds: { slack: 'ac_slack' },
     });
+    await expect(resolveComposioApiKey()).resolves.toBe('stored_secret');
   });
 
   it('does not read Composio credentials from environment variables', async () => {
@@ -76,11 +89,11 @@ describe('composio config', () => {
     try {
       process.env.COMPOSIO_API_KEY = 'env_secret';
 
-      expect(readPublicComposioConfig()).toMatchObject({ configured: false, apiKeyTail: '' });
+      await expect(readPublicComposioConfig()).resolves.toMatchObject({ configured: false, apiKeyTail: '' });
       expect(composioConnectorProvider.isConfigured(composioDefinition())).toBe(false);
 
-      writeComposioConfig({ apiKey: 'stored_secret' });
-      expect(readPublicComposioConfig()).toMatchObject({ configured: true, apiKeyTail: 'cret' });
+      await writeComposioConfig({ apiKey: 'stored_secret' });
+      await expect(readPublicComposioConfig()).resolves.toMatchObject({ configured: true, apiKeyTail: 'cret' });
     } finally {
       if (originalApiKey === undefined) delete process.env.COMPOSIO_API_KEY;
       else process.env.COMPOSIO_API_KEY = originalApiKey;
@@ -89,33 +102,34 @@ describe('composio config', () => {
 
   it('can clear the stored API key through settings', async () => {
     await useTempComposioStore();
-    writeComposioConfig({ apiKey: 'stored_secret' });
+    await writeComposioConfig({ apiKey: 'stored_secret' });
 
-    const publicConfig = writeComposioConfig({ apiKey: '' });
+    const publicConfig = await writeComposioConfig({ apiKey: '' });
 
     expect(publicConfig.configured).toBe(false);
     expect(composioConnectorProvider.isConfigured(composioDefinition())).toBe(false);
-    expect(readComposioConfig()).toEqual({ apiKey: '', authConfigIds: {} });
+    expect(readComposioConfig()).toEqual({ authConfigIds: {} });
   });
 
   it('clears stored auth config ids when the API key changes', async () => {
     await useTempComposioStore();
-    writeComposioConfig({ apiKey: 'stored_secret', authConfigIds: { github: 'ac_github' } });
+    await writeComposioConfig({ apiKey: 'stored_secret', authConfigIds: { github: 'ac_github' } });
 
-    const publicConfig = writeComposioConfig({ apiKey: 'new_secret' });
+    const publicConfig = await writeComposioConfig({ apiKey: 'new_secret' });
 
     expect(publicConfig).toEqual({ configured: true, apiKeyTail: 'cret' });
-    expect(readComposioConfig()).toEqual({ apiKey: 'new_secret', authConfigIds: {} });
+    expect(readComposioConfig()).toEqual({ authConfigIds: {} });
+    await expect(resolveComposioApiKey()).resolves.toBe('new_secret');
   });
 
   it('ignores stale unsupported persisted technical fields', async () => {
     await useTempComposioStore();
-    writeComposioConfig({ apiKey: 'stored_secret' });
+    await writeComposioConfig({ apiKey: 'stored_secret' });
 
-    const publicConfig = writeComposioConfig({ apiKey: '', baseUrl: '', userId: '', timeoutMs: null });
+    const publicConfig = await writeComposioConfig({ apiKey: '', baseUrl: '', userId: '', timeoutMs: null });
 
     expect(publicConfig).toEqual({ configured: false, apiKeyTail: '' });
-    expect(readComposioConfig()).toEqual({ apiKey: '', authConfigIds: {} });
+    expect(readComposioConfig()).toEqual({ authConfigIds: {} });
   });
 
   it('loads persisted Composio catalog cache into fast definitions', async () => {
@@ -217,7 +231,7 @@ describe('composio config', () => {
 
   it('treats the current Notion search action as read-only despite broad response-size wording', async () => {
     await useTempComposioStore();
-    writeComposioConfig({ apiKey: 'cmp_test' });
+    await writeComposioConfig({ apiKey: 'cmp_test' });
     const originalFetch = globalThis.fetch;
     globalThis.fetch = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
       const parsed = new URL(input.toString(), 'https://backend.composio.dev');

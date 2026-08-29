@@ -8,20 +8,25 @@ import {
   buildAcpMcpServers,
   buildClaudeMcpJson,
   buildOpenCodeMcpConfigContent,
+  externalizeClaudeMcpSecrets,
   isManagedProjectCwd,
   readMcpConfig,
   sanitizeMcpServer,
   writeMcpConfig,
 } from '../src/mcp-config.js';
+import { installTestCredentialVault, type TestCredentialVault } from './helpers/credential-vault.js';
 
 describe('mcp-config storage', () => {
   let dataDir: string;
+  let vault: TestCredentialVault;
 
   beforeEach(async () => {
+    vault = installTestCredentialVault();
     dataDir = await mkdtemp(path.join(tmpdir(), 'od-mcpconfig-'));
   });
 
   afterEach(async () => {
+    vault.restore();
     await rm(dataDir, { recursive: true, force: true });
   });
 
@@ -56,6 +61,8 @@ describe('mcp-config storage', () => {
     const reread = await readMcpConfig(dataDir);
     expect(reread.servers[0]?.command).toBe('npx');
     expect(reread.servers[0]?.env?.GITHUB_PERSONAL_ACCESS_TOKEN).toBe('ghp_xxx');
+    const raw = await readFile(path.join(dataDir, 'mcp-config.json'), 'utf8');
+    expect(raw).not.toContain('ghp_xxx');
   });
 
   it('persists and re-reads a valid SSE server with headers', async () => {
@@ -72,6 +79,8 @@ describe('mcp-config storage', () => {
     });
     expect(written.servers[0]?.url).toBe('https://mcp.higgsfield.ai/');
     expect(written.servers[0]?.headers?.Authorization).toBe('Bearer abc');
+    const raw = await readFile(path.join(dataDir, 'mcp-config.json'), 'utf8');
+    expect(raw).not.toContain('Bearer abc');
   });
 
   it('defaults loopback HTTP servers to no managed OAuth', () => {
@@ -194,6 +203,39 @@ describe('buildClaudeMcpJson', () => {
       url: 'https://mcp.higgsfield.ai',
       headers: { Authorization: 'Bearer abc' },
     });
+  });
+
+  it('externalizes env and header secrets so managed .mcp.json stays non-secret', () => {
+    const source = buildClaudeMcpJson(
+      [
+        {
+          id: 'github',
+          transport: 'stdio',
+          enabled: true,
+          command: 'npx',
+          env: { GITHUB_TOKEN: 'ghp-secret' },
+        },
+        {
+          id: 'remote',
+          transport: 'http',
+          enabled: true,
+          url: 'https://mcp.example.test',
+          headers: { 'X-Tenant': 'tenant-secret' },
+        },
+      ],
+      { remote: 'oauth-secret' },
+    );
+    const externalized = externalizeClaudeMcpSecrets(source);
+    const serialized = JSON.stringify(externalized.config);
+    expect(serialized).not.toContain('ghp-secret');
+    expect(serialized).not.toContain('tenant-secret');
+    expect(serialized).not.toContain('oauth-secret');
+    expect(serialized).toContain('${MONOFIELD_MCP_SECRET_1}');
+    expect(Object.values(externalized.env)).toEqual([
+      'ghp-secret',
+      'tenant-secret',
+      'Bearer oauth-secret',
+    ]);
   });
 
   it('skips disabled servers', () => {
@@ -407,16 +449,18 @@ describe('buildOpenCodeMcpConfigContent', () => {
   });
 
   it('emits an external_directory allowlist when the daemon grants OpenCode absolute project dirs', () => {
+    const projectDir = path.resolve('/tmp/od-project');
+    const skillsDir = path.resolve('/tmp/od-skills');
     const raw = buildOpenCodeMcpConfigContent(
       [],
       {},
       {
         allowedDirectories: [
-          '/tmp/od-project',
+          projectDir,
           '',
           'relative/path',
-          '/tmp/od-skills',
-          '/tmp/od-project',
+          skillsDir,
+          projectDir,
         ],
       },
     );
@@ -431,16 +475,40 @@ describe('buildOpenCodeMcpConfigContent', () => {
 
     expect(parsed.mcp).toBeUndefined();
     expect(parsed.permission?.external_directory).toEqual({
-      '/tmp/od-project': 'allow',
-      '/tmp/od-project/*': 'allow',
-      '/tmp/od-project/**': 'allow',
-      '/tmp/od-skills': 'allow',
-      '/tmp/od-skills/*': 'allow',
-      '/tmp/od-skills/**': 'allow',
+      [projectDir]: 'allow',
+      [`${projectDir}${path.sep}*`]: 'allow',
+      [`${projectDir}${path.sep}**`]: 'allow',
+      [skillsDir]: 'allow',
+      [`${skillsDir}${path.sep}*`]: 'allow',
+      [`${skillsDir}${path.sep}**`]: 'allow',
     });
   });
 
+  it('never injects credentials or OAuth tokens for disabled servers', () => {
+    const disabledSecret = 'disabled-server-secret-must-not-spawn';
+    const content = buildOpenCodeMcpConfigContent(
+      [{
+        id: 'disabled',
+        transport: 'http',
+        enabled: false,
+        url: 'https://disabled.example.test/mcp',
+        headers: { Authorization: `Bearer ${disabledSecret}` },
+      }],
+      { disabled: disabledSecret },
+      { allowedDirectories: ['/tmp/project'] },
+    );
+    expect(content).not.toContain(disabledSecret);
+    expect(JSON.stringify(buildClaudeMcpJson([{
+      id: 'disabled',
+      transport: 'stdio',
+      enabled: false,
+      command: 'node',
+      env: { TOKEN: disabledSecret },
+    }]))).not.toContain(disabledSecret);
+  });
+
   it('merges MCP servers and granted external_directory rules into one payload', () => {
+    const projectDir = path.resolve('/tmp/od-project');
     const raw = buildOpenCodeMcpConfigContent(
       [
         {
@@ -452,7 +520,7 @@ describe('buildOpenCodeMcpConfigContent', () => {
         },
       ],
       {},
-      { allowedDirectories: ['/tmp/od-project'] },
+      { allowedDirectories: [projectDir] },
     );
 
     expect(raw).not.toBeNull();
@@ -469,9 +537,9 @@ describe('buildOpenCodeMcpConfigContent', () => {
       enabled: true,
     });
     expect(parsed.permission?.external_directory).toMatchObject({
-      '/tmp/od-project': 'allow',
-      '/tmp/od-project/*': 'allow',
-      '/tmp/od-project/**': 'allow',
+      [projectDir]: 'allow',
+      [`${projectDir}${path.sep}*`]: 'allow',
+      [`${projectDir}${path.sep}**`]: 'allow',
     });
   });
 
@@ -654,12 +722,12 @@ describe('buildOpenCodeMcpConfigContent', () => {
 });
 
 describe('isManagedProjectCwd', () => {
-  const projectsDir = '/abs/.od/projects';
+  const projectsDir = path.resolve('/abs/.od/projects');
 
   it('accepts a real per-project subdir', () => {
-    expect(isManagedProjectCwd('/abs/.od/projects/abc', projectsDir)).toBe(true);
+    expect(isManagedProjectCwd(path.join(projectsDir, 'abc'), projectsDir)).toBe(true);
     expect(
-      isManagedProjectCwd('/abs/.od/projects/abc/sub', projectsDir),
+      isManagedProjectCwd(path.join(projectsDir, 'abc', 'sub'), projectsDir),
     ).toBe(true);
   });
 

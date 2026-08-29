@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EntrySettingsMenu } from '../../src/components/EntrySettingsMenu';
-import { I18nProvider } from '../../src/i18n';
+import { I18nProvider, type Locale } from '../../src/i18n';
 import type { AppConfig } from '../../src/types';
 
 vi.mock('../../src/analytics/provider', async (importOriginal) => {
@@ -36,9 +36,9 @@ function baseConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   } as AppConfig;
 }
 
-function renderMenu() {
+function renderMenu(locale: Locale = 'en') {
   return render(
-    <I18nProvider initial="en">
+    <I18nProvider initial={locale}>
       <EntrySettingsMenu
         config={baseConfig()}
         onThemeChange={vi.fn()}
@@ -98,21 +98,33 @@ describe('EntrySettingsMenu language picker a11y', () => {
     expect(list.hasAttribute('inert')).toBe(false);
   });
 
-  it('shows the public contact links', () => {
+  it('shows localized GitHub support links without exposing personal email addresses', () => {
     renderMenu();
     fireEvent.click(screen.getByTestId('entry-settings-menu-trigger'));
 
     expect(
       screen
-        .getByRole('menuitem', {
-          name: 'Work contact: whdudwls0285@lgcns.com',
-        })
+        .getByRole('menuitem', { name: 'Get help on GitHub' })
         .getAttribute('href'),
-    ).toBe('mailto:whdudwls0285@lgcns.com');
+    ).toBe(
+      'https://github.com/jhy0285/monofield/issues/new?title=%5BSupport%5D%20',
+    );
     expect(
-      screen
-        .getByRole('menuitem', { name: 'GitHub: jhy0285/monofield' })
-        .getAttribute('href'),
-    ).toBe('https://github.com/jhy0285/monofield');
+      screen.getByRole('menuitem', { name: 'Report a problem' }).getAttribute('href'),
+    ).toBe(
+      'https://github.com/jhy0285/monofield/issues/new?labels=bug&title=%5BProblem%5D%20',
+    );
+    expect(document.querySelector('a[href^="mailto:"]')).toBeNull();
+    expect(document.body.textContent).not.toContain('@lgcns.com');
+    expect(document.body.textContent).not.toContain('@gmail.com');
+  });
+
+  it('uses natural Korean spacing for GitHub support copy', () => {
+    renderMenu('ko');
+    fireEvent.click(screen.getByTestId('entry-settings-menu-trigger'));
+
+    expect(screen.getByRole('menuitem', { name: 'GitHub에서 도움 받기' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: '문제 신고하기' })).toBeTruthy();
+    expect(document.body.textContent).not.toContain('GitHub 에서');
   });
 });

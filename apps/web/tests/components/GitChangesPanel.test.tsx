@@ -57,6 +57,164 @@ afterEach(() => {
 });
 
 describe('GitChangesPanel', () => {
+  it('waits for the active module to resolve before requesting Git data', async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockClear();
+    const view = render(
+      <I18nProvider initial="ko">
+        <GitChangesPanel
+          projectId="project-gated"
+          projectPath={null}
+          projectSelectionReady={false}
+          onOpenFile={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+
+    await Promise.resolve();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    view.rerender(
+      <I18nProvider initial="ko">
+        <GitChangesPanel
+          projectId="project-gated"
+          projectPath="agwserver"
+          projectSelectionReady={false}
+          onOpenFile={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+    await Promise.resolve();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    view.rerender(
+      <I18nProvider initial="ko">
+        <GitChangesPanel
+          projectId="project-gated"
+          projectPath="agwserver"
+          projectSelectionReady
+          onOpenFile={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+    expect(await screen.findByText('port: 9081')).toBeTruthy();
+    const urls = fetchMock.mock.calls.map(([input]) => String(input));
+    expect(urls.some((url) => url.includes('/git/status?projectPath=agwserver'))).toBe(true);
+    expect(urls.some((url) => url.includes('/git/branches?projectPath=agwserver'))).toBe(true);
+    expect(urls.every((url) => !url.endsWith('/git/status') && !url.endsWith('/git/branches'))).toBe(true);
+  });
+
+  it('restores the last module snapshot while refreshing it in the background', async () => {
+    const statusB = {
+      ...STATUS,
+      branch: 'develop',
+      files: [{ ...STATUS.files[0], path: 'src/service-b.ts' }],
+      generatedAt: '2026-08-28T00:00:01.000Z',
+    };
+    const diffB = {
+      ...DIFF,
+      path: 'src/service-b.ts',
+      patch: '@@ -1 +1 @@\n-old service\n+new service',
+    };
+    let serviceAStatusReads = 0;
+    let resolveServiceARefresh: (response: Response) => void = () => {};
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/git/status') && url.includes('projectPath=service-a')) {
+        serviceAStatusReads += 1;
+        if (serviceAStatusReads > 1) {
+          return await new Promise<Response>((resolve) => { resolveServiceARefresh = resolve; });
+        }
+      }
+      const payload = url.includes('/git/diff')
+        ? (url.includes('projectPath=service-b') ? diffB : DIFF)
+        : url.includes('/git/branches')
+          ? BRANCHES
+          : url.includes('projectPath=service-b')
+            ? statusB
+            : STATUS;
+      return new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const view = render(
+      <I18nProvider initial="ko">
+        <GitChangesPanel projectId="project-snapshots" projectPath="service-a" onOpenFile={vi.fn()} />
+      </I18nProvider>,
+    );
+    expect(await screen.findByText('port: 9081')).toBeTruthy();
+
+    view.rerender(
+      <I18nProvider initial="ko">
+        <GitChangesPanel projectId="project-snapshots" projectPath="service-b" onOpenFile={vi.fn()} />
+      </I18nProvider>,
+    );
+    expect(await screen.findByText('new service')).toBeTruthy();
+
+    view.rerender(
+      <I18nProvider initial="ko">
+        <GitChangesPanel projectId="project-snapshots" projectPath="service-a" onOpenFile={vi.fn()} />
+      </I18nProvider>,
+    );
+    expect(await screen.findByText('port: 9081')).toBeTruthy();
+    expect((await screen.findByTestId('git-status-loading')).getAttribute('aria-busy')).toBe('true');
+
+    resolveServiceARefresh(new Response(JSON.stringify(STATUS), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+    await waitFor(() => expect(screen.queryByTestId('git-status-loading')).toBeNull());
+  });
+
+  it('clears stale changes and labels status and diff loading while the active server changes', async () => {
+    const statusB = {
+      ...STATUS,
+      branch: 'develop',
+      files: [{ ...STATUS.files[0], path: 'src/service-b.ts' }],
+      generatedAt: '2026-08-28T00:00:01.000Z',
+    };
+    const diffB = {
+      ...DIFF,
+      path: 'src/service-b.ts',
+      patch: '@@ -1 +1 @@\n-old service\n+new service',
+    };
+    let resolveStatusB: (response: Response) => void = () => {};
+    let resolveDiffB: (response: Response) => void = () => {};
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/git/status') && url.includes('projectPath=service-b')) {
+        return await new Promise<Response>((resolve) => { resolveStatusB = resolve; });
+      }
+      if (url.includes('/git/diff') && url.includes('projectPath=service-b')) {
+        return await new Promise<Response>((resolve) => { resolveDiffB = resolve; });
+      }
+      const payload = url.includes('/git/diff') ? DIFF : url.includes('/git/branches') ? BRANCHES : STATUS;
+      return new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const view = render(
+      <I18nProvider initial="ko">
+        <GitChangesPanel projectId="project-1" projectPath="service-a" onOpenFile={vi.fn()} />
+      </I18nProvider>,
+    );
+    expect(await screen.findByText('port: 9081')).toBeTruthy();
+
+    view.rerender(
+      <I18nProvider initial="ko">
+        <GitChangesPanel projectId="project-1" projectPath="service-b" onOpenFile={vi.fn()} />
+      </I18nProvider>,
+    );
+    expect((await screen.findByTestId('git-status-loading')).getAttribute('aria-busy')).toBe('true');
+    expect(screen.queryByText('port: 9081')).toBeNull();
+
+    resolveStatusB(new Response(JSON.stringify(statusB), { status: 200, headers: { 'content-type': 'application/json' } }));
+    expect((await screen.findByTestId('git-diff-loading')).getAttribute('aria-busy')).toBe('true');
+    resolveDiffB(new Response(JSON.stringify(diffB), { status: 200, headers: { 'content-type': 'application/json' } }));
+    expect(await screen.findByText('new service')).toBeTruthy();
+    await waitFor(() => expect(screen.queryByTestId('git-diff-loading')).toBeNull());
+  });
+
   it('defaults to a Korean Before / After comparison and keeps unified view available', async () => {
     render(
       <I18nProvider initial="ko">
@@ -78,6 +236,25 @@ describe('GitChangesPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: '통합 보기' }));
     await waitFor(() => expect(screen.queryByRole('columnheader', { name: '변경 전' })).toBeNull());
     expect(screen.getByLabelText('Git diff').textContent).toContain('-  port: 8081');
+  });
+
+  it('bypasses daemon Git caches when the user explicitly refreshes', async () => {
+    render(
+      <I18nProvider initial="ko">
+        <GitChangesPanel projectId="project-1" projectPath="service-a" onOpenFile={vi.fn()} />
+      </I18nProvider>,
+    );
+
+    await screen.findByText('port: 9081');
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Git 새로고침' }));
+
+    await waitFor(() => {
+      const urls = fetchMock.mock.calls.map(([input]) => String(input));
+      expect(urls.some((url) => url.includes('/git/status?') && url.includes('refresh=1'))).toBe(true);
+      expect(urls.some((url) => url.includes('/git/branches?') && url.includes('refresh=1'))).toBe(true);
+    });
   });
 
   it('compares another branch without checking it out', async () => {

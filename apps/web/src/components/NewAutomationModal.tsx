@@ -291,7 +291,7 @@ export function NewAutomationModal({
     let canceled = false;
     void (async () => {
       const [pluginResult, mcpResult] = await Promise.allSettled([
-        listPlugins(),
+        listPlugins({ summary: true, locale }),
         fetchMcpServers(),
       ]);
       if (canceled) return;
@@ -305,7 +305,7 @@ export function NewAutomationModal({
     return () => {
       canceled = true;
     };
-  }, [open]);
+  }, [open, locale]);
 
   useEffect(() => {
     if (!open) return;
