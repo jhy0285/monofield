@@ -22,7 +22,6 @@ import { PackagedPathAccessError } from "./errors.js";
 import { inspectExistingDesktopForLauncher, waitForLauncherAfterQuit } from "./launcher-after-quit.js";
 import { confirmPackagedLauncherRuntime, resolvePackagedLauncherRuntime } from "./launcher-runtime.js";
 import {
-  applyPackagedHeadlessSmokeMode,
   applyPackagedElectronPathOverrides,
   claimPackagedSingleInstanceLock,
   ensurePackagedNamespacePaths,
@@ -89,7 +88,6 @@ function applyPackagedUpdaterEnv(updateMetadataUrl: string | null): void {
 }
 
 async function main(): Promise<void> {
-  applyPackagedHeadlessSmokeMode(app);
   // Must run BEFORE `app.whenReady()` below, because Chromium consumes
   // `--lang` at session bootstrap. Doing it here lets the packaged
   // renderer's `navigator.language` follow the OS instead of Chromium's

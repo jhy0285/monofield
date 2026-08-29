@@ -14,13 +14,6 @@ export type PackagedSingleInstanceApp = {
   requestSingleInstanceLock: () => boolean;
 };
 
-export type PackagedCommandLineApp = {
-  commandLine: {
-    appendSwitch: (name: string) => void;
-  };
-};
-
-export const PACKAGED_HEADLESS_SMOKE_ENV = "MONOFIELD_HEADLESS_SMOKE";
 type PathDiagnostic = {
   exists: boolean;
   mode?: number;
@@ -112,22 +105,6 @@ export async function ensurePackagedNamespacePaths(
     mkdir(paths.electronUserDataRoot, { recursive: true }),
     mkdir(paths.electronSessionDataRoot, { recursive: true }),
   ]);
-}
-
-/**
- * Lets release smoke run from a non-interactive Windows worker without
- * weakening Chromium's renderer sandbox. Normal Desktop launches never set
- * this private release-harness flag.
- */
-export function applyPackagedHeadlessSmokeMode(
-  electronApp: PackagedCommandLineApp,
-  env: NodeJS.ProcessEnv = process.env,
-): boolean {
-  if (env[PACKAGED_HEADLESS_SMOKE_ENV] !== "1") return false;
-  electronApp.commandLine.appendSwitch("headless");
-  electronApp.commandLine.appendSwitch("disable-gpu");
-  electronApp.commandLine.appendSwitch("disable-gpu-sandbox");
-  return true;
 }
 
 export function applyPackagedElectronPathOverrides(

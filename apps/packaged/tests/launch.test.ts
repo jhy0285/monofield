@@ -9,38 +9,7 @@ vi.mock("electron", () => ({
 }));
 
 import { PackagedPathAccessError } from "../src/errors.js";
-import {
-  applyPackagedHeadlessSmokeMode,
-  claimPackagedSingleInstanceLock,
-  verifyPackagedDataRootWritable,
-} from "../src/launch.js";
-
-describe("applyPackagedHeadlessSmokeMode", () => {
-  it("adds only the release-smoke switches when explicitly enabled", () => {
-    const appendSwitch = vi.fn();
-
-    expect(applyPackagedHeadlessSmokeMode(
-      { commandLine: { appendSwitch } },
-      { MONOFIELD_HEADLESS_SMOKE: "1" },
-    )).toBe(true);
-    expect(appendSwitch.mock.calls.map(([name]) => name)).toEqual([
-      "headless",
-      "disable-gpu",
-      "disable-gpu-sandbox",
-    ]);
-    expect(appendSwitch).not.toHaveBeenCalledWith("no-sandbox");
-  });
-
-  it("leaves normal Desktop launches unchanged", () => {
-    const appendSwitch = vi.fn();
-
-    expect(applyPackagedHeadlessSmokeMode(
-      { commandLine: { appendSwitch } },
-      {},
-    )).toBe(false);
-    expect(appendSwitch).not.toHaveBeenCalled();
-  });
-});
+import { claimPackagedSingleInstanceLock, verifyPackagedDataRootWritable } from "../src/launch.js";
 
 describe("verifyPackagedDataRootWritable", () => {
   it("accepts a writable dataRoot", async () => {

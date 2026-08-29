@@ -61,7 +61,15 @@ import type {
 } from "./types.js";
 
 const PACKAGED_CONFIG_PATH_ENV = "OD_PACKAGED_CONFIG_PATH";
+const RELEASE_SMOKE_NO_SANDBOX_ENV = "MONOFIELD_RELEASE_SMOKE_NO_SANDBOX";
 const UPDATE_ACTION_TIMEOUT_MS = 10 * 60 * 1000;
+
+/** Private tools-pack smoke harness flags. Never used by the packaged product itself. */
+export function resolveWinPackedAppSmokeLaunchArgs(env: NodeJS.ProcessEnv = process.env): string[] {
+  return env[RELEASE_SMOKE_NO_SANDBOX_ENV] === "1"
+    ? ["--disable-gpu", "--disable-gpu-sandbox", "--no-sandbox"]
+    : [];
+}
 
 function desktopStamp(config: ToolPackConfig): SidecarStamp {
   return {
@@ -247,7 +255,10 @@ export async function startPackedWinApp(config: ToolPackConfig, options: { waitF
   await mkdir(dirname(logPath), { recursive: true });
   await writeFile(logPath, "", "utf8");
   const spawned = await spawnBackgroundProcess({
-    args: createProcessStampArgs(stamp, OPEN_DESIGN_SIDECAR_CONTRACT),
+    args: [
+      ...resolveWinPackedAppSmokeLaunchArgs(process.env),
+      ...createProcessStampArgs(stamp, OPEN_DESIGN_SIDECAR_CONTRACT),
+    ],
     command: target.executablePath,
     cwd: dirname(target.executablePath),
     env: createSidecarLaunchEnv({

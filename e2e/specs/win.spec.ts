@@ -22,7 +22,7 @@ const e2eRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspaceRoot = dirname(e2eRoot);
 const toolsPackDir = resolveFromWorkspace(process.env.OD_PACKAGED_E2E_TOOLS_PACK_DIR ?? '.tmp/tools-pack');
 if (process.env.OD_PACKAGED_E2E_WIN === '1') {
-  process.env.MONOFIELD_HEADLESS_SMOKE = '1';
+  process.env.MONOFIELD_RELEASE_SMOKE_NO_SANDBOX = '1';
 }
 const namespace = resolvePackagedSmokeNamespace('win');
 const toolsPackBin = join(workspaceRoot, 'tools', 'pack', 'bin', 'tools-pack.mjs');

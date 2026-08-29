@@ -30,7 +30,12 @@ vi.mock("@open-design/platform", async () => {
   };
 });
 
-const { diagnosePackedWinIpc, inspectPackedWinApp } = await import("../src/win/lifecycle.js");
+const {
+  diagnosePackedWinIpc,
+  inspectPackedWinApp,
+  resolveWinPackedAppSmokeLaunchArgs,
+  startPackedWinApp,
+} = await import("../src/win/lifecycle.js");
 const { resolveWinPaths } = await import("../src/win/paths.js");
 
 function createConfig(root: string): ToolPackConfig {
@@ -76,6 +81,46 @@ async function writeFakeUnpackedExe(config: ToolPackConfig): Promise<void> {
   await mkdir(dirname(paths.unpackedExePath), { recursive: true });
   await writeFile(paths.unpackedExePath, "", "utf8");
 }
+
+describe("Windows packed smoke launch arguments", () => {
+  it("adds renderer smoke flags only for the private harness opt-in", () => {
+    expect(resolveWinPackedAppSmokeLaunchArgs({ MONOFIELD_RELEASE_SMOKE_NO_SANDBOX: "1" })).toEqual([
+      "--disable-gpu",
+      "--disable-gpu-sandbox",
+      "--no-sandbox",
+    ]);
+    expect(resolveWinPackedAppSmokeLaunchArgs({})).toEqual([]);
+    expect(resolveWinPackedAppSmokeLaunchArgs({ MONOFIELD_RELEASE_SMOKE_NO_SANDBOX: "true" })).toEqual([]);
+  });
+
+  it("prepends smoke flags before process stamp arguments without changing normal starts", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-smoke-launch-"));
+    const config = createConfig(root);
+    const previous = process.env.MONOFIELD_RELEASE_SMOKE_NO_SANDBOX;
+    try {
+      await writeFakeUnpackedExe(config);
+      spawnBackgroundProcess.mockClear();
+      process.env.MONOFIELD_RELEASE_SMOKE_NO_SANDBOX = "1";
+      await startPackedWinApp(config, { waitForStatus: false });
+      const smokeArgs = (spawnBackgroundProcess.mock.calls as unknown as Array<[{ args: string[] }]>)[0]![0].args;
+      expect(smokeArgs.slice(0, 3)).toEqual(["--disable-gpu", "--disable-gpu-sandbox", "--no-sandbox"]);
+      expect(smokeArgs.slice(3).some((arg) => arg.includes("stamp"))).toBe(true);
+
+      spawnBackgroundProcess.mockClear();
+      delete process.env.MONOFIELD_RELEASE_SMOKE_NO_SANDBOX;
+      await startPackedWinApp(config, { waitForStatus: false });
+      const normalArgs = (spawnBackgroundProcess.mock.calls as unknown as Array<[{ args: string[] }]>)[0]![0].args;
+      expect(normalArgs).not.toContain("--disable-gpu");
+      expect(normalArgs).not.toContain("--disable-gpu-sandbox");
+      expect(normalArgs).not.toContain("--no-sandbox");
+      expect(normalArgs.some((arg) => arg.includes("stamp"))).toBe(true);
+    } finally {
+      if (previous == null) delete process.env.MONOFIELD_RELEASE_SMOKE_NO_SANDBOX;
+      else process.env.MONOFIELD_RELEASE_SMOKE_NO_SANDBOX = previous;
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
 
 describe("inspectPackedWinApp", () => {
   it("returns status and diagnostics when eval IPC times out", async () => {
