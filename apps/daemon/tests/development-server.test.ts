@@ -5,6 +5,8 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { DesktopDevelopmentProcessInput } from '@open-design/sidecar-proto';
+
 import {
   applyDevelopmentRunOverrides,
   desktopDevelopmentProcessKey,
@@ -468,12 +470,7 @@ describe('development run configuration detection', () => {
     }));
     const detected = await detectDevelopmentRunConfigs(root);
     let statusCalls = 0;
-    const broker = vi.fn(async (input: {
-      action: 'start' | 'status' | 'terminate';
-      environment?: Record<string, string>;
-      port?: number;
-      projectId: string;
-    }) => {
+    const broker = vi.fn(async (input: DesktopDevelopmentProcessInput) => {
       if (input.action === 'start') {
         return { accepted: true as const, action: input.action, error: null, logs: [], pid: 4513, projectId: input.projectId, running: true };
       }
@@ -562,7 +559,7 @@ describe('development run configuration detection', () => {
     expect(new Set(startedProcessKeys)).toHaveProperty('size', 2);
     const startInputs = broker.mock.calls
       .map(([input]) => input)
-      .filter((input) => input.action === 'start');
+      .filter((input): input is Extract<DesktopDevelopmentProcessInput, { action: 'start' }> => input.action === 'start');
     expect(startInputs.map((input) => input.port)).toEqual([63982, 63983]);
     expect(startInputs[0]?.args.join(' ')).toContain('--port 63982');
     expect(startInputs[1]?.args.join(' ')).toContain('--port 63983');

@@ -716,7 +716,7 @@ describe('NewProjectPanel working directory picker', () => {
     );
 
     fireEvent.click(screen.getByTestId('work-mode-development'));
-    fireEvent.click(screen.getByRole('button', { name: 'Local storage' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose folder…' }));
     await screen.findByRole('button', { name: /software-project/i });
     fireEvent.click(screen.getByTestId('create-project'));
 

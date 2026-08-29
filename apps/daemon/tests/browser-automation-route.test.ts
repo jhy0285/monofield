@@ -4,10 +4,17 @@ import { join } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
+import type {
+  DesktopBrowserAutomationInput,
+  DesktopBrowserAutomationResult,
+} from "@open-design/sidecar-proto";
+
 describe("local browser automation route", () => {
-  let started: Awaited<ReturnType<typeof import("../src/server.js")["startServer"]>>;
+  let started: import("../src/server.js").StartServerResult;
   let dataDir: string;
-  const execute = vi.fn(async (input: { action: string; sessionId: string }) => ({
+  const execute = vi.fn(async (
+    input: DesktopBrowserAutomationInput,
+  ): Promise<DesktopBrowserAutomationResult> => ({
     action: input.action,
     data: { title: "Fixture" },
     ok: true,
@@ -18,7 +25,11 @@ describe("local browser automation route", () => {
     dataDir = await mkdtemp(join(tmpdir(), "od-browser-automation-route-"));
     process.env.OD_DATA_DIR = dataDir;
     const { startServer } = await import("../src/server.js");
-    started = await startServer({ desktopBrowserAutomation: execute, port: 0, returnServer: true });
+    started = await startServer({
+      desktopBrowserAutomation: execute,
+      port: 0,
+      returnServer: true,
+    }) as import("../src/server.js").StartServerResult;
   }, 60_000);
 
   afterAll(async () => {

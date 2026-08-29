@@ -55,8 +55,8 @@ describe('SessionModeToggle', () => {
     const card = screen.getByRole('tooltip');
     expect(menu.textContent).toContain('문서');
     expect(card.textContent).toContain('문서 모드');
-    expect(card.textContent).toContain('화면명세서');
-    expect(card.textContent).toContain('인터페이스 명세서');
+    expect(card.textContent).toContain('화면 명세서');
+    expect(card.textContent).toContain('기술 명세서');
     expect(card.textContent).toContain('인터랙티브 프로토타입');
     expect(card.textContent).not.toContain('랜딩 페이지');
   });

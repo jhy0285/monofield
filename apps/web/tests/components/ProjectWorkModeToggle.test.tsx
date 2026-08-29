@@ -13,7 +13,7 @@ describe('ProjectWorkModeToggle', () => {
     const onChange = vi.fn();
     render(<ProjectWorkModeToggle value="creation" onChange={onChange} />);
 
-    expect(screen.getByRole('radio', { name: 'Create documents and designs' }).getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('radio', { name: 'Documents / design' }).getAttribute('aria-checked')).toBe('true');
     fireEvent.click(screen.getByRole('radio', { name: 'Develop software' }));
     expect(onChange).toHaveBeenCalledWith('development');
   });
