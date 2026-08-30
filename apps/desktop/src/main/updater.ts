@@ -2461,6 +2461,7 @@ export function createDesktopUpdater(
   let state: DesktopUpdateState = DESKTOP_UPDATE_STATES.IDLE;
   let error: DesktopUpdateErrorSnapshot | undefined;
   let operation: Promise<unknown> = Promise.resolve();
+  let backgroundDownload: Promise<void> | null = null;
   const sessionId = `${now().toISOString()}-${processPid}`;
 
   function logUpdateEvent(event: string, fields: Record<string, unknown> = {}): void {
@@ -3156,6 +3157,24 @@ export function createDesktopUpdater(
     return await next;
   }
 
+  function startBackgroundDownload(): DesktopUpdateStatusSnapshot {
+    if (backgroundDownload != null) return snapshot();
+
+    const task = serialized(downloadUpdate);
+    const tracked = task.then(
+      () => undefined,
+      (backgroundError: unknown) => {
+        logger.error("[monofield updater] background download failed", backgroundError);
+        setState(DESKTOP_UPDATE_STATES.ERROR, desktopDownloadError(backgroundError));
+      },
+    );
+    backgroundDownload = tracked;
+    void tracked.finally(() => {
+      if (backgroundDownload === tracked) backgroundDownload = null;
+    });
+    return snapshot();
+  }
+
   return {
     checkForUpdates: (options) => serialized(() => checkForCandidate(options)),
     config,
@@ -3167,7 +3186,7 @@ export function createDesktopUpdater(
         case "check":
           return this.checkForUpdates();
         case "download":
-          return this.downloadUpdate();
+          return Promise.resolve(startBackgroundDownload());
         case "install":
           return this.installUpdate();
       }

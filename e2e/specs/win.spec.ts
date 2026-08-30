@@ -129,8 +129,13 @@ const clickUpdaterRailExpression = `
 const ensureMainAppShellExpression = `
   (() => {
     const onboarding = document.querySelector('.entry-shell--onboarding, .entry-onboarding-modal');
-    const home = document.querySelector('[data-testid="entry-nav-home"]');
-    const homeVisible = home instanceof HTMLElement && home.getClientRects().length > 0;
+    const homeNavigation = document.querySelector('[data-testid="entry-nav-logo"]');
+    const homeSurface = document.querySelector('[data-testid="entry-view-home"][data-active="true"]');
+    const homeVisible =
+      homeNavigation instanceof HTMLElement &&
+      homeNavigation.getClientRects().length > 0 &&
+      homeSurface instanceof HTMLElement &&
+      homeSurface.getClientRects().length > 0;
     if (homeVisible) {
       return { homeVisible: true, onboardingVisible: false, skipped: false };
     }
@@ -1053,6 +1058,11 @@ function stripUtf8Bom(value: string): string {
 }
 
 const UPDATE_ENV_KEYS = [
+  'MONOFIELD_UPDATE_AUTO_CHECK',
+  'MONOFIELD_UPDATE_ENABLED',
+  'MONOFIELD_UPDATE_METADATA_URL',
+  'MONOFIELD_UPDATE_CURRENT_VERSION',
+  'MONOFIELD_UPDATE_OPEN_DRY_RUN',
   'OD_UPDATE_AUTO_CHECK',
   'OD_UPDATE_ENABLED',
   'OD_UPDATE_METADATA_URL',

@@ -18,9 +18,11 @@ function sectionAfter(content: string, start: string): string {
 
 describe("Windows release workflow", () => {
   it("builds verified MonoField artifacts without granting the build job write access", async () => {
-    const [workflow, buildScript] = await Promise.all([
+    const [workflow, buildScript, cleanupScript, packageJson] = await Promise.all([
       readFile(new URL("../../../.github/workflows/release-windows.yml", import.meta.url), "utf8"),
       readFile(new URL("../../release/scripts/build-platform.ps1", import.meta.url), "utf8"),
+      readFile(new URL("../../release/scripts/cleanup-monofield-local-temp.ps1", import.meta.url), "utf8"),
+      readFile(new URL("../../../package.json", import.meta.url), "utf8"),
     ]);
     const build = sectionBetween(workflow, "  build:\n", "  publish:\n");
 
@@ -57,6 +59,14 @@ describe("Windows release workflow", () => {
     expect(buildScript).toContain('Test-JsonString $manifest.entry.executable "entry.executable" "payload/MonoField.exe"');
     expect(buildScript).toContain('cleanup-monofield-local-temp.ps1');
     expect(buildScript).toContain('-StopOrphanTestRunners -MinimumAgeMinutes 5');
+    expect(cleanupScript).toContain('[switch]$PruneReusableCaches');
+    expect(cleanupScript).toContain('$_.Name -like "codex-monofield-*"');
+    expect(cleanupScript).toContain('Join-Path $env:APPDATA "MonoField"');
+    expect(cleanupScript).toContain('requiresStoppedApp = $true');
+    expect(cleanupScript).toContain('-Attributes ReparsePoint');
+    expect(cleanupScript).toContain('& robocopy.exe $emptyMirror $cache.path /MIR');
+    expect(packageJson).toContain('"cleanup:deep"');
+    expect(packageJson).toContain('-PruneReusableCaches');
     const updateFixtureBuild = sectionBetween(
       buildScript,
       '    Measure-Step "tools-pack win build update fixture" {',
@@ -117,6 +127,21 @@ describe("Windows release workflow", () => {
     expect(site).toContain("/releases/latest/download/MonoField-default-setup.exe");
     expect(readme).toContain("/releases/latest/download/MonoField-default-setup.exe");
     expect(readme).toContain("/releases/latest/download/MonoField-default-portable.zip");
+  });
+
+  it("keeps release-history cleanup constrained to named direct children", async () => {
+    const releaseCleanup = await readFile(
+      new URL("../../release/scripts/cleanup-monofield-release-history.ps1", import.meta.url),
+      "utf8",
+    );
+
+    expect(releaseCleanup).toContain("[Parameter(Mandatory = $true)]");
+    expect(releaseCleanup).toContain("^monofield-release-.+");
+    expect(releaseCleanup).toContain("^monofield-prev-.+");
+    expect(releaseCleanup).toContain("GetDirectoryName($resolved) -ine $resolvedRoot");
+    expect(releaseCleanup).toContain("$retainedPaths -contains $resolved");
+    expect(releaseCleanup).toContain("$_.IndexOf($resolved");
+    expect(releaseCleanup).toContain("robocopy.exe $emptyMirror $resolved /MIR");
   });
 
   it("does not retain assertions for the removed Open Design release lanes", async () => {

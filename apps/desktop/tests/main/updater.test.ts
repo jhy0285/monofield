@@ -521,6 +521,62 @@ describe("desktop updater", () => {
     }
   });
 
+  it("starts sidecar downloads in the background without duplicating an in-flight request", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture({ platform: "win" });
+    const artifactGate = deferred<void>();
+    let artifactFetches = 0;
+    const fetchImpl: typeof globalThis.fetch = async (input, init) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.endsWith("/artifact.exe")) {
+        artifactFetches += 1;
+        await artifactGate.promise;
+      }
+      return await fetch(input, init);
+    };
+    try {
+      const updater = createDesktopUpdater(
+        {
+          arch: "x64",
+          downloadRoot: root,
+          env: {
+            ...updaterEnv(fixture.metadataUrl, "win32"),
+            [DESKTOP_UPDATE_ENV.AUTO_DOWNLOAD]: "0",
+          },
+          source: SIDECAR_SOURCES.PACKAGED,
+        },
+        { fetch: fetchImpl },
+      );
+      await updater.checkForUpdates({ autoDownload: false });
+
+      await expect(updater.handle("download")).resolves.toMatchObject({
+        state: DESKTOP_UPDATE_STATES.AVAILABLE,
+      });
+      for (let attempt = 0; artifactFetches === 0 && attempt < 100; attempt += 1) {
+        await new Promise<void>((resolveWait) => setTimeout(resolveWait, 5));
+      }
+      expect(artifactFetches).toBe(1);
+
+      await expect(updater.handle("download")).resolves.toMatchObject({
+        state: DESKTOP_UPDATE_STATES.DOWNLOADING,
+      });
+      expect(artifactFetches).toBe(1);
+
+      artifactGate.resolve();
+      let status = await updater.status();
+      for (let attempt = 0; status.state !== DESKTOP_UPDATE_STATES.DOWNLOADED && attempt < 100; attempt += 1) {
+        await new Promise<void>((resolveWait) => setTimeout(resolveWait, 5));
+        status = await updater.status();
+      }
+      expect(status.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      expect(artifactFetches).toBe(1);
+    } finally {
+      artifactGate.resolve();
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   it("keeps using the Windows installer when payload metadata exists but launcher context is absent", async () => {
     const root = makeRoot();
     const fixture = await createUpdaterFixture({

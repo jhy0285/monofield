@@ -49,15 +49,25 @@ export function applyPackagedUpdateEnv(
   metadataUrl: string,
   options: { openDryRun?: boolean } = {},
 ): void {
-  env.OD_UPDATE_ENABLED = '1';
-  env.OD_UPDATE_METADATA_URL = metadataUrl;
-  env.OD_UPDATE_OPEN_DRY_RUN = options.openDryRun === false ? '0' : '1';
-  env.OD_UPDATE_AUTO_CHECK = '1';
+  setPackagedUpdateEnv(env, 'OD_UPDATE_ENABLED', '1');
+  setPackagedUpdateEnv(env, 'OD_UPDATE_METADATA_URL', metadataUrl);
+  setPackagedUpdateEnv(env, 'OD_UPDATE_OPEN_DRY_RUN', options.openDryRun === false ? '0' : '1');
+  setPackagedUpdateEnv(env, 'OD_UPDATE_AUTO_CHECK', '1');
   if (scenario.currentVersionOverride == null) {
-    delete env.OD_UPDATE_CURRENT_VERSION;
+    deletePackagedUpdateEnv(env, 'OD_UPDATE_CURRENT_VERSION');
   } else {
-    env.OD_UPDATE_CURRENT_VERSION = scenario.currentVersionOverride;
+    setPackagedUpdateEnv(env, 'OD_UPDATE_CURRENT_VERSION', scenario.currentVersionOverride);
   }
+}
+
+function setPackagedUpdateEnv(env: NodeJS.ProcessEnv, legacyName: string, value: string): void {
+  env[legacyName] = value;
+  env[legacyName.replace(/^OD_/, 'MONOFIELD_')] = value;
+}
+
+function deletePackagedUpdateEnv(env: NodeJS.ProcessEnv, legacyName: string): void {
+  delete env[legacyName];
+  delete env[legacyName.replace(/^OD_/, 'MONOFIELD_')];
 }
 
 function parseChannel(value: string): PackagedUpdateChannel {
