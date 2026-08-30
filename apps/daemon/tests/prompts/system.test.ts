@@ -425,11 +425,28 @@ describe('composeSystemPrompt', () => {
       expect(disconnectedPrompt).not.toContain('# Connected project database');
       expect(filesystemPrompt).toContain('# Connected project database');
       expect(filesystemPrompt).toContain('database list --json');
+      expect(filesystemPrompt).toContain('& $env:MONOFIELD_NODE_BIN $env:MONOFIELD_BIN database table');
+      expect(filesystemPrompt).toContain('A single-table read gets one command');
+      expect(filesystemPrompt).toContain('Never use `ProcessStartInfo`, named pipes, temporary artifacts, `artifacts create`, or `files write`');
+      expect(filesystemPrompt).toContain('On failure, report the exact broker error and stop');
       expect(filesystemPrompt).toContain('structured mutation operations');
       expect(filesystemPrompt).toContain('“Approve each write” opens a Desktop confirmation');
       expect(filesystemPrompt).toContain('“Always allow” runs those structured mutations without a per-operation dialog');
       expect(filesystemPrompt).toContain('DDL, raw SQL, credential fields, and token or approval bypasses remain prohibited');
       expect(apiPrompt).not.toContain('# Connected project database');
+    });
+
+    it('keeps development writes native and stops on inaccessible UNC working folders', () => {
+      const prompt = composeSystemPrompt({
+        agentId: 'codex',
+        sessionMode: 'chat',
+        streamFormat: 'jsonl',
+        executionProfile: 'filesystem',
+      });
+
+      expect(prompt).toContain('do not use MonoField artifact or project-file wrappers for ordinary source files');
+      expect(prompt).toContain('report the exact error and stop');
+      expect(prompt).toContain('never switch projects, copy the repository to a temporary folder, or claim a UNC/network limitation');
     });
 
     it('forbids wrapping in-place-edit-only turns in an artifact block', () => {

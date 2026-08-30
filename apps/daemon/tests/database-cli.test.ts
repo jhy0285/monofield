@@ -58,4 +58,21 @@ describe('database table CLI fast path', () => {
 
     stdout.mockRestore();
   });
+
+  it('hard-fails a broker error after one request instead of retrying or changing projects', async () => {
+    process.env.MONOFIELD_PROJECT_DATABASE_ID = 'db-project';
+    process.env.MONOFIELD_TOOL_TOKEN = 'run-token';
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      error: { message: 'UNC working directory is unavailable' },
+    }), {
+      status: 500,
+      headers: { 'content-type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      runDatabaseCli(['table', 'abtdb', 'tbpcl250', '--limit', '5', '--json'], helpers()),
+    ).rejects.toThrow('UNC working directory is unavailable');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });

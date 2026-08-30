@@ -149,7 +149,10 @@ interface Props {
   /** Confirms that an external open request was actually applied to the active
    * workspace tab. Document completion combines this UI acknowledgement with
    * a host read-back before it reports success. */
-  onOpenRequestApplied?: (request: { name: string; nonce: number }) => void;
+  onOpenRequestApplied?: (
+    request: { name: string; nonce: number },
+    previewReady?: boolean,
+  ) => void;
   // Open the named file AND surface its Share/Export menu. Drives the chat-side
   // "Share" next-step action without a dedicated share backend.
   shareRequest?: { name: string; nonce: number } | null;
@@ -905,11 +908,18 @@ export function FileWorkspace({
 
   useEffect(() => {
     if (!openRequest || activeTab !== openRequest.name) return;
+    const requestedFile = files.find((file) => file.name === openRequest.name);
+    if (!requestedFile) return;
+    // HTML completion is acknowledged by FileViewer only after its active
+    // iframe returns the exact document receipt token. Selecting the tab (or a
+    // bare load event from a 404 document) is not enough: a broken or
+    // indefinitely loading preview must keep the document turn non-terminal.
+    if (requestedFile?.kind === 'html') return;
     const acknowledgementKey = `${projectId}\0${openRequest.nonce}`;
     if (lastAppliedOpenRequestRef.current === acknowledgementKey) return;
     lastAppliedOpenRequestRef.current = acknowledgementKey;
-    onOpenRequestApplied?.(openRequest);
-  }, [activeTab, onOpenRequestApplied, openRequest, projectId]);
+    onOpenRequestApplied?.(openRequest, true);
+  }, [activeTab, files, onOpenRequestApplied, openRequest, projectId]);
 
   // Share request: ensure the target file is open + active so the FileViewer
   // below receives the matching `shareRequest` and opens its Share menu.
@@ -2509,6 +2519,20 @@ export function FileWorkspace({
               activeFile.name,
               slideNavDeliverableNonce,
             )}
+            previewReadyRequest={
+              openRequest
+              && openRequest.name === activeFile.name
+              && activeFile.kind === 'html'
+                ? { nonce: openRequest.nonce }
+                : null
+            }
+            onPreviewReady={(nonce, success) => {
+              if (!openRequest || openRequest.nonce !== nonce || openRequest.name !== activeFile.name) return;
+              const acknowledgementKey = `${projectId}\0${nonce}`;
+              if (lastAppliedOpenRequestRef.current === acknowledgementKey) return;
+              lastAppliedOpenRequestRef.current = acknowledgementKey;
+              onOpenRequestApplied?.(openRequest, success);
+            }}
           />
         ) : (
           <div className="viewer-empty">

@@ -37,6 +37,19 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain('foreignObject');
   });
 
+  it('injects an exact preview receipt only when a delivery token is provided', () => {
+    const plain = buildSrcdoc('<main>Hero</main>');
+    const receipt = buildSrcdoc('<main>Hero</main>', {
+      previewReadyToken: 'odpr-7-receipt123',
+    });
+
+    expect(plain).not.toContain('data-od-artifact-preview-ready');
+    expect(receipt).toContain('data-od-artifact-preview-ready');
+    expect(receipt).toContain("type: 'od:artifact-preview-ready'");
+    expect(receipt).toContain('var token = "odpr-7-receipt123"');
+    expect(receipt.indexOf('data-od-artifact-preview-ready')).toBeLessThan(receipt.indexOf('</body>'));
+  });
+
   it('paints an opaque background before drawing so empty rasters never flatten to black', () => {
     const srcdoc = buildSrcdoc('<main style="color:red">Hero</main>');
 

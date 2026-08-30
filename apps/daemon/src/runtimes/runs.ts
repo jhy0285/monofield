@@ -193,6 +193,8 @@ export function createChatRunService({
     toolBundle: summarizeRunToolBundle(run.toolBundle),
     ...(run.promptCache ? { promptCache: run.promptCache } : {}),
     ...(run.browserUse ? { browserUse: run.browserUse } : {}),
+    artifactDeliveryRequired: run.artifactDeliveryRequired === true,
+    ...(run.artifactDelivery ? { artifactDelivery: run.artifactDelivery } : {}),
   });
 
   const finish = (run, status, code: number | null = null, signal: string | null = null) => {
@@ -218,6 +220,100 @@ export function createChatRunService({
   const fail = (run, code, message, init = {}) => {
     emit(run, 'error', createSseErrorPayload(code, message, init));
     finish(run, 'failed', 1, null);
+  };
+
+  /**
+   * Reconcile the agent process result with the renderer-owned artifact
+   * delivery phase. The CLI can exit successfully before the browser has
+   * persisted/read back every promised file or loaded an HTML preview, so a
+   * negative receipt is allowed to revise process succeeded -> failed until a
+   * successful host receipt has been recorded. A verified successful receipt,
+   * cancellation, and unrelated runtime failures always remain monotonic.
+   *
+   * This deliberately does not emit another SSE `end`: finish() already
+   * closed the stream, and replaying a second terminal event would make
+   * reconnect cursors ambiguous. Consumers can observe the reconciled state
+   * through the acknowledgment response or GET /api/runs/:id.
+   */
+  const acknowledgeArtifactDelivery = (run, acknowledgment) => {
+    if (run.artifactDeliveryRequired !== true) {
+      return {
+        applied: false,
+        reason: 'artifact-delivery-not-required',
+        run: statusBody(run),
+      };
+    }
+    if (run.status === 'canceled') {
+      return {
+        applied: false,
+        reason: 'run-canceled',
+        run: statusBody(run),
+      };
+    }
+    if (!TERMINAL_RUN_STATUSES.has(run.status)) {
+      return {
+        applied: false,
+        reason: 'run-not-terminal',
+        run: statusBody(run),
+      };
+    }
+    if (run.status === 'failed' && run.errorCode !== 'ARTIFACT_DELIVERY_FAILED') {
+      return {
+        applied: false,
+        reason: 'run-already-failed',
+        run: statusBody(run),
+      };
+    }
+    if (
+      run.artifactDelivery?.status === 'failed'
+      && acknowledgment.status === 'succeeded'
+    ) {
+      return {
+        applied: false,
+        reason: 'artifact-delivery-already-failed',
+        run: statusBody(run),
+      };
+    }
+    // A successful host receipt is the strongest delivery fact we can
+    // observe. The renderer can lose the HTTP response after this mutation
+    // was applied (connection reset, invalid/truncated JSON, app reload) and
+    // retry the same clientRequestId or pessimistically report failure. Treat
+    // both as idempotent no-ops so an ambiguous transport outcome can never
+    // revise a verified delivery to failed.
+    if (run.artifactDelivery?.status === 'succeeded') {
+      return {
+        applied: false,
+        reason: 'artifact-delivery-already-succeeded',
+        run: statusBody(run),
+      };
+    }
+
+    const acknowledgedAt = Date.now();
+    run.artifactDelivery = {
+      status: acknowledgment.status,
+      acknowledgedAt,
+      files: Array.isArray(acknowledgment.files)
+        ? acknowledgment.files.map((file) => ({ ...file }))
+        : [],
+      ...(typeof acknowledgment.error === 'string' && acknowledgment.error
+        ? { error: acknowledgment.error }
+        : {}),
+    };
+    run.updatedAt = acknowledgedAt;
+
+    if (acknowledgment.status === 'failed') {
+      run.status = 'failed';
+      run.errorCode = 'ARTIFACT_DELIVERY_FAILED';
+      run.resumable = false;
+      run.error = typeof acknowledgment.error === 'string' && acknowledgment.error
+        ? acknowledgment.error
+        : 'The generated artifact could not be saved and previewed completely.';
+    }
+
+    return {
+      applied: true,
+      run: statusBody(run),
+    };
   };
 
   const start = (run, starter) => {
@@ -361,7 +457,24 @@ export function createChatRunService({
   };
 
   const cancel = async (run) => {
-    if (TERMINAL_RUN_STATUSES.has(run.status)) return statusBody(run);
+    if (TERMINAL_RUN_STATUSES.has(run.status)) {
+      // A document-producing process can exit successfully before the
+      // renderer has saved/read back every file and loaded its HTML preview.
+      // During that bounded host-owned phase Stop must still mean canceled.
+      // This is a monotonic succeeded -> canceled transition only while a
+      // required delivery has no receipt; ordinary terminal runs and an
+      // already-acknowledged delivery remain immutable.
+      if (
+        run.status === 'succeeded'
+        && run.artifactDeliveryRequired === true
+        && !run.artifactDelivery
+      ) {
+        run.cancelRequested = true;
+        run.status = 'canceled';
+        run.updatedAt = Date.now();
+      }
+      return statusBody(run);
+    }
     run.cancelRequested = true;
     run.updatedAt = Date.now();
     clearPendingRetryRestart(run);
@@ -465,6 +578,7 @@ export function createChatRunService({
     emit,
     finish,
     fail,
+    acknowledgeArtifactDelivery,
     drop,
     signalChild: killChild,
     statusBody,

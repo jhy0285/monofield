@@ -191,4 +191,34 @@ describe('createArtifactParser', () => {
       .join('');
     expect(text).toContain('After the fence, more prose.');
   });
+
+  it('reports an opening artifact tag cut off before its closing angle bracket', () => {
+    const parser = createArtifactParser();
+    const events = [...parser.feed(
+      '<artifact identifier="first" type="text/plain">done</artifact>' +
+      '<artifact identifier="second" type="application/json"',
+    )];
+
+    expect(events.filter((event) => event.type === 'artifact:end')).toHaveLength(1);
+    expect(parser.hasIncompleteArtifactEnvelope()).toBe(true);
+    // The partial second tag is only flushed as display text. It never becomes
+    // a completed artifact persistence receipt.
+    expect([...parser.flush()].some((event) => event.type === 'artifact:end')).toBe(false);
+  });
+
+  it('does not mistake an unfinished markdown fence for an artifact envelope', () => {
+    const parser = createArtifactParser();
+    [...parser.feed('Example:\n```html\n<artifact identifier="sample"')];
+
+    expect(parser.hasIncompleteArtifactEnvelope()).toBe(false);
+  });
+
+  it('reports a second artifact whose tag is cut inside the artifact keyword', () => {
+    const parser = createArtifactParser();
+    [...parser.feed(
+      '<artifact identifier="first" type="text/plain">done</artifact><arti',
+    )];
+
+    expect(parser.hasIncompleteArtifactEnvelope()).toBe(true);
+  });
 });

@@ -13,9 +13,10 @@ import {
 import { AnimatePresence } from 'motion/react';
 import { createHtmlArtifactManifest, inferLegacyManifest } from '../artifacts/manifest';
 import { resolveHtmlPointerArtifactTarget } from '../artifacts/pointer';
-import { validateHtmlArtifact } from '../artifacts/validate';
+import { validateArtifactTextContent } from '../artifacts/validate';
 import { recoverHtmlDocumentFromMarkdownFence, recoverStandaloneHtmlDocument, resolvePersistedArtifactHtml } from '../artifacts/recover';
 import { createArtifactParser } from '../artifacts/parser';
+import { stripArtifact } from '../artifacts/strip';
 import {
   findFirstQuestionForm,
   hasUnterminatedQuestionForm,
@@ -26,6 +27,8 @@ import { parseSubmittedAnswers } from './QuestionForm';
 import { useI18n } from '../i18n';
 import { streamMessage } from '../providers/anthropic';
 import {
+  acknowledgeChatRunArtifactDelivery,
+  cancelChatRun,
   fetchChatRunStatus,
   fetchVelaLoginStatus,
   listActiveChatRuns,
@@ -152,7 +155,7 @@ import {
   type SaveMessageOptions,
   waitGeneratedPluginShareTask,
 } from '../state/projects';
-import type { AppliedPluginSnapshot, ChatAnalyticsEntryFrom, ChatSessionMode, InstalledPluginRecord, WorkspaceContextItem } from '@open-design/contracts';
+import type { AppliedPluginSnapshot, ChatAnalyticsEntryFrom, ChatRunStatusResponse, ChatSessionMode, InstalledPluginRecord, WorkspaceContextItem } from '@open-design/contracts';
 import type {
   AgentEvent,
   AgentInfo,
@@ -400,10 +403,42 @@ const DESIGN_SYSTEM_AUDIT_AUTO_REPAIR_ATTEMPTS = 2;
 // the user a bounded and retryable failure instead of a false completion.
 const ARTIFACT_WRITE_RECEIPT_TIMEOUT_MS = 15_000;
 const ARTIFACT_PREVIEW_ACK_TIMEOUT_MS = 15_000;
+const ARTIFACT_DELIVERY_CAPABILITY_PREFIX = 'od:artifact-delivery-capability:v1:';
+
+export function rememberArtifactDeliveryCapability(runId: string, clientRequestId: string): void {
+  if (typeof window === 'undefined' || !runId || !clientRequestId) return;
+  try {
+    window.sessionStorage.setItem(
+      `${ARTIFACT_DELIVERY_CAPABILITY_PREFIX}${runId}`,
+      clientRequestId,
+    );
+  } catch {
+    // A private-window quota failure only disables reload recovery. The live
+    // turn still owns the capability in memory and remains fail-closed.
+  }
+}
+
+export function readArtifactDeliveryCapability(runId: string): string | null {
+  if (typeof window === 'undefined' || !runId) return null;
+  try {
+    return window.sessionStorage.getItem(`${ARTIFACT_DELIVERY_CAPABILITY_PREFIX}${runId}`);
+  } catch {
+    return null;
+  }
+}
+
+export function forgetArtifactDeliveryCapability(runId: string): void {
+  if (typeof window === 'undefined' || !runId) return;
+  try {
+    window.sessionStorage.removeItem(`${ARTIFACT_DELIVERY_CAPABILITY_PREFIX}${runId}`);
+  } catch {
+    // Best-effort cleanup; stale capabilities are scoped to this renderer
+    // session and still require a matching terminal run id at the daemon.
+  }
+}
 type OpenFileAckWaiter = {
   name: string;
-  resolve: (opened: boolean) => void;
-  timeout: ReturnType<typeof setTimeout>;
+  settle: (opened: boolean) => void;
 };
 // Trailing-debounce window for the canonical (daemon + SQLite) tab-state write.
 // Embedded-browser navigation bursts settle well within this; the local cache
@@ -1207,6 +1242,13 @@ export function ProjectView({
   const [openRequest, setOpenRequest] = useState<{ name: string; nonce: number } | null>(null);
   const openRequestNonceRef = useRef(0);
   const openFileAckWaitersRef = useRef<Map<number, OpenFileAckWaiter>>(new Map());
+  // FileWorkspace exposes one active open request. Serialize exact-preview
+  // receipts so two interrupted HTML deliveries cannot replace each other's
+  // request before the first iframe has acknowledged its document.
+  const openFileRequestQueueRef = useRef<Promise<void>>(Promise.resolve());
+  // Recovery also touches legacy per-workspace save/preview refs. Keep the
+  // complete host transaction single-owner, not only its final open request.
+  const artifactRecoveryQueueRef = useRef<Promise<void>>(Promise.resolve());
   // Like `openRequest`, but additionally asks the preview workspace to open the
   // file's Share/Export menu. Drives the "Share" next-step action: it reuses the
   // existing export/deploy surface rather than introducing a new share backend.
@@ -1225,6 +1267,13 @@ export function ProjectView({
   >(null);
   const abortRef = useRef<AbortController | null>(null);
   const cancelRef = useRef<AbortController | null>(null);
+  // The model stream can finish before host-owned save/readback/preview work.
+  // Keep that second phase in the same Stop lifecycle instead of leaving an
+  // unabortable background promise after the transport has closed.
+  const artifactDeliveryAbortRef = useRef<AbortController | null>(null);
+  const artifactDeliveryRunIdRef = useRef<string | null>(null);
+  const artifactRecoveryControllersRef = useRef<Map<string, AbortController>>(new Map());
+  const artifactRecoveryConversationCountsRef = useRef<Map<string, number>>(new Map());
   // Runs explicitly superseded by a "send now" interrupt. Their abort
   // controller is recorded here synchronously — before handleStop() clears the
   // active refs — so the run's late terminal callbacks (which the daemon still
@@ -1696,6 +1745,14 @@ export function ProjectView({
       // live run canceled even when the user never clicked Stop.
       abortRef.current?.abort();
       abortRef.current = null;
+      artifactDeliveryAbortRef.current?.abort();
+      artifactDeliveryAbortRef.current = null;
+      artifactDeliveryRunIdRef.current = null;
+      for (const controller of artifactRecoveryControllersRef.current.values()) {
+        controller.abort();
+      }
+      artifactRecoveryControllersRef.current.clear();
+      artifactRecoveryConversationCountsRef.current.clear();
       cancelRef.current = null;
       for (const textBuffer of reattachTextBuffersRef.current) textBuffer.cancel();
       reattachTextBuffersRef.current.clear();
@@ -2016,38 +2073,60 @@ export function ProjectView({
     setOpenRequest(nextOpenRequest(name));
   }, [nextOpenRequest]);
 
-  const requestOpenFileAndWait = useCallback((name: string): Promise<boolean> => {
+  const requestOpenFileAndWait = useCallback((
+    name: string,
+    signal?: AbortSignal,
+  ): Promise<boolean> => {
     if (!name) return Promise.resolve(false);
-    const request = nextOpenRequest(name);
-    return new Promise<boolean>((resolve) => {
-      const timeout = setTimeout(() => {
-        openFileAckWaitersRef.current.delete(request.nonce);
-        resolve(false);
-      }, ARTIFACT_PREVIEW_ACK_TIMEOUT_MS);
-      openFileAckWaitersRef.current.set(request.nonce, { name, resolve, timeout });
-      setOpenRequest(request);
-    });
+    if (signal?.aborted) return Promise.resolve(false);
+    const queued = openFileRequestQueueRef.current
+      .catch(() => undefined)
+      .then(() => {
+        if (signal?.aborted) return false;
+        const request = nextOpenRequest(name);
+        return new Promise<boolean>((resolve) => {
+          let settled = false;
+          let timeout: ReturnType<typeof setTimeout> | null = null;
+          const onAbort = () => settle(false);
+          const settle = (opened: boolean) => {
+            if (settled) return;
+            settled = true;
+            if (timeout) clearTimeout(timeout);
+            signal?.removeEventListener('abort', onAbort);
+            openFileAckWaitersRef.current.delete(request.nonce);
+            resolve(opened);
+          };
+          openFileAckWaitersRef.current.set(request.nonce, { name, settle });
+          timeout = setTimeout(() => settle(false), ARTIFACT_PREVIEW_ACK_TIMEOUT_MS);
+          signal?.addEventListener('abort', onAbort, { once: true });
+          setOpenRequest(request);
+        });
+      });
+    openFileRequestQueueRef.current = queued.then(() => undefined, () => undefined);
+    return queued;
   }, [nextOpenRequest]);
 
-  const handleOpenRequestApplied = useCallback((request: { name: string; nonce: number }) => {
+  const handleOpenRequestApplied = useCallback((
+    request: { name: string; nonce: number },
+    previewReady = true,
+  ) => {
     const waiter = openFileAckWaitersRef.current.get(request.nonce);
     if (!waiter) return;
-    openFileAckWaitersRef.current.delete(request.nonce);
-    clearTimeout(waiter.timeout);
-    waiter.resolve(waiter.name === request.name);
+    waiter.settle(previewReady && waiter.name === request.name);
   }, []);
 
   useEffect(() => () => {
     for (const waiter of openFileAckWaitersRef.current.values()) {
-      clearTimeout(waiter.timeout);
-      waiter.resolve(false);
+      waiter.settle(false);
     }
     openFileAckWaitersRef.current.clear();
   }, [project.id]);
 
-  const confirmProjectFilePreview = useCallback(async (file: ProjectFile): Promise<boolean> => {
-    const opened = requestOpenFileAndWait(file.name);
-    const fetched = waitForArtifactWriteReceipt(async (signal) => {
+  const confirmProjectFileReadback = useCallback(async (
+    file: ProjectFile,
+    signal?: AbortSignal,
+  ): Promise<{ ok: true } | { ok: false; reason: string }> => {
+    const fetched = await waitForArtifactWriteReceipt(async (signal) => {
       if (
         file.kind === 'pdf'
         || file.kind === 'document'
@@ -2055,7 +2134,7 @@ export function ProjectView({
         || file.kind === 'spreadsheet'
       ) {
         const preview = await fetchProjectFilePreview(project.id, file.name, { signal });
-        return preview === null ? null : true;
+        return preview === null ? null : { ok: true as const };
       }
       if (
         file.kind === 'html'
@@ -2068,7 +2147,8 @@ export function ProjectView({
           cacheBustKey: file.mtime,
           signal,
         });
-        return text === null ? null : true;
+        if (text === null) return null;
+        return validateArtifactTextContent(file.path || file.name, text);
       }
       const response = await fetch(projectRawUrl(project.id, file.name), {
         cache: 'no-store',
@@ -2077,11 +2157,13 @@ export function ProjectView({
       });
       if (!response.ok) return null;
       await response.body?.cancel().catch(() => undefined);
-      return true;
-    });
-    const [openAcknowledged, fetchAcknowledged] = await Promise.all([opened, fetched]);
-    return openAcknowledged && fetchAcknowledged === true;
-  }, [project.id, requestOpenFileAndWait]);
+      return { ok: true as const };
+    }, ARTIFACT_WRITE_RECEIPT_TIMEOUT_MS, signal);
+    return fetched ?? {
+      ok: false,
+      reason: 'the file could not be read back from the project',
+    };
+  }, [project.id]);
 
   useEffect(() => {
     const designSystemId = brandReady?.designSystemId;
@@ -2119,7 +2201,7 @@ export function ProjectView({
       art: Artifact,
       projectFilesSnapshot?: ProjectFile[],
       sourceText?: string,
-      options: { pointerMinMtime?: number } = {},
+      options: { pointerMinMtime?: number; signal?: AbortSignal } = {},
     ) => {
       const persistedHtml = resolvePersistedArtifactHtml({
         artifactHtml: art.html,
@@ -2163,12 +2245,10 @@ export function ProjectView({
       // prose summary the model emitted inside `<artifact type="text/html">`
       // when only Edit-tool changes happened this turn. Without this guard,
       // such content lands as a phantom HTML file in the project panel.
-      if (ext === '.html') {
-        const validation = validateHtmlArtifact(artifactToPersist.html);
-        if (!validation.ok) {
-          setError(`Refused to save artifact "${art.identifier || art.title || 'untitled'}": ${validation.reason}`);
-          return null;
-        }
+      const contentValidation = validateArtifactTextContent(fileName, artifactToPersist.html);
+      if (!contentValidation.ok) {
+        setError(`Refused to save artifact "${art.identifier || art.title || 'untitled'}": ${contentValidation.reason}`);
+        return null;
       }
       if (savedArtifactRef.current === fileName) {
         return currentProjectFiles.find((file) => file.name === fileName) ?? null;
@@ -2202,6 +2282,8 @@ export function ProjectView({
           artifactManifest: manifest ?? undefined,
           signal,
         }),
+        ARTIFACT_WRITE_RECEIPT_TIMEOUT_MS,
+        options.signal,
       );
       if (file) {
         savedArtifactRef.current = file.name;
@@ -3059,6 +3141,208 @@ export function ProjectView({
     [project.id, activeConversationId, refreshPreviewComments],
   );
 
+  const deliverRecoveredRunArtifacts = useCallback(async ({
+    message,
+    runId,
+    initialStatus,
+    sourceText,
+    artifacts,
+    signal,
+  }: {
+    message: ChatMessage;
+    runId: string;
+    initialStatus: ChatRunStatusResponse;
+    sourceText: string;
+    artifacts: Artifact[];
+    signal: AbortSignal;
+  }): Promise<ProjectFile[]> => {
+    const clientRequestId = readArtifactDeliveryCapability(runId);
+    if (!clientRequestId) {
+      throw new Error(
+        'The document delivery capability was not available after reconnecting; no file was changed.',
+      );
+    }
+    const duplicate = findDuplicateArtifactDeclaration(artifacts);
+    if (duplicate) throw new Error(duplicate);
+
+    const assertRunStillDeliverable = async () => {
+      if (signal.aborted) throw new DOMException('Artifact recovery was canceled', 'AbortError');
+      const latest = await fetchChatRunStatus(runId, {
+        signal,
+        timeoutMs: ARTIFACT_WRITE_RECEIPT_TIMEOUT_MS,
+      });
+      if (!latest) throw new Error('The run status could not be verified before recovery.');
+      if (latest.status === 'canceled') {
+        forgetArtifactDeliveryCapability(runId);
+        throw new DOMException('Artifact recovery was canceled', 'AbortError');
+      }
+      if (latest.status !== 'succeeded') {
+        throw new Error(`The run is no longer deliverable (${latest.status}).`);
+      }
+      return latest;
+    };
+
+    const precedingPrompt = precedingUserPrompt(messagesRef.current, message.id);
+    const declaredFileNames = extractExplicitDeliverableFileNames(precedingPrompt);
+    const receipts: Array<{
+      name: string;
+      saved: boolean;
+      readBack: boolean;
+      previewReady?: boolean;
+    }> = [];
+    let deliveryFiles: ProjectFile[] = [];
+    let producedFiles: ProjectFile[] = [];
+
+    const previousRecovery = artifactRecoveryQueueRef.current.catch(() => undefined);
+    let releaseRecovery!: () => void;
+    const recoveryReservation = new Promise<void>((resolve) => {
+      releaseRecovery = resolve;
+    });
+    artifactRecoveryQueueRef.current = previousRecovery.then(() => recoveryReservation);
+    await previousRecovery;
+
+    try {
+      await assertRunStillDeliverable();
+      let nextFiles = await refreshProjectFiles(signal);
+      const beforeFileNames = new Set(
+        message.preTurnFileNames ?? nextFiles.map((file) => file.name),
+      );
+      const artifactFiles: ProjectFile[] = [];
+      const runStartedAt = initialStatus.createdAt || message.startedAt || message.createdAt;
+
+      if (artifacts.length > 0) {
+        for (const artifactToPersist of artifacts) {
+          await assertRunStillDeliverable();
+          let recovered = findExistingArtifactProjectFile(
+            artifactToPersist,
+            nextFiles,
+            { minMtime: runStartedAt },
+          );
+          if (!recovered && artifactExtensionFor(artifactToPersist) === '.html') {
+            recovered = await findSameTurnHtmlWriteForRecoveredArtifact({
+              artifactHtml: resolvePersistedArtifactHtml({
+                artifactHtml: artifactToPersist.html,
+                identifier: artifactToPersist.identifier,
+                sourceText,
+              }),
+              producedFiles: computeProducedFiles(beforeFileNames, nextFiles) ?? [],
+              readProjectHtml,
+            });
+          }
+          if (!recovered) {
+            recovered = await persistArtifact(
+              artifactToPersist,
+              nextFiles,
+              sourceText,
+              { pointerMinMtime: runStartedAt, signal },
+            );
+            if (!recovered) {
+              throw new Error(
+                `No host save receipt was returned for "${declaredArtifactFileName(artifactToPersist)}".`,
+              );
+            }
+            nextFiles = await refreshProjectFiles(signal);
+          }
+          if (!artifactFiles.some((file) => file.name === recovered.name)) {
+            artifactFiles.push(recovered);
+          }
+        }
+      }
+
+      const changed = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+      if (artifacts.length === 0 && declaredFileNames.length === 0) {
+        throw new Error(
+          'The replay contained no complete artifact and no explicitly named output that could be verified safely.',
+        );
+      }
+      deliveryFiles = selectArtifactDeliveryReceiptFiles({
+        changedFiles: uniqueProjectFiles([...artifactFiles, ...changed]),
+        artifactReceiptFiles: artifactFiles,
+        declaredFileNames,
+      });
+      const missingDeclared = missingDeclaredDeliveryFiles(declaredFileNames, deliveryFiles);
+      if (missingDeclared.length > 0) {
+        throw new Error(
+          `Recovered delivery is missing requested file${missingDeclared.length === 1 ? '' : 's'}: ${missingDeclared.join(', ')}.`,
+        );
+      }
+      if (deliveryFiles.length === 0) {
+        throw new Error('No safely attributable project output was available after reconnecting.');
+      }
+      producedFiles = uniqueProjectFiles([...changed, ...artifactFiles]);
+
+      receipts.push(...deliveryFiles.map((file) => ({
+        name: file.name,
+        saved: true,
+        readBack: false,
+        ...(file.kind === 'html' ? { previewReady: false } : {}),
+      })));
+      for (const file of deliveryFiles) {
+        await assertRunStillDeliverable();
+        const readback = await confirmProjectFileReadback(file, signal);
+        if (!readback.ok) {
+          throw new Error(`Recovered file "${file.name}" failed validation: ${readback.reason}.`);
+        }
+        const receipt = receipts.find((entry) => entry.name === file.name);
+        if (receipt) receipt.readBack = true;
+      }
+      for (const file of deliveryFiles.filter((entry) => entry.kind === 'html')) {
+        await assertRunStillDeliverable();
+        if (!(await requestOpenFileAndWait(file.name, signal))) {
+          throw new Error(`Recovered file "${file.name}" did not load its exact preview document.`);
+        }
+        const receipt = receipts.find((entry) => entry.name === file.name);
+        if (receipt) receipt.previewReady = true;
+      }
+
+      const acknowledgment = await acknowledgeChatRunArtifactDelivery(runId, {
+        clientRequestId,
+        status: 'succeeded',
+        files: receipts,
+      }, { signal });
+      if (acknowledgment.reason === 'run-canceled' || acknowledgment.run.status === 'canceled') {
+        forgetArtifactDeliveryCapability(runId);
+        throw new DOMException('Artifact recovery was canceled', 'AbortError');
+      }
+      if (
+        acknowledgment.applied !== true
+        && acknowledgment.run.artifactDelivery?.status !== 'succeeded'
+      ) {
+        throw new Error('The recovered document delivery was not acknowledged.');
+      }
+      forgetArtifactDeliveryCapability(runId);
+      return producedFiles.length > 0 ? producedFiles : deliveryFiles;
+    } catch (error) {
+      if (signal.aborted || (error as Error).name === 'AbortError') throw error;
+      const latest = await fetchChatRunStatus(runId, {
+        timeoutMs: ARTIFACT_WRITE_RECEIPT_TIMEOUT_MS,
+      }).catch(() => null);
+      if (latest?.status === 'canceled') {
+        forgetArtifactDeliveryCapability(runId);
+        throw new DOMException('Artifact recovery was canceled', 'AbortError');
+      }
+      const negative = await acknowledgeChatRunArtifactDelivery(runId, {
+        clientRequestId,
+        status: 'failed',
+        files: receipts,
+        error: error instanceof Error ? error.message : String(error),
+      }).catch(() => null);
+      if (negative?.run.artifactDelivery?.status === 'succeeded' && deliveryFiles.length > 0) {
+        forgetArtifactDeliveryCapability(runId);
+        return producedFiles.length > 0 ? producedFiles : deliveryFiles;
+      }
+      throw error;
+    } finally {
+      releaseRecovery();
+    }
+  }, [
+    confirmProjectFileReadback,
+    persistArtifact,
+    readProjectHtml,
+    refreshProjectFiles,
+    requestOpenFileAndWait,
+  ]);
+
   useEffect(() => {
     if (config.mode !== 'daemon' || !daemonLive || !activeConversationId || streaming) return;
     let cancelled = false;
@@ -3142,9 +3426,14 @@ export function ProjectView({
             (prev) => ({ ...prev, runStatus: 'failed', endedAt: prev.endedAt ?? Date.now() }),
             true,
           );
+          recoveredArtifactMessagesRef.current.add(message.id);
           completedReattachRunsRef.current.add(runId);
           continue;
         }
+        const interruptedArtifactDeliveryRecovery =
+          status.status === 'succeeded'
+          && status.artifactDeliveryRequired === true
+          && status.artifactDelivery?.status !== 'succeeded';
         updateMessageById(
           message.id,
           (prev) => ({
@@ -3155,13 +3444,14 @@ export function ProjectView({
           true,
         );
 
-        if (shouldReplayTerminalRunMessage(message)) {
+        if (shouldReplayTerminalRunMessage(message) && !interruptedArtifactDeliveryRecovery) {
           const replayedContent = textContentFromAgentEvents(message.events);
           if (replayedContent.trim().length > 0) {
             const parser = createArtifactParser();
             let parsedArtifact: Artifact | null = null;
             let liveHtml = '';
-            for (const ev of [...parser.feed(replayedContent), ...parser.flush()]) {
+            const completedReplayArtifacts: Artifact[] = [];
+            for (const ev of parser.feed(replayedContent)) {
               if (ev.type === 'artifact:start') {
                 liveHtml = '';
                 parsedArtifact = {
@@ -3179,10 +3469,125 @@ export function ProjectView({
                 );
               } else if (ev.type === 'artifact:end') {
                 parsedArtifact = artifactWithHtml(parsedArtifact, ev.identifier, ev.fullContent);
+                completedReplayArtifacts.push(parsedArtifact);
                 setArtifact((prev) =>
                   prev ? artifactWithHtml(prev, ev.identifier, ev.fullContent) : null,
                 );
               }
+            }
+            const incompleteReplayArtifact = parser.hasIncompleteArtifactEnvelope();
+            // flush() is presentation-only for a truncated artifact. Never add
+            // its synthetic artifact:end to the completed delivery set.
+            for (const ev of parser.flush()) {
+              if (ev.type === 'artifact:chunk') {
+                liveHtml += ev.delta;
+                setArtifact((prev) => artifactWithHtml(prev, ev.identifier, liveHtml));
+              } else if (ev.type === 'artifact:end') {
+                setArtifact((prev) => (
+                  prev ? artifactWithHtml(prev, ev.identifier, ev.fullContent) : null
+                ));
+              }
+            }
+
+            const standaloneReplayArtifact = completedReplayArtifacts.length === 0
+              ? artifactFromStandaloneHtml(replayedContent)
+              : null;
+            const replayArtifacts = completedReplayArtifacts.length > 0
+              ? completedReplayArtifacts
+              : standaloneReplayArtifact
+                ? [standaloneReplayArtifact]
+                : [];
+            const duplicateReplayArtifact = findDuplicateArtifactDeclaration(replayArtifacts);
+            if (incompleteReplayArtifact || replayArtifacts.length > 0) {
+              const receipt = status.artifactDelivery;
+              const receiptNames = new Set(
+                receipt?.status === 'succeeded'
+                  ? receipt.files
+                    .filter((file) => (
+                      file.saved
+                      && file.readBack
+                      && (!/\.html?$/i.test(file.name) || file.previewReady === true)
+                    ))
+                    .map((file) => file.name)
+                  : [],
+              );
+              const expectedNames = replayArtifacts.map(declaredArtifactFileName);
+              const missingReceipt = expectedNames.filter((name) => !receiptNames.has(name));
+              if (
+                incompleteReplayArtifact
+                || duplicateReplayArtifact
+                || receipt?.status !== 'succeeded'
+                || missingReceipt.length > 0
+              ) {
+                const detail = incompleteReplayArtifact
+                  ? 'The recovered response ended before every artifact envelope was complete.'
+                  : duplicateReplayArtifact
+                    ? duplicateReplayArtifact
+                    : missingReceipt.length > 0
+                      ? `Recovered artifact delivery is missing verified receipt${missingReceipt.length === 1 ? '' : 's'}: ${missingReceipt.join(', ')}.`
+                      : 'The previous document run ended before host save/readback/preview delivery was acknowledged.';
+                updateMessageById(
+                  message.id,
+                  (prev) => ({
+                    ...prev,
+                    content: replayedContent,
+                    runStatus: 'failed',
+                    endedAt: prev.endedAt ?? Date.now(),
+                    events: [
+                      ...(prev.events ?? []),
+                      { kind: 'status', label: 'artifact_delivery_failed', detail },
+                    ],
+                  }),
+                  true,
+                  { telemetryFinalized: true },
+                );
+                completedReattachRunsRef.current.add(runId);
+                continue;
+              }
+
+              const nextFiles = await refreshProjectFiles();
+              const deliveredFiles = nextFiles.filter((file) => receiptNames.has(file.name));
+              if (deliveredFiles.length !== receiptNames.size) {
+                updateMessageById(
+                  message.id,
+                  (prev) => ({
+                    ...prev,
+                    content: replayedContent,
+                    runStatus: 'failed',
+                    endedAt: prev.endedAt ?? Date.now(),
+                    events: [
+                      ...(prev.events ?? []),
+                      {
+                        kind: 'status',
+                        label: 'artifact_delivery_failed',
+                        detail: 'A previously acknowledged artifact file is no longer present in the project.',
+                      },
+                    ],
+                  }),
+                  true,
+                  { telemetryFinalized: true },
+                );
+                completedReattachRunsRef.current.add(runId);
+                continue;
+              }
+              const htmlToOpen = selectAutoOpenProducedHtml(deliveredFiles);
+              if (htmlToOpen) requestOpenFile(htmlToOpen);
+              updateMessageById(
+                message.id,
+                (prev) => ({
+                  ...prev,
+                  content: replayedContent,
+                  producedFiles: deliveredFiles,
+                  runStatus: resolveSucceededRunStatus(prev.runStatus),
+                  endedAt: prev.endedAt ?? Date.now(),
+                }),
+                true,
+                { telemetryFinalized: true },
+              );
+              await auditDesignSystemWorkspaceAfterRun(message.id);
+              completedReattachRunsRef.current.add(runId);
+              onProjectsRefresh();
+              continue;
             }
 
             updateMessageById(
@@ -3249,7 +3654,7 @@ export function ProjectView({
         const cancelController = new AbortController();
         reattachControllersRef.current.set(runId, controller);
         reattachCancelControllersRef.current.set(runId, cancelController);
-        if (!isTerminalRunStatus(status.status)) {
+        if (!isTerminalRunStatus(status.status) || interruptedArtifactDeliveryRecovery) {
           abortRef.current = controller;
           cancelRef.current = cancelController;
           markStreamingConversation(reattachConversationId);
@@ -3280,6 +3685,8 @@ export function ProjectView({
         const parser = createArtifactParser();
         let parsedArtifact: Artifact | null = null;
         let liveHtml = '';
+        const completedReattachedArtifacts: Artifact[] = [];
+        let reattachedRunWasCanceled = status.status === 'canceled';
         let replayedContent = needsFullReplay ? '' : message.content;
         let replayedEvents: AgentEvent[] = needsFullReplay ? [] : [...(message.events ?? [])];
         const applyContentDelta = (delta: string) => {
@@ -3319,6 +3726,7 @@ export function ProjectView({
                     title: '',
                     html: ev.fullContent,
                   };
+              completedReattachedArtifacts.push({ ...parsedArtifact });
               setArtifact((prev) => (prev ? { ...prev, html: ev.fullContent } : null));
             }
           }
@@ -3336,12 +3744,14 @@ export function ProjectView({
         const unregisterTextBuffer = () => {
           reattachTextBuffersRef.current.delete(textBuffer);
         };
+        let artifactRecoveryOwnsCleanup = false;
 
         void reattachDaemonRun({
           runId,
           signal: controller.signal,
           cancelSignal: cancelController.signal,
           initialLastEventId: needsFullReplay ? null : message.lastRunEventId ?? null,
+          allowArtifactDeliveryRecovery: interruptedArtifactDeliveryRecovery,
           handlers: {
             onDelta: (delta) => {
               replayedContent += delta;
@@ -3359,15 +3769,23 @@ export function ProjectView({
               // the message) — only release this run's bookkeeping. See the
               // streamViaDaemon onDone for the ownership rationale.
               const runMayFinalize =
-                !supersededRunsRef.current.has(controller);
+                !reattachedRunWasCanceled
+                && !supersededRunsRef.current.has(controller);
               if (runMayFinalize) textBuffer.flush();
               textBuffer.cancel();
               unregisterTextBuffer();
-              completedReattachRunsRef.current.add(runId);
-              reattachControllersRef.current.delete(runId);
-              reattachCancelControllersRef.current.delete(runId);
-              clearCurrentRunStreamingMarker(reattachConversationId, controller, cancelController);
-              if (!runMayFinalize) return;
+              const incompleteReattachedArtifact = parser.hasIncompleteArtifactEnvelope();
+              if (!runMayFinalize) {
+                completedReattachRunsRef.current.add(runId);
+                reattachControllersRef.current.delete(runId);
+                reattachCancelControllersRef.current.delete(runId);
+                clearCurrentRunStreamingMarker(
+                  reattachConversationId,
+                  controller,
+                  cancelController,
+                );
+                return;
+              }
               for (const ev of parser.flush()) {
                 if (ev.type === 'artifact:end') {
                   parsedArtifact = parsedArtifact
@@ -3380,6 +3798,119 @@ export function ProjectView({
                   setArtifact((prev) => (prev ? { ...prev, html: ev.fullContent } : null));
                 }
               }
+              if (interruptedArtifactDeliveryRecovery) {
+                artifactRecoveryOwnsCleanup = true;
+                const recoveryController = new AbortController();
+                artifactRecoveryControllersRef.current.set(runId, recoveryController);
+                artifactRecoveryConversationCountsRef.current.set(
+                  reattachConversationId,
+                  (artifactRecoveryConversationCountsRef.current.get(reattachConversationId) ?? 0) + 1,
+                );
+                const abortRecovery = () => recoveryController.abort();
+                cancelController.signal.addEventListener('abort', abortRecovery, { once: true });
+                void (async () => {
+                  try {
+                    if (incompleteReattachedArtifact) {
+                      throw new Error(
+                        'The recovered response ended before every artifact envelope was complete.',
+                      );
+                    }
+                    const standalone = completedReattachedArtifacts.length === 0
+                      ? artifactFromStandaloneHtml(replayedContent)
+                      : null;
+                    const replayArtifacts = completedReattachedArtifacts.length > 0
+                      ? completedReattachedArtifacts
+                      : standalone
+                        ? [standalone]
+                        : [];
+                    const produced = await deliverRecoveredRunArtifacts({
+                      message,
+                      runId,
+                      initialStatus: status,
+                      sourceText: replayedContent,
+                      artifacts: replayArtifacts,
+                      signal: recoveryController.signal,
+                    });
+                    if (recoveryController.signal.aborted) {
+                      throw new DOMException('Artifact recovery was canceled', 'AbortError');
+                    }
+                    setError(null);
+                    updateMessageById(
+                      message.id,
+                      (prev) => ({
+                        ...prev,
+                        content: needsFullReplay ? replayedContent : prev.content,
+                        events: needsFullReplay ? replayedEvents : prev.events,
+                        producedFiles: produced,
+                        runStatus: 'succeeded',
+                        endedAt: prev.endedAt ?? Date.now(),
+                      }),
+                      true,
+                    );
+                    await auditDesignSystemWorkspaceAfterRun(message.id);
+                    onProjectsRefresh();
+                  } catch (error) {
+                    const canceled =
+                      recoveryController.signal.aborted
+                      || (error as Error).name === 'AbortError';
+                    const detail = error instanceof Error ? error.message : String(error);
+                    updateMessageById(
+                      message.id,
+                      (prev) => ({
+                        ...prev,
+                        content: needsFullReplay ? replayedContent : prev.content,
+                        events: canceled
+                          ? (needsFullReplay ? replayedEvents : prev.events)
+                          : [
+                              ...(needsFullReplay ? replayedEvents : prev.events ?? []),
+                              { kind: 'status', label: 'artifact_delivery_failed', detail },
+                            ],
+                        runStatus: canceled ? 'canceled' : 'failed',
+                        endedAt: prev.endedAt ?? Date.now(),
+                      }),
+                      true,
+                    );
+                    if (!canceled) setError(`The document could not be recovered: ${detail}`);
+                  } finally {
+                    cancelController.signal.removeEventListener('abort', abortRecovery);
+                    if (artifactRecoveryControllersRef.current.get(runId) === recoveryController) {
+                      artifactRecoveryControllersRef.current.delete(runId);
+                    }
+                    const remainingRecoveries = Math.max(
+                      0,
+                      (artifactRecoveryConversationCountsRef.current.get(reattachConversationId) ?? 1) - 1,
+                    );
+                    if (remainingRecoveries === 0) {
+                      artifactRecoveryConversationCountsRef.current.delete(reattachConversationId);
+                    } else {
+                      artifactRecoveryConversationCountsRef.current.set(
+                        reattachConversationId,
+                        remainingRecoveries,
+                      );
+                    }
+                    completedReattachRunsRef.current.add(runId);
+                    reattachControllersRef.current.delete(runId);
+                    reattachCancelControllersRef.current.delete(runId);
+                    clearCurrentRunStreamingMarker(
+                      reattachConversationId,
+                      controller,
+                      cancelController,
+                    );
+                    // The SSE promise may have already released abortRef /
+                    // cancelRef while browser-owned delivery was still
+                    // running. Clear the matching conversation marker even
+                    // when those transport refs are no longer present.
+                    if (remainingRecoveries === 0) clearStreamingMarker(reattachConversationId);
+                    persistMessageById(message.id, { telemetryFinalized: true });
+                    scheduleConversationMessageRefresh(reattachConversationId);
+                  }
+                })();
+                return;
+              }
+              completedReattachRunsRef.current.add(runId);
+              reattachControllersRef.current.delete(runId);
+              reattachCancelControllersRef.current.delete(runId);
+              clearCurrentRunStreamingMarker(reattachConversationId, controller, cancelController);
               updateMessageById(
                 message.id,
                 (prev) => ({
@@ -3476,6 +4007,23 @@ export function ProjectView({
                   void (async () => {
                     if (recoveredArtifactMessagesRef.current.has(message.id)) return;
                     const latestRunStatus = await fetchChatRunStatus(runId).catch(() => null);
+                    // Required delivery is a host-owned transaction. Never let
+                    // the legacy best-effort HTML recovery below bypass its
+                    // save/readback/exact-preview/ACK gate after an SSE error.
+                    // The terminal onDone recovery is the single owner when it
+                    // is available; otherwise leave the run failed and
+                    // retryable without writing anything.
+                    const formalDeliveryCapability = Boolean(readArtifactDeliveryCapability(runId));
+                    if (
+                      !latestRunStatus
+                      || (
+                        (formalDeliveryCapability || latestRunStatus.artifactDeliveryRequired === true)
+                        && latestRunStatus.artifactDelivery?.status !== 'succeeded'
+                      )
+                    ) {
+                      recoveredArtifactMessagesRef.current.add(message.id);
+                      return;
+                    }
                     const artifactToPersist = parsedArtifact?.html
                       ? parsedArtifact
                       : artifactFromStandaloneHtml(replayedContent);
@@ -3546,13 +4094,22 @@ export function ProjectView({
             },
           },
           onRunStatus: (runStatus) => {
+            if (runStatus === 'canceled') reattachedRunWasCanceled = true;
             textBuffer.flush();
             updateMessageById(
               message.id,
               (prev) => ({
                 ...prev,
-                runStatus,
-                endedAt: isTerminalRunStatus(runStatus) ? prev.endedAt ?? Date.now() : prev.endedAt,
+                runStatus:
+                  interruptedArtifactDeliveryRecovery && runStatus === 'succeeded'
+                    ? 'running'
+                    : runStatus,
+                endedAt:
+                  interruptedArtifactDeliveryRecovery && runStatus === 'succeeded'
+                    ? undefined
+                    : isTerminalRunStatus(runStatus)
+                      ? prev.endedAt ?? Date.now()
+                      : prev.endedAt,
               }),
               true,
             );
@@ -3598,6 +4155,12 @@ export function ProjectView({
             textBuffer.cancel();
             unregisterTextBuffer();
             if (persistTimer) clearProjectTimeout(persistTimer);
+            // Terminal replay can hand ownership to an async browser delivery
+            // phase (write/readback/preview/ACK). That owner keeps the run
+            // maps, Stop signal, and streaming marker alive until its own
+            // finally block settles. Releasing them here would re-enable the
+            // composer and allow a second reattach while delivery is pending.
+            if (artifactRecoveryOwnsCleanup) return;
             reattachControllersRef.current.delete(runId);
             reattachCancelControllersRef.current.delete(runId);
             clearActiveRunRefs(reattachConversationId, controller, cancelController);
@@ -3628,6 +4191,7 @@ export function ProjectView({
     refreshProjectFiles,
     readProjectHtml,
     persistArtifact,
+    deliverRecoveredRunArtifacts,
     requestOpenFile,
     onProjectsRefresh,
     scheduleProjectTimeout,
@@ -3661,7 +4225,8 @@ export function ProjectView({
           const parser = createArtifactParser();
           let parsedArtifact: Artifact | null = null;
           let liveHtml = '';
-          for (const ev of [...parser.feed(sourceText), ...parser.flush()]) {
+          const completedRecoveryArtifacts: Artifact[] = [];
+          for (const ev of parser.feed(sourceText)) {
             if (ev.type === 'artifact:start') {
               liveHtml = '';
               parsedArtifact = {
@@ -3679,17 +4244,46 @@ export function ProjectView({
               );
             } else if (ev.type === 'artifact:end') {
               parsedArtifact = artifactWithHtml(parsedArtifact, ev.identifier, ev.fullContent);
+              completedRecoveryArtifacts.push(parsedArtifact);
               setArtifact((prev) =>
                 prev ? artifactWithHtml(prev, ev.identifier, ev.fullContent) : null,
               );
             }
           }
+          const incompleteRecoveryArtifact = parser.hasIncompleteArtifactEnvelope();
+          // flush() is presentation-only for a truncated artifact and must not
+          // make it eligible for delayed persistence after the original turn
+          // correctly failed its delivery gate.
+          for (const ev of parser.flush()) {
+            if (ev.type === 'artifact:chunk') {
+              liveHtml += ev.delta;
+              setArtifact((prev) => artifactWithHtml(prev, ev.identifier, liveHtml));
+            } else if (ev.type === 'artifact:end') {
+              setArtifact((prev) => (
+                prev ? artifactWithHtml(prev, ev.identifier, ev.fullContent) : null
+              ));
+            }
+          }
+          if (
+            incompleteRecoveryArtifact
+            || findDuplicateArtifactDeclaration(completedRecoveryArtifacts)
+          ) {
+            recoveredArtifactMessagesRef.current.add(message.id);
+            continue;
+          }
 
-          const artifactToPersist = parsedArtifact?.html
-            ? parsedArtifact
+          const artifactToPersist = completedRecoveryArtifacts.length === 1
+            ? completedRecoveryArtifacts[0]!
             : artifactFromStandaloneHtml(sourceText);
           if (!artifactToPersist?.html) continue;
           const latestRunStatus = await fetchChatRunStatus(runId).catch(() => null);
+          if (
+            latestRunStatus?.artifactDeliveryRequired === true
+            && latestRunStatus.artifactDelivery?.status !== 'succeeded'
+          ) {
+            recoveredArtifactMessagesRef.current.add(message.id);
+            continue;
+          }
           let nextFiles = await refreshProjectFiles();
           if (cancelled) return;
           const beforeFileNames = new Set(
@@ -4168,9 +4762,12 @@ export function ProjectView({
       const parser = createArtifactParser();
       let parsedArtifact: Artifact | null = null;
       let parsedArtifactComplete = false;
+      const completedArtifacts: Artifact[] = [];
       let runWasCanceled = false;
       let liveHtml = '';
       let streamedText = '';
+      const daemonClientRequestId = config.mode === 'daemon' ? randomUUID() : null;
+      let daemonRunId: string | null = null;
 
       const updateAssistant = (updater: (prev: ChatMessage) => ChatMessage) => {
         setMessages((curr) =>
@@ -4315,6 +4912,7 @@ export function ProjectView({
                   title: '',
                   html: ev.fullContent,
                 };
+            completedArtifacts.push(parsedArtifact);
             setArtifact((prev) => (prev ? { ...prev, html: ev.fullContent } : null));
           }
         }
@@ -4330,8 +4928,17 @@ export function ProjectView({
 
       const controller = new AbortController();
       const cancelController = new AbortController();
+      const deliveryController = new AbortController();
       abortRef.current = controller;
       cancelRef.current = cancelController;
+      artifactDeliveryAbortRef.current?.abort();
+      artifactDeliveryAbortRef.current = deliveryController;
+      const releaseDeliveryController = () => {
+        if (artifactDeliveryAbortRef.current === deliveryController) {
+          artifactDeliveryAbortRef.current = null;
+          artifactDeliveryRunIdRef.current = null;
+        }
+      };
       const handlers = {
         onDelta: (delta: string) => {
           streamedText += delta;
@@ -4363,7 +4970,7 @@ export function ProjectView({
             },
           }));
         },
-        onDone: (fullText = '') => {
+        onDone: async (fullText = '') => {
           // The daemon delivers onDone even for a canceled run, so a run
           // superseded by a "send now" interrupt can still land here and must
           // not apply its completion side effects over the replacement. A run
@@ -4374,6 +4981,8 @@ export function ProjectView({
           const runMayFinalize =
             !supersededRunsRef.current.has(controller);
           if (!runMayFinalize) {
+            deliveryController.abort();
+            releaseDeliveryController();
             textBuffer.cancel();
             cancelSendTextBuffer();
             return;
@@ -4387,8 +4996,11 @@ export function ProjectView({
             // the save-failure branch rewrite the user's cancellation as a
             // model failure.
             updateAssistant((prev) => ({ ...prev, runStatus: 'canceled' }));
+            deliveryController.abort();
+            releaseDeliveryController();
             return;
           }
+          const hasIncompleteArtifactEnvelope = parser.hasIncompleteArtifactEnvelope();
           for (const ev of parser.flush()) {
             if (ev.type === 'artifact:end') {
               parsedArtifact = parsedArtifact
@@ -4433,19 +5045,90 @@ export function ProjectView({
               cancelController,
             );
             if (ownsCurrentRun) updateConversationLatestRun('failed', endedAt);
+            deliveryController.abort();
+            releaseDeliveryController();
             void refreshProjectFiles();
             onProjectsRefresh();
             return;
           }
           const finalText = streamedText || fullText;
-          const artifactToPersist = parsedArtifactComplete && parsedArtifact?.html
-            ? parsedArtifact
-            : artifactFromStandaloneHtml(finalText);
-          const receiptBoundArtifact = Boolean(artifactToPersist?.html);
+          const standaloneArtifact = completedArtifacts.length === 0
+            ? artifactFromStandaloneHtml(finalText)
+            : null;
+          const artifactsToPersist = completedArtifacts.length > 0
+            ? [...completedArtifacts]
+            : standaloneArtifact
+              ? [standaloneArtifact]
+              : [];
+          const receiptBoundArtifact = artifactsToPersist.length > 0;
+          const userDeclaredDeliveryFiles = extractExplicitDeliverableFileNames(prompt);
+          const declaredDeliveryFiles = [...new Set([
+            ...userDeclaredDeliveryFiles,
+            ...extractExplicitDeliverableFileNames(stripAllArtifactBlocks(finalText)),
+          ])];
           const clarificationFormEmitted = Boolean(findFirstQuestionForm(finalText));
+          // A form is normally a file-free clarification, but the daemon is
+          // authoritative about native Write/Edit and live-artifact side
+          // effects that happened before that form. Do not let the rendered
+          // markup erase a required save/readback/preview receipt. If the
+          // local status cannot be read, retain the provisional requirement
+          // and fail closed rather than painting an unverified file write as
+          // a successful clarification.
+          const clarificationStillRequiresDelivery =
+            config.mode === 'daemon'
+            && artifactDeliveryExpected
+            && clarificationFormEmitted
+            && Boolean(daemonRunId)
+              ? (await fetchChatRunStatus(daemonRunId!).catch(() => null))
+                  ?.artifactDeliveryRequired !== false
+              : false;
           const deliveryReceiptRequired =
-            artifactDeliveryExpected && !clarificationFormEmitted;
+            artifactDeliveryExpected
+            && (!clarificationFormEmitted || clarificationStillRequiresDelivery);
           const completionNeedsReceipt = receiptBoundArtifact || deliveryReceiptRequired;
+          if (
+            completionNeedsReceipt
+            && daemonRunId
+            && artifactDeliveryAbortRef.current === deliveryController
+          ) {
+            artifactDeliveryRunIdRef.current = daemonRunId;
+          }
+          const artifactDeliveryReceipts: Array<{
+            name: string;
+            saved: boolean;
+            readBack: boolean;
+            previewReady?: boolean;
+          }> = [];
+          let completedDeliveryProducedFiles: ProjectFile[] | null = null;
+          const acknowledgeDaemonDelivery = async (
+            status: 'succeeded' | 'failed',
+            error?: string,
+          ): Promise<{ ok: boolean; authoritativeSuccess: boolean }> => {
+            if (
+              config.mode !== 'daemon'
+              || !artifactDeliveryExpected
+              || !daemonRunId
+              || !daemonClientRequestId
+            ) return { ok: true, authoritativeSuccess: false };
+            const acknowledgment = await acknowledgeChatRunArtifactDelivery(daemonRunId!, {
+                clientRequestId: daemonClientRequestId,
+                status,
+                files: artifactDeliveryReceipts,
+                ...(error ? { error } : {}),
+              }, { signal: deliveryController.signal });
+            if (acknowledgment?.reason === 'run-canceled') {
+              runWasCanceled = true;
+              forgetArtifactDeliveryCapability(daemonRunId);
+              return { ok: false, authoritativeSuccess: false };
+            }
+            const authoritativeSuccess =
+              acknowledgment?.run.artifactDelivery?.status === 'succeeded';
+            if (authoritativeSuccess) forgetArtifactDeliveryCapability(daemonRunId);
+            return {
+              ok: acknowledgment?.applied === true || authoritativeSuccess,
+              authoritativeSuccess,
+            };
+          };
           if (!completionNeedsReceipt) {
             const endedAt = Date.now();
             let finalRunStatus: ChatMessage['runStatus'] = 'succeeded';
@@ -4482,52 +5165,81 @@ export function ProjectView({
           // and attach the new files to the assistant message as download
           // chips.
           void (async () => {
+            if (hasIncompleteArtifactEnvelope) {
+              throw new Error('The response ended before every artifact envelope was complete.');
+            }
+            const duplicateArtifactDeclaration = findDuplicateArtifactDeclaration(
+              artifactsToPersist,
+            );
+            if (duplicateArtifactDeclaration) {
+              throw new Error(duplicateArtifactDeclaration);
+            }
             const initialFiles = completionNeedsReceipt
-              ? await waitForArtifactWriteReceipt((signal) => refreshProjectFiles(signal))
+              ? await waitForArtifactWriteReceipt(
+                  (signal) => refreshProjectFiles(signal),
+                  ARTIFACT_WRITE_RECEIPT_TIMEOUT_MS,
+                  deliveryController.signal,
+                )
               : await refreshProjectFiles();
             if (initialFiles === null) {
               throw new Error('Timed out while checking the project for the generated file.');
             }
             let nextFiles = initialFiles;
-            let artifactReceipt: ProjectFile | null = null;
-            if (artifactToPersist?.html) {
-              const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
-              const sameTurnHtmlWrite = await findSameTurnHtmlWriteForRecoveredArtifact({
-                artifactHtml: resolvePersistedArtifactHtml({
-                  artifactHtml: artifactToPersist.html,
-                  identifier: artifactToPersist.identifier,
-                  sourceText: finalText,
-                }),
-                producedFiles: producedBeforeFallback,
-                readProjectHtml,
-              });
-              if (sameTurnHtmlWrite) {
-                savedArtifactRef.current = sameTurnHtmlWrite.name;
-                requestOpenFile(sameTurnHtmlWrite.name);
-                artifactReceipt = sameTurnHtmlWrite;
+            const artifactReceipts: ProjectFile[] = [];
+            for (const artifactToPersist of artifactsToPersist) {
+              let artifactReceipt: ProjectFile | null = null;
+              if (artifactExtensionFor(artifactToPersist) === '.html') {
+                const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+                artifactReceipt = await findSameTurnHtmlWriteForRecoveredArtifact({
+                  artifactHtml: resolvePersistedArtifactHtml({
+                    artifactHtml: artifactToPersist.html,
+                    identifier: artifactToPersist.identifier,
+                    sourceText: finalText,
+                  }),
+                  producedFiles: producedBeforeFallback,
+                  readProjectHtml,
+                });
+              }
+              if (artifactReceipt) {
+                savedArtifactRef.current = artifactReceipt.name;
+                requestOpenFile(artifactReceipt.name);
               } else {
-                artifactReceipt = await persistArtifact(artifactToPersist, nextFiles, finalText);
+                artifactReceipt = await persistArtifact(
+                  artifactToPersist,
+                  nextFiles,
+                  finalText,
+                  { signal: deliveryController.signal },
+                );
+                if (!artifactReceipt) {
+                  throw new Error(
+                    `No host save receipt was returned for "${declaredArtifactFileName(artifactToPersist)}".`,
+                  );
+                }
                 const refreshedFiles = await waitForArtifactWriteReceipt(
                   (signal) => refreshProjectFiles(signal),
+                  ARTIFACT_WRITE_RECEIPT_TIMEOUT_MS,
+                  deliveryController.signal,
                 );
                 if (refreshedFiles === null) {
                   throw new Error('Timed out while confirming the saved project file.');
                 }
                 nextFiles = refreshedFiles;
               }
+              if (!artifactReceipts.some((file) => file.name === artifactReceipt.name)) {
+                artifactReceipts.push(artifactReceipt);
+              }
             }
             let produced = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
             const touched = computeTouchedProjectFiles(preTurnProjectFiles, nextFiles) ?? [];
-            if (
-              artifactReceipt
-              && !produced.some((file) => file.name === artifactReceipt?.name)
-            ) {
-              produced = [...produced, artifactReceipt];
+            for (const artifactReceipt of artifactReceipts) {
+              if (!produced.some((file) => file.name === artifactReceipt.name)) {
+                produced = [...produced, artifactReceipt];
+              }
             }
             const producedHtmlToOpen = selectAutoOpenProducedHtml(produced);
             if (producedHtmlToOpen) requestOpenFile(producedHtmlToOpen);
             const touchedHtmlToOpen = selectAutoOpenProducedHtml(touched);
-            const previewReceiptFile = artifactReceipt
+            const previewReceiptFile = artifactReceipts.find((file) => file.kind === 'html')
               ?? (producedHtmlToOpen
                 ? nextFiles.find((file) => file.name === producedHtmlToOpen) ?? null
                 : null)
@@ -4536,58 +5248,71 @@ export function ProjectView({
                 : null)
               ?? touched.at(-1)
               ?? null;
-            const hasDeliveryReceipt = previewReceiptFile !== null;
-            if (completionNeedsReceipt && !hasDeliveryReceipt) {
-              const endedAt = Date.now();
-              const canceled = runWasCanceled;
-              setMessages((curr) => {
-                const updated = curr.map((m) =>
-                  m.id === assistantId
-                    ? {
-                        ...m,
-                        endedAt,
-                        runStatus: canceled || m.runStatus === 'canceled'
-                          ? 'canceled' as const
-                          : 'failed' as const,
-                        events: canceled
-                          ? m.events
-                          : [
-                              ...(m.events ?? []),
-                              {
-                                kind: 'status' as const,
-                                label: 'artifact_delivery_failed',
-                                detail: 'No same-turn project file change or host save receipt was produced.',
-                              },
-                            ],
-                      }
-                    : m,
-                );
-                const finalized = updated.find((m) => m.id === assistantId);
-                if (finalized) persistMessage(finalized, { telemetryFinalized: true });
-                return updated;
-              });
-              if (!canceled && runCommentAttachments.length > 0) {
-                void patchAttachedStatuses(runCommentAttachments, 'failed');
-              }
-              const ownsCurrentRun = clearCurrentRunStreamingMarker(
-                runConversationId,
-                controller,
-                cancelController,
-              );
-              if (ownsCurrentRun) updateConversationLatestRun(canceled ? 'canceled' : 'failed', endedAt);
-              if (!canceled) {
-                setError('The document turn did not produce a saved project file. Retry the request; MonoField did not mark it as complete.');
-              }
-              return;
-            }
-            if (
-              completionNeedsReceipt
-              && previewReceiptFile
-              && !(await confirmProjectFilePreview(previewReceiptFile))
-            ) {
+            const changedReceiptFiles = uniqueProjectFiles([
+              ...artifactReceipts,
+              ...produced,
+              ...touched,
+            ]);
+            const deliveryReceiptFiles = selectArtifactDeliveryReceiptFiles({
+              changedFiles: changedReceiptFiles,
+              artifactReceiptFiles: artifactReceipts,
+              // Only the user's request may authorize a generic filesystem
+              // file as delivery evidence. The assistant's final prose can
+              // add an obligation (checked below), but cannot self-authorize
+              // an incidental source/data file by claiming it was created.
+              declaredFileNames: userDeclaredDeliveryFiles,
+            });
+            artifactDeliveryReceipts.push(...deliveryReceiptFiles.map((file) => ({
+              name: file.name,
+              saved: true,
+              readBack: false,
+              ...(file.kind === 'html' ? { previewReady: false } : {}),
+            })));
+            const missingDeclaredFiles = missingDeclaredDeliveryFiles(
+              declaredDeliveryFiles,
+              deliveryReceiptFiles,
+            );
+            if (missingDeclaredFiles.length > 0) {
               throw new Error(
-                `Saved file "${previewReceiptFile.name}" could not be opened and read back in the preview.`,
+                `Missing host save receipt for requested file${missingDeclaredFiles.length === 1 ? '' : 's'}: ${missingDeclaredFiles.join(', ')}.`,
               );
+            }
+            const hasDeliveryReceipt = deliveryReceiptFiles.length > 0;
+            if (completionNeedsReceipt && !hasDeliveryReceipt) {
+              throw new Error('No same-turn project file change or host save receipt was produced.');
+            }
+            if (completionNeedsReceipt) {
+              for (let index = 0; index < deliveryReceiptFiles.length; index += 1) {
+                const receiptFile = deliveryReceiptFiles[index]!;
+                const readback = await confirmProjectFileReadback(
+                  receiptFile,
+                  deliveryController.signal,
+                );
+                if (!readback.ok) {
+                  throw new Error(`Saved file "${receiptFile.name}" failed validation: ${readback.reason}.`);
+                }
+                artifactDeliveryReceipts[index]!.readBack = true;
+              }
+              const htmlReceiptFiles = deliveryReceiptFiles
+                .filter((file) => file.kind === 'html')
+                .sort((left, right) => (
+                  left.name === previewReceiptFile?.name ? 1
+                    : right.name === previewReceiptFile?.name ? -1
+                      : 0
+                ));
+              for (const htmlFile of htmlReceiptFiles) {
+                if (!(await requestOpenFileAndWait(htmlFile.name, deliveryController.signal))) {
+                  throw new Error(
+                    `Saved file "${htmlFile.name}" did not finish loading in the preview.`,
+                  );
+                }
+                const receipt = artifactDeliveryReceipts.find((entry) => entry.name === htmlFile.name);
+                if (receipt) receipt.previewReady = true;
+              }
+              completedDeliveryProducedFiles = produced;
+              if (!(await acknowledgeDaemonDelivery('succeeded')).ok) {
+                throw new Error('Timed out while confirming document delivery with the local runtime.');
+              }
             }
             if (completionNeedsReceipt) setError(null);
             const artifactEndedAt = completionNeedsReceipt ? Date.now() : undefined;
@@ -4628,11 +5353,46 @@ export function ProjectView({
               }
             }
             await auditDesignSystemWorkspaceAfterRun(assistantId);
-          })().catch((err) => {
+          })().catch(async (err) => {
             if (!completionNeedsReceipt) return;
             const endedAt = Date.now();
             const detail = err instanceof Error ? err.message : String(err);
-            const canceled = runWasCanceled;
+            let canceled = runWasCanceled || deliveryController.signal.aborted;
+            let authoritativeSuccess = false;
+            if (!canceled) {
+              const negativeAcknowledgment = await acknowledgeDaemonDelivery('failed', detail)
+                .catch(() => ({ ok: false, authoritativeSuccess: false }));
+              authoritativeSuccess = negativeAcknowledgment.authoritativeSuccess;
+              // The daemon can race this negative receipt with an explicit
+              // cancellation. Sample cancellation again after the await so a
+              // run-canceled acknowledgment can never be painted as failed.
+              canceled = runWasCanceled || deliveryController.signal.aborted;
+            }
+            if (authoritativeSuccess && completedDeliveryProducedFiles) {
+              const recoveredAt = Date.now();
+              setError(null);
+              updateMessageById(
+                assistantId,
+                (prev) => ({
+                  ...prev,
+                  producedFiles: completedDeliveryProducedFiles ?? prev.producedFiles,
+                  endedAt: recoveredAt,
+                  runStatus: resolveSucceededRunStatus(prev.runStatus),
+                }),
+                true,
+                { telemetryFinalized: true },
+              );
+              if (runCommentAttachments.length > 0) {
+                void patchAttachedStatuses(runCommentAttachments, 'needs_review');
+              }
+              const ownsCurrentRun = clearCurrentRunStreamingMarker(
+                runConversationId,
+                controller,
+                cancelController,
+              );
+              if (ownsCurrentRun) updateConversationLatestRun('succeeded', recoveredAt);
+              return;
+            }
             updateMessageById(
               assistantId,
               (prev) => ({
@@ -4659,6 +5419,8 @@ export function ProjectView({
             );
             if (ownsCurrentRun) updateConversationLatestRun(canceled ? 'canceled' : 'failed', endedAt);
             if (!canceled) setError(`The document could not be saved: ${detail}`);
+          }).finally(() => {
+            releaseDeliveryController();
           });
           onProjectsRefresh();
         },
@@ -4676,6 +5438,8 @@ export function ProjectView({
           textBuffer.flush();
           textBuffer.cancel();
           cancelSendTextBuffer();
+          deliveryController.abort();
+          releaseDeliveryController();
           if (runMayFinalize) {
             setError(err.message);
             appendAssistantErrorEvent(assistantId, err.message, errorCode);
@@ -4782,7 +5546,7 @@ export function ProjectView({
           projectId: project.id,
           conversationId: runConversationId,
           assistantMessageId: assistantId,
-          clientRequestId: randomUUID(),
+          clientRequestId: daemonClientRequestId!,
           skillId: project.skillId ?? null,
           skillIds: Array.isArray(meta?.skillIds) ? meta.skillIds : [],
           context: runContext,
@@ -4802,6 +5566,10 @@ export function ProjectView({
           locale,
           ...(runAnalyticsHints ? { analyticsHints: runAnalyticsHints } : {}),
           onRunCreated: (runId) => {
+            daemonRunId = runId;
+            if (artifactDeliveryExpected) {
+              rememberArtifactDeliveryCapability(runId, daemonClientRequestId!);
+            }
             const pinnedAssistant = {
               ...latestAssistantMsg,
               runId,
@@ -4822,12 +5590,16 @@ export function ProjectView({
             // and clear its marker while the artifact was still sitting in the
             // RAF/250ms buffer, then a failed save looked like a completed run.
             if (runStatus === 'succeeded') textBuffer.flush();
-            const clarificationFormEmitted = Boolean(findFirstQuestionForm(streamedText));
             const awaitingArtifactReceipt =
               runStatus === 'succeeded'
               && (
                 Boolean(parsedArtifactComplete && parsedArtifact?.html)
-                || (artifactDeliveryExpected && !clarificationFormEmitted)
+                // Keep daemon Docs turns non-terminal until onDone checks the
+                // authoritative artifactDeliveryRequired flag. This avoids a
+                // transient false-success frame for Write -> question-form
+                // turns, while pure clarification turns settle immediately
+                // after that local status check.
+                || artifactDeliveryExpected
               );
             const visibleRunStatus: ChatMessage['runStatus'] = awaitingArtifactReceipt
               ? 'running'
@@ -5081,7 +5853,8 @@ export function ProjectView({
       refreshProjectFiles,
       refreshLiveArtifacts,
       readProjectHtml,
-      confirmProjectFilePreview,
+      confirmProjectFileReadback,
+      requestOpenFileAndWait,
       requestOpenFile,
       persistMessage,
       persistMessageById,
@@ -5121,6 +5894,17 @@ export function ProjectView({
     }
     cancelSendTextBuffer(true);
     cancelReattachTextBuffers(true);
+    const artifactDeliveryRunId = artifactDeliveryRunIdRef.current;
+    artifactDeliveryAbortRef.current?.abort();
+    artifactDeliveryAbortRef.current = null;
+    artifactDeliveryRunIdRef.current = null;
+    if (artifactDeliveryRunId) void cancelChatRun(artifactDeliveryRunId);
+    for (const [runId, controller] of artifactRecoveryControllersRef.current) {
+      controller.abort();
+      void cancelChatRun(runId);
+    }
+    artifactRecoveryControllersRef.current.clear();
+    artifactRecoveryConversationCountsRef.current.clear();
     cancelRef.current?.abort();
     cancelRef.current = null;
     for (const controller of reattachCancelControllersRef.current.values()) {
@@ -7317,9 +8101,10 @@ export function ProjectView({
   );
 }
 
-function artifactExtensionFor(art: Artifact): '.html' | '.jsx' | '.tsx' {
+function artifactExtensionFor(art: Artifact): '.html' | '.json' | '.jsx' | '.tsx' {
   const type = (art.artifactType || '').toLowerCase();
   const identifier = (art.identifier || '').toLowerCase();
+  if (type.includes('json') || identifier.endsWith('.json')) return '.json';
   if (type.includes('tsx') || identifier.endsWith('.tsx')) return '.tsx';
   if (type.includes('jsx') || type.includes('react') || identifier.endsWith('.jsx')) {
     return '.jsx';
@@ -7328,13 +8113,189 @@ function artifactExtensionFor(art: Artifact): '.html' | '.jsx' | '.tsx' {
 }
 
 function artifactBaseNameFor(art: Artifact): string {
+  const extension = artifactExtensionFor(art);
+  const artifactName = art.identifier || art.title || 'artifact';
+  const rawName = artifactName.toLowerCase().endsWith(extension)
+    ? artifactName.slice(0, -extension.length)
+    : artifactName;
   return (
-    (art.identifier || art.title || 'artifact')
+    rawName
       .toLowerCase()
       .replace(/[^a-z0-9_-]+/g, '-')
       .replace(/^-+|-+$/g, '')
       .slice(0, 60) || 'artifact'
   );
+}
+
+export function declaredArtifactFileName(artifact: Artifact): string {
+  return `${artifactBaseNameFor(artifact)}${artifactExtensionFor(artifact)}`;
+}
+
+/**
+ * A single model response may declare several completed artifact envelopes,
+ * but each declaration must map to a distinct identity and output file. If
+ * two envelopes collide, persisting them sequentially would reuse
+ * `savedArtifactRef` (or deduplicate the receipt list) and falsely acknowledge
+ * both artifacts from one file.
+ */
+export function findDuplicateArtifactDeclaration(
+  artifacts: readonly Artifact[],
+): string | null {
+  const identifiers = new Set<string>();
+  const outputNames = new Set<string>();
+  for (const artifact of artifacts) {
+    const outputName = declaredArtifactFileName(artifact);
+    const normalizedOutputName = normalizeDeliveryFileName(outputName);
+    if (outputNames.has(normalizedOutputName)) {
+      return `Duplicate artifact output filename "${outputName}" was declared in one response.`;
+    }
+    outputNames.add(normalizedOutputName);
+
+    const identifier = artifact.identifier.trim().toLowerCase();
+    if (identifier && identifiers.has(identifier)) {
+      return `Duplicate artifact identifier "${artifact.identifier}" was declared in one response.`;
+    }
+    if (identifier) identifiers.add(identifier);
+  }
+  return null;
+}
+
+const EXPLICIT_DELIVERABLE_FILE_RE = /(?:^|[\s"'`([{,:+])((?:[a-z0-9_.-]+\/)*[a-z0-9_.-]+\.(?:html?|json|jsx|tsx|md|txt|pdf|pptx|docx|xlsx))(?![a-z0-9_-]|\.[a-z0-9])/gi;
+const ENGLISH_DELIVERABLE_VERB_RE = /\b(?:create(?:d)?|generate(?:d)?|produce(?:d)?|deliver(?:ed)?|save(?:d)?|writ(?:e|ten)|export(?:ed)?|include(?:d)?|return(?:ed)?|make|made)\b/i;
+const KOREAN_DELIVERABLE_VERB_RE = /(?:만들|생성|작성|저장|내보내|산출|포함)/i;
+const KOREAN_INPUT_BOUNDARY_RE = /(?:읽고|참고(?:해서|하고)?|분석(?:해서|하고)?)/gi;
+
+/**
+ * Extract only explicitly named output files from clauses that ask for a
+ * deliverable. This deliberately ignores incidental source-file mentions so
+ * a request such as "read data.json, then create index.html" does not require
+ * the input file to change before the turn can complete.
+ */
+export function extractExplicitDeliverableFileNames(prompt: string): string[] {
+  const clauses = prompt.split(/\n+|(?<=[.!?。！？])\s+/);
+  const names = new Set<string>();
+  for (const clause of clauses) {
+    const englishVerb = ENGLISH_DELIVERABLE_VERB_RE.exec(clause);
+    const hasKoreanVerb = KOREAN_DELIVERABLE_VERB_RE.test(clause);
+    if (!englishVerb && !hasKoreanVerb) continue;
+    // English requests conventionally name outputs after the imperative verb.
+    // Starting there avoids treating an input in "read data.json, then create
+    // index.html" as a promised output. Korean verbs commonly follow their
+    // object, so retain the complete Korean clause.
+    let deliverableClause = clause;
+    if (englishVerb && !hasKoreanVerb) {
+      deliverableClause = clause.slice(englishVerb.index);
+    } else if (hasKoreanVerb) {
+      KOREAN_INPUT_BOUNDARY_RE.lastIndex = 0;
+      let boundaryEnd = 0;
+      for (
+        let boundary = KOREAN_INPUT_BOUNDARY_RE.exec(clause);
+        boundary;
+        boundary = KOREAN_INPUT_BOUNDARY_RE.exec(clause)
+      ) {
+        boundaryEnd = boundary.index + boundary[0].length;
+      }
+      if (boundaryEnd > 0) deliverableClause = clause.slice(boundaryEnd);
+    }
+    EXPLICIT_DELIVERABLE_FILE_RE.lastIndex = 0;
+    for (
+      let match = EXPLICIT_DELIVERABLE_FILE_RE.exec(deliverableClause);
+      match;
+      match = EXPLICIT_DELIVERABLE_FILE_RE.exec(deliverableClause)
+    ) {
+      const name = match[1]?.replace(/\\/g, '/').replace(/^\.\//, '');
+      if (name) names.add(name);
+    }
+  }
+  return [...names];
+}
+
+function stripAllArtifactBlocks(text: string): string {
+  let current = text;
+  while (true) {
+    const next = stripArtifact(current);
+    if (next === current) return current;
+    current = next;
+  }
+}
+
+function normalizeDeliveryFileName(name: string): string {
+  return name.replace(/\\/g, '/').replace(/^\.\//, '').toLowerCase();
+}
+
+export function missingDeclaredDeliveryFiles(
+  declaredNames: readonly string[],
+  receiptFiles: readonly Pick<ProjectFile, 'name' | 'path'>[],
+): string[] {
+  const receipts = new Set<string>();
+  for (const file of receiptFiles) {
+    receipts.add(normalizeDeliveryFileName(file.name));
+    if (file.path) receipts.add(normalizeDeliveryFileName(file.path));
+  }
+  return declaredNames.filter((name) => !receipts.has(normalizeDeliveryFileName(name)));
+}
+
+function uniqueProjectFiles(files: readonly ProjectFile[]): ProjectFile[] {
+  const unique = new Map<string, ProjectFile>();
+  for (const file of files) unique.set(normalizeDeliveryFileName(file.path || file.name), file);
+  return [...unique.values()];
+}
+
+const UNNAMED_PRIMARY_DELIVERY_KINDS = new Set<ProjectFile['kind']>([
+  'html',
+  'image',
+  'video',
+  'audio',
+  'pdf',
+  'document',
+  'presentation',
+  'spreadsheet',
+]);
+
+function isUnnamedPrimaryDeliveryFile(file: ProjectFile): boolean {
+  const normalizedPath = normalizeDeliveryFileName(file.path || file.name);
+  const baseName = normalizedPath.split('/').at(-1) ?? normalizedPath;
+  if (!baseName || baseName.startsWith('.') || baseName.endsWith('.log')) return false;
+  if (UNNAMED_PRIMARY_DELIVERY_KINDS.has(file.kind)) return true;
+  return file.kind === 'text' && /\.(?:md|markdown)$/iu.test(baseName);
+}
+
+/**
+ * A file-list diff is useful UI information, but it is not automatically
+ * proof that the requested document exists. Only host-persisted artifacts,
+ * exact explicitly requested filenames, manifest-backed outputs, or an
+ * unnamed primary document/media output may satisfy delivery. Incidental
+ * dotfiles, logs, source code, and generic JSON remain visible in Changes but
+ * cannot turn a document request into a successful delivery.
+ */
+export function selectArtifactDeliveryReceiptFiles({
+  changedFiles,
+  artifactReceiptFiles,
+  declaredFileNames,
+}: {
+  changedFiles: readonly ProjectFile[];
+  artifactReceiptFiles: readonly ProjectFile[];
+  declaredFileNames: readonly string[];
+}): ProjectFile[] {
+  const artifactReceiptKeys = new Set(
+    artifactReceiptFiles.map((file) => normalizeDeliveryFileName(file.path || file.name)),
+  );
+  const declaredKeys = new Set(declaredFileNames.map(normalizeDeliveryFileName));
+  const allowUnnamedPrimary = declaredKeys.size === 0;
+  return uniqueProjectFiles([
+    ...artifactReceiptFiles,
+    ...changedFiles.filter((file) => {
+      const fileKeys = [file.name, file.path]
+        .filter((value): value is string => Boolean(value))
+        .map(normalizeDeliveryFileName);
+      return (
+        fileKeys.some((key) => artifactReceiptKeys.has(key))
+        || fileKeys.some((key) => declaredKeys.has(key))
+        || Boolean(file.artifactManifest)
+        || (allowUnnamedPrimary && isUnnamedPrimaryDeliveryFile(file))
+      );
+    }),
+  ]);
 }
 
 export function findExistingArtifactProjectFile(
@@ -7535,6 +8496,16 @@ function textContentFromAgentEvents(events?: AgentEvent[]): string {
     .filter((event): event is Extract<AgentEvent, { kind: 'text' }> => event.kind === 'text')
     .map((event) => event.text)
     .join('');
+}
+
+function precedingUserPrompt(messages: readonly ChatMessage[], assistantMessageId: string): string {
+  const assistantIndex = messages.findIndex((message) => message.id === assistantMessageId);
+  const start = assistantIndex >= 0 ? assistantIndex - 1 : messages.length - 1;
+  for (let index = start; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role === 'user') return message.content;
+  }
+  return '';
 }
 
 const QUEUED_CHAT_SENDS_STORAGE_VERSION = 1;
@@ -7823,9 +8794,22 @@ export function isArtifactDeliveryExpectedForTurn({
 export async function waitForArtifactWriteReceipt<T>(
   operation: (signal: AbortSignal) => Promise<T | null>,
   timeoutMs = ARTIFACT_WRITE_RECEIPT_TIMEOUT_MS,
+  parentSignal?: AbortSignal,
 ): Promise<T | null> {
+  if (parentSignal?.aborted) return null;
   const controller = new AbortController();
   let timeout: ReturnType<typeof setTimeout> | null = null;
+  let resolveParentAbort: ((value: null) => void) | null = null;
+  const parentAbortPromise = parentSignal
+    ? new Promise<null>((resolve) => {
+        resolveParentAbort = resolve;
+      })
+    : null;
+  const onParentAbort = () => {
+    controller.abort();
+    resolveParentAbort?.(null);
+  };
+  parentSignal?.addEventListener('abort', onParentAbort, { once: true });
   try {
     const operationPromise = Promise.resolve()
       .then(() => operation(controller.signal))
@@ -7837,13 +8821,18 @@ export async function waitForArtifactWriteReceipt<T>(
       operationPromise,
       new Promise<null>((resolve) => {
         timeout = setTimeout(() => {
-          controller.abort();
+          controller.abort(new DOMException(
+            'Artifact delivery receipt timed out',
+            'TimeoutError',
+          ));
           resolve(null);
         }, timeoutMs);
       }),
+      ...(parentAbortPromise ? [parentAbortPromise] : []),
     ]);
   } finally {
     if (timeout) clearTimeout(timeout);
+    parentSignal?.removeEventListener('abort', onParentAbort);
     // A successful response has already been fully parsed; aborting here only
     // tears down any transport work that outlived its receipt promise. On the
     // timeout path this is idempotent and prevents a hung POST/GET from later

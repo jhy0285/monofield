@@ -4,10 +4,20 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { useEffect, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ProjectView } from '../../src/components/ProjectView';
+import {
+  extractExplicitDeliverableFileNames,
+  findDuplicateArtifactDeclaration,
+  ProjectView,
+  selectArtifactDeliveryReceiptFiles,
+} from '../../src/components/ProjectView';
 import { streamMessage } from '../../src/providers/anthropic';
 import type { StreamHandlers } from '../../src/providers/anthropic';
-import { streamViaDaemon } from '../../src/providers/daemon';
+import {
+  acknowledgeChatRunArtifactDelivery,
+  cancelChatRun,
+  fetchChatRunStatus,
+  streamViaDaemon,
+} from '../../src/providers/daemon';
 import {
   fetchProjectFilePreview,
   fetchProjectFileText,
@@ -33,7 +43,9 @@ import type {
 const chatPaneMockState = vi.hoisted(() => ({
   attachments: [] as ChatAttachment[],
   commentAttachments: [] as ChatCommentAttachment[],
+  prompt: 'Create a login page',
   deferOpenRequestAck: false,
+  openRequestAckSuccess: true,
   pendingOpenRequestAck: null as (() => void) | null,
 }));
 
@@ -46,7 +58,9 @@ vi.mock('../../src/providers/anthropic', () => ({
 }));
 
 vi.mock('../../src/providers/daemon', () => ({
-  fetchChatRunStatus: vi.fn(),
+  acknowledgeChatRunArtifactDelivery: vi.fn().mockResolvedValue({ ok: true, applied: true }),
+  cancelChatRun: vi.fn().mockResolvedValue({ id: 'run-1', status: 'canceled' }),
+  fetchChatRunStatus: vi.fn().mockResolvedValue(null),
   listActiveChatRuns: vi.fn().mockResolvedValue([]),
   listProjectRuns: vi.fn().mockResolvedValue([]),
   reattachDaemonRun: vi.fn(),
@@ -127,11 +141,17 @@ vi.mock('../../src/components/FileWorkspace', () => ({
     onOpenRequestApplied,
   }: {
     openRequest?: { name: string; nonce: number } | null;
-    onOpenRequestApplied?: (request: { name: string; nonce: number }) => void;
+    onOpenRequestApplied?: (
+      request: { name: string; nonce: number },
+      previewReady?: boolean,
+    ) => void;
   }) => {
     useEffect(() => {
       if (!openRequest) return;
-      const acknowledge = () => onOpenRequestApplied?.(openRequest);
+      const acknowledge = () => onOpenRequestApplied?.(
+        openRequest,
+        chatPaneMockState.openRequestAckSuccess,
+      );
       if (chatPaneMockState.deferOpenRequestAck) {
         chatPaneMockState.pendingOpenRequestAck = acknowledge;
         return;
@@ -151,6 +171,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     messages,
     onSend,
     onRetry,
+    onStop,
     error,
     projectHeader,
   }: {
@@ -161,6 +182,7 @@ vi.mock('../../src/components/ChatPane', () => ({
       commentAttachments: ChatCommentAttachment[],
     ) => void;
     onRetry?: (assistantMessage: ChatMessage) => void;
+    onStop?: () => void;
     error?: string | null;
     projectHeader?: ReactNode;
   }) => {
@@ -179,10 +201,11 @@ vi.mock('../../src/components/ChatPane', () => ({
         ) : null}
       <button
         type="button"
-        onClick={() => onSend('Create a login page', chatPaneMockState.attachments, chatPaneMockState.commentAttachments)}
+        onClick={() => onSend(chatPaneMockState.prompt, chatPaneMockState.attachments, chatPaneMockState.commentAttachments)}
       >
         send
       </button>
+      <button type="button" onClick={() => onStop?.()}>stop</button>
       {messages.map((message) => (
         <article key={message.id} data-testid={`message-${message.role}`}>
           <span>{message.content}</span>
@@ -202,6 +225,9 @@ vi.mock('../../src/components/ChatPane', () => ({
 
 const mockedStreamMessage = vi.mocked(streamMessage);
 const mockedStreamViaDaemon = vi.mocked(streamViaDaemon);
+const mockedAcknowledgeChatRunArtifactDelivery = vi.mocked(acknowledgeChatRunArtifactDelivery);
+const mockedCancelChatRun = vi.mocked(cancelChatRun);
+const mockedFetchChatRunStatus = vi.mocked(fetchChatRunStatus);
 const mockedFetchProjectFilePreview = vi.mocked(fetchProjectFilePreview);
 const mockedFetchProjectFileText = vi.mocked(fetchProjectFileText);
 const mockedFetchProjectFiles = vi.mocked(fetchProjectFiles);
@@ -277,15 +303,31 @@ describe('ProjectView API empty response handling', () => {
   beforeEach(() => {
     chatPaneMockState.attachments = [];
     chatPaneMockState.commentAttachments = [];
+    chatPaneMockState.prompt = 'Create a login page';
     chatPaneMockState.deferOpenRequestAck = false;
+    chatPaneMockState.openRequestAckSuccess = true;
     chatPaneMockState.pendingOpenRequestAck = null;
     mockedStreamMessage.mockReset();
     mockedStreamViaDaemon.mockReset();
+    mockedAcknowledgeChatRunArtifactDelivery.mockReset();
+    mockedAcknowledgeChatRunArtifactDelivery.mockResolvedValue({
+      ok: true,
+      applied: true,
+      run: { id: 'run-1', status: 'succeeded' },
+    } as never);
+    mockedCancelChatRun.mockReset();
+    mockedCancelChatRun.mockResolvedValue({ id: 'run-1', status: 'canceled' } as never);
+    mockedFetchChatRunStatus.mockReset();
+    mockedFetchChatRunStatus.mockResolvedValue(null);
     mockedFetchProjectFilePreview.mockReset();
     mockedFetchProjectFileText.mockReset();
     mockedFetchProjectFiles.mockReset();
     mockedFetchProjectFilePreview.mockResolvedValue(null);
-    mockedFetchProjectFileText.mockResolvedValue('<!doctype html><html><body>saved</body></html>');
+    mockedFetchProjectFileText.mockImplementation(async (_projectId, name) => (
+      name.toLowerCase().endsWith('.json')
+        ? '{"ok":true}'
+        : '<!doctype html><html><body>saved content with enough structure for delivery validation</body></html>'
+    ));
     mockedFetchProjectFiles.mockResolvedValue([]);
     mockedWriteProjectTextFile.mockResolvedValue({
       name: 'landing-page.html',
@@ -305,6 +347,51 @@ describe('ProjectView API empty response handling', () => {
     cleanup();
     vi.clearAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it('extracts promised output files without treating an input file as a receipt requirement', () => {
+    expect(extractExplicitDeliverableFileNames(
+      'Read source/data.json, then create index.html and critique.json.',
+    )).toEqual(['index.html', 'critique.json']);
+    expect(extractExplicitDeliverableFileNames(
+      'source/data.json을 읽고 index.html과 critique.json을 만들어줘.',
+    )).toEqual(['index.html', 'critique.json']);
+  });
+
+  it('rejects duplicate artifact identifiers and output filenames within one response', () => {
+    expect(findDuplicateArtifactDeclaration([
+      { identifier: 'same', artifactType: 'text/html', title: '', html: '<html></html>' },
+      { identifier: 'same', artifactType: 'application/json', title: '', html: '{}' },
+    ])).toContain('Duplicate artifact identifier "same"');
+    expect(findDuplicateArtifactDeclaration([
+      { identifier: 'Report', artifactType: 'text/html', title: '', html: '<html></html>' },
+      { identifier: 'report!', artifactType: 'text/html', title: '', html: '<html></html>' },
+    ])).toContain('Duplicate artifact output filename "report.html"');
+  });
+
+  it('keeps incidental changed files out of artifact delivery evidence', () => {
+    const artifact = {
+      name: 'dashboard.html',
+      path: 'dashboard.html',
+      kind: 'html',
+      mime: 'text/html',
+      size: 100,
+      mtime: 2,
+    } as const;
+    const incidental = {
+      name: '.gitignore',
+      path: '.gitignore',
+      kind: 'text',
+      mime: 'text/plain',
+      size: 10,
+      mtime: 2,
+    } as const;
+
+    expect(selectArtifactDeliveryReceiptFiles({
+      changedFiles: [incidental, artifact],
+      artifactReceiptFiles: [artifact],
+      declaredFileNames: [],
+    })).toEqual([artifact]);
   });
 
   it('marks an empty API completion as a soft no-output state instead of succeeded', async () => {
@@ -623,6 +710,322 @@ describe('ProjectView API empty response handling', () => {
     });
   });
 
+  it('lets Stop cancel a daemon run while host preview delivery is still pending', async () => {
+    const artifact =
+      '<artifact identifier="delivery-stop" type="text/html" title="Delivery Stop">' +
+      '<!doctype html><html><head><title>Delivery</title></head><body><main><h1>Pending preview</h1><p>Stop must remain available after the daemon stream ends.</p></main></body></html>' +
+      '</artifact>';
+    chatPaneMockState.deferOpenRequestAck = true;
+    mockedStreamViaDaemon.mockImplementation(async (options) => {
+      options.onRunCreated?.('run-delivery-stop');
+      options.handlers.onDelta(artifact);
+      options.onRunStatus?.('succeeded');
+      options.handlers.onDone('');
+    });
+    renderProjectView({
+      ...project,
+      metadata: { kind: 'prototype', workMode: 'creation' },
+    }, {
+      mode: 'daemon',
+      agentId: 'codex',
+      notifications: config.notifications,
+      agentModels: {},
+    } as AppConfig);
+
+    await sendTestPrompt();
+    await waitFor(() => expect(chatPaneMockState.pendingOpenRequestAck).not.toBeNull());
+    expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'stop' }));
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => message.runStatus === 'canceled')).toBe(true);
+    });
+    await waitFor(() => expect(mockedCancelChatRun).toHaveBeenCalledWith('run-delivery-stop'));
+    act(() => {
+      chatPaneMockState.pendingOpenRequestAck?.();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(hasSavedAssistantMessage((message) => message.runStatus === 'failed')).toBe(false);
+    expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(false);
+    expect(mockedAcknowledgeChatRunArtifactDelivery).not.toHaveBeenCalled();
+  });
+
+  it('requires a save receipt and readback for every explicitly requested artifact file', async () => {
+    chatPaneMockState.prompt = 'Create index.html and critique.json.';
+    const artifacts =
+      '<artifact identifier="index.html" type="text/html" title="Dashboard">' +
+      '<!doctype html><html><head><title>Dashboard</title></head><body><main><h1>Dashboard</h1><p>Complete deliverable.</p></main></body></html>' +
+      '</artifact>' +
+      '<artifact identifier="critique.json" type="application/json" title="Critique">' +
+      '{"summary":"Reviewed","issues":[]}' +
+      '</artifact>';
+    mockedWriteProjectTextFile.mockImplementation(async (_projectId, name) => ({
+      name,
+      path: name,
+      kind: name.endsWith('.html') ? 'html' : 'code',
+      mime: name.endsWith('.html') ? 'text/html' : 'application/json',
+      size: 1,
+      mtime: 2,
+    } as never));
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
+      handlers.onDelta(artifacts);
+      handlers.onDone('');
+    });
+    renderProjectView();
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(true);
+    });
+    expect(mockedWriteProjectTextFile.mock.calls.map((call) => call[1])).toEqual([
+      'index.html',
+      'critique.json',
+    ]);
+    expect(mockedFetchProjectFileText).toHaveBeenCalledWith(
+      project.id,
+      'index.html',
+      expect.objectContaining({ cache: 'no-store' }),
+    );
+    expect(mockedFetchProjectFileText).toHaveBeenCalledWith(
+      project.id,
+      'critique.json',
+      expect.objectContaining({ cache: 'no-store' }),
+    );
+  });
+
+  it('reports all host receipts and HTML preview readiness back to a daemon run', async () => {
+    chatPaneMockState.prompt = 'Create index.html and critique.json.';
+    const artifacts =
+      '<artifact identifier="index.html" type="text/html" title="Dashboard">' +
+      '<!doctype html><html><head><title>Dashboard</title></head><body><main><h1>Dashboard</h1><p>Complete daemon deliverable.</p></main></body></html>' +
+      '</artifact>' +
+      '<artifact identifier="critique.json" type="application/json" title="Critique">' +
+      '{"summary":"Reviewed","issues":[]}' +
+      '</artifact>';
+    mockedWriteProjectTextFile.mockImplementation(async (_projectId, name) => ({
+      name,
+      path: name,
+      kind: name.endsWith('.html') ? 'html' : 'code',
+      mime: name.endsWith('.html') ? 'text/html' : 'application/json',
+      size: 1,
+      mtime: 2,
+    } as never));
+    mockedStreamViaDaemon.mockImplementation(async (options) => {
+      options.onRunCreated?.('run-multi');
+      options.handlers.onDelta(artifacts);
+      options.onRunStatus?.('succeeded');
+      options.handlers.onDone('');
+    });
+    renderProjectView({
+      ...project,
+      metadata: { kind: 'prototype', workMode: 'creation' },
+    }, {
+      mode: 'daemon',
+      agentId: 'codex',
+      notifications: config.notifications,
+      agentModels: {},
+    } as AppConfig);
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(true);
+    });
+    expect(mockedAcknowledgeChatRunArtifactDelivery).toHaveBeenCalledWith(
+      'run-multi',
+      expect.objectContaining({
+        status: 'succeeded',
+        files: [
+          { name: 'index.html', saved: true, readBack: true, previewReady: true },
+          { name: 'critique.json', saved: true, readBack: true },
+        ],
+      }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it('rejects a closed malformed JSON artifact and fails the whole daemon delivery', async () => {
+    chatPaneMockState.prompt = 'Create index.html and critique.json.';
+    const artifacts =
+      '<artifact identifier="index.html" type="text/html" title="Dashboard">' +
+      '<!doctype html><html><head><title>Dashboard</title></head><body><main><h1>Dashboard</h1><p>Valid first artifact.</p></main></body></html>' +
+      '</artifact>' +
+      '<artifact identifier="critique.json" type="application/json" title="Critique">' +
+      '{"summary":"missing closing brace"' +
+      '</artifact>';
+    mockedWriteProjectTextFile.mockImplementation(async (_projectId, name) => ({
+      name,
+      path: name,
+      kind: name.endsWith('.html') ? 'html' : 'code',
+      mime: name.endsWith('.html') ? 'text/html' : 'application/json',
+      size: 1,
+      mtime: 2,
+    } as never));
+    mockedStreamViaDaemon.mockImplementation(async (options) => {
+      options.onRunCreated?.('run-malformed-json');
+      options.handlers.onDelta(artifacts);
+      options.onRunStatus?.('succeeded');
+      options.handlers.onDone('');
+    });
+    renderProjectView({
+      ...project,
+      metadata: { kind: 'prototype', workMode: 'creation' },
+    }, {
+      mode: 'daemon',
+      agentId: 'codex',
+      notifications: config.notifications,
+      agentModels: {},
+    } as AppConfig);
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => message.runStatus === 'failed')).toBe(true);
+    });
+    expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(false);
+    expect(mockedWriteProjectTextFile.mock.calls.map((call) => call[1])).toEqual(['index.html']);
+    expect(mockedAcknowledgeChatRunArtifactDelivery).toHaveBeenCalledWith(
+      'run-malformed-json',
+      expect.objectContaining({
+        status: 'failed',
+        error: expect.stringContaining('critique.json'),
+      }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it('fails closed before writing when two completed artifacts declare the same output file', async () => {
+    chatPaneMockState.prompt = 'Create critique.json.';
+    const artifacts =
+      '<artifact identifier="critique.json" type="application/json" title="First">' +
+      '{"summary":"first"}' +
+      '</artifact>' +
+      '<artifact identifier="critique.json" type="application/json" title="Second">' +
+      '{"summary":"second"}' +
+      '</artifact>';
+    mockedStreamViaDaemon.mockImplementation(async (options) => {
+      options.onRunCreated?.('run-duplicate-artifact');
+      options.handlers.onDelta(artifacts);
+      options.onRunStatus?.('succeeded');
+      options.handlers.onDone('');
+    });
+    renderProjectView({
+      ...project,
+      metadata: { kind: 'prototype', workMode: 'creation' },
+    }, {
+      mode: 'daemon',
+      agentId: 'codex',
+      notifications: config.notifications,
+      agentModels: {},
+    } as AppConfig);
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => (
+        message.runStatus === 'failed'
+        && message.events?.some((event) => (
+          event.kind === 'status'
+          && event.label === 'artifact_delivery_failed'
+          && event.detail?.includes('Duplicate artifact output filename "critique.json"')
+        )) === true
+      ))).toBe(true);
+    });
+    expect(mockedAcknowledgeChatRunArtifactDelivery).toHaveBeenCalledWith(
+      'run-duplicate-artifact',
+      expect.objectContaining({
+        status: 'failed',
+        files: [],
+        error: expect.stringContaining('Duplicate artifact output filename "critique.json"'),
+      }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(mockedWriteProjectTextFile).not.toHaveBeenCalled();
+  });
+
+  it('does not let one receipt satisfy an index.html plus critique.json request', async () => {
+    chatPaneMockState.prompt = 'Build the requested dashboard package.';
+    const declaration = 'Created index.html and critique.json.\n';
+    const artifact =
+      '<artifact identifier="index.html" type="text/html" title="Dashboard">' +
+      '<!doctype html><html><head><title>Dashboard</title></head><body><main><h1>Only one file</h1><p>The critique is missing.</p></main></body></html>' +
+      '</artifact>';
+    mockedWriteProjectTextFile.mockImplementation(async (_projectId, name) => ({
+      name,
+      path: name,
+      kind: 'html',
+      mime: 'text/html',
+      size: 1,
+      mtime: 2,
+    } as never));
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
+      handlers.onDelta(declaration + artifact);
+      handlers.onDone('');
+    });
+    renderProjectView();
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => (
+        message.runStatus === 'failed'
+        && message.events?.some(
+          (event) => event.kind === 'status'
+            && event.label === 'artifact_delivery_failed'
+            && event.detail?.includes('critique.json'),
+        ) === true
+      ))).toBe(true);
+    });
+    expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(false);
+  });
+
+  it('fails completion when the saved HTML preview reports a load failure', async () => {
+    const artifact =
+      '<artifact identifier="preview-failure" type="text/html" title="Preview Failure">' +
+      '<!doctype html><html><head><title>Preview Failure</title></head><body><main><h1>Saved</h1><p>But the preview could not load.</p></main></body></html>' +
+      '</artifact>';
+    chatPaneMockState.openRequestAckSuccess = false;
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
+      handlers.onDelta(artifact);
+      handlers.onDone('');
+    });
+    renderProjectView();
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => (
+        message.runStatus === 'failed'
+        && message.events?.some(
+          (event) => event.kind === 'status'
+            && event.label === 'artifact_delivery_failed'
+            && event.detail?.includes('did not finish loading in the preview'),
+        ) === true
+      ))).toBe(true);
+    });
+    expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(false);
+  });
+
   it('fails a saved artifact when the host cannot read it back for preview', async () => {
     const artifact =
       '<artifact identifier="readback-failure" type="text/html" title="Readback Failure">' +
@@ -645,12 +1048,12 @@ describe('ProjectView API empty response handling', () => {
 
     await waitFor(() => {
       expect(hasSavedAssistantMessage((message) => (
-        message.runStatus === 'failed'
-        && message.events?.some(
-          (event) => event.kind === 'status'
-            && event.label === 'artifact_delivery_failed'
-            && event.detail?.includes('could not be opened and read back'),
-        ) === true
+            message.runStatus === 'failed'
+            && message.events?.some(
+              (event) => event.kind === 'status'
+                && event.label === 'artifact_delivery_failed'
+                && event.detail?.includes('could not be read back'),
+            ) === true
       ))).toBe(true);
     });
     expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(false);
@@ -685,7 +1088,7 @@ describe('ProjectView API empty response handling', () => {
       ))).toBe(true);
     });
     expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(false);
-    expect(screen.getByText(/did not produce a saved project file/i)).toBeTruthy();
+    expect(screen.getAllByText(/No host save receipt was returned/i).length).toBeGreaterThan(0);
     expect(screen.getByTestId('file-workspace').dataset.openRequestName).toBe('');
   });
 
@@ -718,6 +1121,396 @@ describe('ProjectView API empty response handling', () => {
     expect(mockedWriteProjectTextFile).not.toHaveBeenCalled();
   });
 
+  it('does not accept a newly created .gitignore as a document delivery receipt', async () => {
+    const incidental = {
+      name: '.gitignore',
+      path: '.gitignore',
+      kind: 'text',
+      mime: 'text/plain',
+      size: 12,
+      mtime: 20,
+    };
+    mockedFetchProjectFiles.mockResolvedValueOnce([] as never).mockResolvedValue([incidental] as never);
+    mockedStreamViaDaemon.mockImplementation(async (options) => {
+      options.onRunCreated?.('run-incidental-dotfile');
+      options.handlers.onDelta('The requested dashboard is complete.');
+      options.onRunStatus?.('succeeded');
+      options.handlers.onDone('The requested dashboard is complete.');
+    });
+    renderProjectView({
+      ...project,
+      metadata: { kind: 'prototype', workMode: 'creation' },
+    }, {
+      mode: 'daemon',
+      agentId: 'codex',
+      notifications: config.notifications,
+      agentModels: {},
+    } as AppConfig);
+    await waitFor(() => expect(mockedFetchProjectFiles).toHaveBeenCalled());
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => message.runStatus === 'failed')).toBe(true);
+    });
+    expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(false);
+    expect(mockedAcknowledgeChatRunArtifactDelivery).toHaveBeenCalledWith(
+      'run-incidental-dotfile',
+      expect.objectContaining({ status: 'failed', files: [] }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it('keeps a Write-then-question-form turn on the delivery pipeline when the daemon requires a receipt', async () => {
+    const dashboard = {
+      name: 'dashboard.html',
+      path: 'dashboard.html',
+      kind: 'html',
+      mime: 'text/html',
+      size: 500,
+      mtime: 20,
+    };
+    mockedFetchProjectFiles.mockResolvedValueOnce([] as never).mockResolvedValue([dashboard] as never);
+    mockedFetchChatRunStatus.mockResolvedValue({
+      id: 'run-write-before-form',
+      projectId: project.id,
+      conversationId: 'conv-project-1',
+      assistantMessageId: 'assistant-write-before-form',
+      agentId: 'codex',
+      status: 'succeeded',
+      createdAt: 10,
+      updatedAt: 20,
+      exitCode: 0,
+      signal: null,
+      artifactDeliveryRequired: true,
+    } as never);
+    mockedStreamViaDaemon.mockImplementation(async (options) => {
+      options.onRunCreated?.('run-write-before-form');
+      options.handlers.onDelta(
+        'One more choice.\n<question-form id="direction">' +
+        '{"questions":[{"id":"tone","label":"Tone","type":"text"}]}' +
+        '</question-form>',
+      );
+      options.onRunStatus?.('succeeded');
+      options.handlers.onDone('');
+    });
+    renderProjectView({
+      ...project,
+      metadata: { kind: 'prototype', workMode: 'creation' },
+    }, {
+      mode: 'daemon',
+      agentId: 'codex',
+      notifications: config.notifications,
+      agentModels: {},
+    } as AppConfig);
+    await waitFor(() => expect(mockedFetchProjectFiles).toHaveBeenCalled());
+
+    await sendTestPrompt();
+
+    await waitFor(() => expect(mockedFetchChatRunStatus).toHaveBeenCalledWith(
+      'run-write-before-form',
+    ));
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(true);
+    });
+    expect(mockedAcknowledgeChatRunArtifactDelivery).toHaveBeenCalledWith(
+      'run-write-before-form',
+      expect.objectContaining({
+        status: 'succeeded',
+        files: [{ name: 'dashboard.html', saved: true, readBack: true, previewReady: true }],
+      }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it('settles a pure question-form turn without requesting a delivery receipt', async () => {
+    mockedFetchChatRunStatus.mockResolvedValue({
+      id: 'run-question-only',
+      projectId: project.id,
+      conversationId: 'conv-project-1',
+      assistantMessageId: 'assistant-question-only',
+      agentId: 'codex',
+      status: 'succeeded',
+      createdAt: 10,
+      updatedAt: 20,
+      exitCode: 0,
+      signal: null,
+      artifactDeliveryRequired: false,
+    } as never);
+    mockedStreamViaDaemon.mockImplementation(async (options) => {
+      options.onRunCreated?.('run-question-only');
+      options.handlers.onDelta(
+        '<question-form id="direction">' +
+        '{"questions":[{"id":"tone","label":"Tone","type":"text"}]}' +
+        '</question-form>',
+      );
+      options.onRunStatus?.('succeeded');
+      options.handlers.onDone('');
+    });
+    renderProjectView({
+      ...project,
+      metadata: { kind: 'prototype', workMode: 'creation' },
+    }, {
+      mode: 'daemon',
+      agentId: 'codex',
+      notifications: config.notifications,
+      agentModels: {},
+    } as AppConfig);
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(true);
+    });
+    expect(mockedFetchChatRunStatus).toHaveBeenCalledWith('run-question-only');
+    expect(mockedAcknowledgeChatRunArtifactDelivery).not.toHaveBeenCalled();
+  });
+
+  it('does not accept an edited input JSON file as a document delivery receipt', async () => {
+    const before = {
+      name: 'source.json',
+      path: 'source.json',
+      kind: 'code',
+      mime: 'application/json',
+      size: 100,
+      mtime: 10,
+    };
+    const after = { ...before, size: 120, mtime: 20 };
+    mockedFetchProjectFiles.mockResolvedValueOnce([before] as never).mockResolvedValue([after] as never);
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
+      handlers.onDelta('The requested dashboard is complete.');
+      handlers.onDone('The requested dashboard is complete.');
+    });
+    renderProjectView({
+      ...project,
+      metadata: { kind: 'prototype', workMode: 'creation' },
+    });
+    await waitFor(() => expect(mockedFetchProjectFiles).toHaveBeenCalled());
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => message.runStatus === 'failed')).toBe(true);
+    });
+    expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(false);
+  });
+
+  it('does not let assistant prose self-authorize a generic JSON file as delivery evidence', async () => {
+    chatPaneMockState.prompt = 'Create the requested dashboard.';
+    const source = {
+      name: 'source.json',
+      path: 'source.json',
+      kind: 'code',
+      mime: 'application/json',
+      size: 40,
+      mtime: 20,
+    };
+    mockedFetchProjectFiles.mockResolvedValueOnce([] as never).mockResolvedValue([source] as never);
+    mockedFetchProjectFileText.mockResolvedValue('{"input":true}');
+    mockedStreamViaDaemon.mockImplementation(async (options) => {
+      options.onRunCreated?.('run-self-declared-source');
+      options.handlers.onDelta('Created source.json.');
+      options.onRunStatus?.('succeeded');
+      options.handlers.onDone('Created source.json.');
+    });
+    renderProjectView({
+      ...project,
+      metadata: { kind: 'prototype', workMode: 'creation' },
+    }, {
+      mode: 'daemon',
+      agentId: 'codex',
+      notifications: config.notifications,
+      agentModels: {},
+    } as AppConfig);
+    await waitFor(() => expect(mockedFetchProjectFiles).toHaveBeenCalled());
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => message.runStatus === 'failed')).toBe(true);
+    });
+    expect(mockedAcknowledgeChatRunArtifactDelivery).toHaveBeenCalledWith(
+      'run-self-declared-source',
+      expect.objectContaining({
+        status: 'failed',
+        files: [],
+        error: expect.stringContaining('source.json'),
+      }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it('accepts an unnamed primary HTML document created by the filesystem agent', async () => {
+    const dashboard = {
+      name: 'dashboard.html',
+      path: 'dashboard.html',
+      kind: 'html',
+      mime: 'text/html',
+      size: 500,
+      mtime: 20,
+    };
+    mockedFetchProjectFiles.mockResolvedValueOnce([] as never).mockResolvedValue([dashboard] as never);
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
+      handlers.onDelta('The requested dashboard is complete.');
+      handlers.onDone('The requested dashboard is complete.');
+    });
+    renderProjectView({
+      ...project,
+      metadata: { kind: 'prototype', workMode: 'creation' },
+    });
+    await waitFor(() => expect(mockedFetchProjectFiles).toHaveBeenCalled());
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(true);
+    });
+  });
+
+  it('accepts an explicitly requested JSON file by exact name', async () => {
+    chatPaneMockState.prompt = 'Create critique.json.';
+    const critique = {
+      name: 'critique.json',
+      path: 'critique.json',
+      kind: 'code',
+      mime: 'application/json',
+      size: 80,
+      mtime: 20,
+    };
+    mockedFetchProjectFiles.mockResolvedValueOnce([] as never).mockResolvedValue([critique] as never);
+    mockedFetchProjectFileText.mockResolvedValue('{"summary":"valid filesystem output"}');
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
+      handlers.onDelta('Created critique.json.');
+      handlers.onDone('Created critique.json.');
+    });
+    renderProjectView({
+      ...project,
+      metadata: { kind: 'prototype', workMode: 'creation' },
+    });
+    await waitFor(() => expect(mockedFetchProjectFiles).toHaveBeenCalled());
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(true);
+    });
+  });
+
+  it.each([
+    ['empty', ''],
+    ['malformed', '{"summary":'],
+  ])('rejects an %s directly written critique.json during readback', async (_label, content) => {
+    chatPaneMockState.prompt = 'Create critique.json.';
+    const critique = {
+      name: 'critique.json',
+      path: 'critique.json',
+      kind: 'code',
+      mime: 'application/json',
+      size: content.length,
+      mtime: 20,
+    };
+    mockedFetchProjectFiles.mockResolvedValueOnce([] as never).mockResolvedValue([critique] as never);
+    mockedFetchProjectFileText.mockResolvedValue(content);
+    mockedStreamViaDaemon.mockImplementation(async (options) => {
+      options.onRunCreated?.(`run-native-${_label}-json`);
+      options.handlers.onDelta('Created critique.json.');
+      options.onRunStatus?.('succeeded');
+      options.handlers.onDone('Created critique.json.');
+    });
+    renderProjectView({
+      ...project,
+      metadata: { kind: 'prototype', workMode: 'creation' },
+    }, {
+      mode: 'daemon',
+      agentId: 'codex',
+      notifications: config.notifications,
+      agentModels: {},
+    } as AppConfig);
+    await waitFor(() => expect(mockedFetchProjectFiles).toHaveBeenCalled());
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => (
+        message.runStatus === 'failed'
+        && message.events?.some((event) => (
+          event.kind === 'status'
+          && event.label === 'artifact_delivery_failed'
+          && event.detail?.includes(`JSON content is ${_label}`)
+        )) === true
+      ))).toBe(true);
+    });
+    expect(mockedAcknowledgeChatRunArtifactDelivery).toHaveBeenCalledWith(
+      `run-native-${_label}-json`,
+      expect.objectContaining({
+        status: 'failed',
+        files: [{ name: 'critique.json', saved: true, readBack: false }],
+        error: expect.stringContaining(`JSON content is ${_label}`),
+      }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it('does not let an unrelated background document replace an explicitly requested file', async () => {
+    chatPaneMockState.prompt = 'Create report.pdf.';
+    const unrelated = {
+      name: 'notes.md',
+      path: 'notes.md',
+      kind: 'text',
+      mime: 'text/markdown',
+      size: 60,
+      mtime: 20,
+    };
+    mockedFetchProjectFiles.mockResolvedValueOnce([] as never).mockResolvedValue([unrelated] as never);
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
+      handlers.onDelta('Created report.pdf.');
+      handlers.onDone('Created report.pdf.');
+    });
+    renderProjectView({
+      ...project,
+      metadata: { kind: 'prototype', workMode: 'creation' },
+    });
+    await waitFor(() => expect(mockedFetchProjectFiles).toHaveBeenCalled());
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => (
+        message.runStatus === 'failed'
+        && message.events?.some(
+          (event) => event.kind === 'status'
+            && event.label === 'artifact_delivery_failed'
+            && event.detail?.includes('report.pdf'),
+        ) === true
+      ))).toBe(true);
+    });
+    expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(false);
+  });
+
   it('does not persist or complete an unterminated artifact envelope', async () => {
     mockedStreamMessage.mockImplementation(async (
       _cfg: AppConfig,
@@ -740,6 +1533,42 @@ describe('ProjectView API empty response handling', () => {
 
     await waitFor(() => {
       expect(hasSavedAssistantMessage((message) => message.runStatus === 'failed')).toBe(true);
+    });
+    expect(mockedWriteProjectTextFile).not.toHaveBeenCalled();
+  });
+
+  it('fails the whole delivery when a complete artifact is followed by an unterminated second artifact', async () => {
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
+      handlers.onDelta(
+        '<artifact identifier="index.html" type="text/html">' +
+        '<!doctype html><html><body><main>Complete first file</main></body></html>' +
+        '</artifact>' +
+        '<artifact identifier="critique.json" type="application/json"',
+      );
+      handlers.onDone('');
+    });
+    renderProjectView({
+      ...project,
+      metadata: { kind: 'prototype', workMode: 'creation' },
+    });
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => (
+        message.runStatus === 'failed'
+        && message.events?.some(
+          (event) => event.kind === 'status'
+            && event.label === 'artifact_delivery_failed'
+            && event.detail?.includes('before every artifact envelope was complete'),
+        ) === true
+      ))).toBe(true);
     });
     expect(mockedWriteProjectTextFile).not.toHaveBeenCalled();
   });
@@ -837,6 +1666,148 @@ describe('ProjectView API empty response handling', () => {
     });
     expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(false);
     expect(screen.getByTestId('file-workspace').dataset.openRequestName).toBe('');
+  });
+
+  it('preserves canceled when the daemon cancels during the delivery acknowledgment', async () => {
+    const artifact =
+      '<artifact identifier="daemon-page" type="text/html" title="Daemon Page">' +
+      '<!doctype html><html><head><title>Daemon</title></head><body><main><h1>Daemon page</h1><p>Saved before cancellation.</p></main></body></html>' +
+      '</artifact>';
+    mockedAcknowledgeChatRunArtifactDelivery.mockResolvedValue({
+      ok: true,
+      applied: false,
+      reason: 'run-canceled',
+      run: { id: 'run-canceled', status: 'canceled' },
+    } as never);
+    mockedStreamViaDaemon.mockImplementation(async (options) => {
+      options.onRunCreated?.('run-canceled');
+      options.handlers.onDelta(artifact);
+      options.onRunStatus?.('succeeded');
+      options.handlers.onDone('');
+    });
+    renderProjectView({
+      ...project,
+      metadata: { kind: 'prototype', workMode: 'creation' },
+    }, {
+      mode: 'daemon',
+      agentId: 'codex',
+      notifications: config.notifications,
+      agentModels: {},
+    } as AppConfig);
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => message.runStatus === 'canceled')).toBe(true);
+    });
+    expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(false);
+    expect(hasSavedAssistantMessage((message) => message.runStatus === 'failed')).toBe(false);
+  });
+
+  it('accepts an idempotent success after the original ACK response was lost', async () => {
+    const artifact =
+      '<artifact identifier="daemon-page" type="text/html" title="Daemon Page">' +
+      '<!doctype html><html><head><title>Daemon</title></head><body><main><h1>Daemon page</h1><p>Saved and previewed before the ACK response was lost.</p></main></body></html>' +
+      '</artifact>';
+    mockedAcknowledgeChatRunArtifactDelivery.mockResolvedValue({
+      ok: true,
+      applied: false,
+      reason: 'artifact-delivery-already-succeeded',
+      run: {
+        id: 'run-idempotent-success',
+        status: 'succeeded',
+        artifactDeliveryRequired: true,
+        artifactDelivery: {
+          status: 'succeeded',
+          acknowledgedAt: Date.now(),
+          files: [
+            { name: 'daemon-page.html', saved: true, readBack: true, previewReady: true },
+          ],
+        },
+      },
+    } as never);
+    mockedStreamViaDaemon.mockImplementation(async (options) => {
+      options.onRunCreated?.('run-idempotent-success');
+      options.handlers.onDelta(artifact);
+      options.onRunStatus?.('succeeded');
+      options.handlers.onDone('');
+    });
+    renderProjectView({
+      ...project,
+      metadata: { kind: 'prototype', workMode: 'creation' },
+    }, {
+      mode: 'daemon',
+      agentId: 'codex',
+      notifications: config.notifications,
+      agentModels: {},
+    } as AppConfig);
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(true);
+    });
+    expect(hasSavedAssistantMessage((message) => message.runStatus === 'failed')).toBe(false);
+    expect(mockedAcknowledgeChatRunArtifactDelivery).toHaveBeenCalledTimes(1);
+    expect(mockedAcknowledgeChatRunArtifactDelivery).toHaveBeenCalledWith(
+      'run-idempotent-success',
+      expect.objectContaining({ status: 'succeeded' }),
+      expect.any(Object),
+    );
+  });
+
+  it('keeps the UI succeeded when a negative ACK discovers the prior success receipt', async () => {
+    const artifact =
+      '<artifact identifier="ack-timeout-page" type="text/html" title="ACK Timeout Page">' +
+      '<!doctype html><html><head><title>ACK Timeout</title></head><body><main><h1>Saved</h1><p>The positive receipt reached the daemon.</p></main></body></html>' +
+      '</artifact>';
+    mockedAcknowledgeChatRunArtifactDelivery
+      .mockRejectedValueOnce(new DOMException('ACK response timed out', 'TimeoutError'))
+      .mockResolvedValueOnce({
+        ok: true,
+        applied: false,
+        reason: 'artifact-delivery-already-succeeded',
+        run: {
+          id: 'run-negative-finds-success',
+          status: 'succeeded',
+          artifactDeliveryRequired: true,
+          artifactDelivery: {
+            status: 'succeeded',
+            acknowledgedAt: Date.now(),
+            files: [
+              { name: 'ack-timeout-page.html', saved: true, readBack: true, previewReady: true },
+            ],
+          },
+        },
+      } as never);
+    mockedStreamViaDaemon.mockImplementation(async (options) => {
+      options.onRunCreated?.('run-negative-finds-success');
+      options.handlers.onDelta(artifact);
+      options.onRunStatus?.('succeeded');
+      options.handlers.onDone('');
+    });
+    renderProjectView({
+      ...project,
+      metadata: { kind: 'prototype', workMode: 'creation' },
+    }, {
+      mode: 'daemon',
+      agentId: 'codex',
+      notifications: config.notifications,
+      agentModels: {},
+    } as AppConfig);
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(true);
+    });
+    expect(hasSavedAssistantMessage((message) => message.runStatus === 'failed')).toBe(false);
+    expect(mockedAcknowledgeChatRunArtifactDelivery).toHaveBeenNthCalledWith(
+      2,
+      'run-negative-finds-success',
+      expect.objectContaining({ status: 'failed' }),
+      expect.any(Object),
+    );
   });
 
   it('opens the real HTML page instead of saving a pointer artifact as the preview entry', async () => {

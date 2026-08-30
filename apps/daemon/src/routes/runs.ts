@@ -1,4 +1,4 @@
-import type { Express, Request, Response } from 'express';
+import type { Express, Request, RequestHandler, Response } from 'express';
 import type Database from 'better-sqlite3';
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -7,6 +7,8 @@ import {
   RUN_RESULT_PACKAGE_SCHEMA,
   type AppliedPluginSnapshot,
   type ArtifactManifest,
+  type ChatRunArtifactDeliveryAcknowledgment,
+  type ChatRunArtifactDeliveryAckRequest,
   type ChatRunStatus,
   type ChatRunStatusResponse,
   type ProjectMetadata as ContractProjectMetadata,
@@ -123,12 +125,14 @@ interface ChatRun {
   projectId: string | null;
   conversationId: string | null;
   assistantMessageId: string | null;
+  clientRequestId: string | null;
   agentId: string | null;
   model?: string | null;
   status: ChatRunStatus;
   createdAt: number;
   updatedAt: number;
   cancelRequested?: boolean;
+  resumable?: boolean;
   exitCode?: number | null;
   signal?: string | null;
   error?: string | null;
@@ -153,6 +157,8 @@ interface ChatRun {
     hit?: boolean;
     missReason?: string | null;
   };
+  artifactDeliveryRequired?: boolean;
+  artifactDelivery?: ChatRunArtifactDeliveryAcknowledgment;
 }
 
 interface RunCreateMeta extends JsonRecord {
@@ -182,6 +188,20 @@ interface ChatRunService {
   start(run: ChatRun, starter: () => Promise<unknown>): ChatRun;
   wait(run: ChatRun): Promise<ChatRunStatusResponse>;
   cancel(run: ChatRun): Promise<ChatRunStatusResponse>;
+  acknowledgeArtifactDelivery(
+    run: ChatRun,
+    acknowledgment: Omit<ChatRunArtifactDeliveryAckRequest, 'clientRequestId'>,
+  ): {
+    applied: boolean;
+    reason?:
+      | 'artifact-delivery-not-required'
+      | 'run-canceled'
+      | 'run-not-terminal'
+      | 'run-already-failed'
+      | 'artifact-delivery-already-succeeded'
+      | 'artifact-delivery-already-failed';
+    run: ChatRunStatusResponse;
+  };
   isTerminal(status: ChatRunStatus): boolean;
   emit?(run: ChatRun, event: string, data: unknown): RunEventRecord;
 }
@@ -239,6 +259,7 @@ export interface RegisterRunRoutesDeps {
   design: RunRoutesDesignService;
   http: {
     createSseResponse: (res: Response) => SseResponse;
+    requireLocalDaemonRequest: RequestHandler;
     sendApiError: (
       res: Response,
       status: number,
@@ -412,6 +433,89 @@ function routeParamId(req: ApiRequest): string | null {
     : null;
 }
 
+const MAX_ARTIFACT_DELIVERY_FILES = 128;
+const MAX_ARTIFACT_DELIVERY_FILE_NAME_CHARS = 1_024;
+const MAX_ARTIFACT_DELIVERY_ERROR_CHARS = 4_000;
+
+type ParsedArtifactDeliveryAck =
+  | { ok: true; value: ChatRunArtifactDeliveryAckRequest }
+  | { ok: false; message: string };
+
+function parseArtifactDeliveryAck(value: unknown): ParsedArtifactDeliveryAck {
+  const body = toJsonRecord(value);
+  const clientRequestId = typeof body.clientRequestId === 'string'
+    ? body.clientRequestId.trim()
+    : '';
+  if (!clientRequestId || clientRequestId.length > 256) {
+    return { ok: false, message: 'clientRequestId is required' };
+  }
+  if (body.status !== 'succeeded' && body.status !== 'failed') {
+    return { ok: false, message: 'status must be succeeded or failed' };
+  }
+  if (!Array.isArray(body.files) || body.files.length > MAX_ARTIFACT_DELIVERY_FILES) {
+    return {
+      ok: false,
+      message: `files must be an array with at most ${MAX_ARTIFACT_DELIVERY_FILES} entries`,
+    };
+  }
+
+  const names = new Set<string>();
+  const files = [];
+  for (const item of body.files) {
+    const record = toJsonRecord(item);
+    const name = typeof record.name === 'string' ? record.name.trim() : '';
+    if (!name || name.length > MAX_ARTIFACT_DELIVERY_FILE_NAME_CHARS) {
+      return { ok: false, message: 'every file receipt requires a valid name' };
+    }
+    const normalizedName = name.replaceAll('\\', '/').toLowerCase();
+    if (names.has(normalizedName)) {
+      return { ok: false, message: `duplicate file receipt: ${name}` };
+    }
+    names.add(normalizedName);
+    if (typeof record.saved !== 'boolean' || typeof record.readBack !== 'boolean') {
+      return { ok: false, message: `file receipt booleans are required for ${name}` };
+    }
+    if (record.previewReady !== undefined && typeof record.previewReady !== 'boolean') {
+      return { ok: false, message: `previewReady must be boolean for ${name}` };
+    }
+    files.push({
+      name,
+      saved: record.saved,
+      readBack: record.readBack,
+      ...(typeof record.previewReady === 'boolean'
+        ? { previewReady: record.previewReady }
+        : {}),
+    });
+  }
+
+  if (body.status === 'succeeded') {
+    if (files.length === 0) {
+      return { ok: false, message: 'a successful delivery requires at least one file receipt' };
+    }
+    for (const file of files) {
+      if (!file.saved || !file.readBack) {
+        return { ok: false, message: `successful delivery lacks a save/readback receipt for ${file.name}` };
+      }
+      if (/\.html?$/i.test(file.name) && file.previewReady !== true) {
+        return { ok: false, message: `successful HTML delivery lacks preview readiness for ${file.name}` };
+      }
+    }
+  }
+
+  const error = typeof body.error === 'string' && body.error.trim()
+    ? body.error.trim().slice(0, MAX_ARTIFACT_DELIVERY_ERROR_CHARS)
+    : null;
+  return {
+    ok: true,
+    value: {
+      clientRequestId,
+      status: body.status,
+      files,
+      ...(error ? { error } : {}),
+    },
+  };
+}
+
 function toOdNativeEvent(record: RunEventRecord): OdNativeEvent | null {
   if (!AGUI_NATIVE_EVENT_KINDS.has(record.event as OdNativeEvent['kind'])) return null;
   return { kind: record.event, ...toJsonRecord(record.data) } as OdNativeEvent;
@@ -419,7 +523,7 @@ function toOdNativeEvent(record: RunEventRecord): OdNativeEvent | null {
 
 export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
   const { db, design } = ctx;
-  const { createSseResponse, sendApiError } = ctx.http;
+  const { createSseResponse, requireLocalDaemonRequest, sendApiError } = ctx.http;
   const { PROJECTS_DIR, RUNTIME_DATA_DIR } = ctx.paths;
   const { detectAgents, getAgentDef } = ctx.agents;
   const { startChatRun } = ctx.chat;
@@ -1222,6 +1326,147 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     res.json(design.runs.statusBody(run));
   });
 
+  // Internal renderer receipt, not a user-facing capability: the agent
+  // process can finish before browser-owned persistence/readback/preview has
+  // completed. Local-origin gating plus the unadvertised per-turn
+  // clientRequestId prevents another tab from revising an unrelated run.
+  app.post(
+    '/api/runs/:id/artifact-delivery',
+    requireLocalDaemonRequest,
+    (req: ApiRequest, res: ApiResponse) => {
+      const runId = routeParamId(req);
+      if (!runId) return sendApiError(res, 400, 'BAD_REQUEST', 'run id missing');
+      const run = design.runs.get(runId);
+      if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
+
+      const parsed = parseArtifactDeliveryAck(req.body);
+      if (!parsed.ok) {
+        return sendApiError(res, 400, 'BAD_REQUEST', parsed.message);
+      }
+      if (!run.clientRequestId || parsed.value.clientRequestId !== run.clientRequestId) {
+        return sendApiError(
+          res,
+          403,
+          'FORBIDDEN',
+          'artifact delivery receipt does not belong to this run',
+        );
+      }
+
+      // A repeated pessimistic receipt is idempotent after the first failed
+      // acknowledgment committed. Do not revise its timestamp/files or touch
+      // the already-terminal assistant row.
+      if (
+        parsed.value.status === 'failed'
+        && run.artifactDelivery?.status === 'failed'
+      ) {
+        return res.json({
+          ok: true,
+          applied: false,
+          run: design.runs.statusBody(run),
+        });
+      }
+
+      const previousStatus = run.status;
+      const previousArtifactDelivery = run.artifactDelivery;
+      const previousUpdatedAt = run.updatedAt;
+      const previousError = run.error;
+      const previousErrorCode = run.errorCode;
+      const previousResumable = run.resumable;
+      let result: ReturnType<ChatRunService['acknowledgeArtifactDelivery']>;
+      try {
+        result = db.transaction(() => {
+          const acknowledgment = design.runs.acknowledgeArtifactDelivery(run, {
+            status: parsed.value.status,
+            files: parsed.value.files,
+            ...(parsed.value.error ? { error: parsed.value.error } : {}),
+          });
+
+          // Browser delivery receipts are correctness-critical persisted state,
+          // not in-memory hints. Commit the matching assistant row in the same
+          // SQLite transaction before exposing either terminal result. The
+          // predicate is deliberately monotonic: a message another owner
+          // already finalized as failed/canceled is never revised.
+          const messageStatus =
+            acknowledgment.run.status === 'succeeded'
+            && run.artifactDelivery?.status === 'succeeded'
+              ? 'succeeded'
+              : acknowledgment.applied === true
+                && acknowledgment.run.status === 'failed'
+                && run.artifactDelivery?.status === 'failed'
+                  ? 'failed'
+                  : null;
+          if (messageStatus && run.assistantMessageId) {
+            const reconciled = db.prepare(
+              `UPDATE messages
+                  SET run_status = ?, ended_at = COALESCE(ended_at, ?)
+                WHERE id = ? AND run_id = ?
+                  AND run_status IN ('queued', 'running', 'succeeded')`,
+            ).run(messageStatus, Date.now(), run.assistantMessageId, run.id);
+            if (reconciled.changes !== 1) {
+              throw new Error(
+                'matching assistant message was missing or already terminal during artifact delivery',
+              );
+            }
+          }
+          return acknowledgment;
+        })();
+      } catch (err) {
+        // acknowledgeArtifactDelivery mutates the in-memory run before the DB
+        // statement. Roll that mutation back whenever the transaction cannot
+        // commit so the exact same capability-bound ACK remains retryable.
+        if (previousArtifactDelivery) run.artifactDelivery = previousArtifactDelivery;
+        else delete run.artifactDelivery;
+        run.status = previousStatus;
+        run.updatedAt = previousUpdatedAt;
+        if (previousError === undefined) delete run.error;
+        else run.error = previousError;
+        if (previousErrorCode === undefined) delete run.errorCode;
+        else run.errorCode = previousErrorCode;
+        if (previousResumable === undefined) delete run.resumable;
+        else run.resumable = previousResumable;
+        console.warn('[runs] artifact delivery message reconciliation failed', err);
+        return sendApiError(
+          res,
+          503,
+          'ARTIFACT_DELIVERY_RECONCILIATION_FAILED',
+          'Artifact delivery could not be finalized. Retry the same acknowledgment.',
+        );
+      }
+      if (result.reason === 'artifact-delivery-not-required') {
+        return sendApiError(
+          res,
+          409,
+          'ARTIFACT_DELIVERY_NOT_REQUIRED',
+          'this run does not require host artifact delivery',
+        );
+      }
+      if (result.reason === 'run-not-terminal') {
+        return sendApiError(res, 409, 'RUN_NOT_TERMINAL', 'run has not reached a terminal status');
+      }
+      if (result.reason === 'run-already-failed') {
+        return sendApiError(res, 409, 'RUN_ALREADY_FAILED', 'run already failed before artifact delivery');
+      }
+      if (result.reason === 'artifact-delivery-already-failed') {
+        return sendApiError(
+          res,
+          409,
+          'ARTIFACT_DELIVERY_ALREADY_FAILED',
+          'failed artifact delivery cannot be revised to succeeded',
+        );
+      }
+
+      res.json({
+        ok: true,
+        applied: result.applied,
+        ...(result.reason === 'run-canceled'
+          || result.reason === 'artifact-delivery-already-succeeded'
+          ? { reason: result.reason }
+          : {}),
+        run: result.run,
+      });
+    },
+  );
+
   app.get('/api/runs/:id/events', (req: ApiRequest, res: ApiResponse) => {
     const runId = routeParamId(req);
     if (!runId) return sendApiError(res, 400, 'BAD_REQUEST', 'run id missing');
@@ -1284,7 +1529,44 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     if (!runId) return sendApiError(res, 400, 'BAD_REQUEST', 'run id missing');
     const run = design.runs.get(runId);
     if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
+    const pendingHostDelivery =
+      run.status === 'succeeded'
+      && run.artifactDeliveryRequired === true
+      && !run.artifactDelivery
+      && Boolean(run.assistantMessageId);
+    const previousStatus = run.status;
+    const previousCancelRequested = run.cancelRequested;
+    const previousUpdatedAt = run.updatedAt;
     const status = await design.runs.cancel(run);
+    if (pendingHostDelivery && status.status === 'canceled' && run.assistantMessageId) {
+      try {
+        db.transaction(() => {
+          const reconciled = db.prepare(
+            `UPDATE messages
+                SET run_status = 'canceled', ended_at = COALESCE(ended_at, ?)
+              WHERE id = ? AND run_id = ?
+                AND run_status IN ('queued', 'running', 'succeeded')`,
+          ).run(Date.now(), run.assistantMessageId, run.id);
+          if (reconciled.changes !== 1) {
+            throw new Error(
+              'matching assistant message was missing or already terminal during artifact delivery cancellation',
+            );
+          }
+        })();
+      } catch (err) {
+        console.warn('[runs] artifact delivery cancellation message reconciliation failed', err);
+        run.status = previousStatus;
+        run.updatedAt = previousUpdatedAt;
+        if (previousCancelRequested === undefined) delete run.cancelRequested;
+        else run.cancelRequested = previousCancelRequested;
+        return sendApiError(
+          res,
+          503,
+          'ARTIFACT_DELIVERY_RECONCILIATION_FAILED',
+          'Artifact delivery cancellation could not be finalized. Retry the same request.',
+        );
+      }
+    }
     const body = { ok: true, run: status };
     res.json(body);
   });

@@ -270,6 +270,53 @@ export const CHAT_RUN_STATUSES = [
 
 export type ChatRunStatus = (typeof CHAT_RUN_STATUSES)[number];
 
+export const CHAT_RUN_ARTIFACT_DELIVERY_STATUSES = [
+  'succeeded',
+  'failed',
+] as const;
+
+export type ChatRunArtifactDeliveryStatus =
+  (typeof CHAT_RUN_ARTIFACT_DELIVERY_STATUSES)[number];
+
+/**
+ * Host-observed receipt for one file that a document-producing run promised.
+ * The browser sends these only after the project-file API has acknowledged the
+ * write and a follow-up read returned the saved bytes. HTML receipts also carry
+ * the real preview-document readiness result rather than merely an active tab.
+ */
+export interface ChatRunArtifactDeliveryFileReceipt {
+  name: string;
+  saved: boolean;
+  readBack: boolean;
+  previewReady?: boolean;
+}
+
+export interface ChatRunArtifactDeliveryAcknowledgment {
+  status: ChatRunArtifactDeliveryStatus;
+  acknowledgedAt: number;
+  files: ChatRunArtifactDeliveryFileReceipt[];
+  error?: string | null;
+}
+
+/**
+ * Internal browser-to-daemon completion receipt. `clientRequestId` is the
+ * unadvertised per-turn capability value created by the initiating renderer;
+ * it prevents another local tab from revising a run it did not start.
+ */
+export interface ChatRunArtifactDeliveryAckRequest {
+  clientRequestId: string;
+  status: ChatRunArtifactDeliveryStatus;
+  files: ChatRunArtifactDeliveryFileReceipt[];
+  error?: string | null;
+}
+
+export interface ChatRunArtifactDeliveryAckResponse {
+  ok: true;
+  applied: boolean;
+  reason?: 'run-canceled' | 'artifact-delivery-already-succeeded';
+  run: ChatRunStatusResponse;
+}
+
 export type ChatMessageFeedbackRating = 'positive' | 'negative';
 
 export type ChatMessageFeedbackReasonCode =
@@ -387,6 +434,16 @@ export interface ChatRunStatusResponse {
   browserUse?: BrowserUseRunState;
   /** Effective storage/provenance for the workspace used by this run. */
   workspace?: RunWorkspace;
+  /**
+   * True when the agent process finishing is only phase one and the initiating
+   * host must still acknowledge durable artifact save/readback/preview.
+   */
+  artifactDeliveryRequired?: boolean;
+  /**
+   * Present after the initiating host confirms or rejects persisted artifact
+   * delivery. A failed receipt can revise an agent-success status to failed.
+   */
+  artifactDelivery?: ChatRunArtifactDeliveryAcknowledgment;
 }
 
 export type ChatRunResultPackageResponse = RunResultPackageResponse;

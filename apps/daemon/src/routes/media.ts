@@ -647,7 +647,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         });
         if (grant?.runId) {
           const evidence = trustedResearchEvidenceFromFindings(result);
-          if (evidence) emitSourceEvidence?.(grant, evidence);
+          if (evidence) emitSourceEvidence?.(grant, evidence, result);
         }
         res.json(result);
       } finally {

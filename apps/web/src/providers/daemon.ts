@@ -13,6 +13,8 @@ import type { AgentEvent, ChatCommentAttachment, ChatMessage } from '../types';
 import type { AmrEntryAttribution } from '../analytics/amr-attribution';
 import type {
   ChatAnalyticsHints,
+  ChatRunArtifactDeliveryAckRequest,
+  ChatRunArtifactDeliveryAckResponse,
   ChatRunCreateResponse,
   ChatRunListResponse,
   ChatRunStatus,
@@ -58,6 +60,7 @@ import { trackRunProgress, trackRunStart, trackRunTerminal } from '../observabil
 const MAX_TRANSCRIPT_MESSAGE_CHARS = 12_000;
 const LARGE_TOOL_RESULT_CHARS = 8_000;
 const HIGH_INPUT_TOKEN_WARNING_THRESHOLD = 200_000;
+const ARTIFACT_DELIVERY_RECONCILE_TIMEOUT_MS = 4_000;
 
 export function latestUserPromptFromHistory(history: ChatMessage[]): string {
   for (let i = history.length - 1; i >= 0; i -= 1) {
@@ -74,7 +77,14 @@ function truncateForTranscript(content: string): string {
 }
 
 function escapeTranscriptRoleDelimiters(content: string): string {
-  return content.replace(/^(## (?:user|assistant)[ \t]*)(\r?)$/gm, '\\$1$2');
+  // Must match the daemon transcript parser's complete delimiter grammar:
+  // literal "## ", every accepted role, ASCII horizontal padding, CRLF, and
+  // case-insensitive role names. Anything accepted by the parser must first
+  // be escaped when it occurs inside user- or assistant-authored content.
+  return content.replace(
+    /^(## (?:user|assistant|system)[ \t]*)(\r?)$/gim,
+    '\\$1$2',
+  );
 }
 
 function compactInput(input: unknown): string {
@@ -310,6 +320,12 @@ export interface DaemonReattachOptions {
   cancelSignal?: AbortSignal;
   handlers: DaemonStreamHandlers;
   initialLastEventId?: string | null;
+  /**
+   * Lets the owning ProjectView replay a terminal run whose agent succeeded
+   * before browser-owned save/readback/preview finished. The default remains
+   * fail-closed for generic consumers that do not implement that recovery.
+   */
+  allowArtifactDeliveryRecovery?: boolean;
   onRunStatus?: (status: ChatRunStatus) => void;
   onRunEventId?: (eventId: string) => void;
 }
@@ -686,6 +702,7 @@ export async function streamViaDaemon({
 export async function reattachDaemonRun(options: DaemonReattachOptions): Promise<void> {
   await consumeDaemonRun({
     ...options,
+    reconcileTerminalStatus: true,
     onRunStatus: (status) => {
       options.onRunStatus?.(status);
       notifyRunsChanged();
@@ -693,13 +710,32 @@ export async function reattachDaemonRun(options: DaemonReattachOptions): Promise
   });
 }
 
-export async function fetchChatRunStatus(runId: string): Promise<ChatRunStatusResponse | null> {
+export async function fetchChatRunStatus(
+  runId: string,
+  options: { signal?: AbortSignal; timeoutMs?: number } = {},
+): Promise<ChatRunStatusResponse | null> {
+  const controller = new AbortController();
+  const onAbort = () => controller.abort(options.signal?.reason);
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  if (options.signal?.aborted) onAbort();
+  else options.signal?.addEventListener('abort', onAbort, { once: true });
+  if (typeof options.timeoutMs === 'number' && options.timeoutMs > 0) {
+    timeout = setTimeout(() => {
+      controller.abort(new DOMException('Run status request timed out', 'TimeoutError'));
+    }, options.timeoutMs);
+  }
   try {
-    const resp = await fetch(`/api/runs/${encodeURIComponent(runId)}`);
+    const resp = await fetch(`/api/runs/${encodeURIComponent(runId)}`, {
+      cache: 'no-store',
+      signal: controller.signal,
+    });
     if (!resp.ok) return null;
     return (await resp.json()) as ChatRunStatusResponse;
   } catch {
     return null;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+    options.signal?.removeEventListener('abort', onAbort);
   }
 }
 
@@ -883,6 +919,156 @@ export async function reportChatRunFeedback(req: {
   }
 }
 
+/**
+ * Confirms the browser-owned half of document delivery after every promised
+ * file has a save/readback receipt and every HTML entry has loaded its actual
+ * preview document. Unlike feedback reporting this is correctness-critical:
+ * callers should surface a rejected acknowledgment instead of silently
+ * presenting the turn as complete.
+ */
+export async function acknowledgeChatRunArtifactDelivery(
+  runId: string,
+  request: ChatRunArtifactDeliveryAckRequest,
+  options: { signal?: AbortSignal } = {},
+): Promise<ChatRunArtifactDeliveryAckResponse> {
+  const url = `/api/runs/${encodeURIComponent(runId)}/artifact-delivery`;
+  const bodyText = JSON.stringify(request);
+  const post = async (signal?: AbortSignal) => {
+    const controller = new AbortController();
+    const onAbort = () => controller.abort(signal?.reason);
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    if (signal?.aborted) onAbort();
+    else signal?.addEventListener('abort', onAbort, { once: true });
+    timeout = setTimeout(() => {
+      controller.abort(new DOMException(
+        'Artifact delivery acknowledgment timed out',
+        'TimeoutError',
+      ));
+    }, ARTIFACT_DELIVERY_RECONCILE_TIMEOUT_MS);
+    try {
+      return await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: bodyText,
+        signal: controller.signal,
+      });
+    } finally {
+      if (timeout) clearTimeout(timeout);
+      signal?.removeEventListener('abort', onAbort);
+    }
+  };
+  let ambiguousError: unknown = null;
+  let retryWithoutCallerSignal = false;
+
+  // A successful mutation can outlive its HTTP response. For success ACKs,
+  // reconcile an ambiguous transport/JSON result against authoritative run
+  // status and retry the exact idempotent request once if no receipt is yet
+  // visible. A 503 ARTIFACT_DELIVERY_RECONCILIATION_FAILED is explicitly
+  // ambiguous: the daemon could not prove whether the idempotent mutation
+  // landed. Retry the exact success body with bounded backoff before callers
+  // are allowed to submit a permanent failed ACK.
+  const attempts = request.status === 'succeeded' ? 3 : 1;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const response = await post(retryWithoutCallerSignal ? undefined : options.signal);
+      const body = await response.json().catch(() => null) as
+        | ChatRunArtifactDeliveryAckResponse
+        | { error?: { message?: string } | string }
+        | null;
+      if (!response.ok) {
+        const error = body && 'error' in body ? body.error : null;
+        const errorCode = typeof error === 'object' && error !== null && 'code' in error
+          ? String((error as { code?: unknown }).code ?? '')
+          : '';
+        const message = typeof error === 'string'
+          ? error
+          : error?.message;
+        const reconciliationFailed =
+          request.status === 'succeeded'
+          && response.status === 503
+          && errorCode === 'ARTIFACT_DELIVERY_RECONCILIATION_FAILED';
+        const explicitError = new Error(
+          message || `artifact delivery acknowledgment failed (${response.status})`,
+        ) as Error & { explicitResponse?: boolean; reconciliationFailed?: boolean };
+        explicitError.explicitResponse = !reconciliationFailed;
+        explicitError.reconciliationFailed = reconciliationFailed;
+        throw explicitError;
+      }
+      if (
+        !body
+        || !('ok' in body)
+        || body.ok !== true
+        || typeof body.applied !== 'boolean'
+        || !body.run
+      ) {
+        throw new Error('artifact delivery acknowledgment returned an invalid response');
+      }
+      return body;
+    } catch (error) {
+      if ((error as Error & { explicitResponse?: boolean }).explicitResponse) throw error;
+      ambiguousError = error;
+      if (request.status === 'succeeded') {
+        const reconciled = await successfulArtifactDeliveryFromRunStatus(
+          runId,
+        );
+        if (reconciled) return reconciled;
+      }
+      const callerAborted = options.signal?.aborted === true;
+      const callerAbortName = options.signal?.reason instanceof Error
+        ? options.signal.reason.name
+        : '';
+      const timeoutAbort = callerAborted && callerAbortName === 'TimeoutError';
+      // A user cancellation remains authoritative. A receipt timeout is
+      // different: the mutation may already have reached the daemon, so use
+      // one fresh, independently bounded retry of the exact idempotent body.
+      if (callerAborted && !timeoutAbort) throw error;
+      if (timeoutAbort) retryWithoutCallerSignal = true;
+      if (attempt + 1 < attempts) {
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, 25 * (attempt + 1));
+        });
+      }
+    }
+  }
+  throw ambiguousError instanceof Error
+    ? ambiguousError
+    : new Error('artifact delivery acknowledgment failed');
+}
+
+async function successfulArtifactDeliveryFromRunStatus(
+  runId: string,
+): Promise<ChatRunArtifactDeliveryAckResponse | null> {
+  const run = await fetchChatRunStatus(runId, {
+    timeoutMs: ARTIFACT_DELIVERY_RECONCILE_TIMEOUT_MS,
+  });
+  if (run?.artifactDelivery?.status !== 'succeeded') return null;
+  return {
+    ok: true,
+    applied: false,
+    reason: 'artifact-delivery-already-succeeded',
+    run,
+  };
+}
+
+/**
+ * Explicitly cancels a run while the renderer is still completing the
+ * host-owned artifact delivery phase. The SSE consumer normally owns this
+ * request, but its cancel listener has already detached after the daemon end
+ * event, while save/readback/preview may still be pending.
+ */
+export async function cancelChatRun(runId: string): Promise<ChatRunStatusResponse | null> {
+  try {
+    const response = await fetch(`/api/runs/${encodeURIComponent(runId)}/cancel`, {
+      method: 'POST',
+    });
+    if (!response.ok) return null;
+    const body = await response.json() as { run?: ChatRunStatusResponse };
+    return body.run ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function listActiveChatRuns(
   projectId: string,
   conversationId: string,
@@ -918,7 +1104,18 @@ async function consumeDaemonRun({
   initialLastEventId,
   onRunStatus,
   onRunEventId,
-}: DaemonReattachOptions & { agentId?: string }): Promise<void> {
+  reconcileTerminalStatus,
+  allowArtifactDeliveryRecovery,
+}: DaemonReattachOptions & {
+  agentId?: string;
+  /**
+   * Persisted SSE logs are append-only and can contain the original process
+   * success even when a later host artifact-delivery receipt revised the run
+   * to failed. Reattach callers must reconcile that replay with the current
+   * run record before presenting a terminal result.
+   */
+  reconcileTerminalStatus?: boolean;
+}): Promise<void> {
   let acc = '';
   let stderrBuf = '';
   let exitCode: number | null = null;
@@ -1120,6 +1317,51 @@ async function consumeDaemonRun({
         handlers.onError(new Error('daemon stream disconnected before run completed'));
         return;
       }
+    }
+
+    if (reconcileTerminalStatus) {
+      const status = await fetchChatRunStatus(runId);
+      if (!status || !isChatRunStatus(status.status)) {
+        onRunStatus?.('failed');
+        handlers.onError(new Error('daemon run status could not be reconciled after reconnect'));
+        return;
+      }
+      const artifactDeliveryIncomplete =
+        status.status === 'succeeded'
+        && status.artifactDeliveryRequired === true
+        && status.artifactDelivery?.status !== 'succeeded';
+      const recoverArtifactDelivery =
+        artifactDeliveryIncomplete && allowArtifactDeliveryRecovery === true;
+      const reconciledStatus: ChatRunStatus =
+        status.artifactDelivery?.status === 'failed'
+        || (artifactDeliveryIncomplete && !recoverArtifactDelivery)
+          ? 'failed'
+          : status.status;
+      if (reconciledStatus === 'queued' || reconciledStatus === 'running') {
+        onRunStatus?.('failed');
+        handlers.onError(new Error('daemon replay ended before the authoritative run status became terminal'));
+        return;
+      }
+      endStatus = reconciledStatus;
+      exitCode = status.exitCode ?? exitCode;
+      exitSignal = status.signal ?? exitSignal;
+      serverDeclaredSuccess = reconciledStatus === 'succeeded';
+      endResumable = status.resumable === true;
+      onRunStatus?.(reconciledStatus);
+
+      if (reconciledStatus === 'failed') {
+        const message = status.error?.trim()
+          || status.artifactDelivery?.error?.trim()
+          || (artifactDeliveryIncomplete
+            ? 'The agent process finished, but required artifact delivery was not acknowledged before reconnect.'
+            : 'daemon run failed after artifact delivery');
+        const error = new Error(message) as Error & { code?: string };
+        if (status.errorCode) error.code = status.errorCode;
+        else if (artifactDeliveryIncomplete) error.code = 'ARTIFACT_DELIVERY_INCOMPLETE';
+        handlers.onError(markErrorResumable(error, endResumable));
+        return;
+      }
+      if (reconciledStatus === 'canceled') return;
     }
 
     if (endStatus === 'canceled') {

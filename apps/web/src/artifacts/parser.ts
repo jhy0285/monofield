@@ -247,5 +247,24 @@ export function createArtifactParser() {
     state.inside = false;
   }
 
-  return { feed, flush };
+  /**
+   * True when the streamed response has begun a real artifact envelope but
+   * has not supplied all of its framing bytes yet. This must be sampled before
+   * `flush()`: flush intentionally emits the partial body for live rendering
+   * and then resets the parser, but those bytes are not a persistence receipt.
+   *
+   * A held markdown fence/backtick is not an artifact envelope. Requiring the
+   * held range itself to start with `<artifact` preserves the parser's markdown
+   * skip rules while still catching an opening tag cut off before its `>`.
+   */
+  function hasIncompleteArtifactEnvelope(): boolean {
+    if (state.inside) return true;
+    const open = findOpenTag(state.buffer);
+    if (open.kind !== 'partial') return false;
+    const heldTail = state.buffer.slice(open.start);
+    return heldTail.startsWith(OPEN_PREFIX)
+      || (heldTail.startsWith('<') && OPEN_PREFIX.startsWith(heldTail));
+  }
+
+  return { feed, flush, hasIncompleteArtifactEnvelope };
 }

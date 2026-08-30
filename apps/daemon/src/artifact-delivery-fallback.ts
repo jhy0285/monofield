@@ -1,5 +1,7 @@
 import type { ExecutionProfile } from '@open-design/contracts';
 
+import { emittedRenderableQuestionForm } from './question-form-detect.js';
+
 export interface ArtifactDeliveryFallbackScope {
   workMode?: unknown;
   sessionMode?: unknown;
@@ -88,13 +90,43 @@ export function shouldEnforceCodexNativeSandboxCircuit(
  * receipt before exposing success.
  */
 export function hasCompleteHostOwnedArtifactEnvelope(value: unknown): boolean {
-  if (typeof value !== 'string' || value.length === 0) return false;
-  const open = /<artifact\b[^>]*>/iu.exec(value);
-  if (!open) return false;
-  const bodyStart = open.index + open[0].length;
-  const close = value.indexOf('</artifact>', bodyStart);
-  if (close < bodyStart) return false;
-  return value.slice(bodyStart, close).trim().length > 0;
+  return completeHostOwnedArtifactBodies(value).length > 0;
+}
+
+/**
+ * Return only bodies from closed, non-empty host artifact envelopes.
+ *
+ * This is intentionally stricter than searching the whole assistant answer:
+ * prose before/after an envelope is not part of the file the host persists.
+ * Consumers such as the financial citation gate must therefore validate these
+ * bodies, rather than accidentally accepting a URL that will disappear once
+ * the artifact is saved.
+ */
+export function completeHostOwnedArtifactBodies(value: unknown): string[] {
+  if (typeof value !== 'string' || value.length === 0) return [];
+  const bodies: string[] = [];
+  for (const match of value.matchAll(/<artifact\b[^>]*>([\s\S]*?)<\/artifact\s*>/giu)) {
+    const body = match[1]?.trim();
+    if (body) bodies.push(body);
+  }
+  return bodies;
+}
+
+/**
+ * A normal clarification turn may contain one short introductory sentence and
+ * a renderable question form, but no artifact envelope at all. Such a turn is
+ * awaiting user input, not awaiting browser-owned file persistence.
+ *
+ * Any artifact tag (including a malformed/truncated one) keeps delivery
+ * required. This fail-closed rule prevents a mixed artifact + question answer
+ * from being reclassified as a harmless clarification.
+ */
+export function isQuestionFormOnlyHostResponse(value: unknown): boolean {
+  return (
+    emittedRenderableQuestionForm(value)
+    && typeof value === 'string'
+    && !/<\/?artifact\b/iu.test(value)
+  );
 }
 
 export function shouldRejectIncompleteHostOwnedArtifact({

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { Button, Input, Select } from '@open-design/components';
 import { APP_CHROME_FILE_ACTIONS_ID, APP_CHROME_FILE_ACTIONS_SELECTOR } from './AppChromeHeader';
@@ -972,6 +972,12 @@ interface Props {
   // Bumped nonce asking a deck preview to flip to `slideIndex` (a queued chat
   // send for this file just started processing).
   slideNavRequest?: { slideIndex: number; nonce: number } | null;
+  // Completion handshake for a host-saved HTML artifact. The caller does not
+  // treat tab selection or a bare iframe load as preview success; HtmlViewer
+  // settles this only after the requested document echoes its exact receipt
+  // token (or its active iframe reports an error).
+  previewReadyRequest?: { nonce: number } | null;
+  onPreviewReady?: (nonce: number, success: boolean) => void;
 }
 
 export function FileViewer({
@@ -996,6 +1002,8 @@ export function FileViewer({
   shareRequest,
   downloadRequest,
   slideNavRequest,
+  previewReadyRequest,
+  onPreviewReady,
 }: Props) {
   const rendererMatch = artifactRendererRegistry.resolve({
     file,
@@ -1039,6 +1047,8 @@ export function FileViewer({
         shareRequest={shareRequest}
         downloadRequest={downloadRequest}
         slideNavRequest={slideNavRequest}
+        previewReadyRequest={previewReadyRequest}
+        onPreviewReady={onPreviewReady}
       />
     );
   }
@@ -4429,6 +4439,21 @@ function DocumentPreviewViewer({
   );
 }
 
+/**
+ * Stable, URL-safe receipt token for one requested artifact document.
+ * The nonce prevents a previous delivery from satisfying a newer request;
+ * hashing the document identity keeps project paths out of the raw URL.
+ */
+export function artifactPreviewReadyToken(nonce: number, documentIdentity: string): string {
+  const input = `${nonce}\0${documentIdentity}`;
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `odpr-${Math.max(0, Math.trunc(nonce)).toString(36)}-${(hash >>> 0).toString(36)}`;
+}
+
 function HtmlViewer({
   projectId,
   projectKind,
@@ -4449,6 +4474,8 @@ function HtmlViewer({
   shareRequest,
   downloadRequest,
   slideNavRequest,
+  previewReadyRequest,
+  onPreviewReady,
 }: {
   projectId: string;
   projectKind: TrackingProjectKind;
@@ -4469,6 +4496,8 @@ function HtmlViewer({
   shareRequest?: { nonce: number } | null;
   downloadRequest?: { nonce: number } | null;
   slideNavRequest?: { slideIndex: number; nonce: number } | null;
+  previewReadyRequest?: { nonce: number } | null;
+  onPreviewReady?: (nonce: number, success: boolean) => void;
 }) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
@@ -5401,9 +5430,18 @@ function HtmlViewer({
     needsFocusGuard,
   };
   const useUrlLoadPreview = shouldUrlLoadHtmlPreview(urlLoadDecision) && !manualEditRequiresSrcDoc;
+  const previewDocumentIdentity = `${projectId}\0${file.name}\0${file.mtime}\0${reloadKey}`;
+  const previewReadyToken = previewReadyRequest
+    ? artifactPreviewReadyToken(previewReadyRequest.nonce, previewDocumentIdentity)
+    : null;
   const basePreviewSrcUrl = useMemo(
-    () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot`,
-    [projectId, file.name, file.mtime, reloadKey],
+    () => {
+      const url = `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot`;
+      return previewReadyToken
+        ? `${url}&odPreviewReadyToken=${encodeURIComponent(previewReadyToken)}`
+        : url;
+    },
+    [projectId, file.name, file.mtime, reloadKey, previewReadyToken],
   );
   const [previewSrcUrl, setPreviewSrcUrl] = useState(basePreviewSrcUrl);
   // Hold the iframe URL still (it carries file.mtime) while the user is mid
@@ -5455,6 +5493,54 @@ function HtmlViewer({
   )
     ? previewSrcUrl
     : effectiveBasePreviewSrcUrl;
+  const settledPreviewReadyTokenRef = useRef<string | null>(null);
+  const settlePreviewReady = useCallback((success: boolean) => {
+    const nonce = previewReadyRequest?.nonce;
+    if (nonce == null || !previewReadyToken || settledPreviewReadyTokenRef.current === previewReadyToken) return;
+    settledPreviewReadyTokenRef.current = previewReadyToken;
+    onPreviewReady?.(nonce, success);
+  }, [onPreviewReady, previewReadyRequest?.nonce, previewReadyToken]);
+  useLayoutEffect(() => {
+    if (!previewReadyToken) return;
+    function onMessage(ev: MessageEvent) {
+      const activeFrame = useUrlLoadPreview
+        ? urlPreviewIframeRef.current
+        : srcDocPreviewIframeRef.current;
+      if (!activeFrame?.contentWindow || ev.source !== activeFrame.contentWindow) return;
+      const data = ev.data as { type?: unknown; token?: unknown } | null;
+      if (
+        data?.type !== 'od:artifact-preview-ready'
+        || data.token !== previewReadyToken
+      ) return;
+      settlePreviewReady(true);
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [previewReadyToken, settlePreviewReady, useUrlLoadPreview]);
+
+  const confirmTrustedUrlPreviewReceipt = useCallback(async (
+    frame: HTMLIFrameElement | null,
+  ) => {
+    if (!frame || !previewReadyToken || !useUrlLoadPreview) return;
+    const expectedWindow = frame.contentWindow;
+    const expectedSrc = frame.getAttribute('src') ?? '';
+    if (!expectedWindow || !expectedSrc) return;
+    try {
+      const response = await fetch(expectedSrc, { cache: 'no-store' });
+      const receipt = response.headers.get('x-monofield-artifact-preview-token');
+      if (
+        !response.ok
+        || receipt !== previewReadyToken
+        || frame !== urlPreviewIframeRef.current
+        || frame.contentWindow !== expectedWindow
+        || frame.getAttribute('src') !== expectedSrc
+      ) return;
+      settlePreviewReady(true);
+    } catch {
+      // The injected message bridge remains a compatibility fallback. If
+      // neither exact receipt arrives, the bounded delivery waiter fails shut.
+    }
+  }, [previewReadyToken, settlePreviewReady, useUrlLoadPreview]);
   useEffect(() => {
     setPreviewSrcUrl(effectiveBasePreviewSrcUrl);
     setUrlSelectionBridgeReady(false);
@@ -5511,8 +5597,9 @@ function HtmlViewer({
       editBridge: true,
       paletteBridge: false,
       previewFocusGuard: true,
+      previewReadyToken: previewReadyToken ?? undefined,
     }) : ''),
-    [previewSource, effectiveDeck, projectId, file.name, previewStateKey],
+    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, previewReadyToken],
   );
   const lazySrcDocTransport = useMemo(() => buildLazySrcdocTransport(), []);
   const [srcDocTransportResetKey, setSrcDocTransportResetKey] = useState(0);
@@ -9191,7 +9278,7 @@ function HtmlViewer({
                     onToolbarClick={fireDrawToolbarClick}
                   >
                     <div className="artifact-preview-transport-stack">
-                      {MONOFIELD_PREVIEW_KEEP_ALIVE ? (
+                      {MONOFIELD_PREVIEW_KEEP_ALIVE && !previewReadyToken ? (
                         <PooledIframe
                           ref={urlPreviewIframeRef}
                           cacheKey={urlPreviewKeepAliveKey}
@@ -9215,10 +9302,18 @@ function HtmlViewer({
                             frame?.contentWindow?.postMessage({ type: 'od:url-selection-bridge-probe' }, '*');
                             syncBridgeModes(frame);
                             if (useUrlLoadPreview) restorePreviewScrollPosition();
+                            void confirmTrustedUrlPreviewReceipt(frame);
+                          }}
+                          onError={(event) => {
+                            if (
+                              useUrlLoadPreview
+                              && event.currentTarget === urlPreviewIframeRef.current
+                            ) settlePreviewReady(false);
                           }}
                         />
                       ) : (
                         <iframe
+                          key={`url:${previewReadyToken ?? 'idle'}:${activePreviewSrcUrl}`}
                           ref={urlPreviewIframeRef}
                           data-testid={useUrlLoadPreview ? 'artifact-preview-frame' : 'artifact-preview-frame-url-load'}
                           data-od-render-mode="url-load"
@@ -9228,8 +9323,9 @@ function HtmlViewer({
                           title={file.name}
                           sandbox="allow-scripts allow-downloads"
                           src={urlTransportSrc}
-                          onLoad={() => {
-                            const frame = urlPreviewIframeRef.current;
+                          onLoad={(event) => {
+                            const frame = event.currentTarget;
+                            if (frame !== urlPreviewIframeRef.current) return;
                             if (useUrlLoadPreview) iframeRef.current = frame;
                             setUrlSelectionBridgeReady(false);
                             dcViewportRestoreAtRef.current = Date.now();
@@ -9240,11 +9336,18 @@ function HtmlViewer({
                             frame?.contentWindow?.postMessage({ type: 'od:url-selection-bridge-probe' }, '*');
                             syncBridgeModes(frame);
                             if (useUrlLoadPreview) restorePreviewScrollPosition();
+                            void confirmTrustedUrlPreviewReceipt(frame);
+                          }}
+                          onError={(event) => {
+                            if (
+                              useUrlLoadPreview
+                              && event.currentTarget === urlPreviewIframeRef.current
+                            ) settlePreviewReady(false);
                           }}
                         />
                       )}
                       <iframe
-                        key={srcDocTransportResetKey}
+                        key={`${srcDocTransportResetKey}:${previewReadyToken ?? 'idle'}`}
                         ref={srcDocPreviewIframeRef}
                         data-testid={useUrlLoadPreview ? 'artifact-preview-frame-srcdoc' : 'artifact-preview-frame'}
                         data-od-render-mode="srcdoc"
@@ -9254,8 +9357,9 @@ function HtmlViewer({
                         title={file.name}
                         sandbox="allow-scripts allow-downloads"
                         srcDoc={srcDocTransportContent}
-                        onLoad={() => {
-                          const frame = srcDocPreviewIframeRef.current;
+                        onLoad={(event) => {
+                          const frame = event.currentTarget;
+                          if (frame !== srcDocPreviewIframeRef.current) return;
                           if (!useUrlLoadPreview) iframeRef.current = frame;
                           // Reset the activation dedupe exactly ONCE per
                           // freshly mounted iframe DOM node, never on the
@@ -9302,6 +9406,16 @@ function HtmlViewer({
                           syncBridgeModes(frame);
                           syncCachedSlideStateToIframe(frame);
                           if (!useUrlLoadPreview) restorePreviewScrollPosition();
+                          // This host-owned srcDoc is keyed by the exact
+                          // project/file/mtime/reload/nonce token. Its load is
+                          // authoritative even when artifact CSP blocks every
+                          // injected script with `script-src 'none'`.
+                          if (!useUrlLoadPreview && !useLazySrcDocTransport) {
+                            settlePreviewReady(true);
+                          }
+                        }}
+                        onError={() => {
+                          if (!useUrlLoadPreview) settlePreviewReady(false);
                         }}
                       />
                     </div>

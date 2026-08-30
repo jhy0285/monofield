@@ -1853,6 +1853,97 @@ describe('ProjectView daemon cleanup', () => {
     expect(writeProjectTextFile).not.toHaveBeenCalled();
   });
 
+  it('does not restore success when a required artifact delivery has no host receipt', async () => {
+    const runCreatedAt = Date.now();
+    const artifactEvent = {
+      kind: 'text',
+      text:
+        '<artifact identifier="index.html" type="text/html" title="Interrupted">' +
+        '<!doctype html><html><body><main><h1>Interrupted delivery</h1></main></body></html>' +
+        '</artifact>',
+    };
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([{
+      id: 'msg-interrupted-delivery',
+      role: 'assistant',
+      content: '',
+      createdAt: runCreatedAt,
+      events: [artifactEvent],
+      runId: 'run-interrupted-delivery',
+      runStatus: 'succeeded',
+      producedFiles: [],
+    }]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-interrupted-delivery',
+      status: 'succeeded',
+      createdAt: runCreatedAt,
+      updatedAt: runCreatedAt + 1,
+      exitCode: 0,
+      signal: null,
+      artifactDeliveryRequired: true,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+
+    render(
+      <ProjectView
+        project={{ id: 'project-1', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect(fetchChatRunStatus).toHaveBeenCalledWith('run-interrupted-delivery'));
+    await waitFor(() => {
+      expect(saveMessage).toHaveBeenCalledWith(
+        'project-1',
+        'conv-1',
+        expect.objectContaining({
+          id: 'msg-interrupted-delivery',
+          runStatus: 'failed',
+          events: expect.arrayContaining([
+            expect.objectContaining({
+              kind: 'status',
+              label: 'artifact_delivery_failed',
+            }),
+          ]),
+        }),
+        expect.objectContaining({ telemetryFinalized: true }),
+      );
+    });
+    expect(writeProjectTextFile).not.toHaveBeenCalled();
+    expect(reattachDaemonRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: 'run-interrupted-delivery',
+        initialLastEventId: null,
+        allowArtifactDeliveryRecovery: true,
+      }),
+    );
+  });
+
   it('keeps reload artifact recovery retryable after a transient persistence miss', async () => {
     const runCreatedAt = Date.now();
     const recoveredArtifact = artifactProjectFile('real-daemon-smoke.html', runCreatedAt + 2);

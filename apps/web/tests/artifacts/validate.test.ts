@@ -1,6 +1,29 @@
 import { describe, expect, it } from 'vitest';
 
-import { validateHtmlArtifact } from '../../src/artifacts/validate';
+import {
+  validateArtifactTextContent,
+  validateHtmlArtifact,
+} from '../../src/artifacts/validate';
+
+describe('validateArtifactTextContent', () => {
+  it('requires JSON delivery to be non-empty and parseable', () => {
+    expect(validateArtifactTextContent('critique.json', '')).toEqual({
+      ok: false,
+      reason: 'JSON content is empty',
+    });
+    expect(validateArtifactTextContent('critique.json', '{"summary":')).toEqual({
+      ok: false,
+      reason: 'JSON content is malformed',
+    });
+    expect(validateArtifactTextContent('CRITIQUE.JSON', '{"summary":"ok"}')).toEqual({
+      ok: true,
+    });
+  });
+
+  it('routes HTML delivery through the structural document validator', () => {
+    expect(validateArtifactTextContent('dashboard.html', 'not an html document').ok).toBe(false);
+  });
+});
 
 describe('validateHtmlArtifact', () => {
   it('rejects an empty string', () => {

@@ -110,6 +110,44 @@ describe('host-owned artifact fallback runtime', { timeout: 120_000 }, () => {
       ))).toBe(false);
     },
   );
+
+  it.skipIf(process.platform !== 'win32')(
+    'does not spend a second model call on a tool-free financial fallback without attestations',
+    async () => {
+      fixtureDir = await mkdtemp(path.join(os.tmpdir(), 'monofield-financial-fallback-'));
+      const promptLog = path.join(fixtureDir, 'prompts.jsonl');
+      const codexBin = await writeFakeCodex(fixtureDir, promptLog);
+      delete process.env.OD_CODEX_SANDBOX;
+
+      started = await startServer({ port: 0, returnServer: true }) as StartedServer;
+      await putConfig(started.url, {
+        agentId: 'codex',
+        agentCliEnv: { codex: { CODEX_BIN: codexBin } },
+        telemetry: { metrics: false, content: false, artifactManifest: false },
+        privacyDecisionAt: Date.now(),
+      });
+      recordCodexWindowsSandboxLogonFailure({
+        environmentFingerprint: codexWindowsSandboxEnvironmentFingerprint({
+          binaryPath: codexBin,
+        }),
+      });
+
+      const run = await createAndWaitForRun(
+        started.url,
+        '삼성전자와 SK하이닉스 매수·매도 의견, 최신 전망과 관련 일정을 담은 대시보드 문서를 만들어줘.',
+      );
+
+      expect(run.status).toBe('failed');
+      expect(run.errorCode).toBe('CODEX_WINDOWS_SANDBOX_UNAVAILABLE');
+      const attempts = await readFile(promptLog, 'utf8').catch(() => '');
+      expect(attempts.trim()).toBe('');
+      const events = await readRunEvents(run.eventsLogPath);
+      expect(events.some((event) => (
+        event.event === 'diagnostic'
+        && event.data.type === 'artifact_delivery_fallback_started'
+      ))).toBe(false);
+    },
+  );
 });
 
 async function writeFakeCodex(dir: string, promptLog: string): Promise<string> {
@@ -159,7 +197,10 @@ async function putConfig(url: string, patch: Record<string, unknown>): Promise<v
   expect(response.status).toBe(200);
 }
 
-async function createAndWaitForRun(url: string): Promise<RunStatus> {
+async function createAndWaitForRun(
+  url: string,
+  message = 'Create a complete dashboard document.',
+): Promise<RunStatus> {
   const projectId = `artifact_fallback_${randomUUID()}`;
   const projectResponse = await fetch(`${url}/api/projects`, {
     method: 'POST',
@@ -183,8 +224,8 @@ async function createAndWaitForRun(url: string): Promise<RunStatus> {
       clientRequestId: `client_${randomUUID()}`,
       agentId: 'codex',
       sessionMode: 'docs',
-      message: 'Create a complete dashboard document.',
-      currentPrompt: 'Create a complete dashboard document.',
+      message,
+      currentPrompt: message,
     }),
   });
   expect(response.status).toBe(202);

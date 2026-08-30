@@ -341,6 +341,9 @@ function syncIframeProps(
   frame.onload = props.onLoad
     ? (event) => props.onLoad?.(event as unknown as SyntheticEvent<HTMLIFrameElement>)
     : null;
+  frame.onerror = props.onError
+    ? (event) => props.onError?.(event as unknown as SyntheticEvent<HTMLIFrameElement>)
+    : null;
   setAttribute(frame, 'src', props.src);
 }
 

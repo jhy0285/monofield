@@ -54,6 +54,39 @@ export type HtmlArtifactValidationResult =
   | { ok: true }
   | { ok: false; reason: string };
 
+export type ArtifactTextValidationResult = HtmlArtifactValidationResult;
+
+/**
+ * Validate text-backed document delivery using the filename that will be
+ * acknowledged to the daemon. Both model-emitted artifact envelopes and
+ * files written directly by a filesystem-capable CLI must pass this exact
+ * gate; a successful write/read is not proof that the requested document is
+ * structurally usable.
+ *
+ * Keep this deliberately extension-scoped. HTML gets the existing document
+ * sniff, JSON must be non-empty and parseable, and formats without a safe
+ * browser-side structural validator retain their readback-only semantics.
+ */
+export function validateArtifactTextContent(
+  fileName: string,
+  content: string,
+): ArtifactTextValidationResult {
+  const normalizedName = fileName.replace(/\\/g, '/').toLowerCase();
+  if (/\.html?$/.test(normalizedName)) {
+    return validateHtmlArtifact(content);
+  }
+  if (/\.json$/.test(normalizedName)) {
+    const json = content.replace(/^﻿/, '').trim();
+    if (!json) return { ok: false, reason: 'JSON content is empty' };
+    try {
+      JSON.parse(json);
+    } catch {
+      return { ok: false, reason: 'JSON content is malformed' };
+    }
+  }
+  return { ok: true };
+}
+
 export function validateHtmlArtifact(content: string): HtmlArtifactValidationResult {
   const trimmed = content.replace(/^﻿/, '').trim();
   if (trimmed.length === 0) {

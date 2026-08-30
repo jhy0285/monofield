@@ -368,8 +368,10 @@ import {
   recordCodexWindowsSandboxLogonFailure,
 } from './codex-windows-sandbox.js';
 import {
+  completeHostOwnedArtifactBodies,
   executionProfileForArtifactDelivery,
   isHostOwnedArtifactFallbackAttempt,
+  isQuestionFormOnlyHostResponse,
   requiresHostOwnedArtifactDelivery,
   shouldEnforceCodexNativeSandboxCircuit,
   shouldRejectIncompleteHostOwnedArtifact,
@@ -377,6 +379,14 @@ import {
 } from './artifact-delivery-fallback.js';
 import {
   FINANCIAL_GROUNDING_REQUIRED,
+  attestFinancialResearchFindings,
+  deriveFinancialGroundingRequirements,
+  evaluateFinancialGroundingCoverage,
+  financialGroundingFailureMessage,
+  hasCompleteFinancialResearchAttestation,
+  isAnaphoricArtifactFollowup,
+  readFinancialGroundingAttachmentTexts,
+  resolveFinancialGroundingPrompt,
   requiresCurrentFinancialArtifactGrounding,
 } from './financial-source-evidence.js';
 import { codexNeedsDangerFullAccessSandbox } from './runtimes/defs/codex.js';
@@ -4308,6 +4318,8 @@ export async function startServer({
     if (!shouldReportRunCompletionTelemetryFallbackStatus(status)) return;
     const timer = setTimeout(() => {
       if (reportedRuns.has(run.id)) return;
+      const reconciledStatus = design.runs.get(run.id)?.status ?? status;
+      if (!shouldReportRunCompletionTelemetryFallbackStatus(reconciledStatus)) return;
       if (run.assistantMessageId) {
         const messageTelemetry = getMessageTelemetryFinalizationState(db, run.assistantMessageId);
         if (messageTelemetry.finalizedAt !== null) return;
@@ -4319,7 +4331,7 @@ export async function startServer({
           endedAt: run.updatedAt,
           role: 'assistant',
           runId: run.id,
-          runStatus: status,
+          runStatus: reconciledStatus,
         },
         { telemetryFinalized: true },
         {
@@ -4568,7 +4580,7 @@ export async function startServer({
   const researchDeps = {
     searchResearch,
     ResearchError,
-    emitSourceEvidence: (grant, evidence) => {
+    emitSourceEvidence: (grant, evidence, findings) => {
       const evidenceRunId = grant?.runId;
       if (!evidenceRunId || !activeChatAgentEventSinks.has(evidenceRunId)) return false;
       const evidenceRun = design.runs.get(evidenceRunId);
@@ -4578,6 +4590,23 @@ export async function startServer({
       // token-scoped research callback can attest the owning run.
       evidenceRun.trustedResearchEvidenceCount =
         (Number(evidenceRun.trustedResearchEvidenceCount) || 0) + 1;
+      if (
+        evidenceRun.financialGroundingRequired === true
+        && evidenceRun.financialGroundingRequirements
+        && findings
+      ) {
+        const attestations = Array.isArray(evidenceRun.trustedFinancialResearchAttestations)
+          ? evidenceRun.trustedFinancialResearchAttestations
+          : [];
+        attestations.push(attestFinancialResearchFindings(
+          evidenceRun.financialGroundingRequirements,
+          findings,
+        ));
+        // A single turn should not need unbounded searches. Keep enough room
+        // for multi-entity follow-ups without retaining arbitrary provider
+        // payloads for the lifetime of the run.
+        evidenceRun.trustedFinancialResearchAttestations = attestations.slice(-32);
+      }
       emitChatAgentEvent(evidenceRunId, evidence);
       return true;
     },
@@ -6222,6 +6251,10 @@ export async function startServer({
       ? resolveSafeProjectAttachments(cwd, attachments)
       : [];
     run.projectAttachmentPaths = safeAttachments;
+    const financialGroundingAttachmentTexts =
+      cwd && isAnaphoricArtifactFollowup(currentPrompt)
+        ? await readFinancialGroundingAttachmentTexts(cwd, safeAttachments)
+        : [];
 
     // Local code agents don't accept a separate "system" channel the way the
     // Messages API does — we fold the skill + design-system prompt into the
@@ -6288,12 +6321,16 @@ export async function startServer({
             projectRecord.metadata.kind,
           )
         : true;
-    const financialGroundingPromptText =
-      typeof message === 'string' && message.trim()
-        ? message
-        : typeof currentPrompt === 'string'
-          ? currentPrompt
-          : '';
+    // `message` may be the full rendered transcript. Grounding intent must
+    // come from the current user turn, otherwise an old market-dashboard
+    // request would keep re-enabling the financial gate for unrelated
+    // follow-ups such as "hello" or "rename the title". Fall back to the
+    // transcript only for legacy callers that did not send currentPrompt.
+    const financialGroundingPromptText = resolveFinancialGroundingPrompt(
+      message,
+      currentPrompt,
+      financialGroundingAttachmentTexts,
+    );
     const financialGroundingRequired = requiresCurrentFinancialArtifactGrounding({
       workMode: projectRecord?.metadata?.workMode,
       sessionMode: runSessionMode,
@@ -6301,6 +6338,23 @@ export async function startServer({
       prompt: financialGroundingPromptText,
     });
     run.financialGroundingRequired = financialGroundingRequired;
+    if (financialGroundingRequired) {
+      run.financialGroundingRequirements ??= deriveFinancialGroundingRequirements(
+        financialGroundingPromptText,
+        Number.isFinite(run.createdAt) ? run.createdAt : Date.now(),
+      );
+      run.trustedFinancialResearchAttestations ??= [];
+    }
+    const financialResearchReadyForToolFreeFallback = () => {
+      if (run.financialGroundingRequired !== true) return true;
+      return hasCompleteFinancialResearchAttestation(
+        run.financialGroundingRequirements
+          ?? deriveFinancialGroundingRequirements(financialGroundingPromptText),
+        Array.isArray(run.trustedFinancialResearchAttestations)
+          ? run.trustedFinancialResearchAttestations
+          : [],
+      );
+    };
     const interfaceSpecGenerationRequested =
       projectRecord?.metadata?.kind === 'interface-spec' &&
       isInterfaceSpecGenerationRequest(interfaceSpecPromptText);
@@ -6670,7 +6724,10 @@ export async function startServer({
           'This artifact requests time-sensitive financial market facts or forecasts.',
           'Before writing any current value, event date, recommendation, or forecast, run the MonoField research command above.',
           'Only a successful run-scoped research response recorded by the daemon counts as source evidence. Model memory, hand-written URLs, copied prose, and printed JSON do not count.',
-          'Cite the returned direct URLs and include an as-of time. Separate observed facts from estimates or scenarios.',
+          'Search every company, ticker, index, or instrument explicitly named by the user. Keep its exact name or ticker in the search query, and require the returned title, snippet, or URL to identify that same target.',
+          'Cover every requested evidence facet separately for every named target: current price, recommendation/target price, outlook/forecast, and issue/event schedule when requested. A price page does not substantiate a recommendation, forecast, or calendar unless its own title/snippet identifies that facet too.',
+          'Use dated recent sources appropriate to each requested facet. Prefer exchange, regulator, filing, and company investor-relations sources when available, but corroborated public sources from other domains are allowed.',
+          'Cite at least one returned direct URL for every named target and every requested facet in the final visible response or artifact, and include an as-of time. Separate observed facts from estimates or scenarios.',
           'If research is unavailable or returns no public sources, do not invent values and do not emit or save the artifact. Report the actual research error and ask the user to configure Tavily or explicitly request a mock/unverified-placeholder document.',
         ].join('\n')
       : '';
@@ -6920,6 +6977,7 @@ export async function startServer({
           fallbackAttempted: run.artifactDeliveryFallbackAttempted,
           cancelRequested: run.cancelRequested,
         }, CODEX_WINDOWS_SANDBOX_UNAVAILABLE)
+        && financialResearchReadyForToolFreeFallback()
       ) {
         // The native attempt is about to be stopped by the runtime error
         // handler. Do not persist a terminal error yet: its close handler will
@@ -7983,6 +8041,7 @@ export async function startServer({
         fallbackAttempted: run.artifactDeliveryFallbackAttempted,
         cancelRequested: run.cancelRequested,
       }, CODEX_WINDOWS_SANDBOX_UNAVAILABLE)
+      && financialResearchReadyForToolFreeFallback()
     ) {
       cleanupPromptFile();
       revokeToolToken('child_exit');
@@ -9424,17 +9483,66 @@ export async function startServer({
         scheduleRetryRestart(0);
         return;
       }
+      // A form is a file-free clarification only when this run truly had no
+      // artifact side effect. A native Write/Edit or live-artifact event may
+      // be followed by a question form, but the file it already changed must
+      // still earn the browser save/readback/preview receipt.
+      const questionFormOnlyResponse =
+        isQuestionFormOnlyHostResponse(visibleAssistantText)
+        && !runArtifactSideEffects.artifactWriteSeen
+        && !runArtifactSideEffects.liveArtifactSeen;
+      if (
+        status === 'succeeded'
+        && run.artifactDeliveryRequired === true
+        && questionFormOnlyResponse
+      ) {
+        // A clarification form is a complete chat response but it creates no
+        // file for the renderer to persist. Clear the provisional requirement
+        // before finish() snapshots the terminal status so reconnecting tabs
+        // cannot misread this successful awaiting-input turn as a missing
+        // artifact-delivery receipt. Mixed form + artifact output is excluded
+        // by isQuestionFormOnlyHostResponse and remains fail-closed.
+        run.artifactDeliveryRequired = false;
+      }
+      const completedArtifactBodies = completeHostOwnedArtifactBodies(visibleAssistantText);
+      const financialGroundingCoverage = run.financialGroundingRequired === true
+        ? evaluateFinancialGroundingCoverage(
+            run.financialGroundingRequirements
+              ?? deriveFinancialGroundingRequirements(financialGroundingPromptText),
+            Array.isArray(run.trustedFinancialResearchAttestations)
+              ? run.trustedFinancialResearchAttestations
+              : [],
+            // Citations must survive in the actual persisted document. URLs
+            // in surrounding assistant prose are not delivery evidence; a
+            // native filesystem-only write has no daemon-verifiable readback
+            // here and therefore fails closed with an empty body set.
+            completedArtifactBodies.join('\n'),
+          )
+        : null;
       if (
         status === 'succeeded'
         && run.financialGroundingRequired === true
-        && !emittedRenderableQuestionForm(visibleAssistantText)
-        && !(Number(run.trustedResearchEvidenceCount) > 0)
+        && !questionFormOnlyResponse
+        && financialGroundingCoverage?.ok !== true
         && !design.runs.isTerminal(run.status)
       ) {
         send('error', createSseErrorPayload(
           FINANCIAL_GROUNDING_REQUIRED,
-          'This current-market financial document did not obtain trusted source evidence. No successful run-scoped research result was recorded, so MonoField did not mark the artifact as complete. Configure Tavily Search and retry, or explicitly request a mock document with unverified placeholders.',
-          { retryable: true },
+          financialGroundingFailureMessage(financialGroundingCoverage),
+          {
+            retryable: true,
+            details: {
+              freshnessDays: financialGroundingCoverage.freshnessDays,
+              freshnessByFacet: financialGroundingCoverage.freshnessByFacet,
+              missingEntities: financialGroundingCoverage.missingEntities,
+              staleEntities: financialGroundingCoverage.staleEntities,
+              undatedEntities: financialGroundingCoverage.undatedEntities,
+              missingFacets: financialGroundingCoverage.missingFacets,
+              staleFacets: financialGroundingCoverage.staleFacets,
+              undatedFacets: financialGroundingCoverage.undatedFacets,
+              missingCitations: financialGroundingCoverage.missingCitations,
+            },
+          },
         ));
         finishWithRetryDecision('failed', 1, null);
         return;
@@ -9445,7 +9553,7 @@ export async function startServer({
           deliveryRequired: run.artifactDeliveryRequired === true,
           executionProfile,
           assistantText: visibleAssistantText,
-          askedQuestion: emittedRenderableQuestionForm(visibleAssistantText),
+          askedQuestion: questionFormOnlyResponse,
         })
         && !design.runs.isTerminal(run.status)
       ) {

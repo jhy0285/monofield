@@ -741,6 +741,13 @@ function wantsUrlPreviewSnapshotBridge(value: unknown): boolean {
   return previewBridgeTokens(value).some((token) => token === 'snapshot' || token === 'image' || token === 'capture');
 }
 
+const ARTIFACT_PREVIEW_READY_TOKEN_RE = /^[A-Za-z0-9_-]{8,192}$/u;
+
+function artifactPreviewReadyToken(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  return ARTIFACT_PREVIEW_READY_TOKEN_RE.test(value) ? value : null;
+}
+
 function injectBeforeBodyClose(html: string, marker: string, injection: string): string {
   if (html.includes(marker)) return html;
   const bodyCloseIndex = html.search(/<\/body\s*>/i);
@@ -758,6 +765,27 @@ function injectUrlPreviewBridge(html: string, bridge: 'scroll' | 'selection' | '
     return injectBeforeBodyClose(html, 'data-od-url-selection-bridge', URL_PREVIEW_SELECTION_BRIDGE);
   }
   return injectBeforeBodyClose(html, 'data-od-url-snapshot-bridge', URL_PREVIEW_SNAPSHOT_BRIDGE);
+}
+
+function injectArtifactPreviewReadyBridge(html: string, token: string): string {
+  const tokenLiteral = JSON.stringify(token);
+  const marker = `data-od-artifact-preview-ready="${token}"`;
+  const script = `<script ${marker}>(function(){
+  var token = ${tokenLiteral};
+  var sent = false;
+  function reportReady(){
+    if (sent) return;
+    sent = true;
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'od:artifact-preview-ready', token: token }, '*');
+      }
+    } catch (_) {}
+  }
+  if (document.readyState === 'complete') setTimeout(reportReady, 0);
+  else window.addEventListener('load', reportReady, { once: true });
+})();</script>`;
+  return injectBeforeBodyClose(html, marker, script);
 }
 
 // ---------------------------------------------------------------------------
@@ -2320,6 +2348,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       if (req.headers.origin === 'null') {
         res.header('Access-Control-Allow-Origin', '*');
       }
+      const previewReadyToken = artifactPreviewReadyToken(req.query.odPreviewReadyToken);
 
       await sendProjectFile(
         req,
@@ -2340,7 +2369,8 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           if (
             (wantsUrlPreviewScrollBridge(req.query.odPreviewBridge) ||
               wantsUrlPreviewSelectionBridge(req.query.odPreviewBridge) ||
-              wantsUrlPreviewSnapshotBridge(req.query.odPreviewBridge)) &&
+              wantsUrlPreviewSnapshotBridge(req.query.odPreviewBridge) ||
+              previewReadyToken !== null) &&
             /^text\/html(?:;|$)/i.test(file.mime)
           ) {
             let html = Buffer.isBuffer(transformed) ? transformed.toString('utf8') : transformed;
@@ -2358,6 +2388,14 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
             }
             if (wantsUrlPreviewSnapshotBridge(req.query.odPreviewBridge)) {
               html = injectUrlPreviewBridge(html, 'snapshot');
+            }
+            if (previewReadyToken) {
+              // Parent-verifiable receipt independent of artifact scripts.
+              // Do not weaken a legitimate `script-src 'none'` policy just to
+              // complete host-owned delivery.
+              res.header('X-MonoField-Artifact-Preview-Token', previewReadyToken);
+              res.header('Access-Control-Expose-Headers', 'X-MonoField-Artifact-Preview-Token');
+              html = injectArtifactPreviewReadyBridge(html, previewReadyToken);
             }
             transformed = html;
           }

@@ -150,6 +150,21 @@ function workspaceFile(name: string): ProjectFile {
   };
 }
 
+function previewReceiptToken(frame: Element): string {
+  const src = frame.getAttribute('src');
+  if (!src) throw new Error('Expected URL-loaded preview src');
+  const token = new URL(src, 'http://localhost').searchParams.get('odPreviewReadyToken');
+  if (!token) throw new Error('Expected preview receipt token');
+  return token;
+}
+
+function postPreviewReceipt(frame: HTMLIFrameElement, token: string) {
+  window.dispatchEvent(new MessageEvent('message', {
+    source: frame.contentWindow,
+    data: { type: 'od:artifact-preview-ready', token },
+  }));
+}
+
 function renderWorkspace(element: React.ReactElement) {
   host = document.createElement('div');
   document.body.appendChild(host);
@@ -1054,7 +1069,7 @@ describe('FileWorkspace launcher tab creation', () => {
     });
   });
 
-  it('focuses an already-open file tab without adding a duplicate tab', async () => {
+  it('focuses an already-open file tab and acknowledges only its exact preview receipt', async () => {
     const onTabsStateChange = vi.fn();
     const onOpenRequestApplied = vi.fn();
 
@@ -1082,12 +1097,164 @@ describe('FileWorkspace launcher tab creation', () => {
         active: 'Web Prototype mutuals-v2.html',
       });
     });
+    expect(onOpenRequestApplied).not.toHaveBeenCalled();
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    fireEvent.load(frame);
+    expect(onOpenRequestApplied).not.toHaveBeenCalled();
+    postPreviewReceipt(frame, 'odpr-wrong-token');
+    expect(onOpenRequestApplied).not.toHaveBeenCalled();
+    const exactToken = previewReceiptToken(frame);
+    postPreviewReceipt(
+      screen.getByTestId('artifact-preview-frame-srcdoc') as HTMLIFrameElement,
+      exactToken,
+    );
+    expect(onOpenRequestApplied).not.toHaveBeenCalled();
+    postPreviewReceipt(frame, exactToken);
     await waitFor(() => {
       expect(onOpenRequestApplied).toHaveBeenCalledWith({
         name: 'Web Prototype mutuals-v2.html',
         nonce: 1,
-      });
+      }, true);
     });
+  });
+
+  it('ignores a previous request receipt after the active request changes', async () => {
+    const onOpenRequestApplied = vi.fn();
+    const file = workspaceFile('landing.html');
+    const baseProps = {
+      projectId: 'project-1',
+      projectKind: 'prototype' as const,
+      files: [file],
+      liveArtifacts: [],
+      onRefreshFiles: vi.fn(),
+      isDeck: false,
+      tabsState: { tabs: ['landing.html'], active: 'landing.html' },
+      onOpenRequestApplied,
+      onTabsStateChange: vi.fn(),
+    };
+    const view = render(
+      <FileWorkspace {...baseProps} openRequest={{ name: 'landing.html', nonce: 11 }} />,
+    );
+    const firstFrame = await screen.findByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const firstToken = previewReceiptToken(firstFrame);
+
+    view.rerender(
+      <FileWorkspace {...baseProps} openRequest={{ name: 'landing.html', nonce: 12 }} />,
+    );
+    const activeFrame = await screen.findByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const activeToken = previewReceiptToken(activeFrame);
+    expect(activeFrame).not.toBe(firstFrame);
+    expect(activeToken).not.toBe(firstToken);
+
+    fireEvent.load(firstFrame);
+    postPreviewReceipt(firstFrame, firstToken);
+    // Even a stale/reflector artifact that somehow learns the new token cannot
+    // acknowledge it: the receipt is bound to the fresh iframe Window.
+    postPreviewReceipt(firstFrame, activeToken);
+    expect(onOpenRequestApplied).not.toHaveBeenCalled();
+
+    postPreviewReceipt(activeFrame, activeToken);
+    await waitFor(() => {
+      expect(onOpenRequestApplied).toHaveBeenCalledWith({ name: 'landing.html', nonce: 12 }, true);
+    });
+  });
+
+  it('accepts the trusted URL receipt when artifact CSP blocks injected scripts', async () => {
+    const onOpenRequestApplied = vi.fn();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', {
+      status: 200,
+      headers: { 'X-MonoField-Artifact-Preview-Token': 'placeholder' },
+    }));
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('strict.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['strict.html'], active: 'strict.html' }}
+        openRequest={{ name: 'strict.html', nonce: 31 }}
+        onOpenRequestApplied={onOpenRequestApplied}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    const frame = await screen.findByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const token = previewReceiptToken(frame);
+    fetchSpy.mockResolvedValue(new Response('', {
+      status: 200,
+      headers: { 'X-MonoField-Artifact-Preview-Token': token },
+    }));
+    fireEvent.load(frame);
+
+    await waitFor(() => {
+      expect(onOpenRequestApplied).toHaveBeenCalledWith(
+        { name: 'strict.html', nonce: 31 },
+        true,
+      );
+    });
+    fetchSpy.mockRestore();
+  });
+
+  it('acknowledges an exact fast srcDoc load without relying on child script execution', async () => {
+    mockedFetchProjectFileText.mockResolvedValue(
+      '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="script-src \'none\'"></head><body><script>localStorage.getItem("x")</script>Strict</body></html>',
+    );
+    const onOpenRequestApplied = vi.fn();
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('strict-srcdoc.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['strict-srcdoc.html'], active: 'strict-srcdoc.html' }}
+        openRequest={{ name: 'strict-srcdoc.html', nonce: 32 }}
+        onOpenRequestApplied={onOpenRequestApplied}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    const frame = await screen.findByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(frame.dataset.odRenderMode).toBe('srcdoc');
+    fireEvent.load(frame);
+    await waitFor(() => {
+      expect(onOpenRequestApplied).toHaveBeenCalledWith(
+        { name: 'strict-srcdoc.html', nonce: 32 },
+        true,
+      );
+    });
+  });
+
+  it('never treats an HTML iframe error as a successful preview receipt', async () => {
+    const onOpenRequestApplied = vi.fn();
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('broken.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['broken.html'], active: 'broken.html' }}
+        openRequest={{ name: 'broken.html', nonce: 7 }}
+        onOpenRequestApplied={onOpenRequestApplied}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    expect(onOpenRequestApplied).not.toHaveBeenCalled();
+    const frame = await screen.findByTestId('artifact-preview-frame');
+    fireEvent.error(frame);
+
+    expect(onOpenRequestApplied).not.toHaveBeenCalledWith({
+      name: 'broken.html',
+      nonce: 7,
+    }, true);
   });
 });
 

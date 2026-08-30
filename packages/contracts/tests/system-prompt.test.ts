@@ -82,6 +82,10 @@ describe('DISCOVERY_AND_PHILOSOPHY (contracts copy) — TodoWrite plan item coun
     });
 
     expect(prompt).toContain('database table <schema> <table> --limit 5 --json');
+    expect(prompt).toContain('& $env:MONOFIELD_NODE_BIN $env:MONOFIELD_BIN database table');
+    expect(prompt).toContain('A single-table read gets one command');
+    expect(prompt).toContain('Never use `ProcessStartInfo`, named pipes, temporary artifacts, `artifacts create`, or `files write`');
+    expect(prompt).toContain('On failure, report the exact broker error and stop');
     expect(prompt).not.toContain('RULE 1 — turn 1 must emit');
     expect(prompt).not.toContain('# Slide deck — fixed framework');
     expect(prompt.length).toBeLessThan(3_500);

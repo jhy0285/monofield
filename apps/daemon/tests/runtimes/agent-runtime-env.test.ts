@@ -137,6 +137,8 @@ describe('agent runtime tool environment', () => {
     expect(prompt).toContain('`MONOFIELD_NODE_BIN`');
     expect(prompt).toContain('`"$MONOFIELD_NODE_BIN" "$MONOFIELD_BIN" tools ...`');
     expect(prompt).toContain('& $env:MONOFIELD_NODE_BIN $env:MONOFIELD_BIN tools ...');
+    expect(prompt).not.toContain('ProcessStartInfo');
+    expect(prompt).not.toContain('NamedPipeServerStream');
     expect(prompt).toContain('`MONOFIELD_TOOL_TOKEN` is available');
     expect(prompt).toContain('do not print, persist, or override it');
     expect(prompt).not.toContain('secret-run-token');

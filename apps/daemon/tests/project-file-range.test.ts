@@ -184,6 +184,11 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     await writeFile(path.join(dir, 'page.html'), Buffer.from('<html/>'));
     await writeFile(path.join(dir, 'body.html'), Buffer.from('<html><body><main>Preview</main></body></html>'));
     await writeFile(
+      path.join(dir, 'csp-none.html'),
+      Buffer.from('<html><head><meta http-equiv="Content-Security-Policy" content="script-src \'none\'"></head><body><main>Strict preview</main></body></html>'),
+    );
+    await writeFile(path.join(dir, 'notes.txt'), Buffer.from('plain text'));
+    await writeFile(
       path.join(dir, 'bridged.html'),
       Buffer.from('<html><body><script data-od-url-scroll-bridge></script><main>Preview</main></body></html>'),
     );
@@ -336,6 +341,43 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(html.indexOf('data-od-url-scroll-bridge')).toBeLessThan(html.indexOf('</body>'));
     expect(html.indexOf('data-od-url-selection-bridge')).toBeLessThan(html.indexOf('</body>'));
     expect(html.indexOf('data-od-url-snapshot-bridge')).toBeLessThan(html.indexOf('</body>'));
+  });
+
+  it('injects an exact preview receipt only into a successful HTML response', async () => {
+    const token = 'odpr-7-receipt123';
+    const receipt = await fetch(`${rawUrl('body.html')}?odPreviewReadyToken=${token}`);
+    expect(receipt.status).toBe(200);
+    expect(receipt.headers.get('x-monofield-artifact-preview-token')).toBe(token);
+    expect(receipt.headers.get('access-control-expose-headers'))
+      .toContain('X-MonoField-Artifact-Preview-Token');
+    const html = await receipt.text();
+    expect(html).toContain(`data-od-artifact-preview-ready="${token}"`);
+    expect(html).toContain("type: 'od:artifact-preview-ready'");
+    expect(html).toContain(`var token = "${token}"`);
+    expect(html.indexOf('data-od-artifact-preview-ready')).toBeLessThan(html.indexOf('</body>'));
+
+    const nonHtml = await fetch(`${rawUrl('notes.txt')}?odPreviewReadyToken=${token}`);
+    expect(nonHtml.status).toBe(200);
+    expect(nonHtml.headers.get('x-monofield-artifact-preview-token')).toBeNull();
+    expect(await nonHtml.text()).toBe('plain text');
+
+    const missing = await fetch(`${rawUrl('missing.html')}?odPreviewReadyToken=${token}`);
+    expect(missing.status).toBe(404);
+    expect(missing.headers.get('x-monofield-artifact-preview-token')).toBeNull();
+    expect(await missing.text()).not.toContain('od:artifact-preview-ready');
+
+    const strictCsp = await fetch(`${rawUrl('csp-none.html')}?odPreviewReadyToken=${token}`);
+    expect(strictCsp.status).toBe(200);
+    // The trusted parent handshake is a response receipt, so it remains
+    // available without relaxing or rewriting the artifact's CSP.
+    expect(strictCsp.headers.get('x-monofield-artifact-preview-token')).toBe(token);
+    expect(await strictCsp.text()).toContain("script-src 'none'");
+  });
+
+  it('ignores malformed preview receipt tokens', async () => {
+    const res = await fetch(`${rawUrl('body.html')}?odPreviewReadyToken=${encodeURIComponent('<script>bad</script>')}`);
+    expect(res.status).toBe(200);
+    expect(await res.text()).not.toContain('data-od-artifact-preview-ready');
   });
 
   it('does not inject the URL preview scroll bridge twice', async () => {

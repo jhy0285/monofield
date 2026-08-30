@@ -33,6 +33,11 @@ export type SrcdocOptions = {
   paletteBridge?: boolean;
   initialPalette?: string | null;
   previewFocusGuard?: boolean;
+  /**
+   * One-shot receipt expected by the host while delivering a saved HTML
+   * artifact. The bridge is omitted for ordinary previews.
+   */
+  previewReadyToken?: string;
 };
 
 /**
@@ -285,9 +290,41 @@ export function buildSrcdoc(
   // it to a per-call option would force iframe srcdoc regeneration (and a
   // visible flash) every time the host toggle flips.
   const withTweaks = injectTweaksBridge(withEdit);
+  const withPreviewReady = options.previewReadyToken
+    ? injectArtifactPreviewReadyBridge(withTweaks, options.previewReadyToken)
+    : withTweaks;
   return injectSrcdocTransportActivationBridge(
-    injectExportCaptureBridge(injectSnapshotBridge(withTweaks)),
+    injectExportCaptureBridge(injectSnapshotBridge(withPreviewReady)),
   );
+}
+
+/**
+ * Receipt handshake for host-side artifact delivery.
+ *
+ * A plain iframe `load` event also fires for daemon 404/error documents, so it
+ * cannot prove that the requested artifact reached the preview. This bridge is
+ * embedded only in the exact srcDoc requested by the host and echoes its token
+ * after that document's load event. The URL-load path injects the same bridge
+ * server-side, but only into a successfully-read HTML response.
+ */
+function injectArtifactPreviewReadyBridge(doc: string, token: string): string {
+  const tokenLiteral = JSON.stringify(token).replace(/</g, '\\u003c');
+  const script = `<script data-od-artifact-preview-ready>(function(){
+  var token = ${tokenLiteral};
+  var sent = false;
+  function reportReady(){
+    if (sent) return;
+    sent = true;
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'od:artifact-preview-ready', token: token }, '*');
+      }
+    } catch (_) {}
+  }
+  if (document.readyState === 'complete') setTimeout(reportReady, 0);
+  else window.addEventListener('load', reportReady, { once: true });
+})();</script>`;
+  return injectBeforeBodyEnd(doc, script);
 }
 
 /**

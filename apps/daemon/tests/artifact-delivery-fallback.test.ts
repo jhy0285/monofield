@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  completeHostOwnedArtifactBodies,
   executionProfileForArtifactDelivery,
   hasCompleteHostOwnedArtifactEnvelope,
   isHostOwnedArtifactFallbackAttempt,
+  isQuestionFormOnlyHostResponse,
   requiresHostOwnedArtifactDelivery,
   shouldEnforceCodexNativeSandboxCircuit,
   shouldRejectIncompleteHostOwnedArtifact,
@@ -97,6 +99,38 @@ describe('host-owned artifact delivery fallback', () => {
     )).toBe(false);
     expect(hasCompleteHostOwnedArtifactEnvelope('<artifact></artifact>')).toBe(false);
     expect(hasCompleteHostOwnedArtifactEnvelope('I finished the document.')).toBe(false);
+  });
+
+  it('extracts only complete artifact bodies and ignores surrounding prose', () => {
+    expect(completeHostOwnedArtifactBodies([
+      'The source is https://outside.example/report.',
+      '<artifact type="text/html"><html>first</html></artifact>',
+      'more prose',
+      '<artifact type="application/json">{"ok":true}</artifact>',
+      '<artifact type="text/html">truncated',
+    ].join('\n'))).toEqual([
+      '<html>first</html>',
+      '{"ok":true}',
+    ]);
+  });
+
+  it('classifies a renderable clarification form without an artifact as question-form-only', () => {
+    const form = [
+      '진행 전에 한 가지만 선택해 주세요.',
+      '<question-form id="direction">',
+      '{"questions":[{"id":"tone","label":"Tone","type":"select"}]}',
+      '</question-form>',
+    ].join('\n');
+    expect(isQuestionFormOnlyHostResponse(form)).toBe(true);
+    expect(isQuestionFormOnlyHostResponse(
+      `${form}\n<artifact type="text/html"><html></html></artifact>`,
+    )).toBe(false);
+    expect(isQuestionFormOnlyHostResponse(
+      `${form}\n<artifact type="text/html">truncated`,
+    )).toBe(false);
+    expect(isQuestionFormOnlyHostResponse(
+      '<question-form id="direction">not json</question-form>',
+    )).toBe(false);
   });
 
   it('rejects prose and partial output on the required no-tools delivery attempt', () => {
