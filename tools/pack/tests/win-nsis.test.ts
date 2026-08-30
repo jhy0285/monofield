@@ -43,17 +43,19 @@ describe("stageNsisInvocation", () => {
     expect(invocation.command).toMatch(/MonoField-default-setup\.exe$/);
     expect(invocation.args).toEqual(["/S", "/D=D:\\runtime\\MonoField"]);
     expect(invocation.args).not.toContain("/NCRC");
+    const stagedRoot = dirname(invocation.command);
     expect(invocation.env).toMatchObject({
-      TEMP: join(fixture.localAppData, "Temp"),
-      TMP: join(fixture.localAppData, "Temp"),
-      TMPDIR: join(fixture.localAppData, "Temp"),
+      TEMP: stagedRoot,
+      TMP: stagedRoot,
+      TMPDIR: stagedRoot,
     });
     expect(await readFile(invocation.command)).toEqual(await readFile(fixture.setupPath));
     expect(invocation.sha256).toBe(
       createHash("sha256").update(await readFile(fixture.setupPath)).digest("hex"),
     );
 
-    const stagedRoot = dirname(invocation.command);
+    await mkdir(join(stagedRoot, "nsis-extraction-residue"), { recursive: true });
+    await writeFile(join(stagedRoot, "nsis-extraction-residue", "payload.bin"), "temporary");
     await invocation.cleanup();
     await expect(readFile(invocation.command)).rejects.toThrow();
     await expect(readFile(stagedRoot)).rejects.toThrow();

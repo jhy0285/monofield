@@ -11,6 +11,7 @@
   },
   "scripts": {
     "postinstall": "node ./scripts/postinstall.mjs",
+    "cleanup:temp": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tools/release/scripts/cleanup-monofield-local-temp.ps1 -StopOrphanTestRunners",
     "build:web": "pnpm --dir apps/web build",
     "build:daemon": "pnpm --dir apps/daemon build",
     "check:contracts": "pnpm --dir packages/contracts typecheck",

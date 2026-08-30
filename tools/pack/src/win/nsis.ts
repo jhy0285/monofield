@@ -257,9 +257,12 @@ export async function stageNsisInvocation(
       command: stagedCommand,
       env: {
         ...env,
-        TEMP: localTempRoot,
-        TMP: localTempRoot,
-        TMPDIR: localTempRoot,
+        // Keep NSIS' ns*.tmp extraction tree inside the invocation directory.
+        // The finally cleanup below then removes both the staged executable and
+        // any extraction residue, including interrupted smoke runs.
+        TEMP: stageRoot,
+        TMP: stageRoot,
+        TMPDIR: stageRoot,
       },
       sha256: sourceSha256,
       staged: true,

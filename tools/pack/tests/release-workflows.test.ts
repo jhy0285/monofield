@@ -55,6 +55,20 @@ describe("Windows release workflow", () => {
     expect(buildScript).toContain('"--to", $BuildTarget');
     expect(buildScript).toContain("Validate-WinLauncherPayloadArchive");
     expect(buildScript).toContain('Test-JsonString $manifest.entry.executable "entry.executable" "payload/MonoField.exe"');
+    expect(buildScript).toContain('cleanup-monofield-local-temp.ps1');
+    expect(buildScript).toContain('-StopOrphanTestRunners -MinimumAgeMinutes 5');
+    const updateFixtureBuild = sectionBetween(
+      buildScript,
+      '    Measure-Step "tools-pack win build update fixture" {',
+      '    Measure-Step "validate launcher payload update fixture" {',
+    );
+    expect(updateFixtureBuild).toContain('$updateOutput | Set-Content -LiteralPath $fixtureJsonPath -Encoding utf8');
+    expect(updateFixtureBuild).toContain('$localUpdateArtifactPath = [string]$updateBuild.installerPath');
+    const scopeBoundary = updateFixtureBuild.indexOf('    }\n    # Measure-Step');
+    expect(scopeBoundary).toBeGreaterThanOrEqual(0);
+    expect(scopeBoundary).toBeLessThan(
+      updateFixtureBuild.indexOf('$localUpdateArtifactPath = [string]$updateBuild.installerPath'),
+    );
   });
 
   it("requires Authenticode signing before publishing updater-compatible GitHub assets", async () => {

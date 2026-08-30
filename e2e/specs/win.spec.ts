@@ -1475,7 +1475,7 @@ function expectPathInside(filePath: string, expectedRoot: string): void {
 }
 
 function expectWindowsPackagedAppUrl(value: string | null | undefined): void {
-  expect(value).toEqual(expect.stringMatching(/^od:\/\/app\/$/));
+  expect(value).toEqual(expect.stringMatching(/^monofield:\/\/app\/$/));
 }
 
 function expectWindowsFallbackWebUrl(value: string | null | undefined): void {

@@ -304,11 +304,14 @@ try {
         throw "tools-pack win update fixture build failed with exit code $LASTEXITCODE"
       }
       $updateOutput | Set-Content -LiteralPath $fixtureJsonPath -Encoding utf8
-      $updateBuild = Get-Content -LiteralPath $fixtureJsonPath -Raw | ConvertFrom-Json
-      $localUpdateArtifactPath = [string]$updateBuild.installerPath
-      if ([string]::IsNullOrWhiteSpace($localUpdateArtifactPath)) {
-        throw "tools-pack win build update fixture did not report installerPath"
-      }
+    }
+    # Measure-Step invokes its scriptblock through a function scope. Resolve the
+    # fixture path here so it remains available when the smoke environment is
+    # populated below.
+    $updateBuild = Get-Content -LiteralPath $fixtureJsonPath -Raw | ConvertFrom-Json
+    $localUpdateArtifactPath = [string]$updateBuild.installerPath
+    if ([string]::IsNullOrWhiteSpace($localUpdateArtifactPath)) {
+      throw "tools-pack win build update fixture did not report installerPath"
     }
     Measure-Step "validate launcher payload update fixture" {
       $updateBuild = Get-Content -LiteralPath $fixtureJsonPath -Raw | ConvertFrom-Json
@@ -375,4 +378,15 @@ try {
     Write-Warning "failed to write $ReleaseChannel build index: $($_.Exception.Message)"
   }
   throw
+} finally {
+  if ([System.Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+    $cleanupScript = Join-Path $PSScriptRoot "cleanup-monofield-local-temp.ps1"
+    if (Test-Path -LiteralPath $cleanupScript) {
+      try {
+        & $cleanupScript -StopOrphanTestRunners -MinimumAgeMinutes 5 | Write-Host
+      } catch {
+        Write-Warning "MonoField local temp cleanup failed: $($_.Exception.Message)"
+      }
+    }
+  }
 }
