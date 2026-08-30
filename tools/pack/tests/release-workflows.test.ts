@@ -61,6 +61,7 @@ describe("Windows release workflow", () => {
     expect(buildScript).toContain('-StopOrphanTestRunners -MinimumAgeMinutes 5');
     expect(cleanupScript).toContain('[switch]$PruneReusableCaches');
     expect(cleanupScript).toContain('$_.Name -like "codex-monofield-*"');
+    expect(cleanupScript).not.toContain('Join-Path $env:LOCALAPPDATA "electron-builder\\\\Cache"');
     expect(cleanupScript).toContain('Join-Path $env:APPDATA "MonoField"');
     expect(cleanupScript).toContain('requiresStoppedApp = $true');
     expect(cleanupScript).toContain('-Attributes ReparsePoint');

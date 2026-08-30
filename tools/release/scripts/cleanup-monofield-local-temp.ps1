@@ -111,11 +111,6 @@ if ($PruneReusableCaches) {
       path = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "electron\\Cache"))
       root = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "electron"))
       requiresStoppedApp = $false
-    },
-    [pscustomobject]@{
-      path = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "electron-builder\\Cache"))
-      root = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA "electron-builder"))
-      requiresStoppedApp = $false
     }
   )
   foreach ($cacheName in @("Cache", "Code Cache", "GPUCache", "DawnGraphiteCache", "DawnWebGPUCache")) {
@@ -143,9 +138,8 @@ if ($PruneReusableCaches) {
       continue
     }
     try {
-      # electron-builder archives can contain dangling macOS symlinks. Removing
-      # those reparse points first avoids Windows PowerShell failing the whole
-      # recursive cache deletion on a target that does not exist on Windows.
+      # Remove cache reparse points before the recursive sweep so a stale link
+      # cannot make Windows PowerShell fail the entire cache deletion.
       Get-ChildItem -LiteralPath $cache.path -Recurse -Force -Attributes ReparsePoint -ErrorAction SilentlyContinue |
         Sort-Object { $_.FullName.Length } -Descending |
         ForEach-Object {
