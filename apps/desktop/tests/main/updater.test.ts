@@ -8,9 +8,6 @@ import { basename, join, relative } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  LAUNCHER_AFTER_QUIT_FLAG,
-  LAUNCHER_AFTER_QUIT_TARGET_PID_ARG,
-  LAUNCHER_AFTER_QUIT_TIMEOUT_MS_ARG,
   LAUNCHER_SCHEMA_VERSION,
   resolveLauncherPaths,
 } from "@open-design/launcher-proto";
@@ -670,7 +667,8 @@ describe("desktop updater", () => {
     const launcherRoot = root;
     const versionRoot = join(root, "launcher", "channels", "beta", "namespaces", "release-beta-win", "versions");
     const launcherLaunchPath = join(root, "installed", "Open Design Beta.exe");
-    const launches: Array<{ appPid: number; launchPath: string; root: string }> = [];
+    const unref = vi.fn();
+    const spawned: Array<{ args: string[]; command: string; options: unknown }> = [];
     let extractCount = 0;
     try {
       await mkdir(join(root, "installed"), { recursive: true });
@@ -724,16 +722,12 @@ describe("desktop updater", () => {
           );
           await writeFile(join(destinationRoot, "payload", "resources", "open-design-config.json"), "{}\n");
         },
-        launchAppAfterQuit: async (input) => {
-          launches.push({
-            appPid: input.appPid,
-            launchPath: input.launchPath,
-            root: input.root,
-          });
-          return { helperLogPath: join(root, "updates", "helpers", "open-app-after-quit-test.log") };
-        },
         processExecPath: "C:\\Program Files\\Open Design Beta\\Open Design Beta.exe",
         processPid: 4242,
+        spawnDetached: (command, args, options) => {
+          spawned.push({ args, command, options });
+          return { unref };
+        },
       });
 
       const checked = await updater.checkForUpdates();
@@ -759,16 +753,45 @@ describe("desktop updater", () => {
       expect(installed.installResult?.activeVersion).toBe("1.0.0-beta.2");
       expect(installed.installResult?.launchPath).toBe(launcherLaunchPath);
       expect(installed.installResult?.launcherRuntimePath).toBe(launcherRuntimePath);
-      expect(installed.installResult?.helperLogPath).toEqual(expect.stringContaining("open-app-after-quit-test.log"));
+      expect(installed.installResult?.helperLogPath).toEqual(expect.stringMatching(/open-app-after-quit-.+\.log$/));
       expect(installed.installResult?.dryRun).toBe(false);
       expect(extractCount).toBe(1);
-      expect(launches).toEqual([
-        {
-          appPid: 4242,
-          launchPath: launcherLaunchPath,
-          root: await realpath(join(root, "updates")),
-        },
-      ]);
+      expect(spawned).toHaveLength(1);
+      expect(unref).toHaveBeenCalledTimes(1);
+      expect(spawned[0]?.command).toEqual(expect.stringContaining(join("System32", "WindowsPowerShell", "v1.0", "powershell.exe")));
+      expect(spawned[0]?.options).toEqual({ detached: true, stdio: "ignore", windowsHide: true });
+      const launchArgs = spawned[0]?.args ?? [];
+      const launcherPath = launchArgs.at(launchArgs.indexOf("-File") + 1);
+      const scriptPath = launchArgs.at(launchArgs.indexOf("-HelperPath") + 1);
+      const logPath = launchArgs.at(launchArgs.indexOf("-LogPath") + 1);
+      expect(launchArgs).toEqual(expect.arrayContaining([
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-PowerShellPath",
+        spawned[0]?.command,
+        "-HelperPath",
+        "-TargetPid",
+        "4242",
+        "-AppPath",
+        launcherLaunchPath,
+        "-TimeoutMs",
+        "600000",
+      ]));
+      expect(launcherPath).toEqual(expect.stringMatching(/open-app-after-quit-.+\.launcher\.ps1$/));
+      expect(scriptPath).toEqual(expect.stringMatching(/open-app-after-quit-.+\.ps1$/));
+      expect(logPath).toBe(installed.installResult?.helperLogPath);
+      const launcher = await readFile(launcherPath ?? "", "utf8");
+      expect(launcher).toContain("Start-Process -FilePath $PowerShellPath -WindowStyle Hidden");
+      expect(launcher).toContain("Quote-WindowsPowerShellArgument $AppPath");
+      expect(launcher).toContain("Remove-Item -LiteralPath $PSCommandPath");
+      const script = await readFile(scriptPath ?? "", "utf8");
+      expect(script).toContain("Get-Process -Id $TargetPid");
+      expect(script).toContain("Start-Sleep -Milliseconds 500");
+      expect(script).toContain("Start-Process -FilePath $AppPath");
+      expect(script).toContain("Remove-Item -LiteralPath $PSCommandPath");
       const runtime = JSON.parse(await readFile(launcherRuntimePath, "utf8")) as {
         active?: { generation?: number; version?: string };
         lastSuccessful?: { generation?: number; version?: string };
@@ -1307,7 +1330,7 @@ describe("desktop updater", () => {
     }
   });
 
-  it("starts the stable Windows launcher in after-quit mode for payload installs", async () => {
+  it("starts the stable Windows launcher through an independent after-quit helper for payload installs", async () => {
     const root = makeRoot();
     const fixture = await createUpdaterFixture({
       artifactBody: "open design windows installer fixture",
@@ -1385,19 +1408,38 @@ describe("desktop updater", () => {
       expect(installed.error).toBeUndefined();
       expect(installed.installResult?.path).toBe(checked.downloadPath);
       expect(installed.installResult?.launchPath).toBe(launcherLaunchPath);
-      expect(installed.installResult?.helperLogPath).toBeUndefined();
+      expect(installed.installResult?.helperLogPath).toEqual(expect.stringMatching(/open-app-after-quit-.+\.log$/));
       expect(spawned).toHaveLength(1);
       expect(unref).toHaveBeenCalledTimes(1);
-      expect(spawned[0]?.command).toBe(launcherLaunchPath);
+      expect(spawned[0]?.command).toEqual(expect.stringContaining(join("System32", "WindowsPowerShell", "v1.0", "powershell.exe")));
       expect(spawned[0]?.options).toEqual({ detached: true, stdio: "ignore", windowsHide: true });
       const args = spawned[0]?.args ?? [];
       expect(args).toEqual(expect.arrayContaining([
-        LAUNCHER_AFTER_QUIT_FLAG,
-        LAUNCHER_AFTER_QUIT_TARGET_PID_ARG,
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-PowerShellPath",
+        spawned[0]?.command,
+        "-HelperPath",
+        "-TargetPid",
         "4245",
-        LAUNCHER_AFTER_QUIT_TIMEOUT_MS_ARG,
+        "-AppPath",
+        launcherLaunchPath,
+        "-TimeoutMs",
         "600000",
       ]));
+      const launcherPath = args.at(args.indexOf("-File") + 1);
+      const helperPath = args.at(args.indexOf("-HelperPath") + 1);
+      const logPath = args.at(args.indexOf("-LogPath") + 1);
+      expect(launcherPath).toEqual(expect.stringMatching(/open-app-after-quit-.+\.launcher\.ps1$/));
+      expect(helperPath).toEqual(expect.stringMatching(/open-app-after-quit-.+\.ps1$/));
+      expect(logPath).toBe(installed.installResult?.helperLogPath);
+      expect(await readFile(launcherPath ?? "", "utf8")).toContain("Start-Process -FilePath $PowerShellPath -WindowStyle Hidden");
+      const helper = await readFile(helperPath ?? "", "utf8");
+      expect(helper).toContain("Get-Process -Id $TargetPid");
+      expect(helper).toContain("Start-Process -FilePath $AppPath");
     } finally {
       await fixture.close();
       rmSync(root, { force: true, recursive: true });
