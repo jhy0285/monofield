@@ -114,6 +114,7 @@ const DEFAULT_POLL_BACKOFF_MAX_MS = 30 * 60 * 1000;
 const MIN_SCHEDULED_POLL_DELAY_MS = 1000;
 const MAC_DEFERRED_INSTALLER_TIMEOUT_MS = 10 * 60 * 1000;
 const WINDOWS_DEFERRED_INSTALLER_TIMEOUT_MS = 10 * 60 * 1000;
+const WINDOWS_DEFERRED_HELPER_READY_TIMEOUT_MS = 15 * 1000;
 const ARTIFACT_DOWNLOAD_MAX_ATTEMPTS = 3;
 const RELEASE_PROMOTE_RETRY_DELAYS_MS = [25, 75, 150, 300] as const;
 const RETRYABLE_RELEASE_PROMOTE_CODES = new Set(["EACCES", "EBUSY", "ENOTEMPTY", "EPERM"]);
@@ -1759,6 +1760,23 @@ function windowsPowerShellCommand(env: NodeJS.ProcessEnv = process.env): string 
   return join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
 }
 
+async function waitForWindowsDeferredHelperReady(
+  logPath: string,
+  timeoutMs = WINDOWS_DEFERRED_HELPER_READY_TIMEOUT_MS,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const log = await readFile(logPath, "utf8").catch(() => "");
+    if (log.includes("armed for pid=")) return;
+    const failure = log
+      .split(/\r?\n/u)
+      .find((line) => line.includes("launcher failed:") || line.includes("failed:"));
+    if (failure != null) throw new Error(failure.trim());
+    await waitForReleasePromoteRetry(50);
+  }
+  throw new Error(`timed out waiting for the Windows relaunch helper to become ready: ${logPath}`);
+}
+
 async function launchMacInstallerAfterQuit(
   input: DeferredInstallerLaunchInput,
   deps: { now: () => Date; spawnDetached: SpawnInstallerHelper },
@@ -1866,6 +1884,7 @@ async function launchWindowsAppAfterQuit(
       { detached: true, stdio: "ignore", windowsHide: true },
     );
     child.unref();
+    await waitForWindowsDeferredHelperReady(logPath);
     return { helperLogPath: logPath };
   } catch (error) {
     return { error: error instanceof Error ? error.message : String(error) };

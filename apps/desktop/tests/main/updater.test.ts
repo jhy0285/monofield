@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { mkdir, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
@@ -726,6 +726,8 @@ describe("desktop updater", () => {
         processPid: 4242,
         spawnDetached: (command, args, options) => {
           spawned.push({ args, command, options });
+          const logPath = args.at(args.indexOf("-LogPath") + 1);
+          if (logPath != null) writeFileSync(logPath, "armed for pid=4242\n", "utf8");
           return { unref };
         },
       });
@@ -1398,6 +1400,8 @@ describe("desktop updater", () => {
         processPid: 4245,
         spawnDetached: (command, args, options) => {
           spawned.push({ args, command, options });
+          const logPath = args.at(args.indexOf("-LogPath") + 1);
+          if (logPath != null) writeFileSync(logPath, "armed for pid=4245\n", "utf8");
           return { unref };
         },
       });
