@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "nod
 import { mkdir, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
-import { basename, join, relative } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
@@ -669,6 +669,7 @@ describe("desktop updater", () => {
     const launcherLaunchPath = join(root, "installed", "Open Design Beta.exe");
     const unref = vi.fn();
     const spawned: Array<{ args: string[]; command: string; options: unknown }> = [];
+    let helperRoot: string | undefined;
     let extractCount = 0;
     try {
       await mkdir(join(root, "installed"), { recursive: true });
@@ -727,7 +728,10 @@ describe("desktop updater", () => {
         spawnDetached: (command, args, options) => {
           spawned.push({ args, command, options });
           const logPath = args.at(args.indexOf("-LogPath") + 1);
-          if (logPath != null) writeFileSync(logPath, "armed for pid=4242\n", "utf8");
+          if (logPath != null) {
+            helperRoot = dirname(logPath);
+            writeFileSync(logPath, "armed for pid=4242\n", "utf8");
+          }
           return { unref };
         },
       });
@@ -785,6 +789,7 @@ describe("desktop updater", () => {
       expect(launcherPath).toEqual(expect.stringMatching(/open-app-after-quit-.+\.launcher\.ps1$/));
       expect(scriptPath).toEqual(expect.stringMatching(/open-app-after-quit-.+\.ps1$/));
       expect(logPath).toBe(installed.installResult?.helperLogPath);
+      expect(logPath).toContain(join(tmpdir(), "monofield-update-helper-"));
       const launcher = await readFile(launcherPath ?? "", "utf8");
       expect(launcher).toContain("Start-Process -FilePath $PowerShellPath -WindowStyle Hidden");
       expect(launcher).toContain("Quote-WindowsPowerShellArgument $AppPath");
@@ -806,6 +811,7 @@ describe("desktop updater", () => {
     } finally {
       await fixture.close();
       rmSync(root, { force: true, recursive: true });
+      if (helperRoot != null) rmSync(helperRoot, { force: true, recursive: true });
     }
   });
 
@@ -1347,6 +1353,7 @@ describe("desktop updater", () => {
     const launcherLaunchPath = join(root, "installed", "Open Design.exe");
     const spawned: Array<{ args: string[]; command: string; options: unknown }> = [];
     const unref = vi.fn();
+    let helperRoot: string | undefined;
     try {
       await mkdir(join(root, "installed"), { recursive: true });
       await writeFile(launcherLaunchPath, "");
@@ -1401,7 +1408,10 @@ describe("desktop updater", () => {
         spawnDetached: (command, args, options) => {
           spawned.push({ args, command, options });
           const logPath = args.at(args.indexOf("-LogPath") + 1);
-          if (logPath != null) writeFileSync(logPath, "armed for pid=4245\n", "utf8");
+          if (logPath != null) {
+            helperRoot = dirname(logPath);
+            writeFileSync(logPath, "armed for pid=4245\n", "utf8");
+          }
           return { unref };
         },
       });
@@ -1440,6 +1450,7 @@ describe("desktop updater", () => {
       expect(launcherPath).toEqual(expect.stringMatching(/open-app-after-quit-.+\.launcher\.ps1$/));
       expect(helperPath).toEqual(expect.stringMatching(/open-app-after-quit-.+\.ps1$/));
       expect(logPath).toBe(installed.installResult?.helperLogPath);
+      expect(logPath).toContain(join(tmpdir(), "monofield-update-helper-"));
       expect(await readFile(launcherPath ?? "", "utf8")).toContain("Start-Process -FilePath $PowerShellPath -WindowStyle Hidden");
       const helper = await readFile(helperPath ?? "", "utf8");
       expect(helper).toContain("Get-Process -Id $TargetPid");
@@ -1447,6 +1458,7 @@ describe("desktop updater", () => {
     } finally {
       await fixture.close();
       rmSync(root, { force: true, recursive: true });
+      if (helperRoot != null) rmSync(helperRoot, { force: true, recursive: true });
     }
   });
 

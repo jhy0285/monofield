@@ -5,6 +5,7 @@ import {
   access,
   chmod,
   lstat,
+  mkdtemp,
   mkdir,
   readdir,
   readFile,
@@ -14,6 +15,7 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
@@ -1850,7 +1852,12 @@ async function launchWindowsAppAfterQuit(
   deps: { now: () => Date; spawnDetached: SpawnInstallerHelper },
 ): Promise<DeferredLaunchResult> {
   try {
-    const helpersRoot = await ensureOwnedSubdir(input.root, HELPERS_DIR);
+    // PowerShell cannot reliably execute `-File` scripts from a UNC path. The
+    // update store may resolve a mapped drive to UNC through `realpath`, so
+    // keep the short-lived relaunch helpers in the current user's local Temp.
+    // The helper scripts remove themselves and the release cleanup sweep owns
+    // stale `monofield-*` directories after interrupted launches.
+    const helpersRoot = await mkdtemp(join(tmpdir(), "monofield-update-helper-"));
     const suffix = `${deps.now().getTime().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
     const scriptPath = join(helpersRoot, `open-app-after-quit-${suffix}.ps1`);
     const launcherPath = join(helpersRoot, `open-app-after-quit-${suffix}.launcher.ps1`);
