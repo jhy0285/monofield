@@ -116,6 +116,8 @@ const MIN_SCHEDULED_POLL_DELAY_MS = 1000;
 const MAC_DEFERRED_INSTALLER_TIMEOUT_MS = 10 * 60 * 1000;
 const WINDOWS_DEFERRED_INSTALLER_TIMEOUT_MS = 10 * 60 * 1000;
 const ARTIFACT_DOWNLOAD_MAX_ATTEMPTS = 3;
+const RELEASE_PROMOTE_RETRY_DELAYS_MS = [25, 75, 150, 300] as const;
+const RETRYABLE_RELEASE_PROMOTE_CODES = new Set(["EACCES", "EBUSY", "ENOTEMPTY", "EPERM"]);
 const DESKTOP_UPDATE_CHANNEL_VALUES = new Set<string>(Object.values(DESKTOP_UPDATE_CHANNELS));
 const execFileAsync = promisify(execFile);
 const MAC_PAYLOAD_XATTRS_TO_SCRUB = ["com.apple.quarantine", "com.apple.provenance", "com.apple.macl"] as const;
@@ -191,6 +193,24 @@ type SpawnInstallerHelper = (
   args: string[],
   options: { detached?: true; stdio: "ignore"; windowsHide: true },
 ) => DetachedProcess;
+
+function waitForReleasePromoteRetry(delayMs: number): Promise<void> {
+  return new Promise((resolveWait) => setTimeout(resolveWait, delayMs));
+}
+
+async function promoteReleaseDirectory(stagingDir: string, releaseDir: string): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await rename(stagingDir, releaseDir);
+      return;
+    } catch (error) {
+      const code = error instanceof Error && "code" in error ? String(error.code) : "";
+      const retryDelay = RELEASE_PROMOTE_RETRY_DELAYS_MS[attempt];
+      if (!RETRYABLE_RELEASE_PROMOTE_CODES.has(code) || retryDelay == null) throw error;
+      await waitForReleasePromoteRetry(retryDelay);
+    }
+  }
+}
 
 export type DeferredInstallerLaunchInput = {
   appPid: number;
@@ -557,14 +577,25 @@ function releaseMatchesCandidate(
   saved: UpdateReleaseRef,
   candidate: UpdateCandidate,
 ): boolean {
+  if (!releaseIdentityMatchesCandidate(saved, candidate)) return false;
+  if (saved.artifact.url !== candidate.artifact.url) return false;
+  if (candidate.checksum.url != null && saved.checksum.url !== candidate.checksum.url) return false;
+  if (candidate.checksum.value != null && saved.checksum.value !== candidate.checksum.value) return false;
+  return true;
+}
+
+function releaseIdentityMatchesCandidate(
+  saved: UpdateReleaseRef,
+  candidate: UpdateCandidate,
+): boolean {
   if (saved.channel !== candidate.channel) return false;
   if (saved.platformKey !== candidate.platformKey) return false;
   if (saved.arch !== candidate.arch) return false;
   if (saved.version !== candidate.version) return false;
-  if (saved.artifact.url !== candidate.artifact.url) return false;
+  if (saved.artifact.type !== candidate.artifact.type) return false;
+  if (saved.artifact.name !== candidate.artifact.name) return false;
+  if (saved.artifact.size !== candidate.artifact.size) return false;
   if (saved.checksum.algorithm !== candidate.checksum.algorithm) return false;
-  if (candidate.checksum.url != null && saved.checksum.url !== candidate.checksum.url) return false;
-  if (candidate.checksum.value != null && saved.checksum.value !== candidate.checksum.value) return false;
   return true;
 }
 
@@ -2596,6 +2627,37 @@ export function createDesktopUpdater(
     }
   }
 
+  async function refreshMatchingActiveRelease(candidateToMatch: UpdateCandidate): Promise<boolean> {
+    const current = activeRelease;
+    if (current == null) return false;
+    if (releaseMatchesCandidate(current.ref, candidateToMatch)) return true;
+    if (!releaseIdentityMatchesCandidate(current.ref, candidateToMatch)) return false;
+
+    const resolvedChecksum = await resolveChecksum(fetchImpl, candidateToMatch.checksum);
+    if (
+      current.ref.checksum.value == null ||
+      resolvedChecksum.value == null ||
+      current.ref.checksum.value.toLowerCase() !== resolvedChecksum.value.toLowerCase()
+    ) {
+      return false;
+    }
+
+    activeRelease = {
+      path: current.path,
+      ref: {
+        ...current.ref,
+        artifact: candidateToMatch.artifact,
+        checksum: resolvedChecksum,
+        metadata: candidateToMatch.metadata,
+      },
+    };
+    logUpdateEvent("check-refresh-active-release", {
+      key: activeRelease.ref.key,
+      version: activeRelease.ref.version,
+    });
+    return true;
+  }
+
   async function restoreStoreState(): Promise<DesktopUpdateStatusSnapshot | null> {
     const opened = await openStore();
     if (!opened.ok) return opened.status;
@@ -2723,14 +2785,27 @@ export function createDesktopUpdater(
         }));
         return setState(DESKTOP_UPDATE_STATES.NOT_AVAILABLE);
       }
-      if (activeRelease != null && releaseMatchesCandidate(activeRelease.ref, selected.candidate)) {
+      if (await refreshMatchingActiveRelease(selected.candidate)) {
+        const matchingActiveRelease = activeRelease;
+        if (matchingActiveRelease == null) {
+          return setState(
+            DESKTOP_UPDATE_STATES.ERROR,
+            createError("active-release-missing", "active release disappeared while refreshing update metadata"),
+          );
+        }
         logUpdateEvent("check-already-downloaded", {
-          key: activeRelease.ref.key,
-          version: activeRelease.ref.version,
+          key: matchingActiveRelease.ref.key,
+          version: matchingActiveRelease.ref.version,
         });
         candidate = selected.candidate;
         metadata = selected.candidate.metadata;
-        const prepareError = await preparePayloadReleaseForReady(activeRelease);
+        await writeMetadataPatch((current) => ({
+          ...current,
+          active: matchingActiveRelease.ref,
+          incoming: undefined,
+          lastCheckedAt,
+        }));
+        const prepareError = await preparePayloadReleaseForReady(matchingActiveRelease);
         if (prepareError != null) return prepareError;
         return setState(DESKTOP_UPDATE_STATES.DOWNLOADED);
       }
@@ -2921,7 +2996,7 @@ export function createDesktopUpdater(
       await writeJson(join(stagingDir, "metadata.json"), nextCandidate.metadata);
       await writeJson(join(stagingDir, "checksum.json"), resolvedChecksum);
       try {
-        await rename(stagingDir, releaseDir);
+        await promoteReleaseDirectory(stagingDir, releaseDir);
       } catch (renameError) {
         return await failDownload(createError("release-promote-failed", renameError instanceof Error ? renameError.message : String(renameError)));
       }

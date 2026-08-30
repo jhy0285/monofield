@@ -1877,6 +1877,51 @@ describe("desktop updater", () => {
     }
   });
 
+  it("reuses an active verified release when only the artifact and checksum URLs change", async () => {
+    const root = makeRoot();
+    const artifactBody = "open design updater fixture with a reusable active digest";
+    const firstFixture = await createUpdaterFixture({ artifactBody });
+    try {
+      const firstUpdater = createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv(firstFixture.metadataUrl),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+      const first = await firstUpdater.checkForUpdates();
+      expect(first.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      expect(first.downloadPath).toEqual(expect.any(String));
+    } finally {
+      await firstFixture.close();
+    }
+
+    const secondFixture = await createUpdaterFixture({ artifactBody });
+    try {
+      const restarted = createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv(secondFixture.metadataUrl),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+      const restored = await restarted.checkForUpdates();
+      const expectedArtifactUrl = new URL("/artifact.dmg", secondFixture.metadataUrl).toString();
+      const metadata = JSON.parse(await readFile(join(root, "metadata.json"), "utf8")) as {
+        active?: { artifact?: { url?: string }; checksum?: { url?: string } };
+      };
+
+      expect(restored.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      expect(restored.error).toBeUndefined();
+      expect(restored.downloadPath).toEqual(expect.any(String));
+      expect(restored.artifactUrl).toBe(expectedArtifactUrl);
+      expect(metadata.active?.artifact?.url).toBe(expectedArtifactUrl);
+      expect(metadata.active?.checksum?.url).toContain(new URL(secondFixture.metadataUrl).host);
+      expect(secondFixture.artifactRequests()).toBe(0);
+    } finally {
+      await secondFixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   it("reports old flat updater stores as protocol errors without repairing them", async () => {
     const root = makeRoot();
     const fixture = await createUpdaterFixture();
