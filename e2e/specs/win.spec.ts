@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { execFile } from 'node:child_process';
+import { realpathSync } from 'node:fs';
 import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1488,12 +1489,24 @@ function asPackagedOnboardingEvalValue(value: unknown): PackagedOnboardingEvalVa
 }
 
 function expectPathInside(filePath: string, expectedRoot: string): void {
-  const normalizedPath = resolve(filePath);
-  const normalizedRoot = resolve(expectedRoot);
+  const normalizedPath = normalizePhysicalPathForComparison(filePath);
+  const normalizedRoot = normalizePhysicalPathForComparison(expectedRoot);
   expect(
     normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}${sep}`),
     `${normalizedPath} should be inside ${normalizedRoot}`,
   ).toBe(true);
+}
+
+function normalizePhysicalPathForComparison(filePath: string): string {
+  const absolutePath = resolve(filePath);
+  let physicalPath = absolutePath;
+  try {
+    physicalPath = realpathSync.native(absolutePath);
+  } catch {
+    // Some negative-path assertions intentionally inspect a path before it is
+    // created. Preserve the resolved path in those cases.
+  }
+  return process.platform === 'win32' ? physicalPath.toLowerCase() : physicalPath;
 }
 
 function expectWindowsPackagedAppUrl(value: string | null | undefined): void {
