@@ -1,6 +1,8 @@
 import { execFile } from "node:child_process";
-import { appendFile, cp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { appendFile, cp, mkdir, mkdtemp, readFile, readdir, rm, stat, statfs, writeFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
 
 import type { ToolPackConfig } from "../config.js";
@@ -176,14 +178,127 @@ export async function runTimed<T>(timingPath: string, action: string, task: () =
   }
 }
 
-export async function invokeNsis(paths: WinPaths, command: string, args: string[], action: "install" | "uninstall"): Promise<void> {
-  await appendNsisLog(paths, `${action} started`, { args, command });
+export type StagedNsisInvocation = {
+  args: string[];
+  bytes?: number;
+  cleanup: () => Promise<void>;
+  command: string;
+  env?: NodeJS.ProcessEnv;
+  sha256?: string;
+  staged: boolean;
+};
+
+const NSIS_LOCAL_STAGE_RESERVE_BYTES = 64 * 1024 * 1024;
+
+async function hashFileSha256(path: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const hash = createHash("sha256");
+    const stream = createReadStream(path);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.once("error", reject);
+    stream.once("end", () => resolve(hash.digest("hex")));
+  });
+}
+
+export async function stageNsisInvocation(
+  command: string,
+  args: string[],
+  action: "install" | "uninstall",
+  options: { env?: NodeJS.ProcessEnv; platform?: NodeJS.Platform } = {},
+): Promise<StagedNsisInvocation> {
+  const platform = options.platform ?? process.platform;
+  if (platform !== "win32") {
+    return { args: [...args], cleanup: async () => undefined, command, staged: false };
+  }
+
+  // NSIS validates its own executable before entering .onInit. A setup.exe on
+  // an SMB/mapped drive can return a short read during that validation even
+  // when its stored CRC is correct, which exits with code 2 and no installer
+  // log. Run the byte-identical executable from local NTFS instead. Never use
+  // /NCRC here: the lifecycle smoke must still reject genuinely corrupt files.
+  const env = options.env ?? process.env;
+  const localAppData = env.LOCALAPPDATA?.trim();
+  if (localAppData == null || localAppData.length === 0) {
+    throw new Error("Windows NSIS lifecycle staging requires LOCALAPPDATA so the executable runs from local NTFS");
+  }
+  const localTempRoot = join(localAppData, "Temp");
+  await mkdir(localTempRoot, { recursive: true });
+  const sourceMetadata = await stat(command);
+  const filesystem = await statfs(localTempRoot);
+  const availableBytes = Number(filesystem.bavail) * Number(filesystem.bsize);
+  const requiredBytes = sourceMetadata.size * 2 + NSIS_LOCAL_STAGE_RESERVE_BYTES;
+  if (Number.isFinite(availableBytes) && availableBytes < requiredBytes) {
+    throw new Error(
+      `insufficient local space to validate the NSIS lifecycle: need ${requiredBytes} bytes, available ${availableBytes} bytes in ${localTempRoot}`,
+    );
+  }
+  const stageRoot = await mkdtemp(join(localTempRoot, "monofield-nsis-"));
+  const stagedCommand = join(stageRoot, basename(command));
   try {
-    const directoryArg = args.at(-1);
-    if (process.platform === "win32" && directoryArg?.startsWith("/D=")) {
-      await execFileAsync(command, args, { cwd: dirname(command), windowsHide: true, windowsVerbatimArguments: true });
+    const sourceSha256 = await hashFileSha256(command);
+    await cp(command, stagedCommand);
+    const stagedSha256 = await hashFileSha256(stagedCommand);
+    if (sourceSha256 !== stagedSha256) {
+      throw new Error(`NSIS staging checksum mismatch for ${command}`);
+    }
+
+    const stagedArgs = [...args];
+    if (action === "uninstall" && !stagedArgs.some((arg) => arg.startsWith("_?="))) {
+      // A staged NSIS uninstaller must be told which original install directory
+      // it owns; `_?=` must remain the final argument.
+      stagedArgs.push(`_?=${dirname(command)}`);
+    }
+    return {
+      args: stagedArgs,
+      bytes: sourceMetadata.size,
+      cleanup: async () => {
+        await rm(stageRoot, { force: true, maxRetries: 5, recursive: true, retryDelay: 200 });
+      },
+      command: stagedCommand,
+      env: {
+        ...env,
+        TEMP: localTempRoot,
+        TMP: localTempRoot,
+        TMPDIR: localTempRoot,
+      },
+      sha256: sourceSha256,
+      staged: true,
+    };
+  } catch (error) {
+    await rm(stageRoot, { force: true, maxRetries: 5, recursive: true, retryDelay: 200 }).catch(() => undefined);
+    throw error;
+  }
+}
+
+export async function invokeNsis(paths: WinPaths, command: string, args: string[], action: "install" | "uninstall"): Promise<void> {
+  const invocation = await stageNsisInvocation(command, args, action);
+  await appendNsisLog(paths, `${action} started`, {
+    args: invocation.args,
+    bytes: invocation.bytes,
+    command,
+    launchCommand: invocation.command,
+    sha256: invocation.sha256,
+    staged: invocation.staged,
+    tempRoot: invocation.env?.TEMP,
+  });
+  try {
+    const directoryArg = invocation.args.at(-1);
+    if (
+      process.platform === "win32"
+      && (directoryArg?.startsWith("/D=") || directoryArg?.startsWith("_?="))
+    ) {
+      await execFileAsync(invocation.command, invocation.args, {
+        cwd: dirname(invocation.command),
+        env: invocation.env,
+        windowsHide: true,
+        windowsVerbatimArguments: true,
+      });
     } else {
-      await execFileAsync(command, args, { cwd: dirname(command), windowsHide: true });
+      await execFileAsync(invocation.command, invocation.args, {
+        cwd: dirname(invocation.command),
+        env: invocation.env,
+        windowsHide: true,
+      });
     }
     await appendNsisLog(paths, `${action} finished`, { code: 0, command });
   } catch (error) {
@@ -195,5 +310,13 @@ export async function invokeNsis(paths: WinPaths, command: string, args: string[
       stdout: typeof failure.stdout === "string" ? failure.stdout : undefined,
     });
     throw error;
+  } finally {
+    await invocation.cleanup().catch(async (error) => {
+      await appendNsisLog(paths, `${action} staging cleanup failed`, {
+        command,
+        error: error instanceof Error ? error.message : String(error),
+        launchCommand: invocation.command,
+      });
+    });
   }
 }
