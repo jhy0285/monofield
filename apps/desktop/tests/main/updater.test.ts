@@ -1833,6 +1833,50 @@ describe("desktop updater", () => {
     }
   });
 
+  it("replaces an orphaned matching release when the checksum URL changes between sessions", async () => {
+    const root = makeRoot();
+    const artifactBody = "open design updater fixture with a stable digest";
+    const firstFixture = await createUpdaterFixture({ artifactBody });
+    try {
+      const firstUpdater = createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv(firstFixture.metadataUrl),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+      const first = await firstUpdater.checkForUpdates();
+      expect(first.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      expect(first.downloadPath).toEqual(expect.any(String));
+      await writeFile(join(root, "metadata.json"), JSON.stringify({
+        lastCheckedAt: first.lastCheckedAt,
+        version: 1,
+      }), "utf8");
+    } finally {
+      await firstFixture.close();
+    }
+
+    const secondFixture = await createUpdaterFixture({ artifactBody });
+    try {
+      const restarted = createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv(secondFixture.metadataUrl),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+      const restored = await restarted.checkForUpdates();
+      const metadata = JSON.parse(await readFile(join(root, "metadata.json"), "utf8")) as Record<string, unknown>;
+
+      expect(restored.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      expect(restored.error).toBeUndefined();
+      expect(restored.downloadPath).toEqual(expect.any(String));
+      expect(metadata.active).toEqual(expect.any(Object));
+      expect(secondFixture.artifactRequests()).toBe(1);
+    } finally {
+      await secondFixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   it("reports old flat updater stores as protocol errors without repairing them", async () => {
     const root = makeRoot();
     const fixture = await createUpdaterFixture();

@@ -2876,6 +2876,48 @@ export function createDesktopUpdater(
       if (!containsPath(opened.root.realRoot, releaseDir)) {
         return await failDownload(createError("download-path-escaped", "resolved release path escaped update root"));
       }
+      const existingReleaseEntry = await lstat(releaseDir).catch(() => null);
+      if (existingReleaseEntry != null) {
+        if (!existingReleaseEntry.isDirectory() || existingReleaseEntry.isSymbolicLink()) {
+          return await failDownload(
+            createError("release-promote-target-invalid", "existing release target is not a plain directory", {
+              path: releaseDir,
+            }),
+          );
+        }
+        const realReleaseDir = await realpath(releaseDir).catch(() => null);
+        if (realReleaseDir == null || !containsPath(releasesRoot, realReleaseDir)) {
+          return await failDownload(
+            createError("release-promote-target-invalid", "existing release target escaped the releases root", {
+              path: releaseDir,
+              realPath: realReleaseDir,
+            }),
+          );
+        }
+        if (activeRelease?.ref.key === key) {
+          return await failDownload(
+            createError("release-promote-target-active", "refused to replace the active release directory", {
+              key,
+              path: releaseDir,
+            }),
+          );
+        }
+        logUpdateEvent("download-replace-orphan", {
+          key,
+          version: nextCandidate.version,
+        });
+        try {
+          await rm(realReleaseDir, { force: true, recursive: true });
+        } catch (removeError) {
+          return await failDownload(
+            createError(
+              "release-promote-failed",
+              removeError instanceof Error ? removeError.message : String(removeError),
+              { key, phase: "remove-orphan" },
+            ),
+          );
+        }
+      }
       await writeJson(join(stagingDir, "metadata.json"), nextCandidate.metadata);
       await writeJson(join(stagingDir, "checksum.json"), resolvedChecksum);
       try {
