@@ -35,6 +35,7 @@ $ErrorActionPreference = "Stop"
 $startedAt = Get-Date
 $timings = @()
 $failureMessage = $null
+$buildSucceeded = $false
 $ReleaseChannel = [string]$env:RELEASE_CHANNEL
 if ([string]::IsNullOrWhiteSpace($ReleaseChannel)) {
   throw "RELEASE_CHANNEL is required"
@@ -367,6 +368,7 @@ try {
   }
 
   Write-Index "success"
+  $buildSucceeded = $true
   Write-Host "$ReleaseChannel build index: $IndexPath"
 } catch {
   if ($script:failureMessage -eq $null) {
@@ -386,6 +388,23 @@ try {
         & $cleanupScript -StopOrphanTestRunners -MinimumAgeMinutes 5 | Write-Host
       } catch {
         Write-Warning "MonoField local temp cleanup failed: $($_.Exception.Message)"
+      }
+    }
+    if ($buildSucceeded) {
+      $releaseHistoryCleanupScript = Join-Path $PSScriptRoot "cleanup-monofield-release-history.ps1"
+      $resolvedWorkRoot = [IO.Path]::GetFullPath($WorkRoot)
+      $releaseHistoryRoot = Split-Path -Parent $resolvedWorkRoot
+      $releaseDirectoryName = Split-Path -Leaf $resolvedWorkRoot
+      if (
+        $releaseDirectoryName -match '^monofield-release-.+' -and
+        (Test-Path -LiteralPath $releaseHistoryCleanupScript) -and
+        (Test-Path -LiteralPath $releaseHistoryRoot -PathType Container)
+      ) {
+        try {
+          & $releaseHistoryCleanupScript -Root $releaseHistoryRoot -KeepLatest 1 | Write-Host
+        } catch {
+          Write-Warning "MonoField release history cleanup failed: $($_.Exception.Message)"
+        }
       }
     }
   }

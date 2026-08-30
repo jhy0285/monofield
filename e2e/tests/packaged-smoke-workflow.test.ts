@@ -130,6 +130,9 @@ describe("packaged smoke workflow", () => {
     expect(buildPlatform).toContain(
       '"pnpm.cmd", "exec", "tsx", "scripts/release-smoke.ts", "win", "specs/win.spec.ts"',
     );
+    expect(buildPlatform).toContain('cleanup-monofield-release-history.ps1');
+    expect(buildPlatform).toContain('$buildSucceeded = $true');
+    expect(buildPlatform).toContain('-KeepLatest 1');
 
     expect(releaseSmoke).toContain("await report.json('manifest.json'");
     expect(releaseSmoke).toContain("saveRequiredSource(report, 'tools-pack.json'");
