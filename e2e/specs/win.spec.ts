@@ -27,6 +27,10 @@ if (process.env.OD_PACKAGED_E2E_WIN === '1') {
 const namespace = resolvePackagedSmokeNamespace('win');
 const toolsPackBin = join(workspaceRoot, 'tools', 'pack', 'bin', 'tools-pack.mjs');
 const maxInstallDurationMs = Number.parseInt(process.env.OD_PACKAGED_E2E_WIN_MAX_INSTALL_MS ?? '120000', 10);
+const updateReadyTimeoutMs =
+  Number.isFinite(maxInstallDurationMs) && maxInstallDurationMs > 0
+    ? Math.max(120_000, maxInstallDurationMs)
+    : 120_000;
 const winTestTimeoutMs = resolvePackagedWinTestTimeoutMs(process.env.OD_PACKAGED_E2E_WIN_TEST_TIMEOUT_MS);
 const smokeProfile = process.env.OD_PACKAGED_E2E_WIN_SMOKE_PROFILE ?? 'core';
 const verifyCoreOnly = smokeProfile === 'core';
@@ -985,12 +989,18 @@ async function resolveLocalPayloadUpdateFixture(): Promise<{ payloadPath: string
   };
 }
 
-async function waitForDownloadedUpdater(expectedVersion: string | null, timeoutMs = 120_000): Promise<WinInspectResult> {
+async function waitForDownloadedUpdater(
+  expectedVersion: string | null,
+  timeoutMs = updateReadyTimeoutMs,
+): Promise<WinInspectResult> {
   const startedAt = Date.now();
   let lastResult: unknown = null;
+  let downloadRequested = false;
   while (Date.now() - startedAt < timeoutMs) {
     try {
-      const inspect = await runToolsPackJson<WinInspectResult>('inspect', ['--update-action', 'download']);
+      const action = downloadRequested ? 'status' : 'download';
+      const inspect = await runToolsPackJson<WinInspectResult>('inspect', ['--update-action', action]);
+      downloadRequested = true;
       lastResult = inspect;
       if (
         inspect.update?.state === 'downloaded' &&
@@ -1007,12 +1017,14 @@ async function waitForDownloadedUpdater(expectedVersion: string | null, timeoutM
         expect(inspect.update.currentVersion).toBe(updateScenario.expectedCurrentVersion);
         return inspect;
       }
+      if (inspect.update?.state === 'error') downloadRequested = false;
     } catch (error) {
       lastResult = error;
+      downloadRequested = false;
     }
     await delay(1000);
   }
-  throw new Error(`external Windows updater did not download an installer: ${formatUnknown(lastResult)}`);
+  throw new Error(`Windows payload update did not become ready: ${formatUnknown(lastResult)}`);
 }
 
 function assertLauncherPointer(
