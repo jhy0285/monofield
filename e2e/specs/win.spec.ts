@@ -113,6 +113,10 @@ const clickUpdaterRailExpression = `
       hostStatus = await host.updater.status({ payload: { source: 'e2e-open-ready-updater-prompt' } });
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
+    const openPopup = document.querySelector('[data-testid="updater-popup"]');
+    if (openPopup instanceof HTMLElement) {
+      return { alreadyOpen: true, clicked: true, hostStatus };
+    }
     const button = document.querySelector('[data-testid="entry-nav-updater"]');
     if (!(button instanceof HTMLButtonElement)) {
       const candidates = Array.from(document.querySelectorAll('button,[role="button"],a'))
