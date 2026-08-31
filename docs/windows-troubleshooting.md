@@ -6,6 +6,43 @@ MonoField runs on Windows natively, but the path is less travelled than macOS, L
 
 ---
 
+## In-app Browser reports `MONOFIELD_NODE_BIN is not set`
+
+### Symptom
+
+An approved Browser action such as click, scroll, snapshot, or screenshot fails
+inside a Codex run with:
+
+```text
+MONOFIELD_NODE_BIN is not set
+```
+
+### Expected behavior
+
+Current MonoField Desktop builds provide the packaged Node runtime, MonoField
+CLI path, and local daemon address to the Codex tool shell for each run. The
+user should only need to open and approve the Browser tab. Do **not** add
+`MONOFIELD_NODE_BIN` as a permanent Windows user or system environment variable.
+
+### Fix
+
+1. Update to a MonoField release that includes the Browser runtime fix.
+2. Completely close the old Desktop process, then start the updated app.
+3. Reopen the project and approve the Browser tab again before retrying.
+
+When running from source, start Desktop through `pnpm tools-dev` so the daemon,
+web app, Desktop shell, and CLI use the same runtime context. Launching Electron
+or the web app alone does not create the complete Browser automation runtime.
+
+If the error remains, check whether the selected Codex profile explicitly uses
+a restrictive `shell_environment_policy.include_only` list. Such a policy can
+intentionally remove host-provided tool variables; allow the MonoField runtime
+variables in that profile or use the default inherited policy. Include the
+MonoField version, selected adapter, and the exact error in a
+[GitHub issue](https://github.com/jhy0285/monofield/issues) if it still fails.
+
+---
+
 ## Installing the desktop app: "Windows protected your PC"
 
 ### Symptom

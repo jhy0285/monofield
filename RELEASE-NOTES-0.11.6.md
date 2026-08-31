@@ -1,5 +1,10 @@
 # MonoField 0.11.6
 
+> **Release status — 2026-08-31:** the source changes are complete on `main`,
+> but `v0.11.6` has not been published. The final Windows package rebuild and
+> full install/update/uninstall smoke were stopped at the operator's request.
+> Do not treat this file as proof that a 0.11.6 binary is available.
+
 This release closes the failure mode where a document run could spend time
 repeating a blocked Windows command, describe a finished result, and still
 leave no project file behind.
@@ -36,12 +41,19 @@ leave no project file behind.
   closes only the guide, including with Escape, and leaves the selected
   Settings page open.
 
-## Installation
+## Planned release assets
 
-- [Windows installer](https://github.com/jhy0285/monofield/releases/download/v0.11.6/MonoField-default-setup.exe)
-- [Portable package](https://github.com/jhy0285/monofield/releases/download/v0.11.6/MonoField-default-portable.zip)
-- [Checksums and all assets](https://github.com/jhy0285/monofield/releases/tag/v0.11.6)
+The release is expected to contain exactly these five verified files after the
+remaining packaged smoke succeeds:
 
-Direct-download builds are currently unsigned. Windows may show an
-unrecognized-publisher warning; compare the file against `SHA256SUMS.txt` before
-running it.
+- `MonoField-default-setup.exe`
+- `MonoField-default-payload.7z`
+- `MonoField-default-portable.zip`
+- `latest.yml`
+- `SHA256SUMS.txt`
+
+Until `v0.11.6` is published, use the
+[latest completed GitHub release](https://github.com/jhy0285/monofield/releases/latest).
+Direct-download builds are currently unsigned, so Windows may show an
+unrecognized-publisher warning. Compare every downloaded file with the
+published `SHA256SUMS.txt` before running it.
