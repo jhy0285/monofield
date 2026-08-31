@@ -611,6 +611,58 @@ describe('development run configuration detection', () => {
       .rejects.toThrow('Add an active Tomcat, Jetty, or Cargo build plugin');
   });
 
+  it('keeps a Maven WAR with parent-inherited Spring dependencies visible from web.xml evidence', async () => {
+    const root = await temporaryRoot();
+    const webInf = path.join(root, 'src', 'main', 'webapp', 'WEB-INF');
+    await fs.mkdir(webInf, { recursive: true });
+    await fs.writeFile(path.join(root, 'pom.xml'), [
+      '<project>',
+      '  <parent><groupId>com.example.platform</groupId><artifactId>corporate-spring-parent</artifactId></parent>',
+      '  <packaging>war</packaging>',
+      '</project>',
+    ].join('\n'));
+    await fs.writeFile(path.join(webInf, 'web.xml'), [
+      '<web-app>',
+      '  <servlet>',
+      '    <servlet-name>dispatcher</servlet-name>',
+      '    <servlet-class>org.springframework.web.servlet.DispatcherServlet</servlet-class>',
+      '  </servlet>',
+      '</web-app>',
+    ].join('\n'));
+
+    const result = await detectDevelopmentRunConfigs(root);
+
+    expect(result.configs).toContainEqual(expect.objectContaining({
+      args: [],
+      framework: 'Spring Framework',
+      launchMode: 'manual',
+      source: 'pom.xml · Servlet/WAR project',
+    }));
+  });
+
+  it('keeps a Gradle WAR with inherited Spring dependencies visible from web.xml evidence', async () => {
+    const root = await temporaryRoot();
+    const webInf = path.join(root, 'src', 'main', 'webapp', 'WEB-INF');
+    await fs.mkdir(webInf, { recursive: true });
+    await fs.writeFile(path.join(root, 'build.gradle'), "plugins { id 'war' }\n");
+    await fs.writeFile(path.join(webInf, 'web.xml'), [
+      '<web-app>',
+      '  <listener>',
+      '    <listener-class>org.springframework.web.context.ContextLoaderListener</listener-class>',
+      '  </listener>',
+      '</web-app>',
+    ].join('\n'));
+
+    const result = await detectDevelopmentRunConfigs(root);
+
+    expect(result.configs).toContainEqual(expect.objectContaining({
+      args: [],
+      framework: 'Spring Framework',
+      launchMode: 'manual',
+      source: 'build.gradle · Servlet/WAR project',
+    }));
+  });
+
   it('inherits the base server port when an active Spring profile has no server override', async () => {
     const root = await temporaryRoot();
     const resources = path.join(root, 'src', 'main', 'resources');

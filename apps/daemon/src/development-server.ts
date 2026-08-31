@@ -950,7 +950,8 @@ async function detectRunConfigsAtRoot(root: string): Promise<DevelopmentConfigsR
       ? (mavenSpringFrameworkDependency
         || mavenPackagingValue === 'war'
         || hasServletWebappDirectory)
-      : (mavenSpringFrameworkDependency && mavenIsServletWarProject(pomText, hasServletWebappDirectory)))) {
+      : ((mavenSpringFrameworkDependency || servletDescriptorUsesSpring)
+        && mavenIsServletWarProject(pomText, hasServletWebappDirectory)))) {
     const wrapper = process.platform === 'win32' ? 'mvnw.cmd' : 'mvnw';
     const hasWrapper = rootFile(wrapper);
     const plugin = mavenServletPlugin;
@@ -989,7 +990,8 @@ async function detectRunConfigsAtRoot(root: string): Promise<DevelopmentConfigsR
     && !gradleSpringBootApplication
     && (gradleServletPlugin
       ? (gradleSpringFrameworkDependency || gradleIsServletWarProject(gradleText, hasServletWebappDirectory))
-      : (gradleSpringFrameworkDependency && gradleIsServletWarProject(gradleText, hasServletWebappDirectory)))) {
+      : ((gradleSpringFrameworkDependency || servletDescriptorUsesSpring)
+        && gradleIsServletWarProject(gradleText, hasServletWebappDirectory)))) {
     const wrapper = process.platform === 'win32' ? 'gradlew.bat' : 'gradlew';
     const hasWrapper = rootFile(wrapper);
     const plugin = gradleServletPlugin;
