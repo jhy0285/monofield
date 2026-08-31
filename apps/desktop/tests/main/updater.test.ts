@@ -765,7 +765,7 @@ describe("desktop updater", () => {
       expect(spawned).toHaveLength(1);
       expect(unref).toHaveBeenCalledTimes(1);
       expect(spawned[0]?.command).toEqual(expect.stringContaining(join("System32", "WindowsPowerShell", "v1.0", "powershell.exe")));
-      expect(spawned[0]?.options).toEqual({ detached: true, stdio: "ignore", windowsHide: true });
+      expect(spawned[0]?.options).toEqual({ detached: false, stdio: "ignore", windowsHide: true });
       const launchArgs = spawned[0]?.args ?? [];
       const launcherPath = launchArgs.at(launchArgs.indexOf("-File") + 1);
       const scriptPath = launchArgs.at(launchArgs.indexOf("-HelperPath") + 1);
@@ -1426,7 +1426,7 @@ describe("desktop updater", () => {
       expect(spawned).toHaveLength(1);
       expect(unref).toHaveBeenCalledTimes(1);
       expect(spawned[0]?.command).toEqual(expect.stringContaining(join("System32", "WindowsPowerShell", "v1.0", "powershell.exe")));
-      expect(spawned[0]?.options).toEqual({ detached: true, stdio: "ignore", windowsHide: true });
+      expect(spawned[0]?.options).toEqual({ detached: false, stdio: "ignore", windowsHide: true });
       const args = spawned[0]?.args ?? [];
       expect(args).toEqual(expect.arrayContaining([
         "-NoLogo",
@@ -1771,7 +1771,7 @@ describe("desktop updater", () => {
       expect(spawned).toHaveLength(1);
       expect(unref).toHaveBeenCalledTimes(1);
       expect(spawned[0]?.command).toEqual(expect.stringContaining(join("System32", "WindowsPowerShell", "v1.0", "powershell.exe")));
-      expect(spawned[0]?.options).toEqual({ detached: true, stdio: "ignore", windowsHide: true });
+      expect(spawned[0]?.options).toEqual({ detached: false, stdio: "ignore", windowsHide: true });
       const args = spawned[0]?.args ?? [];
       const launcherPath = args.at(args.indexOf("-File") + 1);
       const scriptPath = args.at(args.indexOf("-HelperPath") + 1);

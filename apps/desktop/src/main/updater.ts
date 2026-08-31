@@ -193,7 +193,7 @@ type DetachedProcess = { unref(): void };
 type SpawnInstallerHelper = (
   command: string,
   args: string[],
-  options: { detached?: true; stdio: "ignore"; windowsHide: true },
+  options: { detached?: boolean; stdio: "ignore"; windowsHide: true },
 ) => DetachedProcess;
 
 function waitForReleasePromoteRetry(delayMs: number): Promise<void> {
@@ -1838,7 +1838,11 @@ async function launchWindowsInstallerAfterQuit(
         "-LogPath",
         logPath,
       ],
-      { detached: true, stdio: "ignore", windowsHide: true },
+      // Windows PowerShell exits successfully without executing `-File` when
+      // Node starts it in a detached process group on some Windows builds.
+      // The short-lived launcher uses Start-Process for the truly detached
+      // helper, so this first hop must remain attached until it has launched.
+      { detached: false, stdio: "ignore", windowsHide: true },
     );
     child.unref();
     return "";
@@ -1888,7 +1892,10 @@ async function launchWindowsAppAfterQuit(
         "-LogPath",
         logPath,
       ],
-      { detached: true, stdio: "ignore", windowsHide: true },
+      // Keep the launcher attached for the same reason as the installer
+      // launcher above. Its PowerShell child is the process that survives the
+      // app exit; detaching this first hop can silently skip the script.
+      { detached: false, stdio: "ignore", windowsHide: true },
     );
     child.unref();
     await waitForWindowsDeferredHelperReady(logPath);
