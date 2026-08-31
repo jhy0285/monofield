@@ -7680,6 +7680,11 @@ export async function startServer({
         agentOptions,
         {
           cwd: effectiveCwd,
+          runtimeToolEnv: {
+            MONOFIELD_BIN: OD_BIN,
+            MONOFIELD_DAEMON_URL: daemonUrl,
+            MONOFIELD_NODE_BIN: OD_NODE_BIN,
+          },
           hasPriorAssistantTurn: hostOwnedArtifactFallback ? false : hasPriorAssistantTurn,
           agentLogFilePath,
           promptFilePath: promptFile?.path,

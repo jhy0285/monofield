@@ -140,6 +140,36 @@ describe('development run configuration detection', () => {
     );
   });
 
+  it('does not apply generic application overrides to Spring Framework servlet-plugin commands', () => {
+    const config = {
+      id: 'spring-framework-tomcat',
+      label: 'Spring Framework · Tomcat · Maven',
+      kind: 'java' as const,
+      framework: 'Spring Framework',
+      cwd: '.',
+      command: 'mvn',
+      args: ['tomcat7:run'],
+      source: 'pom.xml · tomcat7-maven-plugin',
+      launchMode: 'auto' as const,
+      port: 8080,
+      url: 'http://127.0.0.1:8080',
+    };
+
+    expect(() => applyDevelopmentRunOverrides(config, { applicationArgs: ['--debug'] }))
+      .toThrow('defined by their build plugin');
+    expect(() => applyDevelopmentRunOverrides(config, { profile: 'local' }))
+      .toThrow('defined by their build plugin');
+    expect(() => applyDevelopmentRunOverrides(config, { port: 8081 }))
+      .toThrow('defined by their build plugin');
+    expect(() => applyDevelopmentRunOverrides(config, { url: 'http://127.0.0.1:8080/other' }))
+      .toThrow('defined by their build plugin');
+    expect(() => applyDevelopmentRunOverrides({
+      ...config,
+      framework: 'Java Servlet',
+      runSettingsMode: 'build-plugin',
+    }, { port: 8081 })).toThrow('defined by their build plugin');
+  });
+
   it('bypasses the workspace discovery cache for an explicit refresh', async () => {
     const root = await temporaryRoot();
     const firstRoot = path.join(root, 'service-a');
@@ -370,6 +400,215 @@ describe('development run configuration detection', () => {
     const result = await detectDevelopmentRunConfigs(root);
 
     expect(result.configs[0]).toMatchObject({ args: ['bootRun'], framework: 'Spring Boot', kind: 'java', port: 8080 });
+  });
+
+  it('detects a Spring Framework Maven WAR with an embedded Tomcat plugin as auto-runnable', async () => {
+    const root = await temporaryRoot();
+    await fs.writeFile(path.join(root, 'pom.xml'), [
+      '<project>',
+      '  <packaging>war</packaging>',
+      '  <dependencies><dependency><groupId>org.springframework</groupId><artifactId>spring-webmvc</artifactId></dependency></dependencies>',
+      '  <build><plugins><plugin><artifactId>tomcat7-maven-plugin</artifactId><configuration><port>9181</port><path>/orders</path></configuration></plugin></plugins></build>',
+      '</project>',
+    ].join('\n'));
+    await fs.writeFile(path.join(root, process.platform === 'win32' ? 'mvnw.cmd' : 'mvnw'), process.platform === 'win32' ? '@echo off\r\n' : '#!/bin/sh\n');
+
+    const result = await detectDevelopmentRunConfigs(root);
+
+    expect(result.configs).toContainEqual(expect.objectContaining({
+      args: ['tomcat7:run'],
+      framework: 'Spring Framework',
+      launchMode: 'auto',
+      port: 9181,
+      source: expect.stringContaining('tomcat7-maven-plugin'),
+      url: 'http://127.0.0.1:9181/orders',
+    }));
+    expect(path.basename(result.configs[0]!.command)).toBe(process.platform === 'win32' ? 'mvnw.cmd' : 'mvnw');
+  });
+
+  it('detects a Spring Framework Maven WAR with a Jetty plugin as auto-runnable', async () => {
+    const root = await temporaryRoot();
+    await fs.writeFile(path.join(root, 'pom.xml'), [
+      '<project>',
+      '  <packaging>war</packaging>',
+      '  <dependencies><dependency><groupId>org.springframework</groupId><artifactId>spring-webmvc</artifactId></dependency></dependencies>',
+      '  <build><plugins><plugin><artifactId>jetty-maven-plugin</artifactId><configuration><httpPort>9192</httpPort><contextPath>/catalog</contextPath></configuration></plugin></plugins></build>',
+      '</project>',
+    ].join('\n'));
+
+    const result = await detectDevelopmentRunConfigs(root);
+
+    expect(result.configs).toContainEqual(expect.objectContaining({
+      args: ['jetty:run'],
+      framework: 'Spring Framework',
+      launchMode: 'auto',
+      port: 9192,
+      source: expect.stringContaining('jetty-maven-plugin'),
+      url: 'http://127.0.0.1:9192/catalog',
+    }));
+  });
+
+  it('keeps inherited Spring WAR modules runnable through an active Maven servlet plugin', async () => {
+    const root = await temporaryRoot();
+    await fs.writeFile(path.join(root, 'pom.xml'), [
+      '<project>',
+      '  <parent><groupId>com.example.platform</groupId><artifactId>corporate-spring-parent</artifactId></parent>',
+      '  <packaging>war</packaging>',
+      '  <build><plugins><plugin><artifactId>jetty-maven-plugin</artifactId></plugin></plugins></build>',
+      '</project>',
+    ].join('\n'));
+
+    const result = await detectDevelopmentRunConfigs(root);
+
+    expect(result.configs).toContainEqual(expect.objectContaining({
+      args: ['jetty:run'],
+      framework: 'Java Servlet',
+      launchMode: 'auto',
+      runSettingsMode: 'build-plugin',
+    }));
+  });
+
+  it('detects an active Cargo Maven servlet container with its configured URL', async () => {
+    const root = await temporaryRoot();
+    await fs.writeFile(path.join(root, 'pom.xml'), [
+      '<project><packaging>war</packaging>',
+      '<dependencies><dependency><groupId>org.springframework</groupId><artifactId>spring-webmvc</artifactId></dependency></dependencies>',
+      '<build><plugins><plugin>',
+      '  <groupId>org.codehaus.cargo</groupId><artifactId>cargo-maven3-plugin</artifactId>',
+      '  <configuration><container><containerId>tomcat10x</containerId></container>',
+      '  <configuration><properties><cargo.servlet.port>9294</cargo.servlet.port></properties></configuration>',
+      '  <deployables><deployable><properties><context>/legacy</context></properties></deployable></deployables>',
+      '  </configuration>',
+      '</plugin></plugins></build></project>',
+    ].join('\n'));
+
+    const result = await detectDevelopmentRunConfigs(root);
+
+    expect(result.configs).toContainEqual(expect.objectContaining({
+      args: ['cargo:run'],
+      framework: 'Spring Framework',
+      launchMode: 'auto',
+      port: 9294,
+      source: 'pom.xml · cargo-maven3-plugin',
+      url: 'http://127.0.0.1:9294/legacy',
+    }));
+  });
+
+  it('does not classify a Maven aggregator with a servlet plugin as a runnable Spring application', async () => {
+    const root = await temporaryRoot();
+    await fs.writeFile(path.join(root, 'pom.xml'), [
+      '<project><packaging>pom</packaging>',
+      '<dependencies><dependency><groupId>org.springframework</groupId><artifactId>spring-webmvc</artifactId></dependency></dependencies>',
+      '<build><plugins><plugin><artifactId>jetty-maven-plugin</artifactId></plugin></plugins></build>',
+      '<modules><module>service-a</module></modules>',
+      '</project>',
+    ].join('\n'));
+
+    const result = await detectDevelopmentRunConfigs(root);
+
+    expect(result.configs.some((config) => config.framework === 'Spring Framework' || config.framework === 'Java Servlet')).toBe(false);
+  });
+
+  it('does not classify a non-web Maven plugin project as Spring Framework', async () => {
+    const root = await temporaryRoot();
+    await fs.writeFile(path.join(root, 'pom.xml'), [
+      '<project><packaging>jar</packaging>',
+      '<build><plugins><plugin><artifactId>jetty-maven-plugin</artifactId></plugin></plugins></build>',
+      '</project>',
+    ].join('\n'));
+
+    const result = await detectDevelopmentRunConfigs(root);
+
+    expect(result.configs.some((config) => config.framework === 'Spring Framework' || config.framework === 'Java Servlet')).toBe(false);
+  });
+
+  it('does not mistake Boot BOMs, comments, or plugin management for runnable Boot or servlet plugins', async () => {
+    const root = await temporaryRoot();
+    await fs.writeFile(path.join(root, 'pom.xml'), [
+      '<project>',
+      '  <!-- <parent><artifactId>spring-boot-starter-parent</artifactId></parent> -->',
+      '  <packaging>war</packaging>',
+      '  <dependencyManagement><dependencies><dependency>',
+      '    <groupId>org.springframework.boot</groupId><artifactId>spring-boot-dependencies</artifactId>',
+      '  </dependency></dependencies></dependencyManagement>',
+      '  <dependencies><dependency><groupId>org.springframework</groupId><artifactId>spring-webmvc</artifactId></dependency></dependencies>',
+      '  <build><pluginManagement><plugins>',
+      '    <plugin><artifactId>spring-boot-maven-plugin</artifactId></plugin>',
+      '    <plugin><artifactId>tomcat7-maven-plugin</artifactId></plugin>',
+      '  </plugins></pluginManagement></build>',
+      '</project>',
+    ].join('\n'));
+
+    const result = await detectDevelopmentRunConfigs(root);
+
+    expect(result.configs.some((config) => config.framework === 'Spring Boot')).toBe(false);
+    expect(result.configs).toContainEqual(expect.objectContaining({
+      args: [],
+      framework: 'Spring Framework',
+      launchMode: 'manual',
+    }));
+  });
+
+  it('detects an explicit Gradle Gretty plugin and reads only its selected configuration block', async () => {
+    const root = await temporaryRoot();
+    await fs.writeFile(path.join(root, 'build.gradle'), [
+      "// id 'org.springframework.boot'",
+      "plugins { id 'org.gretty' }",
+      "dependencies { implementation 'org.springframework:spring-webmvc:6.2.0' }",
+      "server { port = 6553; contextPath = '/wrong' }",
+      "gretty { httpPort = 9193; contextPath = '/store' }",
+    ].join('\n'));
+
+    const result = await detectDevelopmentRunConfigs(root);
+
+    expect(result.configs).toContainEqual(expect.objectContaining({
+      args: ['appRun'],
+      framework: 'Spring Framework',
+      launchMode: 'auto',
+      port: 9193,
+      source: expect.stringContaining('Gretty plugin'),
+      url: 'http://127.0.0.1:9193/store',
+    }));
+    expect(result.configs.some((config) => config.framework === 'Spring Boot')).toBe(false);
+  });
+
+  it('does not treat servlet plugins applied only inside Gradle subprojects as root run configurations', async () => {
+    const root = await temporaryRoot();
+    await fs.writeFile(path.join(root, 'build.gradle'), [
+      "plugins { id 'org.gretty' version '4.1.1' apply false }",
+      "subprojects {",
+      "  apply plugin: 'org.gretty'",
+      "  apply plugin: 'war'",
+      "  dependencies { implementation 'org.springframework:spring-webmvc:6.2.0' }",
+      "  gretty { httpPort = 9301; contextPath = '/nested' }",
+      "}",
+    ].join('\n'));
+
+    const result = await detectDevelopmentRunConfigs(root);
+
+    expect(result.configs.some((config) => config.args.includes('appRun'))).toBe(false);
+  });
+
+  it('keeps a plain Spring Framework WAR manual when no embedded container plugin is configured', async () => {
+    const root = await temporaryRoot();
+    await fs.writeFile(path.join(root, 'pom.xml'), [
+      '<project>',
+      '  <packaging>war</packaging>',
+      '  <dependencies><dependency><groupId>org.springframework</groupId><artifactId>spring-webmvc</artifactId></dependency></dependencies>',
+      '</project>',
+    ].join('\n'));
+
+    const result = await detectDevelopmentRunConfigs(root);
+    const manual = result.configs.find((config) => config.framework === 'Spring Framework');
+
+    expect(manual).toMatchObject({
+      args: [],
+      launchMode: 'manual',
+      manualSetup: expect.stringContaining('Tomcat, Jetty, or Cargo'),
+      source: 'pom.xml · Servlet/WAR project',
+    });
+    await expect(new DevelopmentServerService().start('manual-war', root, manual!.id))
+      .rejects.toThrow('Add an active Tomcat, Jetty, or Cargo build plugin');
   });
 
   it('inherits the base server port when an active Spring profile has no server override', async () => {

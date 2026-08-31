@@ -308,6 +308,37 @@ test('codex args keep workspace-write sandbox on Windows by default', () => {
   });
 });
 
+test('codex args pin MonoField browser wrapper coordinates into its tool shell', () => {
+  withEnvSnapshot(['MONOFIELD_CODEX_ENABLE_EXTERNAL_PLUGINS', 'OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX'], () => {
+    delete process.env.MONOFIELD_CODEX_ENABLE_EXTERNAL_PLUGINS;
+    delete process.env.OD_CODEX_DISABLE_PLUGINS;
+    delete process.env.OD_CODEX_SANDBOX;
+
+    const args = codex.buildArgs('', [], [], {}, {
+      cwd: 'C:\\work\\project',
+      runtimeToolEnv: {
+        MONOFIELD_BIN: 'C:\\Program Files\\MonoField\\daemon-cli.mjs',
+        MONOFIELD_DAEMON_URL: 'http://127.0.0.1:7456',
+        MONOFIELD_NODE_BIN: 'C:\\Program Files\\MonoField\\node.exe',
+      },
+    });
+
+    assert.equal(
+      args.includes('shell_environment_policy.set.MONOFIELD_NODE_BIN="C:\\\\Program Files\\\\MonoField\\\\node.exe"'),
+      true,
+    );
+    assert.equal(
+      args.includes('shell_environment_policy.set.MONOFIELD_BIN="C:\\\\Program Files\\\\MonoField\\\\daemon-cli.mjs"'),
+      true,
+    );
+    assert.equal(
+      args.includes('shell_environment_policy.set.MONOFIELD_DAEMON_URL="http://127.0.0.1:7456"'),
+      true,
+    );
+    assert.equal(args.some((arg) => arg.includes('MONOFIELD_TOOL_TOKEN')), false);
+  });
+});
+
 test('codex args disable external plugins by default to avoid duplicate prompt context', () => {
   withEnvSnapshot(['MONOFIELD_CODEX_ENABLE_EXTERNAL_PLUGINS', 'OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX'], () => {
     delete process.env.MONOFIELD_CODEX_ENABLE_EXTERNAL_PLUGINS;

@@ -241,6 +241,8 @@ export function DevelopmentWorkspaceControls({
         environmentHint: 'NAME=value 형식입니다. 이 앱 세션에서만 실행 프로세스에 전달되고 프로젝트에는 저장되지 않습니다. 공유 비밀값은 OS 또는 CLI 자격 증명 저장소를 사용하세요.',
         invalidEnvironment: '세션 환경변수를 확인하세요. NAME=value 형식이며 포트·브라우저 제어 변수는 실행 설정에서 관리합니다.',
         invalidNetwork: '포트와 로컬 URL을 확인하세요.',
+        manualServletContainerSetup: '원클릭 실행을 사용하려면 활성 Tomcat/Jetty/Cargo 빌드 플러그인을 추가하세요. 또는 외부 컨테이너에 배포한 뒤 해당 URL을 MonoField 브라우저에서 열 수 있습니다.',
+        servletPluginOverridesLocked: '포트·URL·애플리케이션 인자는 선택된 서블릿 빌드 플러그인에서 관리합니다. 여기서는 이 실행에만 적용할 세션 환경변수를 설정할 수 있습니다.',
         automaticVerificationUnavailable: '자동 화면 검증은 로컬 CLI 실행에서만 사용할 수 있습니다. BYOK에서는 사용할 수 없습니다.',
         localCliOnly: '로컬 CLI 전용',
         port: '포트',
@@ -251,6 +253,8 @@ export function DevelopmentWorkspaceControls({
         environmentHint: 'Use NAME=value. Values are passed only to this process for the current app session and are never saved in the project. Keep shared secrets in the OS or CLI credential store.',
         invalidEnvironment: 'Check the session environment. Use NAME=value; port and browser control variables are managed by the run settings.',
         invalidNetwork: 'Check the port and local URL.',
+        manualServletContainerSetup: 'Add an active Tomcat/Jetty/Cargo build plugin for one-click launch, or deploy to an external container and open its URL in the MonoField browser.',
+        servletPluginOverridesLocked: 'The selected servlet build plugin owns the port, URL, and application arguments. Only session environment variables can be configured here.',
         automaticVerificationUnavailable: 'Automatic screen verification is available only for local CLI runs, not BYOK.',
         localCliOnly: 'Local CLI only',
         port: 'Port',
@@ -692,14 +696,22 @@ export function DevelopmentWorkspaceControls({
 
   async function start() {
     if (!selected) return;
-    let applicationArgs: string[];
-    let environment: Record<string, string>;
-    let network: { port: number; url: string };
-    try {
-      applicationArgs = parseRunArguments(effectiveArguments);
-    } catch {
-      setError(t('development.invalidArguments'));
+    if (selected.launchMode === 'manual') {
+      setError(runCopy.manualServletContainerSetup);
       return;
+    }
+    const usesServletBuildPlugin = selected.runSettingsMode === 'build-plugin'
+      || selected.framework === 'Spring Framework';
+    let applicationArgs: string[] = [];
+    let environment: Record<string, string>;
+    let network: { port: number; url: string } | null = null;
+    if (!usesServletBuildPlugin) {
+      try {
+        applicationArgs = parseRunArguments(effectiveArguments);
+      } catch {
+        setError(t('development.invalidArguments'));
+        return;
+      }
     }
     try {
       environment = parseRunEnvironment(sessionEnvironmentByProjectRef.current.get(runOverrideKey) ?? '');
@@ -707,11 +719,13 @@ export function DevelopmentWorkspaceControls({
       setError(runCopy.invalidEnvironment);
       return;
     }
-    try {
-      network = normalizeRunNetwork(String(effectivePort ?? ''), effectiveUrl);
-    } catch {
-      setError(runCopy.invalidNetwork);
-      return;
+    if (!usesServletBuildPlugin) {
+      try {
+        network = normalizeRunNetwork(String(effectivePort ?? ''), effectiveUrl);
+      } catch {
+        setError(runCopy.invalidNetwork);
+        return;
+      }
     }
     setBusy('start');
     setError(null);
@@ -726,9 +740,8 @@ export function DevelopmentWorkspaceControls({
           projectPath: activeProjectPath || undefined,
           overrides: {
             ...(selected.framework === 'Spring Boot' ? { profile: effectiveProfile } : {}),
-            ...(applicationArgs.length > 0 ? { applicationArgs } : {}),
-            port: network.port,
-            url: network.url,
+            ...(!usesServletBuildPlugin && applicationArgs.length > 0 ? { applicationArgs } : {}),
+            ...(!usesServletBuildPlugin ? { port: network!.port, url: network!.url } : {}),
             ...(Object.keys(environment).length > 0 ? { environment } : {}),
           },
         }),
@@ -775,8 +788,10 @@ export function DevelopmentWorkspaceControls({
   }
 
   function openRunSettings() {
+    const usesServletBuildPlugin = selected?.runSettingsMode === 'build-plugin'
+      || selected?.framework === 'Spring Framework';
     setDraftProfile(effectiveProfile);
-    setDraftArguments(effectiveArguments);
+    setDraftArguments(usesServletBuildPlugin ? '' : effectiveArguments);
     setDraftPort(String(effectivePort ?? selected?.port ?? ''));
     setDraftUrl(effectiveUrl || selected?.url || '');
     setDraftEnvironment(sessionEnvironmentByProjectRef.current.get(runOverrideKey) ?? '');
@@ -791,12 +806,16 @@ export function DevelopmentWorkspaceControls({
       setRunSettingsProjectKey(null);
       return;
     }
-    let network: { port: number; url: string };
-    try {
-      parseRunArguments(draftArguments);
-    } catch {
-      setError(t('development.invalidArguments'));
-      return;
+    const usesServletBuildPlugin = selected?.runSettingsMode === 'build-plugin'
+      || selected?.framework === 'Spring Framework';
+    let network: { port: number; url: string } | null = null;
+    if (!usesServletBuildPlugin) {
+      try {
+        parseRunArguments(draftArguments);
+      } catch {
+        setError(t('development.invalidArguments'));
+        return;
+      }
     }
     try {
       parseRunEnvironment(draftEnvironment);
@@ -804,11 +823,13 @@ export function DevelopmentWorkspaceControls({
       setError(runCopy.invalidEnvironment);
       return;
     }
-    try {
-      network = normalizeRunNetwork(draftPort, draftUrl);
-    } catch {
-      setError(runCopy.invalidNetwork);
-      return;
+    if (!usesServletBuildPlugin) {
+      try {
+        network = normalizeRunNetwork(draftPort, draftUrl);
+      } catch {
+        setError(runCopy.invalidNetwork);
+        return;
+      }
     }
     try {
       const profile = draftProfile.trim();
@@ -818,14 +839,14 @@ export function DevelopmentWorkspaceControls({
         ...(currentOverrides[settingsKey] ?? {}),
         configId: matchingConfig?.id ?? selected?.id,
         profile: matchingConfig ? undefined : profile || undefined,
-        arguments: draftArguments.trim() || undefined,
+        arguments: usesServletBuildPlugin ? undefined : draftArguments.trim() || undefined,
       };
-      if (network.port === selected?.port && network.url === selected?.url) {
+      if (usesServletBuildPlugin || (network?.port === selected?.port && network?.url === selected?.url)) {
         delete nextOverride.port;
         delete nextOverride.url;
       } else {
-        nextOverride.port = network.port;
-        nextOverride.url = network.url;
+        nextOverride.port = network!.port;
+        nextOverride.url = network!.url;
       }
       for (const key of ['arguments', 'configId', 'profile'] as const) {
         if (!nextOverride[key]) delete nextOverride[key];
@@ -966,6 +987,10 @@ export function DevelopmentWorkspaceControls({
   const launchCommand = launchConfig
     ? [launchConfig.command.split(/[\\/]/).pop() ?? launchConfig.command, ...launchConfig.args].join(' ')
     : '';
+  const selectedRequiresManualSetup = selected?.launchMode === 'manual';
+  const selectedUsesServletBuildPlugin = selected?.runSettingsMode === 'build-plugin'
+    || selected?.framework === 'Spring Framework';
+  const manualSetupMessage = selectedRequiresManualSetup ? runCopy.manualServletContainerSetup : undefined;
   return (
     <Fragment>
       <div className={styles.root} data-testid="development-workspace-controls">
@@ -1057,16 +1082,16 @@ export function DevelopmentWorkspaceControls({
           className={styles.iconAction}
           data-testid="development-run-settings"
           aria-label={t('development.configureRun')}
-          title={t('development.configureRun')}
+          title={manualSetupMessage ?? t('development.configureRun')}
           onClick={openRunSettings}
-          disabled={busy != null || canStop || !selected}
+          disabled={busy != null || canStop || !selected || selectedRequiresManualSetup}
         >
           <Icon name="settings" size={13} />
         </button>
         {canStop ? (
           <button type="button" className={styles.action} data-testid="development-run-action" onClick={() => void stop()} disabled={busy != null}><Icon name="stop" size={13} />{t('development.stop')}</button>
         ) : (
-          <button type="button" className={styles.action} data-testid="development-run-action" onClick={() => void start()} disabled={busy != null || !selected}><Icon name="play" size={13} />{t('development.start')}</button>
+          <button type="button" className={styles.action} data-testid="development-run-action" onClick={() => void start()} disabled={busy != null || !selected || selectedRequiresManualSetup} title={manualSetupMessage}><Icon name="play" size={13} />{t('development.start')}</button>
         )}
         <button
           type="button"
@@ -1084,6 +1109,11 @@ export function DevelopmentWorkspaceControls({
         </button>
         <button type="button" className={styles.action} data-testid="development-open-changes" onClick={onOpenChanges}><Icon name="fork" size={13} />{t('gitChanges.title')}</button>
       </div>
+      {manualSetupMessage ? (
+        <div className={styles.notice} data-testid="development-manual-run-setup" title={manualSetupMessage}>
+          {manualSetupMessage}
+        </div>
+      ) : null}
       <div className={styles.contextGroup}>
         <select className={`${styles.select} ${styles.databaseSelect}`} data-testid="development-database" aria-label={t('development.database')} title={activeDatabaseContext?.label ?? t('development.noDatabase')} value={activeDatabaseContext?.connectionId ?? ''} onChange={(event) => selectDatabase(event.target.value)}>
           <option value="">{t('development.noDatabase')}</option>
@@ -1149,33 +1179,41 @@ export function DevelopmentWorkspaceControls({
               </datalist>
             </label>
           ) : null}
-          <label>
-            <span>{runCopy.port}</span>
-            <input
-              inputMode="numeric"
-              data-testid="development-run-port"
-              value={draftPort}
-              placeholder={String(selected.port)}
-              onChange={(event) => setDraftPort(event.target.value)}
-            />
-          </label>
-          <label className={styles.runUrlField}>
-            <span>{runCopy.url}</span>
-            <input
-              data-testid="development-run-url"
-              value={draftUrl}
-              placeholder={selected.url}
-              onChange={(event) => setDraftUrl(event.target.value)}
-            />
-          </label>
-          <label className={styles.argumentField}>
-            <span>{t('development.additionalArguments')}</span>
-            <input
-              value={draftArguments}
-              placeholder="--debug --feature=orders"
-              onChange={(event) => setDraftArguments(event.target.value)}
-            />
-          </label>
+          {selectedUsesServletBuildPlugin ? (
+            <div className={styles.notice} data-testid="development-servlet-plugin-settings">
+              {runCopy.servletPluginOverridesLocked}
+            </div>
+          ) : (
+            <Fragment>
+              <label>
+                <span>{runCopy.port}</span>
+                <input
+                  inputMode="numeric"
+                  data-testid="development-run-port"
+                  value={draftPort}
+                  placeholder={String(selected.port)}
+                  onChange={(event) => setDraftPort(event.target.value)}
+                />
+              </label>
+              <label className={styles.runUrlField}>
+                <span>{runCopy.url}</span>
+                <input
+                  data-testid="development-run-url"
+                  value={draftUrl}
+                  placeholder={selected.url}
+                  onChange={(event) => setDraftUrl(event.target.value)}
+                />
+              </label>
+              <label className={styles.argumentField}>
+                <span>{t('development.additionalArguments')}</span>
+                <input
+                  value={draftArguments}
+                  placeholder="--debug --feature=orders"
+                  onChange={(event) => setDraftArguments(event.target.value)}
+                />
+              </label>
+            </Fragment>
+          )}
           <label className={styles.environmentField}>
             <span>{runCopy.environment}</span>
             <textarea

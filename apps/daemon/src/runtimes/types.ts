@@ -21,6 +21,18 @@ export type RuntimeBuildOptions = {
 
 export type RuntimeContext = {
   cwd?: string;
+  /**
+   * Non-secret MonoField wrapper coordinates that must be visible inside an
+   * agent's model-generated shell. Most CLIs inherit these values from the
+   * spawned process environment. Codex additionally mirrors them through its
+   * shell-environment policy because some Windows sandbox/runtime versions do
+   * not forward arbitrary parent variables to tool shells.
+   */
+  runtimeToolEnv?: {
+    MONOFIELD_BIN: string;
+    MONOFIELD_DAEMON_URL: string;
+    MONOFIELD_NODE_BIN: string;
+  };
   // True when the current chat run has at least one prior persisted
   // assistant message in the same conversation — i.e. this isn't the
   // first user turn. Plain-streaming adapters that support a "continue

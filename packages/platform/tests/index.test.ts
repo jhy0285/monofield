@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -699,6 +700,51 @@ describe("wellKnownUserToolchainBins Windows fnm node discovery", () => {
     } finally {
       rmSync(home, { recursive: true, force: true });
       rmSync(localAppData, { recursive: true, force: true });
+    }
+  });
+
+  it.runIf(process.platform === "win32")("preserves Codex config quotes and cmd metacharacters through an npm .cmd shim", () => {
+    setPlatform("win32");
+    const fixtureDir = mkdtempSync(join(tmpdir(), "monofield-cmd-argv-"));
+    const capturePath = join(fixtureDir, "argv.json");
+    const scriptPath = join(fixtureDir, "capture.cjs");
+    const shimPath = join(fixtureDir, "capture args.cmd");
+    const expectedArgs = [
+      "exec",
+      "-c",
+      'shell_environment_policy.set.MONOFIELD_NODE_BIN="C:\\\\Users\\\\A&B^C%TEMP%\\\\node.exe"',
+      "spaces & caret ^ pipe | input < output > percent %TEMP% and quote \"done\"",
+      "",
+      '"leading quote',
+      'trailing quote"',
+      'two "adjacent" quotes',
+      "trailing-backslash\\",
+      "parentheses (stay literal)",
+    ];
+    writeFileSync(scriptPath, "require('node:fs').writeFileSync(process.env.ARGV_CAPTURE_PATH, JSON.stringify(process.argv.slice(2)));\n");
+    // Mirror the compound tail emitted by npm's Windows shims (including
+    // codex.cmd). Its `endLocal ... || ... & program %*` shape adds another
+    // cmd parsing boundary that a trivial one-line `%*` fixture misses.
+    writeFileSync(
+      shimPath,
+      `@echo off\r\nsetlocal\r\nset "_prog=${process.execPath}"\r\nendLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%" "%~dp0capture.cjs" %*\r\n`,
+    );
+
+    try {
+      const invocation = createCommandInvocation({
+        command: shimPath,
+        args: expectedArgs,
+        env: { ComSpec: process.env.ComSpec } as NodeJS.ProcessEnv,
+      });
+      const child = spawnSync(invocation.command, invocation.args, {
+        env: { ...process.env, ARGV_CAPTURE_PATH: capturePath, TEMP: "EXPANDED_VALUE_MUST_NOT_APPEAR" },
+        windowsVerbatimArguments: invocation.windowsVerbatimArguments,
+      });
+      expect(child.error).toBeUndefined();
+      expect(child.status).toBe(0);
+      expect(JSON.parse(readFileSync(capturePath, "utf8"))).toEqual(expectedArgs);
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
     }
   });
 

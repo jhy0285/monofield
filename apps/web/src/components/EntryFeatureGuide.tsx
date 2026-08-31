@@ -285,6 +285,11 @@ export function EntryFeatureGuide({
   const [calloutHeight, setCalloutHeight] = useState(250);
   const calloutRef = useRef<HTMLElement | null>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
+  const closeGuide = useCallback(() => {
+    if (!feature) return;
+    completeEntryFeatureGuide(feature);
+    onClose();
+  }, [feature, onClose]);
 
   const updateTarget = useCallback(() => {
     if (!copy) return;
@@ -326,12 +331,15 @@ export function EntryFeatureGuide({
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.preventDefault();
-      completeEntryFeatureGuide(feature);
-      onClose();
+      // The guide is a portal but remains a React child of its opener. Handle
+      // Escape while it is still at the window capture phase so parent dialogs
+      // listening on document never receive the guide's dismissal key.
+      event.stopPropagation();
+      closeGuide();
     };
-    window.addEventListener('keydown', closeOnEscape);
-    return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [feature, onClose]);
+    window.addEventListener('keydown', closeOnEscape, true);
+    return () => window.removeEventListener('keydown', closeOnEscape, true);
+  }, [closeGuide, feature]);
 
   useEffect(() => {
     const callout = calloutRef.current;
@@ -352,13 +360,15 @@ export function EntryFeatureGuide({
         { top: targetRect.bottom, left: 0, right: 0, bottom: 0 },
       ]
     : [{ inset: 0 }];
-  const close = () => {
-    completeEntryFeatureGuide(feature);
-    onClose();
-  };
-
   return createPortal(
-    <div className={styles.tour} data-testid="entry-feature-guide" data-feature={feature}>
+    <div
+      className={styles.tour}
+      data-testid="entry-feature-guide"
+      data-feature={feature}
+      // Portal events follow their React ancestry. Keep guide interactions from
+      // reaching a parent dialog's backdrop click handler.
+      onClick={(event) => event.stopPropagation()}
+    >
       {masks.map((mask, index) => <div key={index} className={styles.blind} style={mask} aria-hidden />)}
       {targetRect ? (
         <div className={styles.spotlight} data-testid="entry-feature-guide-spotlight" style={{
@@ -379,7 +389,7 @@ export function EntryFeatureGuide({
       >
         <header>
           <span>{t('entry.featureGuide')}</span>
-          <Button size="icon" variant="ghost" onClick={close} aria-label={t('common.close')} title={t('common.close')}>
+          <Button size="icon" variant="ghost" onClick={closeGuide} aria-label={t('common.close')} title={t('common.close')}>
             <Icon name="close" size={15} />
           </Button>
         </header>
@@ -388,7 +398,7 @@ export function EntryFeatureGuide({
           <p id="entry-feature-guide-description">{copy.description}</p>
           <ul>{copy.points.map((point) => <li key={point}>{point}</li>)}</ul>
         </div>
-        <footer><Button variant="primary" onClick={close}>{t('common.close')}</Button></footer>
+        <footer><Button variant="primary" onClick={closeGuide}>{t('common.close')}</Button></footer>
       </section>
     </div>,
     document.body,

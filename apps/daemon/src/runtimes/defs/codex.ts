@@ -202,6 +202,23 @@ export const codexAgentDef = {
           );
         });
       }
+      // Codex launches model-generated commands through a separate tool shell.
+      // Most releases inherit the parent process environment, but older/native
+      // Windows sandbox combinations have been observed to omit arbitrary
+      // MONOFIELD_* values even though the Codex process itself received them.
+      // That made approved Browser actions fail with
+      // "MONOFIELD_NODE_BIN is not set" and incorrectly suggested that users
+      // needed to configure the in-app browser manually. Mirror only the three
+      // non-secret wrapper coordinates through Codex's supported shell policy;
+      // run-scoped tokens and provider credentials remain environment-only and
+      // never appear in argv or config overrides.
+      for (const [key, value] of Object.entries(runtimeContext.runtimeToolEnv ?? {})) {
+        if (!value.trim()) continue;
+        args.push(
+          '-c',
+          `shell_environment_policy.set.${key}=${JSON.stringify(value)}`,
+        );
+      }
       if (codexShouldDisableExternalPlugins()) {
         args.push('--disable', 'plugins');
       }

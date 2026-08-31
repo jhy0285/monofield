@@ -24,6 +24,17 @@ leave no project file behind.
   notice once per version. When enabled, Windows notifications work in the
   background; download, release notes, and GitHub Star actions are available in
   the same prompt.
+- **Browser automation without manual setup** — approved in-app Browser actions
+  now receive the packaged MonoField CLI and Node runtime paths inside Codex's
+  tool shell on Windows. Users only approve the tab; no
+  `MONOFIELD_NODE_BIN` environment variable needs to be configured by hand.
+- **Classic Spring projects** — in addition to Spring Boot, MonoField now finds
+  active Maven Tomcat, Jetty, and Cargo plugins and Gradle
+  Gretty/Tomcat/Jetty configurations. Plain Servlet/WAR projects remain visible
+  with honest external-container guidance instead of a non-working Run action.
+- **Guides stay in context** — closing a feature guide opened from Settings now
+  closes only the guide, including with Escape, and leaves the selected
+  Settings page open.
 
 ## Installation
 

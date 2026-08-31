@@ -17,6 +17,9 @@ describe('agent runtime tool environment', () => {
 
     expect(env).toMatchObject({
       PATH: `/opt/open-design/bin${path.delimiter}/bin`,
+      MONOFIELD_BIN: expect.any(String),
+      MONOFIELD_DAEMON_URL: 'http://127.0.0.1:7456',
+      MONOFIELD_NODE_BIN: '/opt/open-design/bin/node',
       OD_DAEMON_URL: 'http://127.0.0.1:7456',
       OD_NODE_BIN: '/opt/open-design/bin/node',
       OD_TOOL_TOKEN: 'fresh-token',

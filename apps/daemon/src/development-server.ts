@@ -200,6 +200,7 @@ export function applyDevelopmentRunOverrides(
 
   let args = [...config.args];
   const portChanged = port !== config.port;
+  const urlChanged = url !== config.url;
   if (config.framework === 'Spring Boot') {
     const isMaven = args.includes('spring-boot:run');
     const isGradle = args.includes('bootRun');
@@ -222,6 +223,16 @@ export function applyDevelopmentRunOverrides(
     } else {
       if (portChanged) args.push(`--server.port=${port}`);
       args.push(...applicationArgs);
+    }
+  } else if (config.runSettingsMode === 'build-plugin' || config.framework === 'Spring Framework') {
+    // Maven/Gradle servlet plugins have plugin-specific port and argument
+    // conventions. Do not append generic application flags to the build-tool
+    // command, where they can be interpreted as unrelated Maven/Gradle flags.
+    if (requestedProfile || portChanged || urlChanged || applicationArgs.length > 0) {
+      throw Object.assign(
+        new Error('Spring Framework servlet configurations use the profile, port, URL, and arguments defined by their build plugin'),
+        { status: 400 },
+      );
     }
   } else {
     if (portChanged && config.packageManager && config.framework !== 'Create React App') {
@@ -393,7 +404,294 @@ function springContextPath(configText: string): string {
   return `/${value.replace(/^\/+|\/+$/g, '')}`;
 }
 
-type DetectionRunConfigInput = Omit<DevelopmentRunConfig, 'id' | 'url'> & { urlPath?: string };
+type ServletBuildPlugin = {
+  label: string;
+  command: string;
+  args: string[];
+  source: string;
+  port?: number | undefined;
+  urlPath?: string | undefined;
+};
+
+function stripXmlComments(value: string): string {
+  return value.replace(/<!--[\s\S]*?-->/g, '');
+}
+
+function stripGradleComments(value: string): string {
+  let result = '';
+  let quote: "'" | '"' | null = null;
+  let escaping = false;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index] ?? '';
+    const next = value[index + 1] ?? '';
+    if (quote) {
+      result += character;
+      if (escaping) escaping = false;
+      else if (character === '\\') escaping = true;
+      else if (character === quote) quote = null;
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      quote = character;
+      result += character;
+      continue;
+    }
+    if (character === '/' && next === '/') {
+      while (index < value.length && value[index] !== '\n') index += 1;
+      result += '\n';
+      continue;
+    }
+    if (character === '/' && next === '*') {
+      index += 2;
+      while (index < value.length && !(value[index] === '*' && value[index + 1] === '/')) index += 1;
+      index += 1;
+      continue;
+    }
+    result += character;
+  }
+  return result;
+}
+
+function xmlElementValue(block: string, element: string): string | null {
+  const match = new RegExp(`<${element}\\b[^>]*>\\s*([^<]+?)\\s*</${element}>`, 'i').exec(block)?.[1]?.trim();
+  return match || null;
+}
+
+function mavenDependencyBlocks(pomText: string): string[] {
+  const active = stripXmlComments(pomText)
+    .replace(/<profiles\b[^>]*>[\s\S]*?<\/profiles>/gi, '')
+    .replace(/<dependencyManagement\b[^>]*>[\s\S]*?<\/dependencyManagement>/gi, '');
+  return [...active.matchAll(/<dependency\b[^>]*>[\s\S]*?<\/dependency>/gi)].map((match) => match[0]);
+}
+
+function mavenActiveBuildPluginBlocks(pomText: string): string[] {
+  // Profiles and pluginManagement describe optional or inherited plugins; they
+  // are not proof that the command can run for the currently selected build.
+  const projectLevel = stripXmlComments(pomText)
+    .replace(/<profiles\b[^>]*>[\s\S]*?<\/profiles>/gi, '');
+  const build = /<build\b[^>]*>([\s\S]*?)<\/build>/i.exec(projectLevel)?.[1] ?? '';
+  const active = build.replace(/<pluginManagement\b[^>]*>[\s\S]*?<\/pluginManagement>/gi, '');
+  return [...active.matchAll(/<plugin\b[^>]*>[\s\S]*?<\/plugin>/gi)].map((match) => match[0]);
+}
+
+function mavenHasSpringBootApplication(pomText: string): boolean {
+  const clean = stripXmlComments(pomText);
+  const parent = /<parent\b[^>]*>([\s\S]*?)<\/parent>/i.exec(clean)?.[1] ?? '';
+  if (xmlElementValue(parent, 'artifactId') === 'spring-boot-starter-parent') return true;
+  return mavenActiveBuildPluginBlocks(clean).some((block) => {
+    const artifactId = xmlElementValue(block, 'artifactId');
+    const groupId = xmlElementValue(block, 'groupId');
+    return artifactId === 'spring-boot-maven-plugin'
+      && (groupId == null || groupId === 'org.springframework.boot');
+  });
+}
+
+function gradleBlockContents(clean: string, brace: number): string {
+  let depth = 0;
+  let quote: "'" | '"' | null = null;
+  let escaping = false;
+  for (let index = brace; index < clean.length; index += 1) {
+    const character = clean[index] ?? '';
+    if (quote) {
+      if (escaping) escaping = false;
+      else if (character === '\\') escaping = true;
+      else if (character === quote) quote = null;
+      continue;
+    }
+    if (character === "'" || character === '"') quote = character;
+    else if (character === '{') depth += 1;
+    else if (character === '}' && --depth === 0) return clean.slice(brace + 1, index);
+  }
+  return '';
+}
+
+function gradleTopLevelNamedBlock(gradleText: string, names: string[]): string {
+  const clean = stripGradleComments(gradleText);
+  const wanted = new Set(names.map((name) => name.toLowerCase()));
+  let depth = 0;
+  let quote: "'" | '"' | null = null;
+  let escaping = false;
+  for (let index = 0; index < clean.length; index += 1) {
+    const character = clean[index] ?? '';
+    if (quote) {
+      if (escaping) escaping = false;
+      else if (character === '\\') escaping = true;
+      else if (character === quote) quote = null;
+      continue;
+    }
+    if (character === "'" || character === '"') { quote = character; continue; }
+    if (character === '{') { depth += 1; continue; }
+    if (character === '}') { depth = Math.max(0, depth - 1); continue; }
+    if (depth !== 0 || !/[A-Za-z_]/.test(character)) continue;
+    const identifier = /^[A-Za-z_][A-Za-z0-9_.-]*/.exec(clean.slice(index))?.[0] ?? '';
+    if (!wanted.has(identifier.toLowerCase())) { index += Math.max(0, identifier.length - 1); continue; }
+    let brace = index + identifier.length;
+    while (/\s/.test(clean[brace] ?? '')) brace += 1;
+    if (clean[brace] === '{') return gradleBlockContents(clean, brace);
+    index += Math.max(0, identifier.length - 1);
+  }
+  return '';
+}
+
+function gradleTopLevelCode(gradleText: string): string {
+  const clean = stripGradleComments(gradleText);
+  let result = '';
+  let depth = 0;
+  let quote: "'" | '"' | null = null;
+  let escaping = false;
+  for (const character of clean) {
+    if (quote) {
+      if (depth === 0) result += character;
+      if (escaping) escaping = false;
+      else if (character === '\\') escaping = true;
+      else if (character === quote) quote = null;
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      quote = character;
+      if (depth === 0) result += character;
+    } else if (character === '{') {
+      depth += 1;
+      result += ' ';
+    } else if (character === '}') {
+      depth = Math.max(0, depth - 1);
+      result += ' ';
+    } else if (depth === 0) result += character;
+    else if (character === '\n') result += '\n';
+  }
+  return result;
+}
+
+function gradleHasPlugin(gradleText: string, id: string): boolean {
+  const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const plugins = gradleTopLevelNamedBlock(gradleText, ['plugins']);
+  const topLevel = gradleTopLevelCode(gradleText);
+  const declaration = new RegExp(`\\bid\\s*\\(?\\s*['"]${escaped}['"]`, 'gi');
+  let declaredAndApplied = false;
+  for (const match of plugins.matchAll(declaration)) {
+    const remainder = plugins.slice((match.index ?? 0) + match[0].length);
+    const nextDeclaration = /(?:[;\r\n]|\bid\s*\(?|\balias\s*\()/i.exec(remainder)?.index ?? remainder.length;
+    const modifiers = remainder.slice(0, nextDeclaration);
+    if (!/\bapply\s*(?:\(\s*)?false\b/i.test(modifiers)) {
+      declaredAndApplied = true;
+      break;
+    }
+  }
+  return declaredAndApplied
+    || new RegExp(`\\bapply\\s+plugin\\s*:\\s*['"]${escaped}['"]`, 'i').test(topLevel);
+}
+
+function gradleNamedBlock(gradleText: string, names: string[]): string {
+  return gradleTopLevelNamedBlock(gradleText, names);
+}
+
+function pluginPort(buildText: string): number | undefined {
+  const value = /<(?:cargo\.servlet\.)?(?:http)?port>\s*(\d{2,5})\s*<\/(?:cargo\.servlet\.)?(?:http)?port>|\b(?:httpPort|port)\s*(?:=\s*|\.set\(\s*)(\d{2,5})\b/i.exec(buildText)?.slice(1).find(Boolean);
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 65_535 ? parsed : undefined;
+}
+
+function pluginUrlPath(buildText: string): string | undefined {
+  const value = /<(?:contextPath|path|context|cargo\.context)>\s*([^<\s]+)\s*<\/(?:contextPath|path|context|cargo\.context)>|\bcontextPath\s*(?:=\s*|\.set\(\s*)['\"]([^'\"\s]+)['\"]/i.exec(buildText)?.slice(1).find(Boolean)?.trim();
+  if (!value || value === '/' || !value.startsWith('/') || /[?#]/.test(value)) return undefined;
+  return `/${value.replace(/^\/+|\/+$/g, '')}`;
+}
+
+function mavenHasSpringFrameworkDependency(pomText: string): boolean {
+  return mavenDependencyBlocks(pomText).some((block) => {
+    const groupId = xmlElementValue(block, 'groupId');
+    const artifactId = xmlElementValue(block, 'artifactId');
+    return groupId === 'org.springframework'
+      && Boolean(artifactId && /^spring-(?:aop|beans|context|core|expression|jdbc|orm|test|tx|web|webmvc|webflux)$/i.test(artifactId));
+  });
+}
+
+function mavenPackaging(pomText: string): string {
+  const project = stripXmlComments(pomText)
+    .replace(/<parent\b[^>]*>[\s\S]*?<\/parent>/gi, '')
+    .replace(/<build\b[^>]*>[\s\S]*?<\/build>/gi, '')
+    .replace(/<dependencies\b[^>]*>[\s\S]*?<\/dependencies>/gi, '');
+  return (/<packaging>\s*([^<\s]+)\s*<\/packaging>/i.exec(project)?.[1] ?? 'jar').toLowerCase();
+}
+
+function gradleHasSpringFrameworkDependency(gradleText: string): boolean {
+  const clean = stripGradleComments(gradleText);
+  return /['\"]org\.springframework:spring-(?:aop|beans|context|core|expression|jdbc|orm|test|tx|web|webmvc|webflux)(?::[^'\"]+)?['\"]/i.test(clean);
+}
+
+function mavenIsServletWarProject(pomText: string, hasWebappDirectory: boolean): boolean {
+  const clean = stripXmlComments(pomText);
+  return /<packaging>\s*war\s*<\/packaging>/i.test(clean)
+    || mavenDependencyBlocks(clean).some((block) => /^(?:javax|jakarta)\.servlet$/i.test(xmlElementValue(block, 'groupId') ?? ''))
+    || hasWebappDirectory;
+}
+
+function gradleIsServletWarProject(gradleText: string, hasWebappDirectory: boolean): boolean {
+  const clean = stripGradleComments(gradleText);
+  return gradleHasPlugin(clean, 'war')
+    || /['\"](?:javax|jakarta)\.servlet:[^'\"]+['\"]/i.test(clean)
+    || hasWebappDirectory;
+}
+
+function mavenServletBuildPlugin(pomText: string): ServletBuildPlugin | null {
+  const plugins = mavenActiveBuildPluginBlocks(pomText);
+  const tomcatBlock = plugins.find((block) => /^tomcat(?:\d+)?-maven-plugin$/i.test(xmlElementValue(block, 'artifactId') ?? ''));
+  if (tomcatBlock) {
+    const artifactId = xmlElementValue(tomcatBlock, 'artifactId') ?? 'tomcat-maven-plugin';
+    const prefix = artifactId.replace(/-maven-plugin$/i, '');
+    const version = /^tomcat(\d+)/i.exec(prefix)?.[1];
+    return {
+      label: `Tomcat ${version ?? ''}`.trim(),
+      command: 'mvn',
+      args: [`${prefix}:run`],
+      source: `pom.xml · ${prefix}-maven-plugin`,
+      port: pluginPort(tomcatBlock),
+      urlPath: pluginUrlPath(tomcatBlock),
+    };
+  }
+  const jettyBlock = plugins.find((block) => xmlElementValue(block, 'artifactId') === 'jetty-maven-plugin');
+  if (jettyBlock) {
+    return {
+      label: 'Jetty',
+      command: 'mvn',
+      args: ['jetty:run'],
+      source: 'pom.xml · jetty-maven-plugin',
+      port: pluginPort(jettyBlock),
+      urlPath: pluginUrlPath(jettyBlock),
+    };
+  }
+  const cargoBlock = plugins.find((block) => /^cargo-maven[23]-plugin$/i.test(xmlElementValue(block, 'artifactId') ?? ''));
+  if (cargoBlock) {
+    const containerId = xmlElementValue(cargoBlock, 'containerId');
+    return {
+      label: `Cargo${containerId ? ` · ${containerId}` : ''}`,
+      command: 'mvn',
+      args: ['cargo:run'],
+      source: `pom.xml · ${xmlElementValue(cargoBlock, 'artifactId')}`,
+      port: pluginPort(cargoBlock),
+      urlPath: pluginUrlPath(cargoBlock),
+    };
+  }
+  return null;
+}
+
+function gradleServletBuildPlugin(gradleText: string): ServletBuildPlugin | null {
+  if (gradleHasPlugin(gradleText, 'org.gretty') || gradleHasPlugin(gradleText, 'gretty')) {
+    const configuration = gradleNamedBlock(gradleText, ['gretty']);
+    return { label: 'Gretty (Tomcat/Jetty)', command: 'gradle', args: ['appRun'], source: 'build.gradle · Gretty plugin', port: pluginPort(configuration), urlPath: pluginUrlPath(configuration) };
+  }
+  if (gradleHasPlugin(gradleText, 'com.bmuschko.tomcat')) {
+    const configuration = gradleNamedBlock(gradleText, ['tomcatRun', 'tomcat']);
+    return { label: 'Tomcat', command: 'gradle', args: ['tomcatRun'], source: 'build.gradle · Tomcat plugin', port: pluginPort(configuration), urlPath: pluginUrlPath(configuration) };
+  }
+  if (gradleHasPlugin(gradleText, 'jetty')) {
+    const configuration = gradleNamedBlock(gradleText, ['jettyRun', 'jetty']);
+    return { label: 'Jetty', command: 'gradle', args: ['jettyRun'], source: 'build.gradle · Jetty plugin', port: pluginPort(configuration), urlPath: pluginUrlPath(configuration) };
+  }
+  return null;
+}
+
+type DetectionRunConfigInput = Omit<DevelopmentRunConfig, 'id' | 'url'> & { urlPath?: string | undefined };
 
 function runConfig(input: DetectionRunConfigInput): DevelopmentRunConfig {
   const { urlPath = '', ...config } = input;
@@ -562,6 +860,20 @@ async function detectRunConfigsAtRoot(root: string): Promise<DevelopmentConfigsR
   const pomText = rootFile('pom.xml') ? await readTextBounded(path.join(resolvedRoot, 'pom.xml')) : '';
   const gradleFile = rootFile('build.gradle.kts') ? 'build.gradle.kts' : rootFile('build.gradle') ? 'build.gradle' : null;
   const gradleText = gradleFile ? await readTextBounded(path.join(resolvedRoot, gradleFile)) : '';
+  const hasServletWebappDirectory = await exists(path.join(resolvedRoot, 'src', 'main', 'webapp'));
+  const servletDescriptorPath = await firstExisting([
+    path.join(resolvedRoot, 'src', 'main', 'webapp', 'WEB-INF', 'web.xml'),
+    path.join(resolvedRoot, 'src', 'main', 'webapp', 'web.xml'),
+  ]);
+  const servletDescriptorText = servletDescriptorPath ? await readTextBounded(servletDescriptorPath) : '';
+  const servletDescriptorUsesSpring = /org\.springframework\.|DispatcherServlet|ContextLoaderListener/i.test(servletDescriptorText);
+  const mavenSpringBootApplication = Boolean(pomText) && mavenHasSpringBootApplication(pomText);
+  const gradleSpringBootApplication = Boolean(gradleText) && gradleHasPlugin(gradleText, 'org.springframework.boot');
+  const mavenServletPlugin = pomText ? mavenServletBuildPlugin(pomText) : null;
+  const gradleServletPlugin = gradleText ? gradleServletBuildPlugin(gradleText) : null;
+  const mavenSpringFrameworkDependency = Boolean(pomText) && mavenHasSpringFrameworkDependency(pomText);
+  const gradleSpringFrameworkDependency = Boolean(gradleText) && gradleHasSpringFrameworkDependency(gradleText);
+  const mavenPackagingValue = pomText ? mavenPackaging(pomText) : '';
   const baseSpringConfigPath = await firstExisting(['application.yml', 'application.yaml', 'application.properties'].flatMap((name) => [
     path.join(resolvedRoot, name),
     path.join(resolvedRoot, 'src', 'main', 'resources', name),
@@ -581,7 +893,7 @@ async function detectRunConfigsAtRoot(root: string): Promise<DevelopmentConfigsR
     null,
     ...springProfiles.filter((profile) => profile.name !== configuredActiveProfile),
   ] as Array<null | { name: string; path: string; text: string }>;
-  if (pomText && /spring-boot|org\.springframework\.boot/i.test(pomText)) {
+  if (mavenSpringBootApplication) {
     const wrapper = process.platform === 'win32' ? 'mvnw.cmd' : 'mvnw';
     const hasWrapper = rootFile(wrapper);
     for (const profile of springVariants) {
@@ -606,7 +918,7 @@ async function detectRunConfigsAtRoot(root: string): Promise<DevelopmentConfigsR
       if (effectiveProfile === preferredSpringProfile) preferredSpringConfigId = config.id;
     }
   }
-  if (gradleText && /org\.springframework\.boot|spring-boot/i.test(gradleText)) {
+  if (gradleSpringBootApplication) {
     const wrapper = process.platform === 'win32' ? 'gradlew.bat' : 'gradlew';
     const hasWrapper = rootFile(wrapper);
     for (const profile of springVariants) {
@@ -630,6 +942,87 @@ async function detectRunConfigsAtRoot(root: string): Promise<DevelopmentConfigsR
       addUnique(configs, config);
       if (effectiveProfile === preferredSpringProfile) preferredSpringConfigId ??= config.id;
     }
+  }
+  if (pomText
+    && !mavenSpringBootApplication
+    && mavenPackagingValue !== 'pom'
+    && (mavenServletPlugin
+      ? (mavenSpringFrameworkDependency
+        || mavenPackagingValue === 'war'
+        || hasServletWebappDirectory)
+      : (mavenSpringFrameworkDependency && mavenIsServletWarProject(pomText, hasServletWebappDirectory)))) {
+    const wrapper = process.platform === 'win32' ? 'mvnw.cmd' : 'mvnw';
+    const hasWrapper = rootFile(wrapper);
+    const plugin = mavenServletPlugin;
+    const command = hasWrapper ? path.join(resolvedRoot, wrapper) : 'mvn';
+    const framework = mavenSpringFrameworkDependency || servletDescriptorUsesSpring
+      ? 'Spring Framework'
+      : 'Java Servlet';
+    addUnique(configs, runConfig(plugin ? {
+      label: `${framework} · ${plugin.label} · Maven${hasWrapper ? ' Wrapper' : ''}`,
+      kind: 'java',
+      framework,
+      cwd: '.',
+      command,
+      args: plugin.args,
+      source: plugin.source,
+      launchMode: 'auto',
+      runSettingsMode: 'build-plugin',
+      port: plugin.port ?? 8080,
+      urlPath: plugin.urlPath,
+      dependenciesReady: await exists(path.join(resolvedRoot, 'target')),
+    } : {
+      label: `Spring Framework · Maven Servlet/WAR · Manual container setup${hasWrapper ? ' · Maven Wrapper' : ''}`,
+      kind: 'java',
+      framework: 'Spring Framework',
+      cwd: '.',
+      command,
+      args: [],
+      source: 'pom.xml · Servlet/WAR project',
+      launchMode: 'manual',
+      manualSetup: 'Add an active Tomcat, Jetty, or Cargo build plugin for one-click launch, or deploy this application to an external container and open that URL in the MonoField browser.',
+      port: 8080,
+      dependenciesReady: await exists(path.join(resolvedRoot, 'target')),
+    }));
+  }
+  if (gradleText
+    && !gradleSpringBootApplication
+    && (gradleServletPlugin
+      ? (gradleSpringFrameworkDependency || gradleIsServletWarProject(gradleText, hasServletWebappDirectory))
+      : (gradleSpringFrameworkDependency && gradleIsServletWarProject(gradleText, hasServletWebappDirectory)))) {
+    const wrapper = process.platform === 'win32' ? 'gradlew.bat' : 'gradlew';
+    const hasWrapper = rootFile(wrapper);
+    const plugin = gradleServletPlugin;
+    const command = hasWrapper ? path.join(resolvedRoot, wrapper) : 'gradle';
+    const framework = gradleSpringFrameworkDependency || servletDescriptorUsesSpring
+      ? 'Spring Framework'
+      : 'Java Servlet';
+    addUnique(configs, runConfig(plugin ? {
+      label: `${framework} · ${plugin.label} · Gradle${hasWrapper ? ' Wrapper' : ''}`,
+      kind: 'java',
+      framework,
+      cwd: '.',
+      command,
+      args: plugin.args,
+      source: `${gradleFile ?? 'build.gradle'} · ${plugin.source.split(' · ').at(-1)}`,
+      launchMode: 'auto',
+      runSettingsMode: 'build-plugin',
+      port: plugin.port ?? 8080,
+      urlPath: plugin.urlPath,
+      dependenciesReady: await exists(path.join(resolvedRoot, 'build')),
+    } : {
+      label: `Spring Framework · Gradle Servlet/WAR · Manual container setup${hasWrapper ? ' · Gradle Wrapper' : ''}`,
+      kind: 'java',
+      framework: 'Spring Framework',
+      cwd: '.',
+      command,
+      args: [],
+      source: `${gradleFile ?? 'build.gradle'} · Servlet/WAR project`,
+      launchMode: 'manual',
+      manualSetup: 'Add an active Tomcat, Jetty, or Cargo build plugin for one-click launch, or deploy this application to an external container and open that URL in the MonoField browser.',
+      port: 8080,
+      dependenciesReady: await exists(path.join(resolvedRoot, 'build')),
+    }));
   }
   const csproj = [...files].find((name) => !name.includes('/') && name.toLowerCase().endsWith('.csproj'));
   if (csproj) addUnique(configs, runConfig({ label: '.NET application', kind: 'dotnet', framework: 'ASP.NET Core', cwd: '.', command: 'dotnet', args: ['run', '--project', csproj], source: csproj, port: 5000 }));
@@ -1034,6 +1427,12 @@ export class DevelopmentServerService {
     const detected = await detectRunConfigsAtRoot(selection.root);
     const detectedConfig = detected.configs.find((candidate) => candidate.id === configIdValue);
     if (!detectedConfig) throw new Error('The selected run configuration is no longer available; detect configurations again');
+    if (detectedConfig.launchMode === 'manual') {
+      throw Object.assign(
+        new Error(detectedConfig.manualSetup ?? 'This run configuration requires manual servlet-container setup.'),
+        { status: 400 },
+      );
+    }
     const config = applyDevelopmentRunOverrides(detectedConfig, overrides);
     const environment = validatedDevelopmentEnvironment(overrides?.environment);
     const environmentFingerprint = developmentEnvironmentFingerprint(environment);

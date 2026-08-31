@@ -88,6 +88,24 @@ function Get-SmokeSummary {
   return Get-Content -LiteralPath $summaryJsonPath -Raw -Encoding utf8 | ConvertFrom-Json
 }
 
+function Test-PathEqualOrUnder([string]$Path, [string]$Root) {
+  $resolvedPath = [IO.Path]::GetFullPath($Path).TrimEnd(
+    [IO.Path]::DirectorySeparatorChar,
+    [IO.Path]::AltDirectorySeparatorChar
+  )
+  $resolvedRoot = [IO.Path]::GetFullPath($Root).TrimEnd(
+    [IO.Path]::DirectorySeparatorChar,
+    [IO.Path]::AltDirectorySeparatorChar
+  )
+  if ($resolvedPath -ieq $resolvedRoot) {
+    return $true
+  }
+  return $resolvedPath.StartsWith(
+    $resolvedRoot + [IO.Path]::DirectorySeparatorChar,
+    [StringComparison]::OrdinalIgnoreCase
+  )
+}
+
 function Write-Index([string]$Status) {
   $durationMs = [int64]((Get-Date) - $startedAt).TotalMilliseconds
   $build = Read-BuildJson
@@ -404,6 +422,43 @@ try {
           & $releaseHistoryCleanupScript -Root $releaseHistoryRoot -KeepLatest 1 | Write-Host
         } catch {
           Write-Warning "MonoField release history cleanup failed: $($_.Exception.Message)"
+        }
+      }
+
+      $workspaceCleanupScript = Join-Path $PSScriptRoot "cleanup-monofield-workspace-artifacts.ps1"
+      $sourceWorkspaceRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\.."))
+      $workspaceCleanupTargets = @(
+        (Join-Path $sourceWorkspaceRoot ".tmp"),
+        (Join-Path $sourceWorkspaceRoot ".playwright-cli")
+      )
+      $releasePaths = @(
+        $WorkRoot,
+        $ToolsPackDir,
+        $CacheDir,
+        $BuildJsonPath,
+        $IndexPath,
+        $ReportRoot,
+        $OutputsPath
+      )
+      $releasePathInsideCleanupTarget = $false
+      foreach ($releasePath in $releasePaths) {
+        foreach ($cleanupTarget in $workspaceCleanupTargets) {
+          if (Test-PathEqualOrUnder $releasePath $cleanupTarget) {
+            $releasePathInsideCleanupTarget = $true
+            break
+          }
+        }
+        if ($releasePathInsideCleanupTarget) {
+          break
+        }
+      }
+      if ($releasePathInsideCleanupTarget) {
+        Write-Warning "Skipping workspace artifact cleanup because the current release uses .tmp or .playwright-cli"
+      } elseif (Test-Path -LiteralPath $workspaceCleanupScript -PathType Leaf) {
+        try {
+          & $workspaceCleanupScript -WorkspaceRoot $sourceWorkspaceRoot | Write-Host
+        } catch {
+          Write-Warning "MonoField workspace artifact cleanup failed: $($_.Exception.Message)"
         }
       }
     }

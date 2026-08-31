@@ -595,6 +595,10 @@ export async function removePathBestEffort(
 // child receives the original arg byte-for-byte while cmd never has a chance
 // to expand anything inside it.
 function quoteWindowsCommandArg(value: string): string {
+  // An empty argv element must be represented explicitly. Joining a bare
+  // empty string into the command line silently drops the positional
+  // argument before the batch shim expands `%*`.
+  if (value.length === 0) return '""';
   if (!/[\s"&<>|^%]/.test(value)) return value;
   const escaped = value.replace(/"/g, '""').replace(/%/g, '"^%"');
   return `"${escaped}"`;

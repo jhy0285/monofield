@@ -12,6 +12,8 @@
   "scripts": {
     "postinstall": "node ./scripts/postinstall.mjs",
     "cleanup:temp": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tools/release/scripts/cleanup-monofield-local-temp.ps1 -StopOrphanTestRunners",
+    "cleanup:workspace": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tools/release/scripts/cleanup-monofield-workspace-artifacts.ps1 -WorkspaceRoot .",
+    "cleanup:workspace:dry-run": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tools/release/scripts/cleanup-monofield-workspace-artifacts.ps1 -WorkspaceRoot . -DryRun",
     "cleanup:deep": "pnpm store prune && powershell -NoProfile -ExecutionPolicy Bypass -File ./tools/release/scripts/cleanup-monofield-local-temp.ps1 -StopOrphanTestRunners -PruneReusableCaches",
     "build:web": "pnpm --dir apps/web build",
     "build:daemon": "pnpm --dir apps/daemon build",

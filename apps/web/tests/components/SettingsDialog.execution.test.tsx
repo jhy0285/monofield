@@ -399,6 +399,35 @@ describe('SettingsDialog feature guides', () => {
     expect(guide.getAttribute('data-feature')).toBe('settings-media');
     expect(within(guide).getByText(en['settings.mediaProvidersHint'])).toBeTruthy();
   });
+
+  it('closes a pet guide without closing its parent settings dialog', () => {
+    const { onClose } = renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      { initialSection: 'pet' },
+    );
+
+    fireEvent.click(screen.getByTestId('settings-feature-guide-button'));
+    const guide = screen.getByTestId('entry-feature-guide');
+    fireEvent.click(within(guide).getByText(en['common.close'], { selector: 'button' }));
+
+    expect(screen.queryByTestId('entry-feature-guide')).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog')).toBeTruthy();
+  });
+
+  it('handles Escape in a pet guide before the parent settings dialog', () => {
+    const { onClose } = renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      { initialSection: 'pet' },
+    );
+
+    fireEvent.click(screen.getByTestId('settings-feature-guide-button'));
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(screen.queryByTestId('entry-feature-guide')).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog')).toBeTruthy();
+  });
 });
 
 describe('SettingsDialog execution settings BYOK interactions', () => {

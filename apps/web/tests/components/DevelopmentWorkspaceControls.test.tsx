@@ -743,6 +743,114 @@ describe('DevelopmentWorkspaceControls', () => {
     expect(screen.getByTestId('development-detect').textContent).toContain('실행 구성 다시 찾기');
   });
 
+  it('shows manual servlet-container setup and does not offer to run it automatically', async () => {
+    const config = {
+      id: 'spring-war-manual',
+      label: 'Spring Framework · Maven WAR · Manual container setup',
+      kind: 'java' as const,
+      framework: 'Spring Framework',
+      cwd: '.',
+      command: 'mvn',
+      args: [],
+      source: 'pom.xml · WAR/Servlet project',
+      launchMode: 'manual' as const,
+      manualSetup: 'Configure a local Tomcat or Jetty container, build and deploy this WAR there.',
+      port: 8080,
+      url: 'http://127.0.0.1:8080',
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const payload = String(input).includes('/development/configs')
+        ? { configs: [config], recommendedConfigId: config.id, scannedAt: '2026-08-31T00:00:00.000Z' }
+        : { projectId: PROJECT_ID, state: 'idle', config: null, pid: null, url: null, startedAt: null, error: null, logs: [] };
+      return new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } });
+    }));
+
+    render(
+      <I18nProvider initial="ko">
+        <DevelopmentWorkspaceControls
+          projectId={PROJECT_ID}
+          metadata={{ kind: 'other', workMode: 'development' }}
+          resolvedDir="C:\\workspace"
+          onMetadataChange={vi.fn()}
+          onOpenUrl={vi.fn()}
+          onOpenChanges={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+
+    const run = await screen.findByTestId('development-run-action');
+    expect((run as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTestId('development-run-settings') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId('development-manual-run-setup').textContent).toContain('Tomcat/Jetty/Cargo');
+  });
+
+  it('keeps servlet-plugin owned overrides out of the UI and start request', async () => {
+    const config = {
+      id: 'spring-framework-jetty',
+      label: 'Spring Framework · Jetty · Maven',
+      kind: 'java' as const,
+      framework: 'Spring Framework',
+      cwd: '.',
+      command: 'mvn',
+      args: ['jetty:run'],
+      source: 'pom.xml · jetty-maven-plugin',
+      launchMode: 'auto' as const,
+      port: 9192,
+      url: 'http://127.0.0.1:9192/catalog',
+    };
+    const startBodies: Array<Record<string, any>> = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      let payload: unknown;
+      if (url.includes('/development/configs')) {
+        payload = { configs: [config], recommendedConfigId: config.id, scannedAt: '2026-08-31T00:00:00.000Z' };
+      } else if (url.includes('/development/servers')) {
+        payload = { servers: [] };
+      } else if (url.endsWith('/development/server/start') && init?.method === 'POST') {
+        startBodies.push(JSON.parse(String(init.body)));
+        payload = { projectId: PROJECT_ID, state: 'idle', config: null, pid: null, url: null, startedAt: null, error: null, logs: [] };
+      } else {
+        payload = { projectId: PROJECT_ID, state: 'idle', config: null, pid: null, url: null, startedAt: null, error: null, logs: [] };
+      }
+      return new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } });
+    }));
+
+    render(
+      <I18nProvider initial="ko">
+        <DevelopmentWorkspaceControls
+          projectId={PROJECT_ID}
+          metadata={{
+            kind: 'other',
+            workMode: 'development',
+            development: {
+              runOverridesByProject: {
+                '.': { configId: config.id, arguments: '"stale', port: 6553, url: 'not-a-url' },
+              },
+            },
+          }}
+          resolvedDir="C:\\workspace"
+          onMetadataChange={vi.fn()}
+          onOpenUrl={vi.fn()}
+          onOpenChanges={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+
+    const run = await screen.findByTestId('development-run-action');
+    await waitFor(() => expect((run as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(run);
+    await waitFor(() => expect(startBodies).toHaveLength(1));
+    expect(startBodies[0]?.overrides).toEqual({});
+
+    const settings = screen.getByTestId('development-run-settings');
+    await waitFor(() => expect((settings as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(settings);
+    expect(screen.getByTestId('development-servlet-plugin-settings').textContent).toContain('빌드 플러그인');
+    expect(screen.queryByTestId('development-run-port')).toBeNull();
+    expect(screen.queryByTestId('development-run-url')).toBeNull();
+    expect(screen.getByTestId('development-run-environment')).toBeTruthy();
+  });
+
   it('shows the active process command and port instead of stale detected defaults', async () => {
     const detected = {
       id: 'node-dev',

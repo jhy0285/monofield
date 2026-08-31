@@ -24,6 +24,16 @@ export interface DevelopmentRunConfig {
   command: string;
   args: string[];
   source: string;
+  /**
+   * Whether MonoField can launch this configuration itself. Servlet/WAR
+   * projects without an embedded build-plugin container remain visible as
+   * manual configurations so they are not mistaken for runnable servers.
+   */
+  launchMode?: 'auto' | 'manual';
+  /** Action the developer must take when `launchMode` is `manual`. */
+  manualSetup?: string;
+  /** Component that owns port, URL, and application-argument configuration. */
+  runSettingsMode?: 'application' | 'build-plugin';
   /** Runtime profile selected by this configuration, for example a Spring profile. */
   profile?: string;
   port: number;

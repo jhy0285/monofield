@@ -4,7 +4,7 @@ MonoField uses semantic versions for source and Desktop releases. Historical
 upstream development remains available in Git history; this file records the
 independent MonoField product line.
 
-## 0.11.6 — 2026-08-30
+## 0.11.6 — 2026-08-31
 
 - Added a global, once-per-version Desktop update notice with release notes,
   background Windows notification support, a safe release-page fallback, and
@@ -24,6 +24,15 @@ independent MonoField product line.
 - Added source-grounding requirements for current financial and market
   artifacts so prices, schedules, recommendations, and citations cannot be
   completed from unsupported model claims.
+- Passed packaged MonoField browser-wrapper coordinates into Codex's Windows
+  tool shell without exposing provider credentials or run-scoped tokens, so
+  approved browser actions no longer fail with `MONOFIELD_NODE_BIN is not set`.
+- Added ordinary Spring Framework detection for active Maven Tomcat, Jetty, and
+  Cargo plugins plus Gradle Gretty/Tomcat/Jetty configurations, while presenting
+  plain Servlet/WAR projects as external-container setups rather than falsely
+  runnable servers.
+- Kept Settings open when a nested feature guide is dismissed by its close
+  button or Escape.
 
 ## 0.11.5 — 2026-08-29
 

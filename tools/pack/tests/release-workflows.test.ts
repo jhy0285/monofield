@@ -3,25 +3,30 @@ import { readFile, readdir } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 function sectionBetween(content: string, start: string, end: string): string {
-  const startIndex = content.indexOf(start);
+  const normalized = content.replaceAll("\r\n", "\n");
+  const startIndex = normalized.indexOf(start);
   expect(startIndex).toBeGreaterThanOrEqual(0);
-  const endIndex = content.indexOf(end, startIndex + start.length);
+  const endIndex = normalized.indexOf(end, startIndex + start.length);
   expect(endIndex).toBeGreaterThan(startIndex);
-  return content.slice(startIndex, endIndex);
+  return normalized.slice(startIndex, endIndex);
 }
 
 function sectionAfter(content: string, start: string): string {
-  const startIndex = content.indexOf(start);
+  const normalized = content.replaceAll("\r\n", "\n");
+  const startIndex = normalized.indexOf(start);
   expect(startIndex).toBeGreaterThanOrEqual(0);
-  return content.slice(startIndex);
+  return normalized.slice(startIndex);
 }
 
 describe("Windows release workflow", () => {
   it("builds verified MonoField artifacts without granting the build job write access", async () => {
-    const [workflow, buildScript, cleanupScript, packageJson] = await Promise.all([
-      readFile(new URL("../../../.github/workflows/release-windows.yml", import.meta.url), "utf8"),
+    const [workflow, buildScript, cleanupScript, workspaceCleanupScript, packageJson] = await Promise.all([
+      readFile(new URL("../../../.github/workflows/release-windows.yml", import.meta.url), "utf8").then((content) =>
+        content.replaceAll("\r\n", "\n"),
+      ),
       readFile(new URL("../../release/scripts/build-platform.ps1", import.meta.url), "utf8"),
       readFile(new URL("../../release/scripts/cleanup-monofield-local-temp.ps1", import.meta.url), "utf8"),
+      readFile(new URL("../../release/scripts/cleanup-monofield-workspace-artifacts.ps1", import.meta.url), "utf8"),
       readFile(new URL("../../../package.json", import.meta.url), "utf8"),
     ]);
     const build = sectionBetween(workflow, "  build:\n", "  publish:\n");
@@ -66,6 +71,16 @@ describe("Windows release workflow", () => {
     expect(cleanupScript).toContain('requiresStoppedApp = $true');
     expect(cleanupScript).toContain('-Attributes ReparsePoint');
     expect(cleanupScript).toContain('& robocopy.exe $emptyMirror $cache.path /MIR');
+    expect(workspaceCleanupScript).toContain('$targetNames = @(".tmp", ".playwright-cli")');
+    expect(workspaceCleanupScript).toContain("WorkspaceRoot must be the exact source workspace");
+    expect(workspaceCleanupScript).toContain("[IO.FileAttributes]::ReparsePoint");
+    expect(workspaceCleanupScript).toContain("$_.IndexOf($targetPath");
+    expect(workspaceCleanupScript).toContain("[switch]$DryRun");
+    expect(workspaceCleanupScript).toContain("freedBytes = $freedBytes");
+    expect(buildScript).toContain('cleanup-monofield-workspace-artifacts.ps1');
+    expect(buildScript).toContain('Skipping workspace artifact cleanup because the current release uses .tmp or .playwright-cli');
+    expect(packageJson).toContain('"cleanup:workspace"');
+    expect(packageJson).toContain('"cleanup:workspace:dry-run"');
     expect(packageJson).toContain('"cleanup:deep"');
     expect(packageJson).toContain('-PruneReusableCaches');
     const updateFixtureBuild = sectionBetween(
@@ -84,7 +99,9 @@ describe("Windows release workflow", () => {
 
   it("requires Authenticode signing before publishing updater-compatible GitHub assets", async () => {
     const [workflow, packConfig, updater, site, readme] = await Promise.all([
-      readFile(new URL("../../../.github/workflows/release-windows.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/release-windows.yml", import.meta.url), "utf8").then((content) =>
+        content.replaceAll("\r\n", "\n"),
+      ),
       readFile(new URL("../src/config.ts", import.meta.url), "utf8"),
       readFile(new URL("../../../apps/desktop/src/main/updater.ts", import.meta.url), "utf8"),
       readFile(new URL("../../../apps/monofield-site/index.html", import.meta.url), "utf8"),
