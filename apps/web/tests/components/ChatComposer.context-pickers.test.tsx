@@ -590,6 +590,28 @@ describe('ChatComposer context pickers', () => {
     expect(screen.queryByTestId('staged-contexts')).toBeNull();
   });
 
+  it('stages a skill picked from the plus menu for one run without changing the project default', async () => {
+    const onProjectSkillChange = vi.fn();
+    const onSend = vi.fn();
+    renderComposer({ onProjectSkillChange, onSend });
+    await flushMounts();
+
+    fireEvent.click(screen.getByTestId('chat-plus-trigger'));
+    fireEvent.click(screen.getByTestId('composer-plus-skills'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Deck Builder' }));
+
+    await waitFor(() => expect(composerText()).toBe('@Deck Builder '));
+    fireEvent.click(screen.getByTestId('chat-send'));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    expect(onSend.mock.calls[0]?.[3]?.skillIds).toEqual(['deck-builder']);
+    expect(onSend.mock.calls[0]?.[3]?.context?.skillIds).toEqual(['deck-builder']);
+    expect(onProjectSkillChange).not.toHaveBeenCalled();
+    expect(fetchMock.mock.calls.some(([url, init]) => (
+      url === '/api/projects/project-1' && (init as RequestInit | undefined)?.method === 'PATCH'
+    ))).toBe(false);
+  });
+
   it('shows all matching skills and ranks exact prefix matches first', async () => {
     skills = [
       makeSkill({

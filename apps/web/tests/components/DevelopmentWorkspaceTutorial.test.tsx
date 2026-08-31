@@ -22,13 +22,30 @@ afterEach(() => {
 });
 
 describe('DevelopmentWorkspaceTutorial', () => {
-  it('uses generic project and module guidance in every bundled locale', () => {
+  it('keeps the Korean and English guide free of organization-specific project examples', () => {
+    const guideKeys = [
+      'development.guideConfigTitle',
+      'development.guideConfigBody',
+      'development.guideRunTitle',
+      'development.guideRunBody',
+      'development.guideDatabaseTitle',
+      'development.guideDatabaseBody',
+      'development.guideChangesTitle',
+      'development.guideChangesBody',
+      'development.guideVerifyTitle',
+      'development.guideVerifyBody',
+    ] as const;
     const korean = String(ko['development.guideConfigBody']);
     const english = String(en['development.guideConfigBody']);
+    const allGuideCopy = guideKeys
+      .flatMap((key) => [String(ko[key]), String(en[key])])
+      .join('\n');
 
     expect(korean).toContain('프로젝트나 모듈');
     expect(english).toContain('project or module');
-    expect(`${korean}\n${english}`).not.toMatch(/OSE|aauserver|acrserver|agwserver|aopserver/i);
+    expect(allGuideCopy).not.toMatch(
+      /\bOSE\b|aauserver|acrserver|agwserver|aopserver|Hellenic|National Railway|그리스 OSE/i,
+    );
   });
 
   it('opens once by default and persists completion', () => {

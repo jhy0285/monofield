@@ -1115,6 +1115,52 @@ process.stdin.on('end', () => {
     );
   });
 
+  it('injects the bounded goal-execution workflow through run-scoped skillIds', async () => {
+    await withFakeAgent(
+      'opencode',
+      `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  prompt += chunk;
+});
+process.stdin.on('end', () => {
+  const checks = [
+    prompt.includes('## Composed skill — goal-execution') ? 'has-goal-skill-header' : 'missing-goal-skill-header',
+    prompt.includes('## Establish the finish line') ? 'has-goal-finish-line' : 'missing-goal-finish-line',
+    prompt.includes('Selecting this skill never expands authority') ? 'has-goal-safety-boundary' : 'missing-goal-safety-boundary',
+  ];
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: checks.join('\\n') } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            message: 'finish this bounded implementation goal',
+            skillIds: ['goal-execution'],
+          }),
+        });
+        const createBody = await createResponse.json() as { runId: string };
+
+        expect(createResponse.status).toBe(202);
+        expect(createBody.runId).toBeTruthy();
+
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${createBody.runId}/events`);
+        const body = await readSseUntil(eventsResponse, 'event: final');
+        expect(body).toContain('has-goal-skill-header');
+        expect(body).toContain('has-goal-finish-line');
+        expect(body).toContain('has-goal-safety-boundary');
+        expect(body).not.toContain('missing-goal-');
+      },
+    );
+  });
+
   it('stages ad-hoc skill side files into the project cwd', async () => {
     const projectId = `project-${randomUUID()}`;
     const stagedRelativePath = `.od-skills/${skillCwdAliasSegment(resolve(process.cwd(), '..', '..', 'skills', 'release-notes-one-pager'))}/references/checklist.md`;

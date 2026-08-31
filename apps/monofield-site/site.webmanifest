@@ -1,0 +1,20 @@
+{
+  "id": "/",
+  "name": "MonoField",
+  "short_name": "MonoField",
+  "description": "A local-first AI workbench for code, design, and documents.",
+  "lang": "en",
+  "start_url": "/",
+  "scope": "/",
+  "display": "browser",
+  "background_color": "#08090a",
+  "theme_color": "#08090a",
+  "icons": [
+    {
+      "src": "/mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

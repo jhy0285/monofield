@@ -38,8 +38,8 @@
   function applyLanguage() {
     document.documentElement.lang = language;
     document.title = language === 'ko'
-      ? 'MonoField | 로컬 AI 워크벤치'
-      : 'MonoField | Local-first AI workbench';
+      ? 'MonoField (모노필드) | 로컬 AI 워크벤치'
+      : 'MonoField (모노필드) | Local-first AI workbench';
     translatable.forEach((element) => {
       element.textContent = element.getAttribute(`data-${language}`) || element.textContent;
     });

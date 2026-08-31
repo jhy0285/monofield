@@ -203,9 +203,11 @@ describe('listSkills', () => {
           'name: localized',
           'zh_name: "本地化技能"',
           'en_name: "Localized Skill"',
+          'ko_name: "현지화 스킬"',
           'description: "English fallback description."',
           'zh_description: "中文描述。"',
           'en_description: "English localized description."',
+          'ko_description: "한국어 설명입니다."',
           'od:',
           '  example_prompt: "English fallback prompt."',
           '  example_prompt_i18n:',
@@ -223,10 +225,12 @@ describe('listSkills', () => {
         displayName: {
           en: 'Localized Skill',
           'zh-CN': '本地化技能',
+          ko: '현지화 스킬',
         },
         descriptionI18n: {
           en: 'English localized description.',
           'zh-CN': '中文描述。',
+          ko: '한국어 설명입니다.',
         },
         examplePrompt: 'English fallback prompt.',
         examplePromptI18n: {
@@ -235,6 +239,28 @@ describe('listSkills', () => {
       });
     } finally {
       rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('includes the built-in goal execution skill with explicit completion and safety boundaries', async () => {
+    const userRoot = fresh();
+    try {
+      const skills = await listSkills([userRoot, skillsRoot]);
+      const skill = skills.find((entry: { id: string }) => entry.id === 'goal-execution');
+
+      expect(skill).toMatchObject({
+        id: 'goal-execution',
+        displayName: {
+          en: 'Goal execution',
+          ko: '목표 실행',
+        },
+        source: 'built-in',
+      });
+      expect(skill?.body).toContain('## Establish the finish line');
+      expect(skill?.body).toContain('Selecting this skill never expands authority');
+      expect(skill?.body).toContain('create an Automation instead');
+    } finally {
+      rmSync(userRoot, { recursive: true, force: true });
     }
   });
 

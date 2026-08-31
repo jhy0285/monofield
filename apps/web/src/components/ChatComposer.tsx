@@ -1211,6 +1211,20 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       setMention(null);
     }
 
+    // The explicit Skills submenu is a run-scoped context picker. Unlike the
+    // legacy typed @ picker above, it must not silently replace the project's
+    // persistent default skill. This is especially important for bounded
+    // workflow skills such as goal-execution: selecting one should shape this
+    // turn, then disappear when the composer resets.
+    function insertTurnSkillMention(skill: SkillSummary) {
+      stageSkillForCurrentTurn(skill);
+      editorRef.current?.insertMention({
+        token: inlineMentionToken(skill.name),
+        entity: { id: skill.id, kind: 'skill', label: skill.name },
+      });
+      setMention(null);
+    }
+
     function stageSkillForCurrentTurn(skill: SkillSummary) {
       setStagedSkills((prev) =>
         prev.some((s) => s.id === skill.id) ? prev : [...prev, skill],
@@ -2568,7 +2582,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                   resource_kind: 'skill',
                   resource_id: skill.id,
                 });
-                void insertSkillMention(skill);
+                insertTurnSkillMention(skill);
               }}
               mcpServers={enabledMcpServers}
               onPickMcp={(server) => {

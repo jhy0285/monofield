@@ -36,9 +36,11 @@ interface SkillFrontmatter extends JsonRecord {
   name?: unknown;
   zh_name?: unknown;
   en_name?: unknown;
+  ko_name?: unknown;
   description?: unknown;
   zh_description?: unknown;
   en_description?: unknown;
+  ko_description?: unknown;
   triggers?: unknown;
   od?: JsonRecord & {
     example_prompt?: unknown;
@@ -205,10 +207,15 @@ export async function listSkills(
             : "html";
         const description =
           typeof data.description === "string" ? data.description : "";
-        const displayName = localizedMapFromFields(data.en_name, data.zh_name);
+        const displayName = localizedMapFromFields(
+          data.en_name,
+          data.zh_name,
+          data.ko_name,
+        );
         const descriptionI18n = localizedMapFromFields(
           data.en_description,
           data.zh_description,
+          data.ko_description,
         );
         const examplePromptI18n = localizedMapFromRecord(data.od?.example_prompt_i18n);
         const parentBody = hasAttachments
@@ -525,10 +532,12 @@ function normalizeBoolHint(value: unknown): boolean | null {
 function localizedMapFromFields(
   enValue: unknown,
   zhValue: unknown,
+  koValue?: unknown,
 ): Record<string, string> | undefined {
   const out: Record<string, string> = {};
   if (typeof enValue === "string" && enValue.trim()) out.en = enValue.trim();
   if (typeof zhValue === "string" && zhValue.trim()) out["zh-CN"] = zhValue.trim();
+  if (typeof koValue === "string" && koValue.trim()) out.ko = koValue.trim();
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
