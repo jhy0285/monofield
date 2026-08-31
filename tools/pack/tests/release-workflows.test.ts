@@ -141,6 +141,8 @@ describe("Windows release workflow", () => {
     expect(releaseCleanup).toContain("^monofield-prev-.+");
     expect(releaseCleanup).toContain("GetDirectoryName($resolved) -ine $resolvedRoot");
     expect(releaseCleanup).toContain("$retainedPaths -contains $resolved");
+    expect(releaseCleanup).toContain("Get-ReleaseSequence");
+    expect(releaseCleanup).toContain("-r(?<sequence>\\d+)$");
     expect(releaseCleanup).toContain("$_.IndexOf($resolved");
     expect(releaseCleanup).toContain("robocopy.exe $emptyMirror $resolved /MIR");
   });

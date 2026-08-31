@@ -39,6 +39,14 @@ $allCandidates = @(
       $_.Name -match '^monofield-prev-.+'
     }
 )
+
+function Get-ReleaseSequence([string]$name) {
+  if ($name -match '-r(?<sequence>\d+)$') {
+    return [int64]$Matches.sequence
+  }
+  return [int64]-1
+}
+
 $retained = @(
   $allCandidates |
     Where-Object {
@@ -46,7 +54,9 @@ $retained = @(
       $_.Name -notmatch '-temp$' -and
       $_.Name -notmatch '-preflight$'
     } |
-    Sort-Object LastWriteTime -Descending |
+    Sort-Object `
+      @{ Expression = { Get-ReleaseSequence $_.Name }; Descending = $true },
+      @{ Expression = { $_.LastWriteTimeUtc }; Descending = $true } |
     Select-Object -First $KeepLatest
 )
 $retainedPaths = @($retained | ForEach-Object { [IO.Path]::GetFullPath($_.FullName) })
