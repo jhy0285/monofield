@@ -354,6 +354,7 @@ try {
       OD_PACKAGED_E2E_WIN_UPDATE_ARTIFACT_PATH = $env:OD_PACKAGED_E2E_WIN_UPDATE_ARTIFACT_PATH
       OD_PACKAGED_E2E_WIN_UPDATE_VERSION = $env:OD_PACKAGED_E2E_WIN_UPDATE_VERSION
       OD_PACKAGED_E2E_WIN_UPDATE_BUILD_JSON_PATH = $env:OD_PACKAGED_E2E_WIN_UPDATE_BUILD_JSON_PATH
+      MONOFIELD_WINDOWS_SHELL_APPDATA = $env:MONOFIELD_WINDOWS_SHELL_APPDATA
     }
     try {
       $env:OD_PACKAGED_E2E_BUILD_JSON_PATH = $BuildJsonPath
@@ -364,6 +365,7 @@ try {
       $env:OD_PACKAGED_E2E_RELEASE_VERSION = $ReleaseVersion
       $env:OD_PACKAGED_E2E_REPORT_DIR = $ReportRoot
       $env:OD_PACKAGED_E2E_TOOLS_PACK_DIR = $ToolsPackDir
+      $env:MONOFIELD_WINDOWS_SHELL_APPDATA = [Environment]::GetFolderPath([Environment+SpecialFolder]::ApplicationData)
       if (-not [string]::IsNullOrWhiteSpace($localUpdateArtifactPath)) {
         $env:OD_PACKAGED_E2E_WIN_UPDATE_FIXTURE = "tools-serve"
         $env:OD_PACKAGED_E2E_WIN_UPDATE_ARTIFACT_PATH = $localUpdateArtifactPath

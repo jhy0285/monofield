@@ -11,7 +11,7 @@ import {
   resolveToolPackLauncherPayloadLayout,
 } from "../src/launcher-layout.js";
 import { resolveMacPaths } from "../src/mac/paths.js";
-import { resolveWinPaths } from "../src/win/paths.js";
+import { resolveWinPaths, resolveWinProductUserDataRoot } from "../src/win/paths.js";
 
 const TEST_WORKSPACE_ROOT = resolve("/work");
 
@@ -104,6 +104,35 @@ describe("tools-pack launcher layout", () => {
     expect(paths.setupPath).toBe(join(config.roots.output.namespaceRoot, "builder", "MonoField-release-beta-win-setup.exe"));
     expect(paths.setupZipPath).toBe(join(config.roots.output.namespaceRoot, "builder", "MonoField-release-beta-win-portable.zip"));
     expect(paths.storePackagePath).toBe(join(config.roots.output.namespaceRoot, "builder", "MonoField-release-beta-win-store.appx"));
+  });
+
+  it("observes Start Menu shortcuts in the real Windows shell AppData without changing isolated product data", () => {
+    const previousShellAppData = process.env.MONOFIELD_WINDOWS_SHELL_APPDATA;
+    const previousAppData = process.env.APPDATA;
+    const shellAppData = join(TEST_WORKSPACE_ROOT, "shell-appdata");
+    const isolatedAppData = join(TEST_WORKSPACE_ROOT, "isolated-appdata");
+
+    try {
+      process.env.MONOFIELD_WINDOWS_SHELL_APPDATA = shellAppData;
+      process.env.APPDATA = isolatedAppData;
+
+      const paths = resolveWinPaths(makeConfig(TEST_WORKSPACE_ROOT, "win", "default", "0.8.1"));
+
+      expect(paths.startMenuShortcutPath).toBe(
+        join(shellAppData, "Microsoft", "Windows", "Start Menu", "Programs", "MonoField.lnk"),
+      );
+      expect(resolveWinProductUserDataRoot()).toBe(join(isolatedAppData, "MonoField"));
+
+      delete process.env.MONOFIELD_WINDOWS_SHELL_APPDATA;
+      expect(resolveWinPaths(makeConfig(TEST_WORKSPACE_ROOT, "win", "default", "0.8.1")).startMenuShortcutPath).toBe(
+        join(isolatedAppData, "Microsoft", "Windows", "Start Menu", "Programs", "MonoField.lnk"),
+      );
+    } finally {
+      if (previousShellAppData == null) delete process.env.MONOFIELD_WINDOWS_SHELL_APPDATA;
+      else process.env.MONOFIELD_WINDOWS_SHELL_APPDATA = previousShellAppData;
+      if (previousAppData == null) delete process.env.APPDATA;
+      else process.env.APPDATA = previousAppData;
+    }
   });
 
   it("uses zip payload archives for mac and 7z payload archives for Windows", () => {

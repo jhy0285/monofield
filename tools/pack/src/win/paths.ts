@@ -20,6 +20,14 @@ export function sanitizeNamespace(value: string): string {
   return value.replace(/[^A-Za-z0-9._-]+/g, "-");
 }
 
+function resolveWinShellAppDataRoot(): string {
+  return (
+    process.env.MONOFIELD_WINDOWS_SHELL_APPDATA?.trim() ||
+    process.env.APPDATA?.trim() ||
+    join(homedir(), "AppData", "Roaming")
+  );
+}
+
 export function resolveWinPaths(config: ToolPackConfig): WinPaths {
   const namespaceToken = sanitizeNamespace(config.namespace);
   const namespaceRoot = config.roots.output.namespaceRoot;
@@ -60,7 +68,14 @@ export function resolveWinPaths(config: ToolPackConfig): WinPaths {
     setupPath: join(namespaceRoot, "builder", `${PRODUCT_NAME}-${namespaceToken}-setup.exe`),
     setupZipPath: join(namespaceRoot, "builder", `${PRODUCT_NAME}-${namespaceToken}-portable.zip`),
     storePackagePath: join(namespaceRoot, "builder", `${PRODUCT_NAME}-${namespaceToken}-store.appx`),
-    startMenuShortcutPath: join(process.env.APPDATA ?? join(homedir(), "AppData", "Roaming"), "Microsoft", "Windows", "Start Menu", "Programs", identity.shortcutName),
+    startMenuShortcutPath: join(
+      resolveWinShellAppDataRoot(),
+      "Microsoft",
+      "Windows",
+      "Start Menu",
+      "Programs",
+      identity.shortcutName,
+    ),
     tarballsRoot: join(namespaceRoot, "tarballs"),
     userDesktopShortcutPath: join(homedir(), "Desktop", identity.shortcutName),
     uninstallMarkerPath: join(namespaceRoot, "logs", "uninstall.marker.json"),

@@ -79,6 +79,10 @@ describe("Windows release workflow", () => {
     expect(workspaceCleanupScript).toContain("freedBytes = $freedBytes");
     expect(buildScript).toContain('cleanup-monofield-workspace-artifacts.ps1');
     expect(buildScript).toContain('Skipping workspace artifact cleanup because the current release uses .tmp or .playwright-cli');
+    expect(buildScript).toContain('MONOFIELD_WINDOWS_SHELL_APPDATA = $env:MONOFIELD_WINDOWS_SHELL_APPDATA');
+    expect(buildScript).toContain(
+      '$env:MONOFIELD_WINDOWS_SHELL_APPDATA = [Environment]::GetFolderPath([Environment+SpecialFolder]::ApplicationData)',
+    );
     expect(packageJson).toContain('"cleanup:workspace"');
     expect(packageJson).toContain('"cleanup:workspace:dry-run"');
     expect(packageJson).toContain('"cleanup:deep"');
