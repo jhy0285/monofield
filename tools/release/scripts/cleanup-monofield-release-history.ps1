@@ -1,7 +1,7 @@
 param(
   [Parameter(Mandatory = $true)]
   [string]$Root,
-  [ValidateRange(1, 20)]
+  [ValidateRange(0, 20)]
   [int]$KeepLatest = 1,
   [switch]$DryRun
 )
@@ -47,18 +47,22 @@ function Get-ReleaseSequence([string]$name) {
   return [int64]-1
 }
 
-$retained = @(
-  $allCandidates |
-    Where-Object {
-      $_.Name -match '^monofield-release-.+' -and
-      $_.Name -notmatch '-temp$' -and
-      $_.Name -notmatch '-preflight$'
-    } |
-    Sort-Object `
-      @{ Expression = { Get-ReleaseSequence $_.Name }; Descending = $true },
-      @{ Expression = { $_.LastWriteTimeUtc }; Descending = $true } |
-    Select-Object -First $KeepLatest
-)
+$retained = if ($KeepLatest -eq 0) {
+  @()
+} else {
+  @(
+    $allCandidates |
+      Where-Object {
+        $_.Name -match '^monofield-release-.+' -and
+        $_.Name -notmatch '-temp$' -and
+        $_.Name -notmatch '-preflight$'
+      } |
+      Sort-Object `
+        @{ Expression = { Get-ReleaseSequence $_.Name }; Descending = $true },
+        @{ Expression = { $_.LastWriteTimeUtc }; Descending = $true } |
+      Select-Object -First $KeepLatest
+  )
+}
 $retainedPaths = @($retained | ForEach-Object { [IO.Path]::GetFullPath($_.FullName) })
 
 $deleted = [System.Collections.Generic.List[string]]::new()

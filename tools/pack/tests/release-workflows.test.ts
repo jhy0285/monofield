@@ -164,6 +164,8 @@ describe("Windows release workflow", () => {
     expect(releaseCleanup).toContain("$retainedPaths -contains $resolved");
     expect(releaseCleanup).toContain("Get-ReleaseSequence");
     expect(releaseCleanup).toContain("-r(?<sequence>\\d+)$");
+    expect(releaseCleanup).toContain("[ValidateRange(0, 20)]");
+    expect(releaseCleanup).toContain("$KeepLatest -eq 0");
     expect(releaseCleanup).toContain("$_.IndexOf($resolved");
     expect(releaseCleanup).toContain("robocopy.exe $emptyMirror $resolved /MIR");
   });
