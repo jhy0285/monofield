@@ -3,6 +3,8 @@ param(
   [string]$Root,
   [ValidateRange(0, 20)]
   [int]$KeepLatest = 1,
+  [switch]$IncludeRuntimeArtifacts,
+  [switch]$IncludeCacheArtifacts,
   [switch]$DryRun
 )
 
@@ -36,7 +38,9 @@ $allCandidates = @(
   Get-ChildItem -LiteralPath $resolvedRoot -Directory -Force -ErrorAction Stop |
     Where-Object {
       $_.Name -match '^monofield-release-.+' -or
-      $_.Name -match '^monofield-prev-.+'
+      $_.Name -match '^monofield-prev-.+' -or
+      ($IncludeRuntimeArtifacts -and $_.Name -match '^runtime-\d+\.\d+\.\d+(?:-[A-Za-z0-9._-]+)?$') -or
+      ($IncludeCacheArtifacts -and $_.Name -match '^cache-\d+\.\d+\.\d+(?:-[A-Za-z0-9._-]+)?$')
     }
 )
 
@@ -113,6 +117,8 @@ $after = (Get-PSDrive -Name $driveName).Free
 [pscustomobject]@{
   root = $resolvedRoot
   keepLatest = $KeepLatest
+  includeRuntimeArtifacts = [bool]$IncludeRuntimeArtifacts
+  includeCacheArtifacts = [bool]$IncludeCacheArtifacts
   retained = $retainedPaths
   planned = @($planned)
   deleted = @($deleted)
