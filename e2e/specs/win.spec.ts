@@ -28,10 +28,16 @@ if (process.env.OD_PACKAGED_E2E_WIN === '1') {
 const namespace = resolvePackagedSmokeNamespace('win');
 const toolsPackBin = join(workspaceRoot, 'tools', 'pack', 'bin', 'tools-pack.mjs');
 const maxInstallDurationMs = Number.parseInt(process.env.OD_PACKAGED_E2E_WIN_MAX_INSTALL_MS ?? '120000', 10);
+const updateReadyTimeoutOverrideMs = Number.parseInt(
+  process.env.OD_PACKAGED_E2E_WIN_UPDATE_READY_TIMEOUT_MS ?? '',
+  10,
+);
 const updateReadyTimeoutMs =
-  Number.isFinite(maxInstallDurationMs) && maxInstallDurationMs > 0
-    ? Math.max(120_000, maxInstallDurationMs)
-    : 120_000;
+  Number.isFinite(updateReadyTimeoutOverrideMs) && updateReadyTimeoutOverrideMs > 0
+    ? updateReadyTimeoutOverrideMs
+    : Number.isFinite(maxInstallDurationMs) && maxInstallDurationMs > 0
+      ? Math.max(120_000, maxInstallDurationMs)
+      : 120_000;
 const winTestTimeoutMs = resolvePackagedWinTestTimeoutMs(process.env.OD_PACKAGED_E2E_WIN_TEST_TIMEOUT_MS);
 const smokeProfile = process.env.OD_PACKAGED_E2E_WIN_SMOKE_PROFILE ?? 'core';
 const verifyCoreOnly = smokeProfile === 'core';

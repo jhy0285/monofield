@@ -152,6 +152,8 @@ describe("packaged smoke workflow", () => {
     expect(smoke).toContain("waitForHealthyDesktop()");
     expect(smoke).toContain("startToolsServeUpdaterFixture");
     expect(smoke).toContain("runPayloadUpdateAcceptance");
+    expect(smoke).toContain("OD_PACKAGED_E2E_WIN_UPDATE_READY_TIMEOUT_MS");
+    expect(smoke).toContain("updateReadyTimeoutOverrideMs");
     expect(smoke).toContain("expect(downloadedInspect.update.artifact?.type).toBe('payload')");
     expect(smoke).toContain("assertLauncherPointer");
     expect(smoke).toContain("runToolsPackJson<WinUninstallResult>('uninstall'");
