@@ -12,6 +12,8 @@ import {
   shouldOpenDevelopmentWorkspaceTutorial,
 } from '../../src/components/DevelopmentWorkspaceTutorial';
 import { I18nProvider } from '../../src/i18n';
+import { en } from '../../src/i18n/locales/en';
+import { ko } from '../../src/i18n/locales/ko';
 
 afterEach(() => {
   cleanup();
@@ -20,6 +22,15 @@ afterEach(() => {
 });
 
 describe('DevelopmentWorkspaceTutorial', () => {
+  it('uses generic project and module guidance in every bundled locale', () => {
+    const korean = String(ko['development.guideConfigBody']);
+    const english = String(en['development.guideConfigBody']);
+
+    expect(korean).toContain('프로젝트나 모듈');
+    expect(english).toContain('project or module');
+    expect(`${korean}\n${english}`).not.toMatch(/OSE|aauserver|acrserver|agwserver|aopserver/i);
+  });
+
   it('opens once by default and persists completion', () => {
     expect(shouldOpenDevelopmentWorkspaceTutorial()).toBe(true);
     completeDevelopmentWorkspaceTutorial();
@@ -30,9 +41,9 @@ describe('DevelopmentWorkspaceTutorial', () => {
     const onClose = vi.fn();
     render(
       <I18nProvider initial="ko">
-        <select data-testid="development-active-project" aria-label="활성 프로젝트" defaultValue="aauserver">
-          <option value="aauserver">aauserver</option>
-          <option value="acrserver">acrserver</option>
+        <select data-testid="development-active-project" aria-label="활성 프로젝트" defaultValue="api-service">
+          <option value="api-service">api-service</option>
+          <option value="web-client">web-client</option>
         </select>
         <select data-testid="development-run-config" aria-label="실행 구성" defaultValue="spring">
           <option value="spring">Spring Boot</option>
@@ -56,8 +67,10 @@ describe('DevelopmentWorkspaceTutorial', () => {
     expect(guide.getAttribute('data-step')).toBe('1');
     expect(screen.getByRole('heading', { name: '소프트웨어 개발' })).toBeTruthy();
 
-    fireEvent.change(screen.getByTestId('development-active-project'), { target: { value: 'acrserver' } });
+    fireEvent.change(screen.getByTestId('development-active-project'), { target: { value: 'web-client' } });
     await waitFor(() => expect(guide.getAttribute('data-step')).toBe('2'));
+    expect(guide.textContent).toContain('워크스페이스에서 작업할 프로젝트나 모듈을 선택하면');
+    expect(guide.textContent).not.toMatch(/OSE|aauserver/);
     fireEvent.change(screen.getByTestId('development-run-config'), { target: { value: 'web' } });
     await waitFor(() => expect(guide.getAttribute('data-step')).toBe('3'));
     fireEvent.click(screen.getByTestId('development-run-settings'));
@@ -96,7 +109,7 @@ describe('DevelopmentWorkspaceTutorial', () => {
 
     render(
       <I18nProvider initial="ko">
-        <select data-testid="development-active-project" aria-label="활성 프로젝트"><option>aauserver</option></select>
+        <select data-testid="development-active-project" aria-label="활성 프로젝트"><option>api-service</option></select>
         <select data-testid="development-run-config" aria-label="실행 구성"><option>Spring Boot</option></select>
         <button type="button" data-testid="development-run-settings">실행 설정</button>
         <button type="button" data-testid="development-run-action">실행</button>

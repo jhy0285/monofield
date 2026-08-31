@@ -77,6 +77,16 @@ async function readBack(buffer: Buffer): Promise<ExcelJS.Workbook> {
 }
 
 describe('renderInterfaceSpecXlsx', () => {
+  it('uses a generic cover label when no brand was supplied', async () => {
+    const doc = sampleDocument();
+    doc.cover.brand = '';
+
+    const result = await renderInterfaceSpecXlsx(doc);
+    const wb = await readBack(result.buffer);
+
+    expect(wb.getWorksheet('문서표지')?.getCell('Q4').value).toBe('기관명');
+  });
+
   it('renders the aapserver workbook shape: cover, list, generated, one detail sheet per endpoint', async () => {
     const result = await renderInterfaceSpecXlsx(sampleDocument());
     expect(result.endpointCount).toBe(2);

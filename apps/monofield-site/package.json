@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "typecheck": "node --check script.js"
+    "test": "node --test tests/seo.test.ts",
+    "typecheck": "node --check script.js && node --check tests/seo.test.ts"
   },
   "engines": {
     "node": "~24"

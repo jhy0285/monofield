@@ -127,4 +127,33 @@ describe('PluginsSection', () => {
     expect(screen.queryByTestId('context-chip-strip')).toBeNull();
     expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
   });
+
+  it('surfaces apply validation errors without creating an active plugin chip', async () => {
+    fetchMock.mockImplementation(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [PLUGIN_ROW] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({
+        error: {
+          code: 'missing-input',
+          message: 'Topic is required before this plugin can be used.',
+          data: { missing: ['topic'] },
+        },
+      }), {
+        status: 422,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    const onApplied = vi.fn();
+
+    render(<PluginsSection onApplied={onApplied} />);
+    fireEvent.click(await waitFor(() => screen.getByTitle('A fixture')));
+
+    expect((await screen.findByRole('alert')).textContent).toContain('Topic is required');
+    expect(onApplied).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('context-chip-strip')).toBeNull();
+  });
 });

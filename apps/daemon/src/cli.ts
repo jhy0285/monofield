@@ -2579,16 +2579,19 @@ async function runPluginRun(rest) {
     console.error(`apply failed: ${applyResp.status} ${JSON.stringify(applyData)}`);
     process.exit(applyResp.status === 422 ? 67 : 1);
   }
-  // 2. Start the run with pluginId so the daemon resolver pins the
-  //    snapshot to the run object.
+  // 2. Reuse the persisted snapshot returned by apply. Re-sending pluginId
+  // here would resolve and persist the same plugin a second time.
+  const appliedPluginSnapshotId = typeof applyData?.appliedPlugin?.snapshotId === 'string'
+    ? applyData.appliedPlugin.snapshotId
+    : null;
   const runResp = await fetch(`${base}/api/runs`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       projectId:        flags.project,
-      pluginId:         id,
-      pluginInputs:     inputs,
-      grantCaps,
+      ...(appliedPluginSnapshotId
+        ? { appliedPluginSnapshotId }
+        : { pluginId: id, pluginInputs: inputs, grantCaps }),
       ...(flags.conversation ? { conversationId: flags.conversation } : {}),
       ...(flags.message ? { message: flags.message } : {}),
       ...(flags.agent ? { agentId: flags.agent } : {}),
@@ -3811,11 +3814,16 @@ async function runPluginApply(rest) {
   }
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok) {
-    if (resp.status === 422 && Array.isArray(data?.fields)) {
+    const missingFields = Array.isArray(data?.fields)
+      ? data.fields
+      : Array.isArray(data?.error?.data?.missing)
+        ? data.error.data.missing
+        : [];
+    if (resp.status === 422 && missingFields.length > 0) {
       return exitWithStructuredError({
         code: 'missing-input',
-        message: `Plugin "${id}" is missing required inputs: ${data.fields.join(', ')}`,
-        data: { pluginId: id, missing: data.fields },
+        message: `Plugin "${id}" is missing required inputs: ${missingFields.join(', ')}`,
+        data: { pluginId: id, missing: missingFields },
       });
     }
     return structuredHttpFailure(resp);

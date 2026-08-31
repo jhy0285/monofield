@@ -12,8 +12,10 @@ import type {
   ConnectorDetail,
   InstalledPluginRecord,
   McpServerConfig,
+  SkillSummary,
 } from '@open-design/contracts';
 import { useI18n, useT } from '../i18n';
+import { localizeSkillName } from '../i18n/content';
 import { LIBRARY_UI_VISIBLE } from '../features/libraryUi';
 import { ComposerPluginPreview } from './ComposerPluginPreview';
 import { localizePluginTitle } from './plugins-home/localization';
@@ -119,6 +121,10 @@ export interface ComposerPlusMenuProps {
   /** Opens the plugin registry; omit to hide the add row. */
   onAddPlugin?: () => void;
 
+  /** Skills available to bind to the current project/turn. */
+  skills?: SkillSummary[];
+  onPickSkill?: (skill: SkillSummary) => void;
+
   /** Enabled MCP servers shown under the "MCP" submenu. */
   mcpServers: McpServerConfig[];
   onPickMcp: (server: McpServerConfig) => void;
@@ -185,6 +191,8 @@ export function ComposerPlusMenu({
   plugins,
   onPickPlugin,
   onAddPlugin,
+  skills = [],
+  onPickSkill,
   mcpServers,
   onPickMcp,
   onAddMcp,
@@ -201,7 +209,7 @@ export function ComposerPlusMenu({
   const { locale } = useI18n();
   const [open, setOpen] = useState(false);
   const [submenu, setSubmenu] = useState<
-    'connectors' | 'plugins' | 'mcp' | 'toolbox' | null
+    'connectors' | 'plugins' | 'skills' | 'mcp' | 'toolbox' | null
   >(null);
   const [query, setQuery] = useState('');
   // Id of the plugin row the preview column is mirroring. Defaults to the
@@ -279,7 +287,7 @@ export function ComposerPlusMenu({
   }
 
   function openSubmenu(
-    next: 'connectors' | 'plugins' | 'mcp' | 'toolbox',
+    next: 'connectors' | 'plugins' | 'skills' | 'mcp' | 'toolbox',
     row: HTMLDivElement | null,
   ) {
     cancelSubmenuClose();
@@ -561,6 +569,39 @@ export function ComposerPlusMenu({
               ) : null}
             </div>
           </PlusSubmenuRow>
+          {onPickSkill ? (
+            <PlusSubmenuRow
+              label={t('chat.mentionTabSkills')}
+              icon="sparkles"
+              open={submenu === 'skills'}
+              testId="composer-plus-skills"
+              onOpen={(row) => openSubmenu('skills', row)}
+              onClose={scheduleCloseSubmenu}
+            >
+              <div className="plus-menu__list">
+                {skills.length === 0 ? (
+                  <div className="plus-menu__empty">{t('chat.mentionNoResults', { query: '' })}</div>
+                ) : (
+                  skills.map((skill) => (
+                    <button
+                      key={skill.id}
+                      type="button"
+                      role="menuitem"
+                      className="plus-menu__item"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => {
+                        close();
+                        onPickSkill(skill);
+                      }}
+                    >
+                      <Icon name="sparkles" size={15} className="plus-menu__item-icon" />
+                      <span>{localizeSkillName(locale, skill)}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </PlusSubmenuRow>
+          ) : null}
           <PlusSubmenuRow
             label="MCP"
             icon="link"

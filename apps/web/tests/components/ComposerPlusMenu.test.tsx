@@ -21,6 +21,7 @@ afterEach(() => {
 const CONNECTOR = { id: 'c1', name: 'Notion', status: 'connected' } as never;
 const PLUGIN = { id: 'p1', title: 'Deck Maker', manifest: {} } as never;
 const MCP_SERVER = { id: 'm1', label: 'Linear', enabled: true } as never;
+const SKILL = { id: 's1', name: 'Document Reviewer', mode: 'docs' } as never;
 
 function renderMenu(
   overrides: Partial<ComponentProps<typeof ComposerPlusMenu>> = {},
@@ -84,6 +85,18 @@ describe('ComposerPlusMenu pick-row caret protection', () => {
 
     fireEvent.click(screen.getByRole('menuitem', { name: /^MCP/i }));
     expectPickRowPreventsMousedown(/Linear/i);
+  });
+
+  it('shows an explicit Skills submenu and picks a skill', () => {
+    const onPickSkill = vi.fn();
+    renderMenu({ skills: [SKILL], onPickSkill });
+    fireEvent.click(screen.getByTestId('plus-trigger'));
+
+    fireEvent.click(screen.getByTestId('composer-plus-skills'));
+    expectPickRowPreventsMousedown(/Document Reviewer/i);
+    fireEvent.click(screen.getByRole('menuitem', { name: /Document Reviewer/i }));
+
+    expect(onPickSkill).toHaveBeenCalledWith(SKILL);
   });
 
   it('resets the shared search query when switching submenus', () => {

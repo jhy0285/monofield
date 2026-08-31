@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  MONOFIELD_SITE_ORIGIN,
   OPEN_DESIGN_SITE_ORIGIN,
   pluginSlug,
   pluginSlugSegment,
@@ -53,10 +54,11 @@ describe('pluginDetailPath / pluginPreviewPath', () => {
 });
 
 describe('pluginShareUrl', () => {
-  it('defaults to the public open-design.ai origin, single-segment path', () => {
-    expect(OPEN_DESIGN_SITE_ORIGIN).toBe('https://open-design.ai');
-    expect(pluginShareUrl('open-design/live-dashboard')).toBe(
-      'https://open-design.ai/plugins/live-dashboard/',
+  it('defaults to the public MonoField origin, single-segment path', () => {
+    expect(MONOFIELD_SITE_ORIGIN).toBe('https://monofield.vercel.app');
+    expect(OPEN_DESIGN_SITE_ORIGIN).toBe(MONOFIELD_SITE_ORIGIN);
+    expect(pluginShareUrl('monofield/live-dashboard')).toBe(
+      'https://monofield.vercel.app/plugins/live-dashboard/',
     );
   });
   it('honours an explicit origin and trims a trailing slash on it', () => {

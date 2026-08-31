@@ -3832,7 +3832,7 @@ export const ko: Dict = {
   'development.guideMeta': '개발 프로젝트 / 7단계',
   'development.guideFinish': '가이드 완료',
   'development.guideConfigTitle': '실행 구성을 확인하세요',
-  'development.guideConfigBody': '예: OSE 워크스페이스에서 aauserver를 선택하면 해당 폴더의 Spring Boot, Maven, Node, Python, Go 실행 구성을 우선 보여줍니다. 실행할 서버와 명령이 맞는지 확인하세요.',
+  'development.guideConfigBody': '워크스페이스에서 작업할 프로젝트나 모듈을 선택하면 해당 폴더에서 찾은 Spring Boot, Maven, Node, Python, Go 실행 구성을 우선 보여줍니다. 실행 전에 선택한 프로젝트, 명령, 프로필이 의도와 맞는지 확인하세요.',
   'development.guideRunTitle': '프로젝트를 실행하고 빌드하세요',
   'development.guideRunBody': '실행을 누르면 선택된 하위 프로젝트에서 서버를 시작하고 상태·로그·URL을 추적합니다. 실행 중에는 같은 버튼이 중지로 바뀝니다. 전체 빌드나 테스트가 더 필요하면 대화에서 함께 요청하세요.',
   'development.guideDatabaseTitle': '개발 DB를 연결하세요',

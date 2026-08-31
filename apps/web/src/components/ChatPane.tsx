@@ -1856,6 +1856,7 @@ export function ChatPane({
       ref={composerRef}
       designSystemPicker={designSystemPicker}
       projectId={projectId}
+      conversationId={activeConversationId}
       projectFiles={projectFiles}
       activeProjectFileName={activeProjectFileName}
       sessionMode={sessionMode}

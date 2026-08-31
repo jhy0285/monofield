@@ -286,6 +286,7 @@ import {
   pluginPromptBlock,
   pruneExpiredSnapshots,
   readPluginLockfile,
+  mergeBundledMarketplaceEntries,
   parseBundledPluginAllowlist,
   registerBuiltInAtomWorkers,
   registerBundledPlugins,
@@ -829,30 +830,6 @@ function isPathWithin(base, target) {
   );
 }
 
-function mergeMarketplaceEntries(manifestText, entries) {
-  try {
-    const parsed = JSON.parse(manifestText);
-    const plugins = Array.isArray(parsed.plugins) ? parsed.plugins : [];
-    const seen = new Set(plugins.map((entry) => String(entry?.name ?? '').toLowerCase()));
-    const generated = entries.filter((entry) => {
-      const key = String(entry.name ?? '').toLowerCase();
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-    return JSON.stringify({
-      ...parsed,
-      metadata: {
-        ...(parsed.metadata && typeof parsed.metadata === 'object' ? parsed.metadata : {}),
-        bundledPreinstallCount: entries.length,
-      },
-      plugins: [...plugins, ...generated],
-    });
-  } catch {
-    return manifestText;
-  }
-}
-
 async function marketplaceSeedManifestText(id, bundledMarketplaceEntries) {
   const preferredManifestPath = path.join(PLUGIN_REGISTRY_DIR, id, MONOFIELD_MARKETPLACE_MANIFEST_FILENAME);
   const legacyDocsManifestPath = path.join(PLUGIN_REGISTRY_DIR, id, LEGACY_OPEN_DOCS_MARKETPLACE_MANIFEST_FILENAME);
@@ -862,7 +839,7 @@ async function marketplaceSeedManifestText(id, bundledMarketplaceEntries) {
   if (!fs.existsSync(manifestPath)) return null;
   let manifestText = await fs.promises.readFile(manifestPath, 'utf8');
   if (id === OFFICIAL_MARKETPLACE_ID && bundledMarketplaceEntries.length > 0) {
-    manifestText = mergeMarketplaceEntries(manifestText, bundledMarketplaceEntries);
+    manifestText = mergeBundledMarketplaceEntries(manifestText, bundledMarketplaceEntries);
   }
   return manifestText;
 }
@@ -4023,18 +4000,18 @@ export async function startServer({
       marketplaceProvenance: {
         sourceMarketplaceId: OFFICIAL_MARKETPLACE_ID,
         marketplaceTrust:    'official',
-        entryNamePrefix:     'open-design',
+        entryNamePrefix:     'monofield',
       },
     });
     bundledMarketplaceEntries = result.registered.map((plugin) => ({
-      name:        `open-design/${plugin.id}`,
+      name:        `monofield/${plugin.id}`,
       title:       plugin.title,
       title_i18n:  plugin.manifest.title_i18n,
       description: plugin.manifest.description,
       description_i18n: plugin.manifest.description_i18n,
       version:     plugin.version,
       source:      bundledPluginRegistrySource(plugin.source),
-      publisher:   { id: 'open-design', url: 'https://open-design.ai' },
+      publisher:   { id: 'monofield', url: 'https://monofield.vercel.app' },
       homepage:    plugin.manifest.homepage,
       license:     plugin.manifest.license,
       tags:        plugin.manifest.tags,

@@ -44,6 +44,7 @@ function managedDeps() {
   const handleCandidateShareTask = vi.fn();
   const handleProjectShareTask = vi.fn();
   const applyPlugin = vi.fn();
+  const resolvePluginSnapshot = vi.fn();
   const applyBakedPreviews = vi.fn((rows: unknown) => rows);
   const installed = [approvedPlugin, blockedPlugin];
   const listInstalledPlugins = vi.fn(() => installed);
@@ -87,7 +88,7 @@ function managedDeps() {
       getSnapshot: (_db: unknown, id: string) => snapshots.get(id) ?? null,
       pruneExpiredSnapshots: () => ({ removed: 0, ids: [] }),
       readPluginLockfile: async () => ({}),
-      resolvePluginSnapshot: vi.fn(),
+      resolvePluginSnapshot,
       MissingInputError: class MissingInputError extends Error {
         fields: string[] = [];
       },
@@ -136,6 +137,7 @@ function managedDeps() {
   return {
     deps: deps as never,
     applyPlugin,
+    resolvePluginSnapshot,
     handleShareProject,
     handlePluginTrust,
     handleProjectPluginCli,
@@ -272,6 +274,54 @@ describe('managed plugin distribution routes', () => {
     expect(trust.status).toBe(403);
     expect(applyPlugin).not.toHaveBeenCalled();
     expect(handlePluginTrust).not.toHaveBeenCalled();
+  });
+
+  it('returns the persisted snapshot for a project-scoped apply without running the pure resolver twice', async () => {
+    const { baseUrl, applyPlugin, resolvePluginSnapshot } = await start();
+    const persisted = {
+      snapshotId: 'persisted-snapshot',
+      pluginId: approvedPlugin.id,
+      pluginVersion: approvedPlugin.version,
+      manifestSourceDigest: 'a'.repeat(64),
+    };
+    resolvePluginSnapshot.mockReturnValue({
+      ok: true,
+      snapshotId: persisted.snapshotId,
+      snapshot: persisted,
+      applyResult: {
+        query: 'Create a document',
+        contextItems: [],
+        inputs: [],
+        assets: [],
+        mcpServers: [],
+        projectMetadata: {},
+        trust: 'trusted',
+        capabilitiesGranted: [],
+        capabilitiesRequired: [],
+        appliedPlugin: { ...persisted, snapshotId: '' },
+      },
+    });
+
+    const response = await fetch(`${baseUrl}/api/plugins/${approvedPlugin.id}/apply`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectId: 'project-1',
+        conversationId: 'conversation-1',
+        inputs: {},
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      appliedPlugin: { snapshotId: persisted.snapshotId, pluginId: approvedPlugin.id },
+    });
+    expect(resolvePluginSnapshot).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      body: expect.objectContaining({ pluginId: approvedPlugin.id }),
+    }));
+    expect(applyPlugin).not.toHaveBeenCalled();
   });
 
   it('blocks public sharing endpoints before their handlers run', async () => {

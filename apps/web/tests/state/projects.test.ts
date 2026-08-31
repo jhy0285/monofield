@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   applyPlugin,
+  applyPluginWithOutcome,
   contributeGeneratedPluginToOpenDocs,
   createProject,
   createPluginShareProject,
@@ -60,6 +61,28 @@ describe('applyPlugin', () => {
       inputs: {},
       grantCaps: [],
       locale: 'zh-CN',
+    });
+  });
+
+  it('returns the daemon validation message and missing fields for an apply failure', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(
+      JSON.stringify({
+        error: {
+          code: 'missing-input',
+          message: 'Plugin is missing required inputs: topic.',
+          data: { missing: ['topic'] },
+        },
+      }),
+      { status: 422, headers: { 'content-type': 'application/json' } },
+    )));
+
+    await expect(applyPluginWithOutcome('sample-plugin', {
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+    })).resolves.toEqual({
+      result: null,
+      error: 'Plugin is missing required inputs: topic.',
+      missingInputs: ['topic'],
     });
   });
 });

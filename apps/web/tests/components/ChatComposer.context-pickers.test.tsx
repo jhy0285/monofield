@@ -149,6 +149,7 @@ function composerElement(
   return (
     <ChatComposer
       projectId="project-1"
+      conversationId="conversation-1"
       projectFiles={[]}
       streaming={false}
       onEnsureProject={async () => 'project-1'}
@@ -645,6 +646,37 @@ describe('ChatComposer context pickers', () => {
     expect(pill?.getAttribute('data-mention-kind')).toBe('plugin');
   });
 
+  it('does not leave a plugin mention or active chip when apply validation fails', async () => {
+    const baseFetch = fetchMock.getMockImplementation() as
+      | ((url: string, init?: RequestInit) => Promise<Response>)
+      | undefined;
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url.includes('/api/plugins/') && url.endsWith('/apply')) {
+        return new Response(JSON.stringify({
+          error: {
+            code: 'missing-input',
+            message: 'Choose a document format before using this plugin.',
+            data: { missing: ['format'] },
+          },
+        }), {
+          status: 422,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (baseFetch) return baseFetch(url, init);
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    renderComposer();
+    await flushMounts();
+
+    await typeAndSettle('@export');
+    fireEvent.click(await screen.findByText('My Export'));
+
+    expect((await screen.findByRole('alert')).textContent).toContain('Choose a document format');
+    expect(composerText()).toBe('@export');
+    expect(stagedPluginChip()).toBeNull();
+  });
+
   it('clears the inline plugin context when the plugin token is removed', async () => {
     renderComposer();
     await flushMounts();
@@ -756,6 +788,11 @@ describe('ChatComposer context pickers', () => {
     fireEvent.click(screen.getByText('My Export'));
 
     await waitFor(() => expect(composerText()).toBe('@My Export '));
+    const applyCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/apply'));
+    expect(JSON.parse(String(applyCall?.[1]?.body))).toMatchObject({
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+    });
     // The applied-plugin chip now rides the shared staged-context row as a
     // `.staged-context--plugin` chip (rendered by the host, not PluginsSection's
     // own ContextChipStrip). It is keyed off the plugin id when no display title

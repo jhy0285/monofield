@@ -4,19 +4,70 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#08090a" />
-    <meta name="description" content="MonoField is a local-first desktop workbench for software development and documents/design. Keep the folder, diff, build, browser, governed data, and deliverables in one project." />
-    <meta property="og:title" content="MonoField — code / design / documents" />
-    <meta property="og:description" content="One field. Every kind of work." />
+    <meta name="application-name" content="MonoField" />
+    <meta name="description" content="MonoField: local AI workbench for code, design, documents. 모노필드로 개발부터 문서까지." />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <link rel="canonical" href="https://monofield.vercel.app/" />
+    <meta property="og:site_name" content="MonoField" />
+    <meta property="og:title" content="MonoField | Local-first AI workbench" />
+    <meta property="og:description" content="Connect code, diffs, builds, browser verification, governed data, design, and documents in one local-first Windows app." />
     <meta property="og:type" content="website" />
-    <meta property="og:image" content="/social-card.svg?v=monofield-m1" />
+    <meta property="og:url" content="https://monofield.vercel.app/" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="ko_KR" />
+    <meta property="og:image" content="https://monofield.vercel.app/social-card.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="MonoField — one workspace for code, design, and documents" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="MonoField | Local-first AI workbench" />
+    <meta name="twitter:description" content="Code, design, and documents with your chosen agent in one local-first Windows workbench." />
+    <meta name="twitter:image" content="https://monofield.vercel.app/social-card.png" />
+    <meta name="twitter:image:alt" content="MonoField — one workspace for code, design, and documents" />
     <!-- Fill with the 12-character Partner Center Store ID after certification. -->
     <meta name="monofield-store-product-id" content="" />
     <link rel="icon" href="/mark.svg?v=monofield-m1" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/mark.svg?v=monofield-m1" />
     <link rel="stylesheet" href="/styles.css" />
     <script src="/script.js" defer></script>
-    <title>MonoField — code / design / documents</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://monofield.vercel.app/#website",
+            "url": "https://monofield.vercel.app/",
+            "name": "MonoField",
+            "alternateName": "모노필드",
+            "description": "A local-first workbench for code, design, and documents.",
+            "inLanguage": ["en", "ko"]
+          },
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://monofield.vercel.app/#software",
+            "name": "MonoField",
+            "alternateName": "모노필드",
+            "url": "https://monofield.vercel.app/",
+            "description": "A local-first Windows workbench that connects code, diffs, builds, browser verification, governed data, design, and documents with the agent you choose.",
+            "applicationCategory": "DeveloperApplication",
+            "operatingSystem": "Windows",
+            "softwareVersion": "0.11.6",
+            "isAccessibleForFree": true,
+            "license": "https://github.com/jhy0285/monofield/blob/main/LICENSE",
+            "downloadUrl": "https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-setup.exe",
+            "screenshot": "https://monofield.vercel.app/monofield-development.png",
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            }
+          }
+        ]
+      }
+    </script>
+    <title>MonoField | Local-first AI workbench</title>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
@@ -125,7 +176,7 @@
                       <header><div><small data-en="OPERATIONS" data-ko="운영">OPERATIONS</small><h3 data-en="Orders" data-ko="주문 관리">Orders</h3></div><button class="demo-target" type="button"><span data-en="Create order" data-ko="주문 생성">Create order</span><i>1</i></button></header>
                       <div class="demo-metrics"><span><small data-en="Today" data-ko="오늘">Today</small><b>128</b><em>+12%</em></span><span><small data-en="Pending" data-ko="처리 대기">Pending</small><b>14</b><em>3 urgent</em></span><span><small data-en="Completed" data-ko="완료">Completed</small><b>1,284</b><em>98.4%</em></span></div>
                       <div class="demo-draw-region"><i>2</i><div><b data-en="Search orders" data-ko="주문 검색">Search orders</b><span data-en="Status: all" data-ko="상태: 전체">Status: all</span><span data-en="Last 30 days" data-ko="최근 30일">Last 30 days</span></div></div>
-                      <div class="demo-orders-table"><header><span>ID</span><span data-en="Customer" data-ko="고객">Customer</span><span data-en="Status" data-ko="상태">Status</span><span data-en="Total" data-ko="금액">Total</span></header><p><span>#ORD-1048</span><span>Hellenic Rail</span><span><i></i>Processing</span><span>€1,240</span></p><p><span>#ORD-1047</span><span>Northwind</span><span><i></i>Ready</span><span>€892</span></p><p><span>#ORD-1046</span><span>Contoso</span><span><i></i>Delivered</span><span>€2,410</span></p></div>
+                      <div class="demo-orders-table"><header><span>ID</span><span data-en="Customer" data-ko="고객">Customer</span><span data-en="Status" data-ko="상태">Status</span><span data-en="Total" data-ko="금액">Total</span></header><p><span>#ORD-1048</span><span>Northstar Labs</span><span><i></i>Processing</span><span>€1,240</span></p><p><span>#ORD-1047</span><span>Northwind</span><span><i></i>Ready</span><span>€892</span></p><p><span>#ORD-1046</span><span>Contoso</span><span><i></i>Delivered</span><span>€2,410</span></p></div>
                       <div class="demo-inspect-card"><i>3</i><small>DOM</small><b>button.order-create</b><span>40 × 124 · #111111</span></div>
                       <div class="demo-adjust-chip"><i>4</i><span data-en="Card gap" data-ko="카드 간격">Card gap</span><b>24px → 16px</b></div>
                     </div>
@@ -244,7 +295,7 @@
           <a href="/downloads/monofield-user-guide-ko.pdf" data-en="User guide" data-ko="사용자 가이드">User guide</a>
           <a href="https://github.com/jhy0285/monofield">GitHub</a>
           <a href="https://github.com/jhy0285/monofield/releases">Releases</a>
-          <a href="/open-source.html" data-en="Open source notices" data-ko="오픈소스 고지">Open source notices</a>
+          <a href="/open-source" data-en="Open source notices" data-ko="오픈소스 고지">Open source notices</a>
         </nav>
       </div>
       <p class="footer-legal">Apache-2.0 · © 2026 MonoField contributors</p>

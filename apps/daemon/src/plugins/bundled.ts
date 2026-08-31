@@ -62,6 +62,11 @@ export interface RegisterBundledPluginsResult {
 }
 
 const SAFE_BASENAME = /^[a-z0-9][a-z0-9._-]*$/;
+const MONOFIELD_GITHUB_URL = 'https://github.com/jhy0285/monofield';
+const MONOFIELD_SITE_URL = 'https://monofield.vercel.app';
+const LEGACY_GITHUB_ORG_URL = 'https://github.com/nexu-io';
+const LEGACY_GITHUB_REPO_URL = `${LEGACY_GITHUB_ORG_URL}/open-design`;
+const LEGACY_SITE_URL = 'https://open-design.ai';
 
 export function parseBundledPluginAllowlist(value: string | undefined): Set<string> {
   const ids = new Set<string>();
@@ -70,6 +75,37 @@ export function parseBundledPluginAllowlist(value: string | undefined): Set<stri
     if (SAFE_BASENAME.test(id)) ids.add(id);
   }
   return ids;
+}
+
+export function mergeBundledMarketplaceEntries(
+  manifestText: string,
+  entries: ReadonlyArray<Record<string, unknown>>,
+): string {
+  try {
+    const parsed = JSON.parse(manifestText) as Record<string, unknown>;
+    const generatedNames = new Set(
+      entries.map((entry) => String(entry.name ?? '').toLowerCase()).filter(Boolean),
+    );
+    // The checked-in seed remains as an upstream/compatibility asset, but its
+    // historic product namespace must not leak into the current catalog.
+    // Prefer boot-generated records so normalized public metadata and managed
+    // allowlists are reflected in the persisted marketplace row.
+    const plugins = (Array.isArray(parsed.plugins) ? parsed.plugins : []).filter((entry) => {
+      const key = String((entry as Record<string, unknown>)?.name ?? '').toLowerCase();
+      if (key.startsWith('open-design/')) return false;
+      return !generatedNames.has(key);
+    });
+    return JSON.stringify({
+      ...parsed,
+      metadata: {
+        ...(parsed.metadata && typeof parsed.metadata === 'object' ? parsed.metadata : {}),
+        bundledPreinstallCount: entries.length,
+      },
+      plugins: [...plugins, ...entries],
+    });
+  } catch {
+    return manifestText;
+  }
 }
 
 export async function registerBundledPlugins(
@@ -191,7 +227,10 @@ async function registerOne(args: {
     args.warnings.push(`bundled plugin ${args.folderId} failed to parse: ${probe.errors.join('; ')}`);
     return;
   }
-  const record = withMarketplaceProvenance(probe.record, args.input.marketplaceProvenance);
+  const record = withMarketplaceProvenance(
+    withMonoFieldPublicMetadata(probe.record),
+    args.input.marketplaceProvenance,
+  );
   upsertInstalledPlugin(args.input.db, record);
   args.seenFolderIds.add(record.id);
   args.out.push(record);
@@ -210,6 +249,50 @@ function withMarketplaceProvenance(
     marketplaceTrust:              provenance.marketplaceTrust,
     resolvedSource:                record.source,
   };
+}
+
+// Historic bundled manifests are retained as source material so LICENSE,
+// NOTICE and third-party attribution stay intact. At registration time we
+// only normalize records that already identify MonoField as their author;
+// upstream authors (for example nexu-io) keep their original attribution.
+// This keeps API/UI metadata current without rewriting vendored manifests.
+function withMonoFieldPublicMetadata(record: InstalledPluginRecord): InstalledPluginRecord {
+  const author = record.manifest.author;
+  if (!author) return record;
+  const authorName = author.name?.trim().toLowerCase();
+  if (authorName !== 'monofield' && authorName !== 'monofield contributors') {
+    return record;
+  }
+
+  const normalizedAuthorName = authorName === 'monofield contributors'
+    ? 'MonoField contributors'
+    : 'MonoField';
+  return {
+    ...record,
+    manifest: {
+      ...record.manifest,
+      author: {
+        ...author,
+        name: normalizedAuthorName,
+        url: rewriteMonoFieldOwnedUrl(author.url),
+      },
+      homepage: rewriteMonoFieldOwnedUrl(record.manifest.homepage),
+    },
+  };
+}
+
+function rewriteMonoFieldOwnedUrl(value: string | undefined): string | undefined {
+  if (!value) return value;
+  if (value === LEGACY_GITHUB_ORG_URL || value === `${LEGACY_GITHUB_ORG_URL}/`) {
+    return MONOFIELD_GITHUB_URL;
+  }
+  if (value === LEGACY_GITHUB_REPO_URL || value.startsWith(`${LEGACY_GITHUB_REPO_URL}/`)) {
+    return `${MONOFIELD_GITHUB_URL}${value.slice(LEGACY_GITHUB_REPO_URL.length)}`;
+  }
+  if (value === LEGACY_SITE_URL || value.startsWith(`${LEGACY_SITE_URL}/`)) {
+    return `${MONOFIELD_SITE_URL}${value.slice(LEGACY_SITE_URL.length)}`;
+  }
+  return value;
 }
 
 async function pathExists(p: string): Promise<boolean> {

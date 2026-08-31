@@ -249,7 +249,7 @@ describe('ChatComposer design toolbox', () => {
     );
   });
 
-  it('gives creative director a searchable index across all resource types', async () => {
+  it('keeps only resource counts in the draft instead of copying every available name', async () => {
     const { ref } = renderComposer({
       skills: [
         DESIGN_TASTE_SKILL,
@@ -275,11 +275,11 @@ describe('ChatComposer design toolbox', () => {
     await waitFor(() => {
       expect(composerText()).toContain('@creative-director');
       expect(composerText()).toContain('Global resource index');
-      expect(composerText()).toContain('spreadsheet-ops');
-      expect(composerText()).toContain('Research Asset Plugin');
-      expect(composerText()).toContain('Higgsfield Video MCP');
-      expect(composerText()).toContain('Figma');
-      expect(composerText()).toContain('data/proof.csv');
+      expect(composerText()).not.toContain('spreadsheet-ops');
+      expect(composerText()).not.toContain('Research Asset Plugin');
+      expect(composerText()).not.toContain('Higgsfield Video MCP');
+      expect(composerText()).not.toContain('Figma');
+      expect(composerText()).not.toContain('data/proof.csv');
       expect(composerText()).toContain('Do not only use design toolbox recommendations');
     });
   });

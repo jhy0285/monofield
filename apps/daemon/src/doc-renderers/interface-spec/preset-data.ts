@@ -87,7 +87,7 @@ export const LIST_SHEET_LAYOUT = {
 export const COVER_SHEET_LAYOUT = {
   title: '문서표지',
   brandCell: 'Q4',
-  defaultBrandText: '그리스 OSE',
+  defaultBrandText: '기관명',
   docTypeCell: 'O7',
   docTypeText: '인터페이스 명세서',
   docNameCell: 'O9',

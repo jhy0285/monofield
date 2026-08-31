@@ -17,7 +17,11 @@
 // this file never reads env.
 
 // Canonical public site origin for shareable plugin links.
-export const OPEN_DESIGN_SITE_ORIGIN = 'https://open-design.ai';
+export const MONOFIELD_SITE_ORIGIN = 'https://monofield.vercel.app';
+
+// Compatibility alias for consumers compiled against the historic export.
+// New code should use MONOFIELD_SITE_ORIGIN.
+export const OPEN_DESIGN_SITE_ORIGIN = MONOFIELD_SITE_ORIGIN;
 
 // Slugify one path segment: lower-cased, non-url-safe runs collapsed to `-`,
 // leading/trailing `-` trimmed. Must match the landing site byte-for-byte.
@@ -66,7 +70,7 @@ export function pluginPreviewPath(id: string): string {
 // we never emit `//plugins/...`.
 export function pluginShareUrl(
   id: string,
-  origin: string = OPEN_DESIGN_SITE_ORIGIN,
+  origin: string = MONOFIELD_SITE_ORIGIN,
 ): string {
   return `${origin.replace(/\/+$/, '')}${pluginDetailPath(id)}`;
 }

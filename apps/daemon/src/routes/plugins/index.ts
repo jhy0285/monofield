@@ -107,6 +107,15 @@ interface PluginRouteHelpers {
   isPluginAllowed?(plugin: InstalledPluginLike): boolean;
 }
 
+interface PluginSnapshotResolutionLike {
+  ok: boolean;
+  status?: number;
+  body?: unknown;
+  snapshotId?: string;
+  snapshot?: Record<string, unknown>;
+  applyResult?: PluginApplyResult['result'];
+}
+
 function localizedText(value: unknown, locale?: string): string | undefined {
   if (typeof value === 'string') return value || undefined;
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
@@ -312,7 +321,7 @@ export interface RegisterPluginRoutesDeps {
     getSnapshot: (db: SqliteDbLike, id: string) => AppliedPluginSnapshotLike | null;
     pruneExpiredSnapshots: (db: SqliteDbLike, opts?: { before?: number }) => { removed: number; ids: string[] };
     readPluginLockfile: (path: string) => Promise<unknown>;
-    resolvePluginSnapshot: (args: unknown) => unknown;
+    resolvePluginSnapshot: (args: unknown) => PluginSnapshotResolutionLike | null;
     MissingInputError: new (...args: unknown[]) => MissingInputErrorLike;
     pluginPromptBlock: (snap: AppliedPluginSnapshotLike) => string;
     listSkillPluginCandidates: (db: SqliteDbLike, projectId: string, includeDismissed?: boolean) => InstalledPluginLike[];
@@ -489,6 +498,64 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
       const locale = typeof body.locale === 'string' ? body.locale : undefined;
       const registry = await helpers.loadPluginRegistryView();
       const connectorProbe = helpers.buildConnectorProbe(helpers.connectorService);
+
+      // Applying from an existing project must return a real, persisted
+      // snapshot. The composer sends that id to POST /api/runs, which keeps
+      // the selected plugin frozen even if the installed plugin changes
+      // between selection and send. Project-less Home applies remain a pure
+      // preview; POST /api/projects persists them through the same resolver.
+      const projectId = typeof body.projectId === 'string' ? body.projectId.trim() : '';
+      if (projectId) {
+        const conversationId = typeof body.conversationId === 'string'
+          ? body.conversationId.trim()
+          : '';
+        const resolved = plugins.resolvePluginSnapshot({
+          db,
+          body: {
+            pluginId: req.params.id,
+            pluginInputs: inputs,
+            grantCaps,
+            locale,
+          },
+          projectId,
+          ...(conversationId ? { conversationId } : {}),
+          registry,
+          connectorProbe,
+        });
+        if (!resolved) {
+          return res.status(500).json({
+            error: { code: 'plugin-apply-failed', message: 'Plugin apply did not produce a snapshot.' },
+          });
+        }
+        if (!resolved.ok) {
+          const responseBody = resolved.body && typeof resolved.body === 'object'
+            ? resolved.body as Record<string, unknown>
+            : { error: 'plugin apply failed' };
+          const error = responseBody.error && typeof responseBody.error === 'object'
+            ? responseBody.error as Record<string, unknown>
+            : null;
+          const data = error?.data && typeof error.data === 'object'
+            ? error.data as Record<string, unknown>
+            : null;
+          return res.status(resolved.status ?? 400).json({
+            ...responseBody,
+            ...(Array.isArray(data?.missing) ? { fields: data.missing } : {}),
+          });
+        }
+        if (!resolved.applyResult || !resolved.snapshot || !resolved.snapshotId) {
+          return res.status(500).json({
+            error: { code: 'plugin-apply-failed', message: 'Persisted plugin apply result is incomplete.' },
+          });
+        }
+        return res.json({
+          ok: true,
+          ...resolved.applyResult,
+          appliedPlugin: resolved.snapshot,
+          warnings: [],
+          manifestSourceDigest: resolved.snapshot.manifestSourceDigest,
+        });
+      }
+
       const computed = plugins.applyPlugin({ plugin, inputs, registry, locale, connectorProbe });
       if (grantCaps.length > 0) {
         const merged = new Set([...computed.result.capabilitiesGranted, ...grantCaps]);

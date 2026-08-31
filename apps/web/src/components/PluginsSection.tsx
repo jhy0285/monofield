@@ -36,7 +36,7 @@ import type {
   InstalledPluginRecord,
 } from '@open-design/contracts';
 import {
-  applyPlugin,
+  applyPluginWithOutcome,
   renderPluginBriefTemplate,
 } from '../state/projects';
 import { useI18n } from '../i18n';
@@ -47,6 +47,7 @@ import { localizePluginTitle } from './plugins-home/localization';
 interface Props {
   // Active project the apply will be scoped to. Omit on Home.
   projectId?: string | null;
+  conversationId?: string | null;
   // Inline rail layout: 'wide' on Home, 'strip' inside ChatComposer.
   variant?: 'wide' | 'strip';
   // Filter the rail (Phase 2B). When unspecified the daemon-wide list
@@ -67,6 +68,7 @@ interface Props {
   showRail?: boolean;
   // Optional hooks — see file header.
   onApplied?: (brief: string, applied: ApplyResult) => void;
+  onApplyError?: (message: string | null) => void;
   onCleared?: () => void;
   onValidityChange?: (valid: boolean) => void;
   // Forwarded to ContextChipStrip so chips can open the plugin details
@@ -101,11 +103,14 @@ export const PluginsSection = forwardRef<PluginsSectionHandle, Props>(
     const { locale } = useI18n();
     const [applied, setApplied] = useState<ApplyResult | null>(null);
     const [activeRecord, setActiveRecord] = useState<InstalledPluginRecord | null>(null);
+    const [applyError, setApplyError] = useState<string | null>(null);
 
     const handleApplied = useCallback(
       (record: InstalledPluginRecord | null, result: ApplyResult) => {
         setActiveRecord(record);
         setApplied(result);
+        setApplyError(null);
+        props.onApplyError?.(null);
         // Seed inputs from their schema defaults. The inputs form is no longer
         // rendered in the composer, so these defaults are the values that ride
         // the brief — users no longer edit them inline.
@@ -136,18 +141,25 @@ export const PluginsSection = forwardRef<PluginsSectionHandle, Props>(
       ref,
       () => ({
         applyById: async (pluginId, record = null) => {
-          const result = await applyPlugin(pluginId, {
+          const outcome = await applyPluginWithOutcome(pluginId, {
             ...(props.projectId ? { projectId: props.projectId } : {}),
+            ...(props.conversationId ? { conversationId: props.conversationId } : {}),
             locale,
           });
-          if (!result) return null;
+          const result = outcome.result;
+          if (!result) {
+            const message = outcome.error ?? `Failed to apply ${record?.title ?? pluginId}.`;
+            setApplyError(message);
+            props.onApplyError?.(message);
+            return null;
+          }
           handleApplied(record, result);
           return result;
         },
         clear,
         getActiveRecord: () => activeRecord,
       }),
-      [props.projectId, locale, handleApplied, clear, activeRecord],
+      [props.projectId, props.conversationId, props.onApplyError, locale, handleApplied, clear, activeRecord],
     );
 
     const showRail = props.showRail ?? true;
@@ -186,6 +198,11 @@ export const PluginsSection = forwardRef<PluginsSectionHandle, Props>(
 
     return (
       <div className="plugins-section" data-testid="plugins-section">
+        {applyError ? (
+          <div role="alert" className="inline-plugins-rail__error">
+            {applyError}
+          </div>
+        ) : null}
         {renderActiveChip && applied ? (
           <div className="plugins-section__active" data-active-plugin-id={activeRecord?.id}>
             <ContextChipStrip

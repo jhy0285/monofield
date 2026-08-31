@@ -3832,7 +3832,7 @@ export const en: Dict = {
   'development.guideMeta': 'DEVELOPMENT / 7 STEPS',
   'development.guideFinish': 'Finish guide',
   'development.guideConfigTitle': 'Confirm the run configuration',
-  'development.guideConfigBody': 'For example, selecting aauserver inside an OSE workspace prioritizes runnable Spring Boot, Maven, Node, Python, or Go configurations from that folder. Confirm the server and command before running.',
+  'development.guideConfigBody': 'Select the project or module you want to work on. MonoField prioritizes Spring Boot, Maven, Node, Python, or Go run configurations found in that folder. Before running, confirm that the selected project, command, and profile match your intent.',
   'development.guideRunTitle': 'Run and build the project',
   'development.guideRunBody': 'Run starts the server in the selected subproject and tracks its state, logs, and URL. The same control becomes Stop while it is running. Ask in chat when you also need a full build or focused tests.',
   'development.guideDatabaseTitle': 'Connect the development database',

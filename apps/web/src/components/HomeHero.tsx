@@ -1548,6 +1548,10 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 });
                 onAddPlugin();
               }}
+              skills={skillOptions}
+              onPickSkill={(skill) => {
+                pickSkill(skill);
+              }}
               mcpServers={mcpOptions}
               onPickMcp={(server) => {
                 trackHomeChatComposerClick(analytics.track, {

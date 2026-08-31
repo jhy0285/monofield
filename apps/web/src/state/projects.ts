@@ -1420,10 +1420,30 @@ export async function applyPlugin(
   options: {
     inputs?: Record<string, unknown>;
     projectId?: string;
+    conversationId?: string;
     grantCaps?: string[];
     locale?: string;
   } = {},
 ): Promise<ApplyResult | null> {
+  return (await applyPluginWithOutcome(pluginId, options)).result;
+}
+
+export interface ApplyPluginOutcome {
+  result: ApplyResult | null;
+  error: string | null;
+  missingInputs?: string[];
+}
+
+export async function applyPluginWithOutcome(
+  pluginId: string,
+  options: {
+    inputs?: Record<string, unknown>;
+    projectId?: string;
+    conversationId?: string;
+    grantCaps?: string[];
+    locale?: string;
+  } = {},
+): Promise<ApplyPluginOutcome> {
   try {
     const resp = await fetch(
       `/api/plugins/${encodeURIComponent(pluginId)}/apply`,
@@ -1433,16 +1453,44 @@ export async function applyPlugin(
         body: JSON.stringify({
           inputs: options.inputs ?? {},
           projectId: options.projectId,
+          conversationId: options.conversationId,
           grantCaps: options.grantCaps ?? [],
           locale: options.locale,
         }),
       },
     );
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      const payload = (await resp.json().catch(() => null)) as {
+        error?: string | { code?: string; message?: string; data?: { missing?: unknown } };
+        fields?: unknown;
+        message?: string;
+      } | null;
+      const missing = Array.isArray(payload?.fields)
+        ? payload.fields.filter((field): field is string => typeof field === 'string')
+        : Array.isArray(typeof payload?.error === 'object' ? payload.error.data?.missing : undefined)
+          ? (payload!.error as { data?: { missing?: unknown[] } }).data!.missing!
+              .filter((field): field is string => typeof field === 'string')
+          : [];
+      const message = payload?.message
+        ?? (typeof payload?.error === 'object' ? payload.error.message : undefined)
+        ?? (missing.length > 0
+          ? `Required plugin inputs are missing: ${missing.join(', ')}.`
+          : typeof payload?.error === 'string' && payload.error !== 'missing_inputs'
+            ? payload.error
+            : `Plugin apply failed (${resp.status}).`);
+      return {
+        result: null,
+        error: message,
+        ...(missing.length > 0 ? { missingInputs: missing } : {}),
+      };
+    }
     const json = (await resp.json()) as ApplyResult & { ok?: boolean };
-    return json;
-  } catch {
-    return null;
+    return { result: json, error: null };
+  } catch (err) {
+    return {
+      result: null,
+      error: err instanceof Error ? err.message : 'Could not reach the plugin service.',
+    };
   }
 }
 

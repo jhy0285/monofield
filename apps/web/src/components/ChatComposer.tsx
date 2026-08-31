@@ -167,6 +167,7 @@ type DesignToolboxResource =
 
 interface Props {
   projectId: string | null;
+  conversationId?: string | null;
   projectFiles: ProjectFile[];
   activeProjectFileName?: string | null;
   streaming: boolean;
@@ -344,6 +345,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
   function ChatComposer(
     {
       projectId,
+      conversationId = null,
       projectFiles,
       activeProjectFileName = null,
       streaming,
@@ -1320,11 +1322,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
 
       if (resource.kind === 'plugin') {
         void (async () => {
+          const applied = await pluginsSectionRef.current?.applyById(resource.plugin.id, resource.plugin);
+          if (!applied) return;
           inlineBackedPluginRef.current = {
             id: resource.plugin.id,
             label: resource.plugin.title,
           };
-          await pluginsSectionRef.current?.applyById(resource.plugin.id, resource.plugin);
           applyDesignToolboxDraft(`${inlineMentionToken(resource.plugin.title)}\n${prompt}`);
         })();
         return;
@@ -2061,13 +2064,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     }
 
     async function insertPluginMention(record: InstalledPluginRecord) {
+      const applied = await pluginsSectionRef.current?.applyById(record.id, record);
+      if (!applied) return;
       editorRef.current?.insertMention({
         token: inlineMentionToken(record.title),
         entity: { id: record.id, kind: 'plugin', label: record.title },
       });
       setMention(null);
       inlineBackedPluginRef.current = { id: record.id, label: record.title };
-      await pluginsSectionRef.current?.applyById(record.id, record);
     }
 
     function insertMcpMention(server: McpServerConfig) {
@@ -2352,6 +2356,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             <PluginsSection
               ref={pluginsSectionRef}
               projectId={projectId}
+              conversationId={conversationId}
               showRail={false}
               renderActiveChip={false}
               onApplied={(brief, applied) => {
@@ -2363,6 +2368,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                   setDraft((cur) => (cur.trim().length === 0 ? brief : cur));
                 }
               }}
+              onApplyError={setUploadError}
               onCleared={() => {
                 inlineBackedPluginRef.current = null;
                 setActiveAppliedPlugin(null);
@@ -2554,6 +2560,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               onAddPlugin={() => {
                 trackComposerBar({ element: 'plus_add', resource_kind: 'plugin' });
                 onBrowsePlugins?.();
+              }}
+              skills={skills}
+              onPickSkill={(skill) => {
+                trackComposerBar({
+                  element: 'plus_pick',
+                  resource_kind: 'skill',
+                  resource_id: skill.id,
+                });
+                void insertSkillMention(skill);
               }}
               mcpServers={enabledMcpServers}
               onPickMcp={(server) => {
@@ -2768,7 +2783,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             />
           </div>
         ) : null}
-        {uploadError ? <span className="composer-hint">{uploadError}</span> : null}
+        {uploadError ? <span role="alert" className="composer-hint">{uploadError}</span> : null}
         {detailsRecord ? (
           <PluginDetailsModal
             record={detailsRecord}
@@ -4694,35 +4709,8 @@ function designToolboxResourceIndexLines(
       connectors: index.connectors.length,
       files: files.length,
     }),
-    designToolboxCompactLine(t('chat.designToolbox.prompt.searchableSkills'), index.skills.map((skill) => skill.name), 60, t),
-    designToolboxCompactLine(t('chat.designToolbox.prompt.searchablePlugins'), index.plugins.map((plugin) => plugin.title), 40, t),
-    designToolboxCompactLine(t('chat.designToolbox.prompt.availableMcp'), [
-      ...index.mcpServers.map((server) => server.label || server.id),
-      ...index.mcpTemplates.map((template) => t('chat.designToolbox.prompt.mcpTemplateName', { name: template.label })),
-    ], 40, t),
-    designToolboxCompactLine(t('chat.designToolbox.prompt.connectedConnectors'), index.connectors.map((connector) => connector.name), 30, t),
-    designToolboxCompactLine(t('chat.designToolbox.prompt.referenceDesignFiles'), files, 40, t),
     t('chat.designToolbox.prompt.processRule'),
   ].filter(Boolean);
-}
-
-function designToolboxCompactLine(
-  label: string,
-  values: string[],
-  limit: number,
-  t: TranslateFn,
-): string {
-  const clean = Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
-  if (clean.length === 0) return '';
-  const shown = clean.slice(0, limit);
-  const suffix = clean.length > shown.length
-    ? t('chat.designToolbox.prompt.moreSuffix', { count: clean.length - shown.length })
-    : '';
-  return t('chat.designToolbox.prompt.compactLine', {
-    label,
-    values: shown.join(', '),
-    suffix,
-  });
 }
 
 function skillMentionRank(skill: SkillSummary, query: string): number {

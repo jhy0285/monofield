@@ -8,7 +8,11 @@ import Database from 'better-sqlite3';
 import { migratePlugins } from '../src/plugins/persistence.js';
 import { listInstalledPlugins, upsertInstalledPlugin } from '../src/plugins/registry.js';
 import type { InstalledPluginRecord } from '@open-design/contracts';
-import { parseBundledPluginAllowlist, registerBundledPlugins } from '../src/plugins/bundled.js';
+import {
+  mergeBundledMarketplaceEntries,
+  parseBundledPluginAllowlist,
+  registerBundledPlugins,
+} from '../src/plugins/bundled.js';
 
 let db: Database.Database;
 let tmpRoot: string;
@@ -42,6 +46,28 @@ afterEach(async () => {
 });
 
 describe('registerBundledPlugins', () => {
+  it('replaces legacy official seed entries with current bundled metadata', () => {
+    const merged = JSON.parse(mergeBundledMarketplaceEntries(JSON.stringify({
+      metadata: { title: 'Official' },
+      plugins: [
+        { name: 'open-design/starter', publisher: { id: 'open-design' } },
+        { name: 'partner/external', publisher: { id: 'partner' } },
+      ],
+    }), [{
+      name: 'monofield/starter',
+      publisher: { id: 'monofield', url: 'https://monofield.vercel.app' },
+    }]));
+
+    expect(merged.metadata).toEqual({ title: 'Official', bundledPreinstallCount: 1 });
+    expect(merged.plugins).toEqual([
+      { name: 'partner/external', publisher: { id: 'partner' } },
+      {
+        name: 'monofield/starter',
+        publisher: { id: 'monofield', url: 'https://monofield.vercel.app' },
+      },
+    ]);
+  });
+
   it('normalizes a managed bundled-plugin allowlist and ignores unsafe ids', () => {
     expect([...parseBundledPluginAllowlist(
       ' Interface-Spec,screen-spec,../escape,interface-spec,with space ',
@@ -83,20 +109,59 @@ describe('registerBundledPlugins', () => {
       marketplaceProvenance: {
         sourceMarketplaceId: 'official',
         marketplaceTrust: 'official',
-        entryNamePrefix: 'open-design',
+        entryNamePrefix: 'monofield',
       },
     });
 
     expect(result.registered[0]?.sourceKind).toBe('bundled');
     expect(result.registered[0]?.sourceMarketplaceId).toBe('official');
-    expect(result.registered[0]?.sourceMarketplaceEntryName).toBe('open-design/starter');
+    expect(result.registered[0]?.sourceMarketplaceEntryName).toBe('monofield/starter');
     expect(result.registered[0]?.sourceMarketplaceEntryVersion).toBe('0.1.0');
     expect(result.registered[0]?.marketplaceTrust).toBe('official');
     expect(result.registered[0]?.resolvedSource).toBe(folder);
 
     const [row] = listInstalledPlugins(db);
     expect(row?.sourceMarketplaceId).toBe('official');
-    expect(row?.sourceMarketplaceEntryName).toBe('open-design/starter');
+    expect(row?.sourceMarketplaceEntryName).toBe('monofield/starter');
+  });
+
+  it('normalizes MonoField-owned public metadata without erasing upstream attribution', async () => {
+    const ownedFolder = path.join(tmpRoot, 'scenarios', 'owned');
+    const upstreamFolder = path.join(tmpRoot, 'scenarios', 'upstream');
+    await mkdir(ownedFolder, { recursive: true });
+    await mkdir(upstreamFolder, { recursive: true });
+    await writeFile(path.join(ownedFolder, 'open-design.json'), JSON.stringify({
+      ...JSON.parse(SAMPLE_MANIFEST('owned')),
+      author: { name: 'MonoField', url: 'https://github.com/nexu-io' },
+      homepage: 'https://github.com/nexu-io/open-design/tree/main/plugins/_official/scenarios/owned',
+    }));
+    await writeFile(path.join(ownedFolder, 'SKILL.md'), SAMPLE_SKILL('owned'));
+    await writeFile(path.join(upstreamFolder, 'open-design.json'), JSON.stringify({
+      ...JSON.parse(SAMPLE_MANIFEST('upstream')),
+      author: { name: 'nexu-io', url: 'https://github.com/nexu-io' },
+      homepage: 'https://github.com/nexu-io/open-design',
+    }));
+    await writeFile(path.join(upstreamFolder, 'SKILL.md'), SAMPLE_SKILL('upstream'));
+
+    const result = await registerBundledPlugins({ db, bundledRoot: tmpRoot });
+    const owned = result.registered.find((row) => row.id === 'owned');
+    const upstream = result.registered.find((row) => row.id === 'upstream');
+
+    expect(owned?.manifest.author).toEqual({
+      name: 'MonoField',
+      url: 'https://github.com/jhy0285/monofield',
+    });
+    expect(owned?.manifest.homepage).toBe(
+      'https://github.com/jhy0285/monofield/tree/main/plugins/_official/scenarios/owned',
+    );
+    expect(upstream?.manifest.author).toEqual({
+      name: 'nexu-io',
+      url: 'https://github.com/nexu-io',
+    });
+    expect(upstream?.manifest.homepage).toBe('https://github.com/nexu-io/open-design');
+
+    const persistedOwned = listInstalledPlugins(db).find((row) => row.id === 'owned');
+    expect(persistedOwned?.manifest.author?.url).toBe('https://github.com/jhy0285/monofield');
   });
 
   it('also registers a direct <bundledRoot>/<plugin-id>/ folder', async () => {
