@@ -642,6 +642,13 @@ describe('exportAsMd', () => {
     expect(capturedFilename).toBe('artifact.md');
   });
 
+  it('preserves multilingual document titles while removing path separators', () => {
+    exportAsMd('# 보고', '주간 업무 보고');
+    expect(capturedFilename).toBe('주간-업무-보고.md');
+    exportAsMd('# Notes', '中文/日本語\\résumé:2026');
+    expect(capturedFilename).toBe('中文-日本語-résumé-2026.md');
+  });
+
   it('keeps multi-byte content (UTF-8) intact end-to-end', async () => {
     const source = '# 中文标题\n\n这是 markdown 文件 — でも本当は HTML 源代码 (مرحبا)。\n';
 

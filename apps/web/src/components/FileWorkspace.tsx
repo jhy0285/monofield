@@ -17,7 +17,8 @@ import {
   trackTabLauncherClick,
 } from '../analytics/events';
 import { deriveUploadCohort } from '../analytics/upload-tracking';
-import { useT } from '../i18n';
+import { useI18n, useT } from '../i18n';
+import { developmentWorkflowCopy } from './development-workflow-copy';
 import { isMacPlatform } from '../utils/platform';
 import {
   deleteProjectFile,
@@ -489,7 +490,10 @@ export function FileWorkspace({
   onSubmitQuestionForm,
   focusQuestionsRequest = null,
 }: Props) {
-  const t = useT();
+  const { locale, t } = useI18n();
+  const filesTabLabel = projectMetadata?.workMode === 'development'
+    ? developmentWorkflowCopy(locale).files
+    : t('workspace.designFiles');
   const creationWorkspace = projectMetadata?.workMode === 'creation';
   const [creationGuideOpen, setCreationGuideOpen] = useState(false);
 
@@ -1641,7 +1645,7 @@ export function FileWorkspace({
       // Nothing to reference yet — don't auto-stage an empty "Design files" chip.
       if (designFilesTabIsEmpty) return null;
       const trimmedDir = uploadDir.trim();
-      const label = trimmedDir.split('/').filter(Boolean).pop() || t('workspace.designFiles');
+      const label = trimmedDir.split('/').filter(Boolean).pop() || filesTabLabel;
       return {
         id: trimmedDir ? `folder:${trimmedDir}` : 'workspace:design-files',
         kind: trimmedDir ? 'folder' : 'design-files',
@@ -1714,6 +1718,7 @@ export function FileWorkspace({
     designFilesTabIsEmpty,
     designSystemProject,
     resolvedDir,
+    filesTabLabel,
     t,
     uploadDir,
   ]);
@@ -1772,7 +1777,7 @@ export function FileWorkspace({
     }
 
     const trimmedDir = uploadDir.trim();
-    const designFilesLabel = trimmedDir.split('/').filter(Boolean).pop() || t('workspace.designFiles');
+    const designFilesLabel = trimmedDir.split('/').filter(Boolean).pop() || filesTabLabel;
     push({
       id: trimmedDir ? `folder:${trimmedDir}` : 'workspace:design-files',
       kind: trimmedDir ? 'folder' : 'design-files',
@@ -1859,6 +1864,7 @@ export function FileWorkspace({
     conversations,
     designSystemProject,
     liveArtifactEntries,
+    filesTabLabel,
     orderedWorkspaceTabs,
     resolvedDir,
     sketches,
@@ -1972,7 +1978,7 @@ export function FileWorkspace({
           ref={tabsBarRef}
           className={`ws-tabs-bar${tabsOverflowing ? ' is-overflowing' : ''}`}
           role="tablist"
-          aria-label={t('workspace.designFiles')}
+          aria-label={filesTabLabel}
           onWheel={(event) => {
             // Translate vertical wheel into horizontal tab scroll so Windows
             // mouse-wheel users (no horizontal wheel/trackpad) can reach
@@ -2017,12 +2023,12 @@ export function FileWorkspace({
             tabIndex={0}
             data-testid="design-files-tab"
             onClick={() => setPersistedActive(DESIGN_FILES_TAB)}
-            title={t('workspace.designFiles')}
+            title={filesTabLabel}
           >
             <span className="tab-icon" aria-hidden>
               <Icon name="grid" size={13} />
             </span>
-            <span className="ws-tab-label">{t('workspace.designFiles')}</span>
+            <span className="ws-tab-label">{filesTabLabel}</span>
           </button>
           {showQuestionsTab ? (
             <button

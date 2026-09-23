@@ -499,6 +499,9 @@ export function DevelopmentWorkspaceControls({
   useEffect(() => () => {
     loadAbortRef.current?.abort();
     runtimeSummaryAbortRef.current?.abort();
+    // React Strict Mode replays effects on mount. The first request is
+    // cancelled above, so its load key must be reset for the replay to retry.
+    initialLoadKeyRef.current = '';
   }, []);
   useEffect(() => {
     let cancelled = false;

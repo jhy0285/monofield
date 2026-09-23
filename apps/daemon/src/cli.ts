@@ -235,7 +235,7 @@ const PROJECT_STRING_FLAGS = new Set([
   'pending-prompt', 'project', 'conversation', 'message', 'prompt',
   'prompt-file', 'path', 'dir', 'as',
   'agent', 'model', 'snapshot-id', 'inputs', 'grant-caps', 'editor',
-  'title', 'against', 'seed-from', 'fork-after', 'mode',
+  'title', 'against', 'seed-from', 'fork-after', 'mode', 'script', 'project-path',
 ]);
 const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow']);
 // `monofield templates …` mirrors NewProjectPanel / ExamplesTab. Same surface,
@@ -5866,6 +5866,8 @@ async function runProject(args) {
                     [--design-system <id>] [--json]
   monofield project list                         List projects.
   monofield project info <id>                    Print one project.
+  monofield project verify <id> [--script test] [--project-path <path>] [--json]
+                                                Start a package script, or read its latest result.
   monofield project delete <id>                  Delete a project.
   monofield project editors                      List locally-installed editors that
                                           can open a project (hand-off targets).
@@ -5896,6 +5898,23 @@ Common options:
   const flags = parseFlags(rest, { string: PROJECT_STRING_FLAGS, boolean: PROJECT_BOOLEAN_FLAGS });
   const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
   switch (sub) {
+    case 'verify': {
+      const [id] = collectCliPositionals(rest, PROJECT_STRING_FLAGS);
+      if (!id) {
+        console.error('Usage: monofield project verify <id> [--script test] [--project-path <path>] [--json]');
+        process.exit(2);
+      }
+      const params = new URLSearchParams();
+      if (flags['project-path']) params.set('projectPath', flags['project-path']);
+      const url = `${base}/api/projects/${encodeURIComponent(id)}/development/verification`;
+      const resp = flags.script
+        ? await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ script: flags.script, projectPath: flags['project-path'] }) })
+        : await fetch(url + (params.size ? '?' + params : ''));
+      if (!resp.ok) return structuredHttpFailure(resp);
+      process.stdout.write(JSON.stringify(await resp.json(), null, 2) + '\n');
+      return;
+    }
     case 'list': {
       const resp = await fetch(`${base}/api/projects`);
       if (!resp.ok) return structuredHttpFailure(resp);
@@ -5910,7 +5929,7 @@ Common options:
       return;
     }
     case 'info': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const [id] = collectCliPositionals(rest, PROJECT_STRING_FLAGS);
       if (!id) {
         console.error('Usage: monofield project info <id>');
         process.exit(2);
@@ -6023,7 +6042,7 @@ Common options:
       return;
     }
     case 'delete': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const [id] = collectCliPositionals(rest, PROJECT_STRING_FLAGS);
       if (!id) {
         console.error('Usage: monofield project delete <id>');
         process.exit(2);
@@ -6046,7 +6065,7 @@ Common options:
       return;
     }
     case 'open-in': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const [id] = collectCliPositionals(rest, PROJECT_STRING_FLAGS);
       if (!id) {
         console.error('Usage: monofield project open-in <id> --editor <slug>');
         process.exit(2);

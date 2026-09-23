@@ -25,6 +25,7 @@ import {
   legacyDirHasPayload,
   migrateLegacyDataDirSync,
   promoteStaged,
+  resolveLegacyMigrationDir,
 } from '../src/legacy-data-migrator.js';
 
 interface SilentLogger {
@@ -497,6 +498,29 @@ describe('legacyDirHasPayload', () => {
   it('returns false when the directory is missing', async () => {
     await rm(legacyDir, { recursive: true, force: true });
     expect(legacyDirHasPayload(legacyDir)).toBe(false);
+  });
+
+  it('skips automatic migration for fresh installs with no legacy database', () => {
+    expect(resolveLegacyMigrationDir(undefined, path.join(legacyDir, 'missing'))).toBeUndefined();
+    expect(resolveLegacyMigrationDir(undefined, legacyDir)).toBeUndefined();
+    expect(resolveLegacyMigrationDir(undefined, undefined)).toBeUndefined();
+  });
+
+  it('selects a discovered legacy database for migration', () => {
+    seedLegacyDir(legacyDir);
+    expect(resolveLegacyMigrationDir(undefined, legacyDir)).toBe(legacyDir);
+  });
+
+  it('preserves explicit sources, including invalid paths and explicit opt-out', () => {
+    seedLegacyDir(legacyDir);
+    const explicitDir = path.join(legacyDir, 'missing');
+    expect(resolveLegacyMigrationDir(explicitDir, legacyDir)).toBe(explicitDir);
+    expect(resolveLegacyMigrationDir('', legacyDir)).toBe('');
+    expect(() => migrateLegacyDataDirSync({
+      legacyDir: resolveLegacyMigrationDir(explicitDir, legacyDir),
+      dataDir: path.join(legacyDir, 'target'),
+      logger: makeLogger(),
+    })).toThrow(LegacyMigrationError);
   });
 
   it('returns false when the directory exists but has no app.sqlite', () => {

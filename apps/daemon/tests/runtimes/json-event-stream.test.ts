@@ -10,6 +10,17 @@ function collectEvents(kind: string) {
   return { events, handler };
 }
 
+test('codex stops on bare sandbox errors in failed MCP calls but not quoted successful output', () => {
+  for (const failed of [false, true]) {
+    const { events, handler } = collectEvents('codex');
+    handler.feed(JSON.stringify({ type: 'item.completed', item: {
+      id: 'shell', type: 'mcp_tool_call', status: failed ? 'failed' : 'completed',
+      result: { isError: failed, content: [{ type: 'text', text: 'CreateProcessWithLogonW failed: 1385' }] },
+    } }) + '\n');
+    assert.equal(events.some(event => event.code === 'CODEX_WINDOWS_SANDBOX_UNAVAILABLE'), failed);
+  }
+});
+
 test('opencode json stream emits text and usage events', () => {
   const { events, handler } = collectEvents('opencode');
 

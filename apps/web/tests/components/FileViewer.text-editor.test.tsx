@@ -50,6 +50,71 @@ describe('FileViewer text editor', () => {
     vi.clearAllMocks();
   });
 
+  it('previews an unsaved Markdown draft, retains it across tabs, and saves through the guarded file API', async () => {
+    fetchText.mockResolvedValue('# Weekly report\n\nBefore editing.');
+    const file = sourceFile({ name: 'report.md', path: 'report.md', kind: 'text', mime: 'text/markdown' });
+    const onFileSaved = vi.fn();
+    render(<FileViewer projectId="markdown-workflow" projectKind="prototype" file={file} onFileSaved={onFileSaved} />);
+    expect(await screen.findByRole('heading', { name: 'Weekly report' })).toBeTruthy();
+    fireEvent.click(screen.getByTestId('markdown-edit'));
+    const editor = await screen.findByTestId('text-editor-input');
+    fireEvent.change(editor, { target: { value: '# Updated report\n\nApproved next steps.' } });
+    fireEvent.click(screen.getByTestId('markdown-preview'));
+    expect(await screen.findByRole('heading', { name: 'Updated report' })).toBeTruthy();
+    expect(screen.getByTestId('text-editor-dirty')).toBeTruthy();
+    expect(writeText).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('markdown-edit'));
+    expect((screen.getByTestId('text-editor-input') as HTMLTextAreaElement).value).toContain('Approved next steps.');
+    fireEvent.click(screen.getByTestId('text-editor-save'));
+    await waitFor(() => expect(onFileSaved).toHaveBeenCalledTimes(1));
+    expect(writeText).toHaveBeenCalledWith('markdown-workflow', 'report.md', '# Updated report\n\nApproved next steps.', { expectedContentSha256: expect.stringMatching(/^[a-f0-9]{64}$/) });
+    expect(screen.queryByTestId('text-editor-dirty')).toBeNull();
+  });
+
+  it('keeps streaming Markdown read-only', async () => {
+    fetchText.mockResolvedValue('# Still generating');
+    render(<FileViewer projectId="markdown-stream" projectKind="prototype" streaming file={sourceFile({ name: 'stream.md', kind: 'text', mime: 'text/markdown' })} />);
+    expect(await screen.findByRole('heading', { name: 'Still generating' })).toBeTruthy();
+    expect(screen.queryByTestId('markdown-edit')).toBeNull();
+  });
+
+  it('ends the loading state when a document cannot be read', async () => {
+    fetchText.mockResolvedValue(null);
+    render(<FileViewer projectId="missing-document" projectKind="prototype" file={sourceFile({ name: 'missing.md', kind: 'text', mime: 'text/markdown' })} />);
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.queryByText(/Loading…|불러오는 중/)).toBeNull();
+    expect(screen.queryByTestId('text-editor-input')).toBeNull();
+    expect((screen.getByTestId('text-editor-save') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('supports source indentation while allowing keyboard users to leave the editor', async () => {
+    fetchText.mockResolvedValue('first\nsecond\n');
+    render(<FileViewer projectId="indent-workflow" projectKind="prototype" file={sourceFile()} />);
+    const editor = await screen.findByTestId('text-editor-input') as HTMLTextAreaElement;
+    editor.setSelectionRange(0, 13);
+    expect(fireEvent.keyDown(editor, { key: 'Tab' })).toBe(false);
+    expect(editor.value).toBe('  first\n  second\n');
+    editor.setSelectionRange(0, editor.value.length);
+    fireEvent.keyDown(editor, { key: 'Tab', shiftKey: true });
+    expect(editor.value).toBe('first\nsecond\n');
+    fireEvent.keyDown(editor, { key: 'Escape' });
+    expect(fireEvent.keyDown(editor, { key: 'Tab' })).toBe(true);
+  });
+
+  it('preserves a Markdown draft when an external editor changed the document', async () => {
+    fetchText.mockResolvedValueOnce('# Original').mockResolvedValue('# Changed externally');
+    render(<FileViewer projectId="markdown-conflict" projectKind="prototype" file={sourceFile({ name: 'conflict.md', kind: 'text', mime: 'text/markdown' })} />);
+    await screen.findByRole('heading', { name: 'Original' });
+    fireEvent.click(screen.getByTestId('markdown-edit'));
+    fireEvent.change(screen.getByTestId('text-editor-input'), { target: { value: '# My draft' } });
+    fireEvent.click(screen.getByTestId('text-editor-save'));
+    expect(await screen.findByTestId('text-editor-conflict')).toBeTruthy();
+    expect(writeText).not.toHaveBeenCalled();
+    expect((screen.getByTestId('text-editor-input') as HTMLTextAreaElement).value).toBe('# My draft');
+    fireEvent.click(screen.getByRole('button', { name: /overwrite with my version|내 내용으로 덮어쓰기/i }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('markdown-conflict', 'conflict.md', '# My draft', { expectedContentSha256: expect.stringMatching(/^[a-f0-9]{64}$/) }));
+  });
+
   it('edits and saves a source file after checking the latest disk version', async () => {
     const onFileSaved = vi.fn();
     render(

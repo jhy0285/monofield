@@ -14,7 +14,8 @@ let circuitState: CodexWindowsSandboxCircuitState | null = null;
 
 export function isCodexWindowsSandboxLogonFailureText(value: unknown): boolean {
   if (typeof value !== 'string' || value.length === 0) return false;
-  return /windows sandbox:\s*CreateProcessWithLogonW failed:\s*1385\b/i.test(value);
+  // CLI releases differ in whether the native error has a `windows sandbox:` prefix.
+  return /\bCreateProcessWithLogonW failed:\s*1385\b/i.test(value);
 }
 
 /**

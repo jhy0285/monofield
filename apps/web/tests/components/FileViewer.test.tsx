@@ -2670,7 +2670,7 @@ describe('FileViewer SVG artifacts', () => {
     });
     vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
-      if (url === '/api/projects/project-1/raw/notes.md') {
+      if (url.split('?')[0] === '/api/projects/project-1/raw/notes.md') {
         return new Response('# Notes\n\nKeep this as markdown.');
       }
       return new Response('', { status: 404 });
@@ -2679,6 +2679,7 @@ describe('FileViewer SVG artifacts', () => {
     render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
 
     expect(screen.queryByRole('button', { name: /^deploy$/i })).toBeNull();
+    await screen.findByRole('heading', { name: 'Notes' });
     fireEvent.click(await screen.findByRole('button', { name: /^download$/i }));
 
     expect(screen.getByRole('menuitem', { name: /Export as Markdown/i })).toBeTruthy();

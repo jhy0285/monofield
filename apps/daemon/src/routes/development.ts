@@ -21,6 +21,7 @@ import {
   switchGitWorkspaceBranch,
 } from '../git-workspace.js';
 import type { RouteDeps } from '../server-context.js';
+import { DevelopmentVerificationService } from '../services/development-verification.js';
 
 interface DevelopmentRouteDeps extends RouteDeps<'db' | 'http' | 'paths'> {
   developmentServers: DevelopmentServerService;
@@ -103,6 +104,19 @@ async function requireStoppedDevelopmentServer(deps: DevelopmentRouteDeps, proje
 
 export function registerDevelopmentRoutes(app: Express, deps: DevelopmentRouteDeps): void {
   const gate = deps.http.requireLocalDaemonRequest;
+  const verification = new DevelopmentVerificationService();
+  app.get('/api/projects/:id/development/verification', gate, async (req, res) => {
+    try {
+      res.set('Cache-Control', 'no-store');
+      res.json(await verification.status(await activeProjectRoot(deps, req.params.id, req.query.projectPath)));
+    } catch (error) { sendError(res, error); }
+  });
+  app.post('/api/projects/:id/development/verification', gate, async (req, res) => {
+    try {
+      const root = await activeProjectRoot(deps, req.params.id, req.body?.projectPath);
+      res.status(202).json(await verification.start(root, req.body?.script));
+    } catch (error) { sendError(res, error); }
+  });
   app.get('/api/projects/:id/development/configs', gate, async (req, res) => {
     try {
       const refresh = ['1', 'true', 'yes'].includes(String(req.query.refresh ?? '').toLowerCase());

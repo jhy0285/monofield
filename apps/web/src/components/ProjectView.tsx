@@ -7882,13 +7882,13 @@ export function ProjectView({
                   ) : null}
                 </span>
               )}
-              designSystemPicker={(
+              designSystemPicker={currentProject.metadata?.workMode !== 'development' ? (
                 <DesignSystemPicker
                   designSystems={designSystems}
                   selectedId={projectDesignSystemId ?? null}
                   onChange={handleChangeDesignSystemId}
                 />
-              )}
+              ) : null}
             />
           ) : (
             <div className="pane" data-testid="chat-pane-loading">

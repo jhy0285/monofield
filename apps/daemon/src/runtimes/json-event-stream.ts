@@ -686,6 +686,19 @@ function emitCodexTerminalError(
 function handleCodexEvent(obj: unknown, onEvent: StreamEventHandler, state: ParserState): boolean {
   if (!isRecord(obj)) return false;
 
+  // MCP-wrapped shell calls use a different item shape from command_execution.
+  // Inspect failed tool results only: reading a document quoting this error is not a failure.
+  if (obj.type === 'item.completed' && isRecord(obj.item) && obj.item.type === 'mcp_tool_call') {
+    const item = obj.item;
+    const result = isRecord(item.result) ? item.result : null;
+    const failed = item.status === 'failed' || result?.isError === true || item.error != null;
+    const content = JSON.stringify(item.error ?? item.result ?? '');
+    if (failed && isCodexWindowsSandboxLogonFailureText(content)) {
+      emitCodexTerminalError(content, onEvent, state);
+      return true;
+    }
+  }
+
   if (obj.type === 'error') {
     const message = extractErrorMessage(obj.message ?? obj.error, 'Codex error');
     // Reconnecting events are recoverable — treat as status warning, not fatal

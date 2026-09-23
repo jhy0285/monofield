@@ -71,6 +71,15 @@ export interface MigrateLegacyDataDirResult {
   copied?: readonly string[];
 }
 
+/** Explicit migration sources must be validated; auto-discovery only selects an existing payload. */
+export function resolveLegacyMigrationDir(
+  explicitDir: string | undefined,
+  fallbackDir: string | undefined,
+): string | undefined {
+  if (explicitDir !== undefined) return explicitDir;
+  return fallbackDir !== undefined && legacyDirHasPayload(fallbackDir) ? fallbackDir : undefined;
+}
+
 /**
  * Daemon startup throws this when MONOFIELD_LEGACY_DATA_DIR is explicitly set
  * but the path is not a usable legacy data dir, or the new dataDir is

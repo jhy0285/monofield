@@ -625,13 +625,14 @@ export function composeSystemPrompt({
   const resolvedExecutionProfile =
     executionProfile ?? executionProfileFromStreamFormat(streamFormat);
   const isLeanChatMode = sessionMode === 'chat';
+  const isDevelopmentMode = metadata?.workMode === 'development';
   const isStructuredSpecificationWorkflow =
     metadata?.kind === 'interface-spec'
     || metadata?.kind === 'screen-spec'
     || /(?:interface|screen)[\s-]*spec/i.test(skillName ?? '');
   const isStructuredSpecGuidance =
     isStructuredSpecificationWorkflow && structuredArtifactInstructions === false;
-  const isLeanResponseMode = isLeanChatMode || isStructuredSpecGuidance;
+  const isLeanResponseMode = isLeanChatMode || isStructuredSpecGuidance || isDevelopmentMode;
   const hasConnectedProjectDatabase =
     typeof metadata?.databaseContext?.connectionId === 'string'
     && metadata.databaseContext.connectionId.trim().length > 0;
@@ -702,7 +703,7 @@ export function composeSystemPrompt({
     parts.push('\n\n---\n\n');
   }
 
-  if (!isMediaSurfaceEarly && !isLeanChatMode && !isStructuredSpecificationWorkflow) {
+  if (!isMediaSurfaceEarly && !isLeanChatMode && !isStructuredSpecificationWorkflow && !isDevelopmentMode) {
     parts.push(renderDiscoveryAndPhilosophy(resolvedExecutionProfile), '\n\n---\n\n');
     // Direction library is only useful when the agent must pick a visual
     // direction itself. When an active design system is present it is the
@@ -730,7 +731,7 @@ export function composeSystemPrompt({
     }
   }
 
-  if (!isLeanChatMode && !isStructuredSpecificationWorkflow) {
+  if (!isLeanChatMode && !isStructuredSpecificationWorkflow && !isDevelopmentMode) {
     parts.push(
       '# Identity and workflow charter (background)\n\n',
       renderOfficialDesignerPrompt(resolvedExecutionProfile),

@@ -78,6 +78,15 @@ function file(name: string, kind: ProjectFile['kind'], mtime: number): ProjectFi
 }
 
 describe('ChatPane imported folder artifacts', () => {
+  it('offers actionable code workflows for an imported development project', () => {
+    renderPane({ projectMetadata: { kind: 'prototype', importedFrom: 'folder', workMode: 'development' } });
+    expect(screen.queryByTestId('chat-design-artifacts-empty')).toBeNull();
+    expect(screen.queryByText('chat.example1Title')).toBeNull();
+    expect(screen.getByText('Understand the code')).toBeTruthy();
+    fireEvent.click(screen.getByText('Run and fix tests'));
+    expect(composerMocks.setDraft).toHaveBeenCalledWith(expect.stringContaining('run the relevant tests'));
+  });
+
   it('replaces empty starter prompts with design artifact previews', () => {
     const onRequestOpenFile = vi.fn();
     const metadata: ProjectMetadata = {

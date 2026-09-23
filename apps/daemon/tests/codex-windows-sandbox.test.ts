@@ -18,6 +18,8 @@ describe('Codex Windows sandbox circuit breaker', () => {
       'execution error: Io(Custom { kind: Other, error: "windows sandbox: CreateProcessWithLogonW failed: 1385" })',
     )).toBe(true);
     expect(isCodexWindowsSandboxLogonFailureText('spawn failed: EPERM')).toBe(false);
+    expect(isCodexWindowsSandboxLogonFailureText('CreateProcessWithLogonW failed: 1385')).toBe(true);
+    expect(isCodexWindowsSandboxLogonFailureText('CreateProcessWithLogonW failed: 13850')).toBe(false);
     expect(isCodexWindowsSandboxLogonFailureText('Windows error 1385')).toBe(false);
   });
 

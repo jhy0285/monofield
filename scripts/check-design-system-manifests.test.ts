@@ -237,6 +237,23 @@ test("design-system project manifest schema accepts import-project optional inde
   }
 });
 
+test("design-system derived files accept Windows checkout line endings", async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "od-derived-crlf-guard-"));
+  try {
+    writeDerivedTokenFixture(root);
+    for (const name of ["design-tokens.json", "tailwind-v4.css"]) {
+      const filePath = path.join(root, name);
+      writeFileSync(filePath, readFileSync(filePath, "utf8").replace(/\r?\n/g, "\r\n"));
+    }
+    const violations: string[] = [];
+    await validateDesignTokensJson(violations, "design-systems/test/manifest.json", root, "tokens.css", "design-tokens.json", REPORT_PATH);
+    await validateTailwindV4Css(violations, "design-systems/test/manifest.json", root, "tokens.css", "tailwind-v4.css");
+    assert.deepEqual(violations, []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("design-system design tokens guard rejects stale derived JSON", async () => {
   const root = mkdtempSync(path.join(os.tmpdir(), "od-design-tokens-guard-"));
   try {

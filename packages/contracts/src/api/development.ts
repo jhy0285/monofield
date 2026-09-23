@@ -205,3 +205,23 @@ export interface GitWorkspaceDiffResponse {
   truncated: boolean;
   maxPatchBytes: number;
 }
+/** Local verification evidence is retained for the current daemon session. */
+export interface DevelopmentVerificationRun {
+  id: string;
+  script: string;
+  command: string;
+  state: 'running' | 'passed' | 'failed';
+  exitCode: number | null;
+  output: string;
+  truncated: boolean;
+  startedAt: string;
+  finishedAt?: string;
+  sourceFingerprint: string | null;
+  sourceChangedDuringRun: boolean;
+}
+
+export interface DevelopmentVerificationResponse {
+  scripts: string[];
+  run: DevelopmentVerificationRun | null;
+  freshness: 'current' | 'stale' | 'unknown';
+}

@@ -210,7 +210,7 @@ export async function validateDesignTokensJson(
     bindings: report.tokens,
     report,
   });
-  if (actualText !== expected) {
+  if (actualText.replace(/\r\n/g, "\n") !== expected) {
     violations.push(`${repositoryManifestPath}: ${designTokensPath} is stale; regenerate it from ${reportPath}`);
   }
 
@@ -277,7 +277,7 @@ export async function validateTailwindV4Css(
   const expectedCss = renderTailwindV4Css(
     Array.from(parseRootTokenDeclarations(tokensCss).keys(), (name) => ({ name })),
   );
-  if (actualCss !== expectedCss) {
+  if (actualCss.replace(/\r\n/g, "\n") !== expectedCss) {
     violations.push(`${repositoryManifestPath}: ${tailwindPath} is stale; regenerate it from ${tokensPath}`);
   }
 }

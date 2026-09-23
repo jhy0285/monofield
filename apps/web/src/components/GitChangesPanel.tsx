@@ -13,6 +13,7 @@ import type {
 import { useT } from '../i18n';
 import { splitUnifiedDiff, type SplitDiffCell } from '../runtime/git-diff';
 import { Icon } from './Icon';
+import { DevelopmentVerification } from './DevelopmentVerification';
 import styles from './GitChangesPanel.module.css';
 
 type Props = {
@@ -458,6 +459,10 @@ export function GitChangesPanel({
           </button>
         </div>
       </header>
+
+      {projectSelectionReady && workspaceRestored && (
+        <DevelopmentVerification key={workspaceKey} projectId={projectId} projectPath={projectPath} revision={status?.generatedAt} />
+      )}
 
       {branchManagerOpen && status?.repository ? (
         <div className={styles.branchManager} data-testid="git-branch-manager-panel">

@@ -290,13 +290,14 @@ export function composeSystemPrompt({
   const parts: string[] = [];
   const activeDesignSystemBody = designSystemBody?.trim();
   const isLeanChatMode = sessionMode === 'chat';
+  const isDevelopmentMode = metadata?.workMode === 'development';
   const isStructuredSpecificationWorkflow =
     metadata?.kind === 'interface-spec'
     || metadata?.kind === 'screen-spec'
     || /(?:interface|screen)[\s-]*spec/i.test(skillName ?? '');
   const isStructuredSpecGuidance =
     isStructuredSpecificationWorkflow && structuredArtifactInstructions === false;
-  const isLeanResponseMode = isLeanChatMode || isStructuredSpecGuidance;
+  const isLeanResponseMode = isLeanChatMode || isStructuredSpecGuidance || isDevelopmentMode;
   const hasConnectedProjectDatabase =
     typeof metadata?.databaseContext?.connectionId === 'string'
     && metadata.databaseContext.connectionId.trim().length > 0;
@@ -358,11 +359,11 @@ export function composeSystemPrompt({
     parts.push('\n\n---\n\n');
   }
 
-  if (!isMediaSurfaceEarly && !isLeanChatMode && !isStructuredSpecificationWorkflow) {
+  if (!isMediaSurfaceEarly && !isLeanChatMode && !isStructuredSpecificationWorkflow && !isDevelopmentMode) {
     parts.push(DISCOVERY_AND_PHILOSOPHY, '\n\n---\n\n');
   }
 
-  if (!isLeanChatMode && !isStructuredSpecificationWorkflow) {
+  if (!isLeanChatMode && !isStructuredSpecificationWorkflow && !isDevelopmentMode) {
     parts.push('# Identity and workflow charter (background)\n\n', BASE_SYSTEM_PROMPT);
   }
 

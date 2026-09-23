@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { StrictMode } from 'react';
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -37,6 +38,35 @@ afterEach(() => {
 });
 
 describe('DevelopmentWorkspaceControls', () => {
+  it('resolves the project after Strict Mode cancels the first mount request', async () => {
+    const onActiveProjectStateChange = vi.fn();
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, options?: RequestInit) =>
+      new Promise<Response>((resolve, reject) => {
+        setTimeout(() => {
+          if (options?.signal?.aborted) {
+            reject(new DOMException('cancelled', 'AbortError'));
+            return;
+          }
+          const url = String(input);
+          const payload = url.includes('/development/configs')
+            ? { configs: [], recommendedConfigId: null, scannedAt: '2026-09-24', activeProjectPath: '.', projects: [{ path: '.', label: 'sample', markers: ['package.json'] }] }
+            : url.includes('/development/servers')
+              ? { servers: [] }
+              : { projectId: PROJECT_ID, projectPath: '.', state: 'idle', config: null, pid: null, url: null, startedAt: null, error: null, logs: [] };
+          resolve(new Response(JSON.stringify(payload), { status: 200 }));
+        }, 0);
+      }),
+    ));
+    render(<StrictMode><I18nProvider initial="ko">
+      <DevelopmentWorkspaceControls projectId={PROJECT_ID}
+        metadata={{ kind: 'other', workMode: 'development' }}
+        resolvedDir="C:\\workspace" onMetadataChange={vi.fn()}
+        onOpenUrl={vi.fn()} onOpenChanges={vi.fn()}
+        onActiveProjectStateChange={onActiveProjectStateChange} />
+    </I18nProvider></StrictMode>);
+    await waitFor(() => expect(onActiveProjectStateChange).toHaveBeenCalledWith({ projectPath: '.', ready: true }));
+  });
+
   it('keeps database selections and their connection policies isolated by workspace module', () => {
     const legacy: ProjectMetadata = {
       kind: 'other',

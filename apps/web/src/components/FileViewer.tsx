@@ -29,6 +29,7 @@ import {
 } from '../analytics/events';
 import { MarkdownRenderer, artifactRendererRegistry } from '../artifacts/renderer-registry';
 import { renderMarkdownToSafeHtml } from '../artifacts/markdown';
+import { indentTextSelection } from './text-editor-indentation';
 import { useT, useI18n } from '../i18n';
 import type { Dict, Locale } from '../i18n/types';
 import {
@@ -1062,7 +1063,10 @@ export function FileViewer({
     );
   }
   if (rendererMatch?.renderer.id === 'markdown') {
-    return <MarkdownViewer projectId={projectId} file={file} />;
+    if (streaming || file.artifactManifest?.status === 'streaming') {
+      return <MarkdownViewer key={`${projectId}:${file.name}`} projectId={projectId} file={file} />;
+    }
+    return <TextViewer key={`${projectId}:${file.name}`} projectId={projectId} file={file} markdown onFileSaved={onFileSaved} />;
   }
   if (rendererMatch?.renderer.id === 'svg') {
     return <SvgViewer projectId={projectId} file={file} />;
@@ -10550,10 +10554,12 @@ function TextViewer({
   projectId,
   file,
   onFileSaved,
+  markdown = false,
 }: {
   projectId: string;
   file: ProjectFile;
   onFileSaved?: () => Promise<void> | void;
+  markdown?: boolean;
 }) {
   const { locale, t } = useI18n();
   const copy = locale === 'ko'
@@ -10595,10 +10601,13 @@ function TextViewer({
   const [diskChanged, setDiskChanged] = useState(false);
   const [pendingDiskText, setPendingDiskText] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [preview, setPreview] = useState(markdown);
+  const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
   const baseTextRef = useRef(baseText);
   const draftTextRef = useRef(draftText);
   const dirty = baseText !== null && draftText !== baseText;
   const dirtyRef = useRef(dirty);
+  const allowTabNavigationRef = useRef(false);
   baseTextRef.current = baseText;
   draftTextRef.current = draftText;
   dirtyRef.current = dirty;
@@ -10735,7 +10744,7 @@ function TextViewer({
       }
       if (overwriteDisk && !window.confirm(copy.overwriteConfirm)) return;
       const result = await writeProjectTextFileDetailed(projectId, file.name, draftText, {
-        ...(overwriteDisk ? {} : { expectedContentSha256: await sha256Text(latest) }),
+        expectedContentSha256: await sha256Text(latest),
       });
       if (!result.ok) {
         if (result.status === 409 && result.code === 'FILE_CHANGED') {
@@ -10764,6 +10773,12 @@ function TextViewer({
     <div className="viewer text-viewer">
       <div className="viewer-toolbar">
         <div className="viewer-toolbar-left">
+          {markdown ? (
+            <div className="viewer-tabs">
+              <button type="button" className={`viewer-tab ${preview ? 'active' : ''}`} aria-pressed={preview} data-testid="markdown-preview" onClick={() => setPreview(true)}>{t('fileViewer.preview')}</button>
+              <button type="button" className={`viewer-tab ${!preview ? 'active' : ''}`} aria-pressed={!preview} data-testid="markdown-edit" onClick={() => setPreview(false)}>{t('common.edit')}</button>
+            </div>
+          ) : null}
           {dirty ? <span className="text-editor-dirty" data-testid="text-editor-dirty">{copy.unsaved}</span> : null}
           {saved ? <span className="text-editor-saved" role="status">{copy.saved}</span> : null}
         </div>
@@ -10808,6 +10823,21 @@ function TextViewer({
             <Icon name={copied ? 'check' : 'copy'} size={13} />
             <span>{copied ? t('fileViewer.copied') : t('fileViewer.copy')}</span>
           </button>
+          {markdown ? (
+            <div className="share-menu chrome-share-menu">
+              <button type="button" className="viewer-action" disabled={baseText === null || loading} aria-haspopup="menu" aria-expanded={downloadMenuOpen} onClick={() => setDownloadMenuOpen((open) => !open)}>
+                <Icon name="download" size={13} /><span>{t('fileViewer.download')}</span>
+              </button>
+              {downloadMenuOpen ? (
+                <div className="share-menu-popover" role="menu">
+                  <button type="button" className="share-menu-item" role="menuitem" onClick={() => {
+                    setDownloadMenuOpen(false);
+                    exportAsMd(draftText, file.name.replace(/\.mdx?$/i, ''));
+                  }}>{t('fileViewer.exportMd')}</button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
       <div className="viewer-body">
@@ -10821,13 +10851,16 @@ function TextViewer({
           </div>
         ) : null}
         {saveError || loadError ? <div className="text-editor-error" role="alert">{saveError || loadError}</div> : null}
-        {loading || baseText === null ? (
+        {loading ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
+        ) : baseText === null ? null : markdown && preview ? (
+          <MarkdownViewer projectId={projectId} file={file} embeddedText={draftText} />
         ) : (
           <textarea
             className="text-editor-input"
             data-testid="text-editor-input"
             aria-label={copy.editor}
+            aria-description={locale === 'ko' ? 'Tab으로 들여쓰기, Shift+Tab으로 내어쓰기. Escape 후 Tab을 누르면 다음 컨트롤로 이동합니다.' : 'Tab indents; Shift+Tab outdents. Press Escape then Tab to move to the next control.'}
             value={draftText}
             onChange={(event) => {
               setDraftText(event.target.value);
@@ -10835,9 +10868,28 @@ function TextViewer({
               setSaveError('');
             }}
             onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                allowTabNavigationRef.current = true;
+                return;
+              }
+              if (event.key === 'Tab' && allowTabNavigationRef.current) {
+                allowTabNavigationRef.current = false;
+                return;
+              }
+              allowTabNavigationRef.current = false;
               if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
                 event.preventDefault();
                 void save();
+              } else if (event.key === 'Tab' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+                event.preventDefault();
+                const input = event.currentTarget;
+                const next = indentTextSelection(input.value, input.selectionStart, input.selectionEnd, event.shiftKey);
+                setDraftText(next.text);
+                setSaved(false);
+                setSaveError('');
+                window.requestAnimationFrame(() => {
+                  if (input.isConnected) input.setSelectionRange(next.start, next.end);
+                });
               }
             }}
             spellCheck={false}
@@ -10851,9 +10903,11 @@ function TextViewer({
 function MarkdownViewer({
   projectId,
   file,
+  embeddedText,
 }: {
   projectId: string;
   file: ProjectFile;
+  embeddedText?: string;
 }) {
   const t = useT();
   const [text, setText] = useState<string | null>(null);
@@ -10869,6 +10923,10 @@ function MarkdownViewer({
   const exportTitle = file.name.replace(/\.mdx?$/i, '') || file.name;
 
   useEffect(() => {
+    if (embeddedText !== undefined) {
+      setText(embeddedText);
+      return;
+    }
     setText(null);
     copiedMarkdownBlockRef.current = null;
     if (copyBlockTimerRef.current) {
@@ -10882,7 +10940,7 @@ function MarkdownViewer({
     return () => {
       cancelled = true;
     };
-  }, [projectId, file.name, file.mtime, reloadKey]);
+  }, [projectId, file.name, file.mtime, reloadKey, embeddedText]);
 
   useEffect(() => {
     return () => {
@@ -10947,7 +11005,7 @@ function MarkdownViewer({
 
   return (
     <div className="viewer text-viewer">
-      <div className="viewer-toolbar">
+      {embeddedText === undefined ? <div className="viewer-toolbar">
         <div className="viewer-toolbar-left">
           {isStreaming ? <span className="viewer-meta">{t('fileViewer.markdownStreamingMeta')}</span> : null}
           {isError ? <span className="viewer-meta">{t('fileViewer.markdownErrorMeta')}</span> : null}
@@ -11002,7 +11060,7 @@ function MarkdownViewer({
             </div>
           ) : null}
         </div>
-      </div>
+      </div> : null}
       <div className="viewer-body">
         {html === null ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>

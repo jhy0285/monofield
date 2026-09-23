@@ -1,0 +1,10 @@
+.root { padding: 10px 14px; border-bottom: 1px solid var(--border); font: 12px/1.5 var(--sans); }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 4px; }
+.controls select, .controls button { color: var(--text); background: var(--control-bg); border: 1px solid var(--control-border); border-radius: var(--radius-sm); padding: 4px 8px; font: inherit; }
+.controls select { width: min(220px, 100%); flex: 0 1 220px; }
+.controls button:disabled { opacity: .5; }
+.root small { color: var(--text-muted); }
+.result { margin-top: 8px; }
+.result summary { cursor: pointer; }
+.result strong { margin-left: 10px; }
+.result pre { overflow: auto; max-height: 180px; white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.5 var(--mono); user-select: text; }

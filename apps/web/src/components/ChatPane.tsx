@@ -18,7 +18,8 @@ import { useAnalytics } from '../analytics/provider';
 import { getResolvedDeviceId } from '../analytics/client';
 import { trackChatPanelClick, trackMessageQueueClick, trackRunFailedToastSurfaceView } from '../analytics/events';
 import { amrHandoffDeviceId, attributedAmrUrl, recordAmrEntry } from '../analytics/amr-attribution';
-import { useT } from '../i18n';
+import { useI18n, useT } from '../i18n';
+import { developmentWorkflowCopy } from './development-workflow-copy';
 import {
   FEATURED_DESIGN_TOOLBOX_ACTION_IDS,
   findDesignToolboxSkill,
@@ -817,7 +818,8 @@ export function ChatPane({
   designSystemPicker,
   config,
 }: Props) {
-  const t = useT();
+  const { locale, t } = useI18n();
+  const developmentStarters = useMemo(() => developmentWorkflowCopy(locale).starters, [locale]);
   const analytics = useAnalytics();
   const displayMessages = messages;
   const amrProfile = config?.agentCliEnv?.amr?.[AMR_PROFILE_ENV_KEY] ?? null;
@@ -933,14 +935,15 @@ export function ChatPane({
     return map;
   }, [skills]);
   const blankProjectComposerScenarios = useMemo<PlaceholderScenario[]>(
-    () => pickStarters(projectMetadata, t).map((starter, index) => ({
+    () => (projectMetadata?.workMode === 'development' ? developmentStarters : pickStarters(projectMetadata, t)).map((starter, index) => ({
       id: `blank-${projectMetadata?.kind ?? 'prototype'}-${index}`,
       text: starter.prompt,
       chipId: 'project',
     })),
-    [projectMetadata, t],
+    [developmentStarters, projectMetadata, t],
   );
   const followUpComposerScenarios = useMemo<PlaceholderScenario[]>(() => {
+    if (projectMetadata?.workMode === 'development') return blankProjectComposerScenarios;
     if (nextStepVariant === 'design-system') {
       return DESIGN_SYSTEM_NEXT_STEP_ACTIONS.map((action) => ({
         id: action.id,
@@ -959,7 +962,7 @@ export function ChatPane({
       text,
       chipId: 'design-toolbox',
     }));
-  }, [nextStepVariant, t]);
+  }, [blankProjectComposerScenarios, nextStepVariant, projectMetadata?.workMode, t]);
   const composerPlaceholderScenarios = useMemo<PlaceholderScenario[]>(() => {
     if (loading || initialDraft?.trim()) return [];
     if (displayMessages.length === 0 && queuedItems.length === 0) return blankProjectComposerScenarios;
@@ -1220,7 +1223,7 @@ export function ChatPane({
         : [],
     [projectFiles, projectMetadata?.entryFile, projectMetadata?.importedFrom],
   );
-  const showImportedFolderArtifacts = projectMetadata?.importedFrom === 'folder';
+  const showImportedFolderArtifacts = projectMetadata?.importedFrom === 'folder' && projectMetadata?.workMode !== 'development';
   const composerDraftStorageKey = projectId && activeConversationId
     ? `od:chat-composer:draft:${projectId}:${activeConversationId}`
     : undefined;
@@ -2119,7 +2122,7 @@ export function ChatPane({
                         </span>
                       </div>
                       <div className="chat-examples" role="list">
-                        {pickStarters(projectMetadata, t).map((ex, i) => (
+                        {(projectMetadata?.workMode === 'development' ? developmentStarters : pickStarters(projectMetadata, t)).map((ex, i) => (
                           <button
                             key={`${ex.title}-${i}`}
                             type="button"

@@ -25,7 +25,7 @@ const DESIGN_MANIFEST_FILENAME = 'DESIGN-MANIFEST.json';
 
 function safeFilename(name: string, fallback: string): string {
   const slug = (name || fallback)
-    .replace(/[^\w.\-]+/g, '-')
+    .replace(/[^\p{L}\p{N}\p{M}_.\-]+/gu, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 60);
   return slug || fallback;

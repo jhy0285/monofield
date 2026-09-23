@@ -196,7 +196,7 @@ import {
   fetchVelaPresetModels,
   fetchVelaRemoteModelsWithRetry,
 } from './runtimes/defs/amr.js';
-import { migrateLegacyDataDirSync } from './legacy-data-migrator.js';
+import { migrateLegacyDataDirSync, resolveLegacyMigrationDir } from './legacy-data-migrator.js';
 import {
   consumedImportNonces,
   getDesktopAuthSecret,
@@ -979,11 +979,12 @@ const RUNTIME_DATA_DIR_CANONICAL = (() => {
 // would race an async copy. See apps/daemon/src/legacy-data-migrator.ts
 // and https://github.com/jhy0285/monofield/issues/710.
 migrateLegacyDataDirSync({
-  legacyDir: process.env.MONOFIELD_LEGACY_DATA_DIR
-    ?? process.env.OD_LEGACY_DATA_DIR
-    ?? (process.env.MONOFIELD_DATA_DIR || process.env.OD_DATA_DIR
+  legacyDir: resolveLegacyMigrationDir(
+    process.env.MONOFIELD_LEGACY_DATA_DIR ?? process.env.OD_LEGACY_DATA_DIR,
+    process.env.MONOFIELD_DATA_DIR || process.env.OD_DATA_DIR
       ? undefined
-      : path.join(PROJECT_ROOT, '.od')),
+      : path.join(PROJECT_ROOT, '.od'),
+  ),
   dataDir: RUNTIME_DATA_DIR,
 });
 const ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'artifacts');
