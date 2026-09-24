@@ -1141,6 +1141,22 @@ describe('DevelopmentWorkspaceControls', () => {
     }));
   });
 
+  it('saves the visible text required for an outcome claim', async () => {
+    const onMetadataChange = vi.fn();
+    render(<I18nProvider initial="ko">
+      <DevelopmentWorkspaceControls projectId={PROJECT_ID}
+        metadata={{ kind: 'other', workMode: 'development', development: { autoVerify: true } }}
+        resolvedDir="C:\\workspace\\app" onMetadataChange={onMetadataChange}
+        onOpenUrl={vi.fn()} onOpenChanges={vi.fn()} />
+    </I18nProvider>);
+    const input = await screen.findByTestId('development-expected-text');
+    fireEvent.change(input, { target: { value: '  저장 완료  ' } });
+    fireEvent.blur(input);
+    expect(onMetadataChange).toHaveBeenCalledWith(expect.objectContaining({
+      development: expect.objectContaining({ verifyExpectedText: '저장 완료' }),
+    }));
+  });
+
   it('makes the local-CLI-only verification boundary explicit for BYOK runs', async () => {
     render(
       <I18nProvider initial="ko">

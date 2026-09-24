@@ -244,6 +244,8 @@ export function DevelopmentWorkspaceControls({
         manualServletContainerSetup: '원클릭 실행을 사용하려면 활성 Tomcat/Jetty/Cargo 빌드 플러그인을 추가하세요. 또는 외부 컨테이너에 배포한 뒤 해당 URL을 MonoField 브라우저에서 열 수 있습니다.',
         servletPluginOverridesLocked: '포트·URL·애플리케이션 인자는 선택된 서블릿 빌드 플러그인에서 관리합니다. 여기서는 이 실행에만 적용할 세션 환경변수를 설정할 수 있습니다.',
         automaticVerificationUnavailable: '자동 화면 검증은 로컬 CLI 실행에서만 사용할 수 있습니다. BYOK에서는 사용할 수 없습니다.',
+        expectedText: '결과 확인 문구',
+        expectedTextHint: '작업 후 화면에 보여야 할 문구를 입력하세요. 비워두면 화면을 관측하지만 결과 성공으로 표시하지 않습니다.',
         localCliOnly: '로컬 CLI 전용',
         port: '포트',
         url: '준비 상태 URL',
@@ -256,6 +258,8 @@ export function DevelopmentWorkspaceControls({
         manualServletContainerSetup: 'Add an active Tomcat/Jetty/Cargo build plugin for one-click launch, or deploy to an external container and open its URL in the MonoField browser.',
         servletPluginOverridesLocked: 'The selected servlet build plugin owns the port, URL, and application arguments. Only session environment variables can be configured here.',
         automaticVerificationUnavailable: 'Automatic screen verification is available only for local CLI runs, not BYOK.',
+        expectedText: 'Expected page text',
+        expectedTextHint: 'Text that must be visible after the run. Leave blank to capture the screen without claiming the outcome passed.',
         localCliOnly: 'Local CLI only',
         port: 'Port',
         url: 'Readiness URL',
@@ -1139,6 +1143,24 @@ export function DevelopmentWorkspaceControls({
           <i className={styles.verifyStatus} data-active={automaticVerificationAvailable && browserVerificationActive ? 'true' : 'false'} aria-hidden="true" />
           <span>{t('development.autoVerify')}{automaticVerificationAvailable ? '' : ` · ${runCopy.localCliOnly}`}</span>
         </label>
+        <input
+          key={projectId}
+          type="text"
+          className={`${styles.select} ${styles.databaseSelect}`}
+          data-testid="development-expected-text"
+          aria-label={runCopy.expectedText}
+          placeholder={runCopy.expectedText}
+          title={runCopy.expectedTextHint}
+          defaultValue={metadata.development?.verifyExpectedText ?? ''}
+          maxLength={200}
+          disabled={!automaticVerificationAvailable}
+          onBlur={(event) => {
+            const value = event.target.value.trim();
+            if (value !== (metadata.development?.verifyExpectedText ?? '')) {
+              persistDevelopment({ verifyExpectedText: value });
+            }
+          }}
+        />
         <button
           type="button"
           className={styles.iconAction}

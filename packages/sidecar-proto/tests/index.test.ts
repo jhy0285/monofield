@@ -217,6 +217,14 @@ describe("open-design sidecar contract", () => {
       type: "browser-automation",
     });
     expect(normalizeDesktopSidecarMessage({
+      input: { action: "assert-text", sessionId, text: "Saved successfully" },
+      type: SIDECAR_MESSAGES.BROWSER_AUTOMATION,
+    })).toMatchObject({ input: { action: "assert-text", text: "Saved successfully" } });
+    expect(() => normalizeDesktopSidecarMessage({
+      input: { action: "assert-text", sessionId, text: "  " },
+      type: SIDECAR_MESSAGES.BROWSER_AUTOMATION,
+    })).toThrow(/1 to 200/);
+    expect(normalizeDesktopSidecarMessage({
       input: {
         action: "batch",
         continueOnError: true,

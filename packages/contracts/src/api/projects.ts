@@ -116,6 +116,8 @@ export interface ProjectMetadata {
     /** Active runnable module inside a multi-project workspace, relative to baseDir. */
     activeProjectPath?: string;
     autoVerify?: boolean;
+    /** Visible page text required for a post-run browser outcome claim. */
+    verifyExpectedText?: string;
   };
   intent?: 'live-artifact';
   fidelity?: 'wireframe' | 'high-fidelity';

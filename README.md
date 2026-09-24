@@ -66,6 +66,12 @@ structured deliverable.
   used by the agent, run configuration, Git view, browser, and database policy.
 - **The result stays reviewable.** Compare before and after, inspect build and
   test results, then verify the running interaction in an approved browser tab.
+- **Browser outcome checks are explicit.** In Development, approve the in-app
+  browser tab and enter **Expected page text** beside Auto verify. After a
+  successful local CLI run, MonoField reloads that page, checks the visible
+  text, captures DOM and screenshot evidence, and reports a source fingerprint
+  when Git can provide one. With no expected text, it reports a screen
+  observation without claiming the requested interaction succeeded.
 - **Database access is explicit.** Credentials stay in the encrypted Desktop
   vault; each project or module uses a selected read/write policy and audit
   trail.

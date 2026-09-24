@@ -194,6 +194,15 @@ export const BROWSER_AUTOMATION_SNAPSHOT_SCRIPT = `(() => {
   };
 })()`;
 
+// Only return the assertion result. Page text may include private account data.
+export function browserAutomationAssertTextScript(expectedText: string): string {
+  return `(() => {
+    const expected = ${JSON.stringify(expectedText)}.replace(/\\s+/g, ' ').trim();
+    const visible = (document.body?.innerText || '').replace(/\\s+/g, ' ');
+    return { matched: visible.includes(expected), title: document.title };
+  })()`;
+}
+
 export function browserAutomationPointerTargetScript(selector: string): string {
   return `(() => {
     const marker = '__open_agent_pointer_target__';
@@ -667,6 +676,21 @@ export function createBrowserAutomationService(options: BrowserAutomationService
   ): Promise<unknown> => {
     if (session.stopped) throw new Error("Browser automation stopped");
     switch (input.action) {
+      case DESKTOP_BROWSER_AUTOMATION_ACTIONS.ASSERT_TEXT: {
+        for (let attempt = 0; attempt < 20; attempt += 1) {
+          if (session.stopped || httpOrigin(guest.getURL()) !== session.origin) {
+            throw new Error("The approved browser session changed during the text check");
+          }
+          const result = await guest.executeJavaScript<{ matched: boolean; title: string }>(
+            browserAutomationAssertTextScript(input.text!), false,
+          );
+          if (result?.matched === true) return {
+            matched: true, title: result.title, url: redactBrowserAutomationUrl(guest.getURL()),
+          };
+          if (attempt < 19) await wait(250);
+        }
+        throw new Error("Expected text was not visible in the approved tab");
+      }
       case DESKTOP_BROWSER_AUTOMATION_ACTIONS.STATUS:
         return { expiresAt: null, origin: session.origin, url: redactBrowserAutomationUrl(guest.getURL()) };
       case DESKTOP_BROWSER_AUTOMATION_ACTIONS.PAGE_INFO:
@@ -676,7 +700,8 @@ export function createBrowserAutomationService(options: BrowserAutomationService
       case DESKTOP_BROWSER_AUTOMATION_ACTIONS.SCREENSHOT: {
         const image = await guest.capturePage();
         const size = image.getSize();
-        return { dataUrl: image.toDataURL(), height: size.height, width: size.width };
+        return { dataUrl: image.toDataURL(), height: size.height, width: size.width,
+          url: redactBrowserAutomationUrl(guest.getURL()) };
       }
       case DESKTOP_BROWSER_AUTOMATION_ACTIONS.CLICK:
         return await pointerClick(guest, session, input.selector!, wait);

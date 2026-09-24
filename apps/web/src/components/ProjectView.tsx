@@ -5535,7 +5535,13 @@ export function ProjectView({
         const browserVerification =
           project.metadata?.workMode === 'development' &&
           project.metadata.development?.autoVerify !== false
-            ? getActiveBrowserVerification(project.id)
+            ? (() => {
+                const active = getActiveBrowserVerification(project.id);
+                return active ? {
+                  ...active,
+                  expectedText: project.metadata.development?.verifyExpectedText?.trim() || undefined,
+                } : undefined;
+              })()
             : undefined;
         void streamViaDaemon({
           agentId: config.agentId,

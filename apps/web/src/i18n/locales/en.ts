@@ -3857,7 +3857,7 @@ export const en: Dict = {
   'development.detectAgain': 'Detect run configurations again',
   'development.database': 'Project database',
   'development.noDatabase': 'No project database',
-  'development.autoVerifyHint': 'After one approval in Browser, automatically verify the build, rendered screen, and interactions after code changes. A green dot means an approved tab is connected.',
+  'development.autoVerifyHint': 'After a run, reload and observe the approved browser tab. Set expected page text to check whether the intended result is visible. A green dot means the tab is connected.',
   'development.autoVerify': 'Auto verify',
   'development.localApp': 'Local application',
   'development.configureRun': 'Edit run settings',

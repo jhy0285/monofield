@@ -102,6 +102,7 @@ export const SIDECAR_MESSAGES = Object.freeze({
 } as const);
 
 export const DESKTOP_BROWSER_AUTOMATION_ACTIONS = Object.freeze({
+  ASSERT_TEXT: "assert-text",
   BATCH: "batch",
   CLICK: "click",
   DRAG: "drag",
@@ -910,6 +911,7 @@ function normalizeDesktopBrowserAutomationStep(
   }
   if (!allowBatch && action === "batch") throw new Error("nested browser automation batches are not supported");
   const keysByAction: Record<DesktopBrowserAutomationAction, readonly string[]> = {
+    "assert-text": ["action", "text"],
     "status": ["action"],
     "page-info": ["action"],
     "snapshot": ["action"],
@@ -932,6 +934,9 @@ function normalizeDesktopBrowserAutomationStep(
   }
   if (action === "type-text" && value.text == null) {
     throw new Error("desktop browser automation type-text requires text");
+  }
+  if (action === "assert-text" && (typeof value.text !== "string" || !value.text.trim() || value.text.length > 200)) {
+    throw new Error("desktop browser automation assert-text requires 1 to 200 characters of text");
   }
   if (action === "upload" && value.filePath == null) {
     throw new Error("desktop browser automation upload requires filePath");

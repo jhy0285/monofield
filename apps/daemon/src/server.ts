@@ -92,6 +92,7 @@ import {
   BrowserVerificationEvidenceStore,
   runAutomaticBrowserVerification,
 } from './automatic-browser-verification.js';
+import { verificationFingerprint } from './services/development-verification.js';
 import {
   UPLOAD_DIR,
   composeLiveInstructionPrompt,
@@ -6110,20 +6111,21 @@ export async function startServer({
       const sessionId = typeof browserVerification.sessionId === 'string' ? browserVerification.sessionId.trim() : '';
       const origin = typeof browserVerification.origin === 'string' ? browserVerification.origin.trim() : '';
       const url = typeof browserVerification.url === 'string' ? browserVerification.url.trim() : '';
+      const expectedText = typeof browserVerification.expectedText === 'string'
+        ? browserVerification.expectedText.trim() : '';
       if (!/^[A-Za-z0-9_-]{20,128}$/.test(sessionId)) return null;
+      if (browserVerification.expectedText != null
+        && (typeof browserVerification.expectedText !== 'string' || expectedText.length > 200)) return null;
       try {
         const parsedUrl = new URL(url);
         if (parsedUrl.origin !== origin || !['http:', 'https:'].includes(parsedUrl.protocol)) return null;
       } catch {
         return null;
       }
-      return { sessionId, origin, url };
+      return { sessionId, origin, url, expectedText };
     })();
     const automaticBrowserVerificationStartedAt = Date.now();
-    const automaticBrowserVerificationRequested = normalizedBrowserVerification != null
-      && /(?:수정|고쳐|변경|구현|추가|삭제|리팩터|만들|개발|빌드|검증|테스트|fix|change|implement|add|remove|update|refactor|build|verify|test)/i.test(
-        `${typeof message === 'string' ? message : ''}\n${typeof currentPrompt === 'string' ? currentPrompt : ''}`,
-      );
+    const automaticBrowserVerificationRequested = normalizedBrowserVerification != null;
     const browserUseRunState = buildBrowserUseRunState({
       requested: normalizedBrowserVerification != null || isBrowserUseRequested(message, currentPrompt, systemPrompt),
       agentId: def.id,
@@ -6768,7 +6770,10 @@ export async function startServer({
           `2. Reload the bound page using \`monofield browser navigate --session ${normalizedBrowserVerification.sessionId} --url ${normalizedBrowserVerification.url}\`.`,
           `3. Inspect both DOM state and a screenshot with \`monofield browser snapshot --session ${normalizedBrowserVerification.sessionId}\` and \`monofield browser screenshot --session ${normalizedBrowserVerification.sessionId} --out .monofield/verification/latest.png\`.`,
           '4. Exercise the affected interaction when safe. Browser click, hover, upload, and drag commands use the approved tab and pointer-backed native Electron input; do not launch a separate browser.',
-          '5. Report exact evidence. Never claim browser verification if a command failed, the page was not reachable, or the affected interaction was not exercised.',
+          ...(normalizedBrowserVerification.expectedText
+            ? [`5. Check the user-defined outcome with \`monofield browser assert-text --session ${normalizedBrowserVerification.sessionId} --text ${JSON.stringify(normalizedBrowserVerification.expectedText)}\`.`]
+            : []),
+          '6. Report exact evidence. A successful click alone does not prove the intended outcome. Never claim outcome verification if the expected text is absent.',
         ].join('\n')
       : '';
     const titleGenerationRequested =
@@ -9704,27 +9709,40 @@ export async function startServer({
           sessionId: normalizedBrowserVerification.sessionId,
           startedAt: automaticBrowserVerificationStartedAt,
           url: normalizedBrowserVerification.url,
+          expectedText: normalizedBrowserVerification.expectedText,
         });
+        const sourceFingerprint = cwd ? await verificationFingerprint(cwd) : null;
+        const verifiedAt = new Date().toISOString();
         const korean = typeof locale === 'string' && locale.toLowerCase().startsWith('ko');
         const interaction = verification.interactionActions.length > 0
           ? verification.interactionActions.join(', ')
           : null;
         const delta = verification.ok
           ? korean
-            ? interaction
-              ? `\n\n자동 검증 완료 — 승인된 탭을 새로고침하고 DOM·스크린샷을 확인했으며 상호작용 기록(${interaction})도 확인했습니다.`
-              : '\n\n자동 화면 검증 완료 — 승인된 탭을 새로고침하고 DOM·스크린샷을 확인했습니다. 이 요청에서 실행된 상호작용 기록은 없어 클릭 동작까지 검증했다고 표시하지 않습니다.'
-            : interaction
-              ? `\n\nAutomatic verification complete — reloaded the approved tab, captured DOM and screenshot evidence, and confirmed interaction evidence (${interaction}).`
-              : '\n\nAutomatic screen verification complete — reloaded the approved tab and captured DOM and screenshot evidence. No interaction action was recorded, so interaction behavior is not claimed as verified.'
+            ? verification.outcomeVerified
+              ? `\n\n화면 결과 확인 — 승인된 탭에서 지정한 문구가 실제로 표시됐고 DOM·스크린샷을 확인했습니다.${interaction ? ` 브라우저 조작 기록: ${interaction}.` : ''}`
+              : `\n\n화면 관측 완료 — 승인된 탭에서 DOM·스크린샷을 확인했습니다. 기대 문구가 설정되지 않아 작업 결과나 상호작용 성공까지 검증한 것은 아닙니다.${interaction ? ` 브라우저 조작 기록: ${interaction}.` : ''}`
+            : verification.outcomeVerified
+              ? `\n\nScreen outcome confirmed — the expected text was visible in the approved tab; DOM and screenshot evidence were captured.${interaction ? ` Browser actions recorded: ${interaction}.` : ''}`
+              : `\n\nScreen observed — DOM and screenshot evidence were captured in the approved tab. No expected text was set, so task outcome and interaction success are not claimed.${interaction ? ` Browser actions recorded: ${interaction}.` : ''}`
           : korean
             ? `\n\n자동 검증 실패 — ${verification.error ?? '승인된 브라우저 탭에서 필수 검증 단계를 완료하지 못했습니다.'}`
             : `\n\nAutomatic verification failed — ${verification.error ?? 'The required checks did not complete in the approved browser tab.'}`;
-        send('agent', { type: 'text_delta', delta });
+        const sourceNote = sourceFingerprint
+          ? (korean ? ` 검증 당시 소스 지문: ${sourceFingerprint.slice(0, 12)}.`
+            : ` Source fingerprint at verification: ${sourceFingerprint.slice(0, 12)}.`)
+          : (korean ? ' Git 소스 지문은 확인할 수 없습니다.' : ' Git source fingerprint is unavailable.');
+        send('agent', { type: 'text_delta', delta: delta + sourceNote });
         send('diagnostic', {
-          type: verification.ok ? 'automatic_browser_verification_succeeded' : 'automatic_browser_verification_failed',
+          type: verification.ok
+            ? (verification.outcomeVerified ? 'automatic_browser_outcome_verified' : 'automatic_browser_observed')
+            : 'automatic_browser_verification_failed',
           ...verification,
           sessionId: normalizedBrowserVerification.sessionId,
+          url: normalizedBrowserVerification.url,
+          verifiedAt,
+          sourceFingerprint,
+          ...(normalizedBrowserVerification.expectedText ? { expectedText: normalizedBrowserVerification.expectedText } : {}),
         });
       }
       if (normalizedBrowserVerification) {

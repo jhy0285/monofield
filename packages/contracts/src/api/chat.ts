@@ -64,6 +64,7 @@ export interface ChatRequest {
     sessionId: string;
     origin: string;
     url: string;
+    expectedText?: string;
   };
   /**
    * Run-scoped media execution policy. Omitted means current MonoField

@@ -11,6 +11,7 @@ import {
   createBrowserAutomationService,
   BROWSER_AUTOMATION_PAGE_INFO_SCRIPT,
   BROWSER_AUTOMATION_SNAPSHOT_SCRIPT,
+  browserAutomationAssertTextScript,
   redactBrowserAutomationUrl,
   type BrowserAutomationGuest,
 } from "../../src/main/browser-automation.js";
@@ -43,6 +44,7 @@ describe("approved in-app browser automation", () => {
   it("keeps the fixed guest scripts syntactically valid after template escaping", () => {
     expect(() => new Function(`return ${BROWSER_AUTOMATION_PAGE_INFO_SCRIPT}`)).not.toThrow();
     expect(() => new Function(`return ${BROWSER_AUTOMATION_SNAPSHOT_SCRIPT}`)).not.toThrow();
+    expect(() => new Function(`return ${browserAutomationAssertTextScript('Saved \\\"successfully\\\"')}`)).not.toThrow();
     expect(() => new Function(`return ${browserAutomationPointerTargetScript("#continue")}`)).not.toThrow();
     expect(() => new Function(`return ${browserAutomationPointerDragTargetsScript("#card", "#column")}`)).not.toThrow();
     expect(() => new Function(`return ${browserAutomationPointerOverlayScript(
@@ -95,6 +97,25 @@ describe("approved in-app browser automation", () => {
     });
     expect(result).toMatchObject({ ok: false, error: "Navigation is limited to the approved origin" });
     expect(target.loadURL).not.toHaveBeenCalled();
+  });
+
+  it("confirms visible text without returning page content", async () => {
+    const check = new Function('document', `return ${browserAutomationAssertTextScript('Saved successfully')}`);
+    expect(check({ title: 'Orders', body: { innerText: 'Order 42\nSaved   successfully' } }))
+      .toEqual({ matched: true, title: 'Orders' });
+    expect(check({ title: 'Orders', body: { innerText: 'Save failed' } }).matched).toBe(false);
+    const target = guest({
+      executeJavaScript: executeJavaScriptMock(async (code: string) => code.includes('Saved successfully')
+        ? { matched: true, title: 'Orders' } : {}),
+    });
+    const service = createBrowserAutomationService({
+      emit: () => undefined, getGuest: () => target, token: () => "browser_session_1234567890",
+    });
+    const session = service.begin({ guestWebContentsId: 41, origin: "http://127.0.0.1:5173", projectId: "p1" });
+    if (!session.ok) throw new Error(session.reason);
+    const result = await service.execute({ action: 'assert-text', sessionId: session.sessionId, text: 'Saved successfully' });
+    expect(result).toMatchObject({ ok: true, data: { matched: true, title: 'Orders', url: 'http://127.0.0.1:5173/app' } });
+    expect(JSON.stringify(result)).not.toContain('document.body');
   });
 
   it("turns a sensitive-field response into a rejected operation", async () => {

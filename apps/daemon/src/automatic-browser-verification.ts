@@ -54,6 +54,7 @@ export type AutomaticBrowserVerificationResult = {
   error: string | null;
   interactionActions: string[];
   ok: boolean;
+  outcomeVerified: boolean;
   verifiedActions: string[];
 };
 
@@ -68,7 +69,9 @@ export async function runAutomaticBrowserVerification(options: {
   sessionId: string;
   startedAt: number;
   url: string;
+  expectedText?: string;
 }): Promise<AutomaticBrowserVerificationResult> {
+  const expectedText = options.expectedText?.trim();
   const input: DesktopBrowserAutomationInput = {
     action: 'batch',
     continueOnError: true,
@@ -77,6 +80,7 @@ export async function runAutomaticBrowserVerification(options: {
       { action: 'navigate', url: options.url },
       { action: 'page-info' },
       { action: 'snapshot' },
+      ...(expectedText ? [{ action: 'assert-text' as const, text: expectedText }] : []),
       { action: 'screenshot' },
     ],
   };
@@ -88,25 +92,54 @@ export async function runAutomaticBrowserVerification(options: {
       error: error instanceof Error ? error.message : String(error),
       interactionActions: [],
       ok: false,
+      outcomeVerified: false,
       verifiedActions: [],
     };
   }
   options.evidence.recordResult(input, result);
   const evidence = options.evidence.since(options.sessionId, options.startedAt);
-  const verifiedActions = REQUIRED_VERIFICATION_ACTIONS
-    .filter((action) => evidence.some((item) => item.action === action && item.ok));
+  const steps = (result.data as { results?: Array<{ action?: string; data?: unknown; error?: string; ok?: boolean }> } | null)?.results;
+  const completed = Array.isArray(steps) ? steps : [];
+  const matchesTargetRoute = (observed: unknown): boolean => {
+    if (typeof observed !== 'string') return false;
+    try {
+      const actual = new URL(observed);
+      const target = new URL(options.url);
+      const route = (url: URL) => url.pathname.replace(/\/+$/, '') || '/';
+      return actual.origin === target.origin && route(actual) === route(target);
+    } catch { return false; }
+  };
+  const validStep = (action: string): boolean => completed.some((step) => {
+    if (step.action !== action || step.ok !== true) return false;
+    const data = step.data as Record<string, unknown> | null;
+    if (!data || typeof data !== 'object') return false;
+    if (action === 'navigate') return matchesTargetRoute(data.url);
+    if (action === 'page-info') return matchesTargetRoute(data.url) && typeof data.title === 'string';
+    if (action === 'snapshot') return Array.isArray(data.elements) && matchesTargetRoute(data.url);
+    if (action === 'screenshot') return typeof data.dataUrl === 'string'
+      && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(data.dataUrl)
+      && typeof data.width === 'number' && data.width > 0
+      && typeof data.height === 'number' && data.height > 0 && matchesTargetRoute(data.url);
+    if (action === 'assert-text') return data.matched === true && matchesTargetRoute(data.url);
+    return false;
+  });
+  const verifiedActions = [...REQUIRED_VERIFICATION_ACTIONS, ...(expectedText ? ['assert-text' as const] : [])]
+    .filter(validStep);
   const interactionActions = Array.from(new Set(
     evidence.filter((item) => item.ok && INTERACTION_ACTIONS.has(item.action)).map((item) => item.action),
   ));
-  const failed = evidence.filter((item) =>
-    !item.ok && REQUIRED_VERIFICATION_ACTIONS.some((action) => action === item.action));
-  const ok = result.ok && verifiedActions.length === REQUIRED_VERIFICATION_ACTIONS.length;
+  const required = [...REQUIRED_VERIFICATION_ACTIONS, ...(expectedText ? ['assert-text' as const] : [])];
+  const failed = required.filter((action) => !verifiedActions.includes(action));
+  const ok = result.ok && failed.length === 0;
+  const stepError = completed.find((step) => failed.some((action) => action === step.action)
+    && step.ok === false && typeof step.error === 'string')?.error;
   return {
-    error: ok ? null : result.error ?? (failed.length > 0
-      ? `Failed browser actions: ${failed.map((item) => item.action).join(', ')}`
+    error: ok ? null : result.error ?? stepError ?? (failed.length > 0
+      ? `Browser evidence missing or invalid: ${failed.join(', ')}`
       : 'The approved browser tab did not complete the required verification actions.'),
     interactionActions,
     ok,
+    outcomeVerified: ok && Boolean(expectedText),
     verifiedActions,
   };
 }

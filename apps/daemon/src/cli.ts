@@ -394,6 +394,7 @@ function printBrowserHelp() {
   monofield browser page-info --session <id>
   monofield browser snapshot --session <id>
   monofield browser screenshot --session <id> --out <png-path>
+  monofield browser assert-text --session <id> --text <visible-page-text>
   monofield browser navigate --session <id> --url <same-origin-url>
   monofield browser click --session <id> --selector <css-selector>
   monofield browser hover --session <id> --selector <css-selector>
@@ -423,7 +424,7 @@ async function runBrowser(args) {
   }
   const aliases = { info: 'page-info', page_info: 'page-info', type: 'type-text', type_text: 'type-text' };
   const action = aliases[args[0]] || args[0];
-  const allowed = new Set(['status', 'page-info', 'snapshot', 'screenshot', 'navigate', 'click', 'hover', 'drag', 'type-text', 'upload', 'scroll', 'batch']);
+  const allowed = new Set(['status', 'page-info', 'snapshot', 'screenshot', 'assert-text', 'navigate', 'click', 'hover', 'drag', 'type-text', 'upload', 'scroll', 'batch']);
   if (!allowed.has(action)) {
     console.error(`unknown browser action: ${args[0]}`);
     printBrowserHelp();

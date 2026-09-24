@@ -3857,7 +3857,7 @@ export const ko: Dict = {
   'development.detectAgain': '실행 구성 다시 찾기',
   'development.database': '프로젝트 데이터베이스',
   'development.noDatabase': '프로젝트 DB 연결 안 함',
-  'development.autoVerifyHint': '켜면 브라우저 탭에서 한 번 승인한 뒤, 코드 변경 후 빌드·실제 화면·동작을 자동 검증합니다. 초록 점은 승인된 탭 연결 상태입니다.',
+  'development.autoVerifyHint': '켜면 승인된 브라우저 탭을 작업 후 다시 열어 화면을 확인합니다. 결과 확인 문구를 지정하면 실제 표시 여부도 검사합니다. 초록 점은 탭 연결 상태입니다.',
   'development.autoVerify': '자동 검증',
   'development.localApp': '로컬 앱',
   'development.configureRun': '실행 설정 편집',
