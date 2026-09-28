@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { renderMarkdownToSafeHtml } from '@open-design/contracts';
 
 import type {
   DesktopExportArtifactFormat,
@@ -27,7 +28,7 @@ export async function buildDesktopPdfExportInput(
     baseHref: rawBaseHref(options.daemonUrl, options.projectId, options.fileName),
     deck: options.deck === true,
     defaultFilename: `${safeFilename(title, 'artifact')}.pdf`,
-    html: file.buffer.toString('utf8'),
+    html: exportHtml(file.buffer.toString('utf8'), options.fileName),
     title,
   };
 }
@@ -54,12 +55,28 @@ export async function buildDesktopArtifactExportInput(
     baseHref: rawBaseHref(options.daemonUrl, options.projectId, options.fileName),
     deck: options.deck === true,
     format: options.format,
-    html: file.buffer.toString('utf8'),
+    html: exportHtml(file.buffer.toString('utf8'), options.fileName),
     title,
     ...(options.imageFormat ? { imageFormat: options.imageFormat } : {}),
     ...(options.width ? { width: options.width } : {}),
     ...(options.height ? { height: options.height } : {}),
   };
+}
+
+function exportHtml(content: string, fileName: string): string {
+  if (!/\.(md|markdown)$/i.test(fileName)) return content;
+  return `<!doctype html><html><head><meta charset="utf-8"><style>
+    @page { size: A4; margin: 18mm; }
+    body { font-family: Arial, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; font-size: 14px; line-height: 1.7; color: #171717; margin: 32px; overflow-wrap: anywhere; }
+    h1, h2, h3 { line-height: 1.3; break-after: avoid; }
+    h1 { font-size: 28px; } h2 { font-size: 21px; margin-top: 28px; }
+    table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+    th, td { border: 1px solid #ccc; padding: 9px 12px; text-align: left; }
+    th { background: #f3f3f3; } tr, pre, blockquote { break-inside: avoid; }
+    pre { white-space: pre-wrap; padding: 12px; background: #f5f5f5; }
+    blockquote { border-left: 3px solid #ccc; padding-left: 16px; margin-left: 0; }
+    @media print { body { margin: 0; } }
+  </style></head><body>${renderMarkdownToSafeHtml(content)}</body></html>`;
 }
 
 function displayTitle(title: string | undefined, fileName: string): string {
