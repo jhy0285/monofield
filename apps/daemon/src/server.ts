@@ -93,6 +93,7 @@ import {
   runAutomaticBrowserVerification,
 } from './automatic-browser-verification.js';
 import { verificationFingerprint } from './services/development-verification.js';
+import { saveBrowserVerificationArtifacts } from './services/browser-verification-artifacts.js';
 import {
   UPLOAD_DIR,
   composeLiveInstructionPrompt,
@@ -9703,6 +9704,8 @@ export async function startServer({
         && normalizedBrowserVerification
         && desktopBrowserAutomation
       ) {
+        const sourceFingerprint = cwd ? await verificationFingerprint(cwd) : null;
+        const verifiedAt = new Date().toISOString();
         const verification = await runAutomaticBrowserVerification({
           execute: desktopBrowserAutomation,
           evidence: browserVerificationEvidence,
@@ -9710,9 +9713,17 @@ export async function startServer({
           startedAt: automaticBrowserVerificationStartedAt,
           url: normalizedBrowserVerification.url,
           expectedText: normalizedBrowserVerification.expectedText,
+          persistEvidence: async (capture) => {
+            const currentFingerprint = cwd ? await verificationFingerprint(cwd) : null;
+            if (currentFingerprint !== sourceFingerprint) {
+              throw new Error('Project source changed during browser verification; run verification again.');
+            }
+            return saveBrowserVerificationArtifacts({
+              artifactsDir: ARTIFACTS_DIR, capture, sourceFingerprint, verifiedAt,
+              expectedText: normalizedBrowserVerification.expectedText,
+            });
+          },
         });
-        const sourceFingerprint = cwd ? await verificationFingerprint(cwd) : null;
-        const verifiedAt = new Date().toISOString();
         const korean = typeof locale === 'string' && locale.toLowerCase().startsWith('ko');
         const interaction = verification.interactionActions.length > 0
           ? verification.interactionActions.join(', ')
@@ -9732,7 +9743,10 @@ export async function startServer({
           ? (korean ? ` 검증 당시 소스 지문: ${sourceFingerprint.slice(0, 12)}.`
             : ` Source fingerprint at verification: ${sourceFingerprint.slice(0, 12)}.`)
           : (korean ? ' Git 소스 지문은 확인할 수 없습니다.' : ' Git source fingerprint is unavailable.');
-        send('agent', { type: 'text_delta', delta: delta + sourceNote });
+        const evidenceLinks = verification.artifacts
+          ? `\n\n[${korean ? '검증 화면' : 'Verification screenshot'}](${verification.artifacts.screenshotUrl}) · [${korean ? '검증 기록' : 'Verification report'}](${verification.artifacts.reportUrl})`
+          : '';
+        send('agent', { type: 'text_delta', delta: delta + sourceNote + evidenceLinks });
         send('diagnostic', {
           type: verification.ok
             ? (verification.outcomeVerified ? 'automatic_browser_outcome_verified' : 'automatic_browser_observed')

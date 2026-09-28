@@ -4,7 +4,7 @@ import type {
 } from '@open-design/sidecar-proto';
 
 const INTERACTION_ACTIONS = new Set(['click', 'drag', 'hover', 'scroll', 'type-text', 'upload']);
-const REQUIRED_VERIFICATION_ACTIONS = ['navigate', 'page-info', 'snapshot', 'screenshot'] as const;
+const REQUIRED_VERIFICATION_ACTIONS = ['page-info', 'snapshot', 'screenshot'] as const;
 const MAX_EVIDENCE_PER_SESSION = 100;
 const MAX_EVIDENCE_SESSIONS = 256;
 
@@ -56,12 +56,20 @@ export type AutomaticBrowserVerificationResult = {
   ok: boolean;
   outcomeVerified: boolean;
   verifiedActions: string[];
+  artifacts?: { screenshotUrl: string; reportUrl: string };
+};
+
+export type BrowserVerificationCapture = {
+  screenshot: { dataUrl: string; width: number; height: number; url: string };
+  snapshot: Record<string, unknown>;
+  result: AutomaticBrowserVerificationResult;
 };
 
 /**
  * Always performs an objective, read-only post-run pass in the approved tab.
  * The agent may additionally exercise task-specific interactions; those are
- * reported from the bounded evidence store instead of being assumed.
+ * reported from the bounded evidence store instead of being assumed. Never
+ * navigate here: reloading destroys transient results of those interactions.
  */
 export async function runAutomaticBrowserVerification(options: {
   execute: (input: DesktopBrowserAutomationInput) => Promise<DesktopBrowserAutomationResult>;
@@ -70,6 +78,7 @@ export async function runAutomaticBrowserVerification(options: {
   startedAt: number;
   url: string;
   expectedText?: string;
+  persistEvidence?: (capture: BrowserVerificationCapture) => Promise<NonNullable<AutomaticBrowserVerificationResult['artifacts']>>;
 }): Promise<AutomaticBrowserVerificationResult> {
   const expectedText = options.expectedText?.trim();
   const input: DesktopBrowserAutomationInput = {
@@ -77,10 +86,9 @@ export async function runAutomaticBrowserVerification(options: {
     continueOnError: true,
     sessionId: options.sessionId,
     steps: [
-      { action: 'navigate', url: options.url },
+      ...(expectedText ? [{ action: 'assert-text' as const, text: expectedText }] : []),
       { action: 'page-info' },
       { action: 'snapshot' },
-      ...(expectedText ? [{ action: 'assert-text' as const, text: expectedText }] : []),
       { action: 'screenshot' },
     ],
   };
@@ -94,6 +102,12 @@ export async function runAutomaticBrowserVerification(options: {
       ok: false,
       outcomeVerified: false,
       verifiedActions: [],
+    };
+  }
+  if (result.sessionId !== options.sessionId || result.action !== 'batch') {
+    return {
+      error: 'Browser evidence does not belong to the requested session and batch.',
+      interactionActions: [], ok: false, outcomeVerified: false, verifiedActions: [],
     };
   }
   options.evidence.recordResult(input, result);
@@ -113,7 +127,6 @@ export async function runAutomaticBrowserVerification(options: {
     if (step.action !== action || step.ok !== true) return false;
     const data = step.data as Record<string, unknown> | null;
     if (!data || typeof data !== 'object') return false;
-    if (action === 'navigate') return matchesTargetRoute(data.url);
     if (action === 'page-info') return matchesTargetRoute(data.url) && typeof data.title === 'string';
     if (action === 'snapshot') return Array.isArray(data.elements) && matchesTargetRoute(data.url);
     if (action === 'screenshot') return typeof data.dataUrl === 'string'
@@ -133,7 +146,7 @@ export async function runAutomaticBrowserVerification(options: {
   const ok = result.ok && failed.length === 0;
   const stepError = completed.find((step) => failed.some((action) => action === step.action)
     && step.ok === false && typeof step.error === 'string')?.error;
-  return {
+  const verification: AutomaticBrowserVerificationResult = {
     error: ok ? null : result.error ?? stepError ?? (failed.length > 0
       ? `Browser evidence missing or invalid: ${failed.join(', ')}`
       : 'The approved browser tab did not complete the required verification actions.'),
@@ -142,4 +155,18 @@ export async function runAutomaticBrowserVerification(options: {
     outcomeVerified: ok && Boolean(expectedText),
     verifiedActions,
   };
+  if (options.persistEvidence && validStep('screenshot') && validStep('snapshot')) {
+    try {
+      verification.artifacts = await options.persistEvidence({
+        screenshot: completed.find((step) => step.action === 'screenshot' && step.ok)?.data as BrowserVerificationCapture['screenshot'],
+        snapshot: completed.find((step) => step.action === 'snapshot' && step.ok)?.data as Record<string, unknown>,
+        result: { ...verification },
+      });
+    } catch (error) {
+      verification.ok = false;
+      verification.outcomeVerified = false;
+      verification.error = `Browser evidence could not be saved: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  }
+  return verification;
 }
