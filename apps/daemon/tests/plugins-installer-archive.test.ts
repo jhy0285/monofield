@@ -16,9 +16,10 @@ import path from 'node:path';
 import url from 'node:url';
 import { createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
-import { mkdtemp, rm, writeFile, mkdir, symlink, readdir, readFile } from 'node:fs/promises';
+import { gzipSync, gunzipSync } from 'node:zlib';
+import { mkdtemp, rm, writeFile, mkdir, readdir, readFile } from 'node:fs/promises';
 import Database from 'better-sqlite3';
-import { c as tarCreate } from 'tar';
+import { c as tarCreate, Header } from 'tar';
 import { migratePlugins } from '../src/plugins/persistence.js';
 import { installPlugin, type ArchiveFetcher } from '../src/plugins/installer.js';
 
@@ -47,9 +48,6 @@ async function buildFixtureTarball(args: {
     const data = await fs.promises.readFile(path.join(fixtureSrc, entry));
     await writeFile(path.join(pluginRoot, entry), data);
   }
-  if (args.withSymlink) {
-    await symlink('SKILL.md', path.join(pluginRoot, 'symlink-here'));
-  }
   if (args.bigPaddingBytes) {
     const buf = Buffer.alloc(args.bigPaddingBytes, 0);
     await writeFile(path.join(pluginRoot, 'huge.bin'), buf);
@@ -61,7 +59,17 @@ async function buildFixtureTarball(args: {
   const chunks: Buffer[] = [];
   for await (const chunk of stream) chunks.push(Buffer.from(chunk as Buffer));
   await rm(tmp, { recursive: true, force: true });
-  return Buffer.concat(chunks);
+  const tarball = Buffer.concat(chunks);
+  if (!args.withSymlink) return tarball;
+  // Encode the archive entry directly so the rejection test also runs on
+  // Windows accounts without filesystem symlink privileges.
+  const header = new Header({
+    path: path.posix.join(args.rootPrefix, args.pluginSubpath ?? '', 'symlink-here'),
+    type: 'SymbolicLink', linkpath: 'SKILL.md', mode: 0o777, size: 0,
+  });
+  header.encode();
+  if (!header.block) throw new Error('Failed to encode the symlink fixture');
+  return gzipSync(Buffer.concat([header.block, gunzipSync(tarball)]));
 }
 
 function makeFetcher(buf: Buffer): ArchiveFetcher {
@@ -373,7 +381,7 @@ describe('archive installer', () => {
     const tarball = await buildFixtureTarball({ rootPrefix: 'sample-plugin-1.0.0' });
     const integrity = `sha256:${createHash('sha256').update(tarball).digest('hex')}`;
     const policy = {
-      allowedVisibilities: ['enterprise'] as const,
+      allowedVisibilities: ['enterprise' as const],
       allowedHosts: ['packages.company.example'],
       allowedLicenses: ['Apache-2.0'],
       requireHttps: true,

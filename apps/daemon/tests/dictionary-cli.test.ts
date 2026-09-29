@@ -10,7 +10,7 @@ afterEach(() => {
 
 describe('dictionary CLI', () => {
   it('attaches the latest global dictionary version to a project by default', async () => {
-    const fetchMock = vi.fn(async (url: string) => {
+    const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => {
       if (url.endsWith('/api/dictionaries/dictionary-1')) {
         return new Response(JSON.stringify({ dictionary: { latestVersion: { id: 'version-2' } } }), { status: 200 });
       }

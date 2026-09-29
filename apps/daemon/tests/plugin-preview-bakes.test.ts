@@ -28,17 +28,17 @@ describe('plugin preview bake resolution', () => {
       },
     }));
 
-    const records = applyBakedPreviews([
+    const records = applyBakedPreviews<{ id: string; manifest: { od: { bakedPreview?: { video: string; poster: string } } } }>([
       { id: 'local', manifest: { od: {} } },
       { id: 'remote', manifest: { od: {} } },
-    ], dir) as Array<{ manifest: { od: { bakedPreview: { video: string; poster: string } } } }>;
+    ], dir);
 
     expect(records[0]?.manifest.od.bakedPreview).toMatchObject({
       video: `${PLUGIN_PREVIEWS_ROUTE}/local.mp4`,
       poster: `${PLUGIN_PREVIEWS_ROUTE}/local.jpg`,
       holdMs: 500,
     });
-    expect(records[1]?.manifest.od.bakedPreview.video).toBe(
+    expect(records[1]?.manifest.od.bakedPreview?.video).toBe(
       'https://repo-assets.open-design.ai/plugin-previews/remote.mp4',
     );
   });

@@ -86,6 +86,7 @@ export function createChatRunService({
       error: null,
       errorCode: null,
       cancelRequested: false,
+      artifactDeliveryRequired: false,
       retryRestartTimer: null,
       stdinOpen: false,
       eventsLogPath: runsLogDir ? path.join(runsLogDir, id, 'events.jsonl') : null,

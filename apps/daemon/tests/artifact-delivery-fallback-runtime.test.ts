@@ -88,6 +88,7 @@ describe('host-owned artifact fallback runtime', { timeout: 120_000 }, () => {
           projectId: string | null;
         });
       expect(attempts).toHaveLength(1);
+      if (!attempts[0]) throw new Error('Expected one fallback attempt');
       expect(attempts[0].stdin).toContain('# API mode — no tools available');
       expect(attempts[0].stdin).toContain('## Text-artifact handoff');
       expect(attempts[0].stdin).not.toContain('## Filesystem handoff');

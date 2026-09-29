@@ -866,7 +866,11 @@ export async function writeProjectFile(
   projectId,
   name,
   body,
-  { overwrite = true, artifactManifest = null, expectedContentSha256 = null } = {},
+  { overwrite = true, artifactManifest = null, expectedContentSha256 = null }: {
+    overwrite?: boolean;
+    artifactManifest?: unknown;
+    expectedContentSha256?: string | null;
+  } = {},
   metadata?,
 ) {
   const dir = await ensureProject(projectsRoot, projectId, metadata);

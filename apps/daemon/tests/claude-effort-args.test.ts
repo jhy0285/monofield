@@ -17,7 +17,7 @@ const MODELS = [
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 
 function build(model: string, reasoning?: string): string[] {
-  return claudeAgentDef.buildArgs('prompt', [], [], { model, reasoning }, {});
+  return claudeAgentDef.buildArgs('prompt', [], [], { model, ...(reasoning === undefined ? {} : { reasoning }) }, {});
 }
 
 describe('claude buildArgs --effort wiring', () => {
