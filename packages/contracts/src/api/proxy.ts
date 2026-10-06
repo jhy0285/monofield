@@ -26,6 +26,8 @@ export interface ProxyMessage {
 }
 
 export interface ProxyStreamRequest extends ReasoningExecutionRequestFields {
+  /** Official GPT-5/reasoning models default to Responses; compatible providers retain chat completions. */
+  apiFormat?: 'responses' | 'chat-completions';
   baseUrl: string;
   apiKey: string;
   model: string;

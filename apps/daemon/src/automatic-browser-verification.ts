@@ -93,12 +93,16 @@ export async function runAutomaticBrowserVerification(options: {
   }
   options.evidence.recordResult(input, result);
   const evidence = options.evidence.since(options.sessionId, options.startedAt);
+  const currentPass = new BrowserVerificationEvidenceStore();
+  currentPass.recordResult(input, result);
+  const finalEvidence = currentPass.since(options.sessionId, 0);
   const verifiedActions = REQUIRED_VERIFICATION_ACTIONS
-    .filter((action) => evidence.some((item) => item.action === action && item.ok));
+    .filter((action) => finalEvidence.some((item) => item.action === action && item.ok)
+      && !finalEvidence.some((item) => item.action === action && !item.ok));
   const interactionActions = Array.from(new Set(
     evidence.filter((item) => item.ok && INTERACTION_ACTIONS.has(item.action)).map((item) => item.action),
   ));
-  const failed = evidence.filter((item) =>
+  const failed = finalEvidence.filter((item) =>
     !item.ok && REQUIRED_VERIFICATION_ACTIONS.some((action) => action === item.action));
   const ok = result.ok && verifiedActions.length === REQUIRED_VERIFICATION_ACTIONS.length;
   return {

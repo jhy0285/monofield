@@ -163,7 +163,7 @@ describe('probe (issue #658) — ghost CLI after the binary is uninstalled', () 
     expect(codex?.version).toBe('codex 1.2.3');
   });
 
-  it('honors Trae CLI adapter-specific version probe timeout', async () => {
+  it('honors adapter-specific version probe timeouts', async () => {
     execAgentFileMock.mockResolvedValue({ stdout: 'agent 1.2.3\n', stderr: '' });
     resolveAgentLaunchMock.mockImplementation((def: { id: string }) => ({
       configuredOverridePath: null,
@@ -187,6 +187,15 @@ describe('probe (issue #658) — ghost CLI after the binary is uninstalled', () 
 
     expect(traeVersionCall).toBeDefined();
     expect(traeVersionCall?.[2]).toMatchObject({ timeout: 10_000 });
+
+    const codexVersionCall = execAgentFileMock.mock.calls.find(
+      ([command, args]) => command === '/fake/bin/codex' && args.join('\0') === '--version',
+    );
+    const claudeVersionCall = execAgentFileMock.mock.calls.find(
+      ([command, args]) => command === '/fake/bin/claude' && args.join('\0') === '--version',
+    );
+    expect(codexVersionCall?.[2]).toMatchObject({ timeout: 10_000 });
+    expect(claudeVersionCall?.[2]).toMatchObject({ timeout: 20_000 });
   });
 
   it('keeps the default version probe timeout for other runtimes', async () => {
@@ -204,15 +213,15 @@ describe('probe (issue #658) — ghost CLI after the binary is uninstalled', () 
 
     await detectAgents();
 
-    const codexVersionCall = execAgentFileMock.mock.calls.find(
+    const qwenVersionCall = execAgentFileMock.mock.calls.find(
       ([command, args]) =>
-        command === '/fake/bin/codex' &&
+        command === '/fake/bin/qwen' &&
         Array.isArray(args) &&
         args.join('\0') === '--version',
     );
 
-    expect(codexVersionCall).toBeDefined();
-    expect(codexVersionCall?.[2]).toMatchObject({ timeout: 3000 });
+    expect(qwenVersionCall).toBeDefined();
+    expect(qwenVersionCall?.[2]).toMatchObject({ timeout: 10_000 });
   });
 
   it('reports missing Trae CLI as unavailable without breaking full detection', async () => {

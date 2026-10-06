@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import { join } from "node:path";
 
@@ -55,6 +55,7 @@ export type DatabaseWritePolicy = 'disabled' | 'approve-each' | 'always';
 
 export type DatabaseBrokerRequest =
   | { action: "list" }
+  | { action: "schema-snapshot"; connectionId: string; background: boolean }
   | { action: "schemas"; connectionId: string; selectedByUser?: boolean }
   | { action: "describe"; connectionId: string; schema: string; table: string }
   | { action: "sample"; connectionId: string; schema: string; table: string; limit?: number }
@@ -360,8 +361,12 @@ export class DatabaseBroker {
     if (request.action === 'list') return true;
     if (request.action === 'mutate') return await this.approveMutation(connection, request);
     if (connection.readApproval === 'always') return true;
+    // Background polling must never open approval dialogs or silently expand access.
+    if (request.action === 'schema-snapshot' && request.background) return false;
     const detail = request.action === "schemas"
       ? "Read database schemas and table names."
+      : request.action === 'schema-snapshot'
+        ? 'Read database table and column metadata without row values.'
       : request.action === "describe"
         ? `Read column metadata for ${request.schema}.${request.table}.`
         : request.action === "inspect"
@@ -458,6 +463,7 @@ export class DatabaseBroker {
     });
     try {
       await client.connect();
+
       await client.query('BEGIN');
       await client.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
       await client.query("SET LOCAL statement_timeout = '10s'");
@@ -540,6 +546,36 @@ export class DatabaseBroker {
     });
     try {
       await client.connect();
+      if (request.action === 'schema-snapshot') {
+        // One statement sees a consistent catalogue snapshot. Full PostgreSQL
+        // type modifiers detect varchar/numeric size changes too; no rows or
+        // default expressions (which can contain secrets) leave the broker.
+        const result = await client.query<{
+          schema: string; table: string; name: string | null; type: string | null; nullable: string; structureSignature?: unknown;
+        }>(`SELECT n.nspname AS schema, c.relname AS table, a.attname AS name,
+          pg_catalog.format_type(a.atttypid, a.atttypmod) AS type,
+          CASE WHEN a.attnotnull THEN 'NO' ELSE 'YES' END AS nullable,
+          jsonb_build_object(
+            'constraints', (SELECT jsonb_agg(jsonb_build_array(con.conname, pg_catalog.pg_get_constraintdef(con.oid, true)) ORDER BY con.conname) FROM pg_catalog.pg_constraint con WHERE con.conrelid = c.oid),
+            'indexes', (SELECT jsonb_agg(pg_catalog.pg_get_indexdef(idx.indexrelid) ORDER BY idx.indexrelid::regclass::text) FROM pg_catalog.pg_index idx WHERE idx.indrelid = c.oid),
+            'defaults', (SELECT jsonb_agg(jsonb_build_array(d.adnum, pg_catalog.pg_get_expr(d.adbin, d.adrelid)) ORDER BY d.adnum) FROM pg_catalog.pg_attrdef d WHERE d.adrelid = c.oid)
+          ) AS "structureSignature"
+          FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+          LEFT JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+          WHERE c.relkind IN ('r', 'p') AND n.nspname <> 'information_schema' AND n.nspname NOT LIKE 'pg_%'
+            AND pg_catalog.has_table_privilege(c.oid, 'SELECT')
+          ORDER BY n.nspname, c.relname, a.attnum LIMIT 50001`);
+        if (result.rows.length > 50000) throw new Error('Database schema exceeds the 50000 column monitoring limit');
+        const tables = new Map<string, { schema: string; table: string; columns: Array<{ name: string; type: string; nullable: string }>; structureSha256?: string }>();
+        for (const row of result.rows) {
+          const key = JSON.stringify([row.schema, row.table]);
+          const table = tables.get(key) ?? { schema: row.schema, table: row.table, columns: [] };
+          if (row.structureSignature !== undefined && !table.structureSha256) table.structureSha256 = createHash('sha256').update(JSON.stringify(row.structureSignature)).digest('hex');
+          if (row.name !== null && row.type !== null) table.columns.push({ name: row.name, type: row.type, nullable: row.nullable });
+          tables.set(key, table);
+        }
+        return { tables: [...tables.values()] };
+      }
       if (request.action === "schemas") {
         const result = await client.query<{ schema: string; table: string }>(
           "SELECT table_schema AS schema, table_name AS table FROM information_schema.tables WHERE table_type = 'BASE TABLE' AND table_schema NOT IN ('information_schema', 'pg_catalog') ORDER BY table_schema, table_name",

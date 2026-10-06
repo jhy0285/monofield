@@ -10,7 +10,42 @@ describe('buildProxyMessages', () => {
     vi.unstubAllGlobals();
   });
 
-  it('serializes image attachments as Anthropic image content blocks', async () => {
+  it('sends repeated identical images once while preserving each later reference and message', async () => {
+    const pngBytes = new Uint8Array([137, 80, 78, 71]);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true,
+      headers: { get: () => 'image/png' }, arrayBuffer: async () => pngBytes.buffer,
+    }));
+    const image = { path: 'screen.png', name: 'screen.png', kind: 'image' as const, size: 4 };
+    const messages = await buildProxyMessages('/api/proxy/openai/stream', [
+      userMessage('Explain this screen', [image]),
+      userMessage('Use the same screen to check the next change', [image]),
+    ], { projectId: 'project-1' });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const blocks = messages.flatMap((message) => typeof message.content === 'string' ? [] : message.content);
+    expect(blocks.filter((block) => block.type === 'image')).toHaveLength(1);
+    expect(messages[1]?.content).toEqual(expect.arrayContaining([
+      { type: 'text', text: 'Use the same screen to check the next change' },
+      { type: 'text', text: 'Image 1 (screen.png, screen.png): identical to image 1 in user message 1 above.' },
+    ]));
+  });
+
+  it('keeps distinct images even when the file names match', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => ({ ok: true,
+      headers: { get: () => 'image/png' },
+      arrayBuffer: async () => new Uint8Array(url.includes('before/') ? [1, 2] : [3, 4]).buffer,
+    })));
+    const messages = await buildProxyMessages('/api/proxy/anthropic/stream', [
+      userMessage('Compare these', [
+        { path: 'before/screen.png', name: 'screen.png', kind: 'image', size: 2 },
+        { path: 'after/screen.png', name: 'screen.png', kind: 'image', size: 2 },
+      ]),
+    ], { projectId: 'project-1' });
+    const content = messages[0]!.content;
+    expect(typeof content).not.toBe('string');
+    if (typeof content !== 'string') expect(content.filter((block) => block.type === 'image')).toHaveLength(2);
+  });
+
+  it.each(['/api/proxy/anthropic/stream', '/api/proxy/openai/stream'])('serializes image attachments for %s', async (endpoint) => {
     const pngBytes = new Uint8Array([137, 80, 78, 71]);
     vi.stubGlobal(
       'fetch',
@@ -24,7 +59,7 @@ describe('buildProxyMessages', () => {
     );
 
     const messages = await buildProxyMessages(
-      '/api/proxy/anthropic/stream',
+      endpoint,
       [
         userMessage('Describe the attached image', [
           { path: 'references/logo.png', name: 'logo.png', kind: 'image', size: 4 },
@@ -91,11 +126,11 @@ describe('buildProxyMessages', () => {
     );
   });
 
-  it('keeps non-Anthropic proxy messages as plain text', async () => {
+  it('keeps other proxy protocols as plain text', async () => {
     vi.stubGlobal('fetch', vi.fn());
 
     const messages = await buildProxyMessages(
-      '/api/proxy/openai/stream',
+      '/api/proxy/azure/stream',
       [
         userMessage('Describe the attached image', [
           { path: 'references/logo.png', name: 'logo.png', kind: 'image', size: 4 },

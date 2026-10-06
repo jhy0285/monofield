@@ -1,0 +1,42 @@
+.root {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 0 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font: 11px/1 var(--sans);
+  z-index: 130;
+}
+.identity { flex: 0 0 auto; }
+.root :global(.entry-updater-menu) { position: relative; }
+.root :global(.entry-updater-menu__button) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  height: 28px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-strong);
+  font-size: 11px;
+  animation: none;
+}
+.root :global(.entry-updater-menu__button)::before,
+.root :global(.entry-updater-menu__button)::after,
+.root :global(.entry-updater-menu__glyph)::before { display: none; }
+.root :global(.entry-updater-menu__button):hover { background: var(--control-hover); box-shadow: none; }
+.root :global(.entry-updater-menu__glyph) { width: 16px; height: 16px; }
+.root :global(.updater-popup) {
+  inset: auto auto calc(100% + 8px) 0;
+  width: min(360px, calc(100vw - 24px));
+  max-height: calc(100vh - 72px);
+  overflow: auto;
+}
+[dir='rtl'] .root :global(.updater-popup) { inset-inline-start: 0; inset-inline-end: auto; }

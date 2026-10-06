@@ -13,6 +13,12 @@ const TITLE_OPEN_TAG = '<od-title>';
 const TITLE_CLOSE_TAG = '</od-title>';
 const DEFAULT_TITLE_MARKER_SCAN_LIMIT = 512;
 
+/** Native coding sessions do not need an extra model task to label the conversation. */
+export function localConversationTitle(prompt: string): string {
+  const firstLine = prompt.split(/\r?\n/).find((line) => line.trim()) ?? '';
+  return sanitizeAgentGeneratedTitle(firstLine).split(/\s+/).slice(0, 8).join(' ');
+}
+
 export function sanitizeAgentGeneratedTitle(value: unknown): string {
   if (typeof value !== 'string') return '';
   return value

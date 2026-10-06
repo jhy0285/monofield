@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import type {
-  AutomationCompressionReport,
   AutomationContentPacket,
   AutomationOutputSink,
   AutomationProvenanceRef,
@@ -16,6 +15,7 @@ import type {
   MemoryType,
 } from '@open-design/contracts';
 
+import { compactAutomationContext } from './services/automation-context.js';
 import { createAutomationProposal } from './automation-proposals.js';
 import { getAnyAutomationTemplate } from './automation-templates.js';
 
@@ -176,65 +176,6 @@ function firstLineTitle(body: string): string {
     .map((item) => item.replace(/^#+\s*/, '').trim())
     .find(Boolean);
   return line ? line.slice(0, 100) : '';
-}
-
-function compactMarkdown(
-  body: string,
-  mode: AutomationTokenCompressionMode,
-  packetId: string,
-): { body: string; report: AutomationCompressionReport } {
-  const beforeTokens = estimateTokens(body);
-  if (mode === 'off') {
-    return {
-      body,
-      report: {
-        mode,
-        status: 'skipped',
-        beforeTokens,
-        afterTokens: beforeTokens,
-        summary: 'Token compression disabled for this ingestion.',
-        preservedSourcePacketId: packetId,
-      },
-    };
-  }
-
-  const maxChars = mode === 'aggressive' ? 1_600 : 3_200;
-  if (body.length <= maxChars) {
-    return {
-      body,
-      report: {
-        mode,
-        status: 'skipped',
-        beforeTokens,
-        afterTokens: beforeTokens,
-        summary: 'Source packet was already below the compression threshold.',
-        preservedSourcePacketId: packetId,
-      },
-    };
-  }
-
-  const head = body.slice(0, maxChars).trimEnd();
-  const omittedTokens = estimateTokens(body.slice(maxChars));
-  const compressed = [
-    head,
-    '',
-    `> Automation compression preserved the original packet (${packetId}) and omitted roughly ${omittedTokens} tokens from this proposal preview.`,
-  ].join('\n');
-  const afterTokens = estimateTokens(compressed);
-  return {
-    body: compressed,
-    report: {
-      mode,
-      status: 'applied',
-      beforeTokens,
-      afterTokens,
-      summary:
-        mode === 'aggressive'
-          ? 'Kept the leading durable context and preserved the full source packet for audit.'
-          : 'Trimmed oversized source context while preserving provenance to the full packet.',
-      preservedSourcePacketId: packetId,
-    },
-  };
 }
 
 function buildProvenance(input: {
@@ -400,7 +341,7 @@ export async function ingestAutomationSource(
     : input.connectorId
       ? [`connector:${input.connectorId}`]
       : [];
-  const { body: proposalBody, report } = compactMarkdown(bodyMarkdown, tokenCompression, packetId);
+  const { body: proposalBody, report } = compactAutomationContext(bodyMarkdown, tokenCompression, packetId);
   const originalTokens = estimateTokens(bodyMarkdown);
   const provenanceInput: {
     sourceKind: AutomationSourceKind;

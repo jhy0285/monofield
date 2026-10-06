@@ -47,23 +47,24 @@ describe('development run configuration detection', () => {
   });
 
   it('includes the normalized workspace and process cwd in the Desktop process identity', () => {
+    const workspace = path.join(os.tmpdir(), 'work');
     const first = desktopDevelopmentProcessKey(
       'project-folder-switch',
       '.',
-      'C:\\work\\workspace-a',
-      'C:\\work\\workspace-a\\server',
+      path.join(workspace, 'workspace-a'),
+      path.join(workspace, 'workspace-a', 'server'),
     );
     const equivalent = desktopDevelopmentProcessKey(
       'project-folder-switch',
       '.',
-      'C:\\work\\workspace-a\\.',
-      'C:\\work\\workspace-a\\server\\.',
+      `${path.join(workspace, 'workspace-a')}${path.sep}.`,
+      `${path.join(workspace, 'workspace-a', 'server')}${path.sep}.`,
     );
     const second = desktopDevelopmentProcessKey(
       'project-folder-switch',
       '.',
-      'C:\\work\\workspace-b',
-      'C:\\work\\workspace-b\\server',
+      path.join(workspace, 'workspace-b'),
+      path.join(workspace, 'workspace-b', 'server'),
     );
 
     expect(first).toBe(equivalent);
@@ -722,7 +723,45 @@ describe('development run configuration detection', () => {
     expect(result.configs.find((config) => config.id === result.recommendedConfigId)?.profile).toBe('local');
   });
 
-  it('returns a starting server immediately and lets the user stop it before readiness', async () => {
+  it.each([
+    { explicit: true, name: 'preserves an explicit readiness path when the server logs its root URL' },
+    { explicit: false, name: 'ignores a log URL on a port outside the selected server configuration' },
+  ])('$name', async ({ explicit }) => {
+    const reservation = net.createServer();
+    await new Promise<void>((resolve) => reservation.listen(0, '127.0.0.1', resolve));
+    const address = reservation.address();
+    if (!address || typeof address === 'string') throw new Error('Expected a TCP address');
+    const port = address.port;
+    await new Promise<void>((resolve) => reservation.close(() => resolve()));
+    const root = await temporaryRoot();
+    await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ scripts: { dev: `node server.cjs --port ${port}` } }));
+    await fs.writeFile(path.join(root, 'server.cjs'), `
+      const http = require('node:http');
+      http.createServer((req, res) => { res.end('ready'); }).listen(Number(process.env.PORT), '127.0.0.1', () => {
+        console.log('Server ready at http://127.0.0.1:' + ${explicit ? 'process.env.PORT' : '1'});
+      });
+    `);
+    const detected = await detectDevelopmentRunConfigs(root);
+    const service = new DevelopmentServerService();
+    const projectId = `project-readiness-${explicit}`;
+    const expectedUrl = `http://127.0.0.1:${port}${explicit ? '/api/health' : ''}`;
+    try {
+      await service.start(projectId, root, detected.configs[0]!.id, '.', {
+        port,
+        ...(explicit ? { url: expectedUrl } : {}),
+      });
+      await vi.waitFor(() => {
+        const status = service.status(projectId);
+        expect(status.logs.some((line) => line.includes('Server ready at'))).toBe(true);
+        expect(status.url).toBe(expectedUrl);
+        expect(status.state).toBe('ready');
+      }, { timeout: 5_000, interval: 100 });
+    } finally {
+      await service.stop(projectId);
+    }
+  });
+
+  it.runIf(process.platform === 'win32')('returns a starting desktop-managed server immediately and lets the user stop it before readiness', async () => {
     const root = await temporaryRoot();
     await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({
       scripts: { dev: 'node server.js --port 63991' },
@@ -785,7 +824,7 @@ describe('development run configuration detection', () => {
     expect(failed).toMatchObject({ state: 'failed', error: 'Development server exited (1)' });
   });
 
-  it('keeps sibling module servers independent when their generated config ids match', async () => {
+  it.runIf(process.platform === 'win32')('keeps desktop-managed sibling module servers independent when their generated config ids match', async () => {
     const root = await temporaryRoot();
     for (const moduleName of ['service-a', 'service-b']) {
       const moduleRoot = path.join(root, moduleName);

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DocumentEvidenceSchema, DocumentReviewStatusSchema } from './evidence.js';
 
 /**
  * interface-spec document contract (v1).
@@ -28,6 +29,9 @@ export type InterfaceRequiredFlag = z.infer<typeof InterfaceRequiredFlagSchema>;
  * (e.g. `result.items.id` with parent `result.items`, depth 2).
  */
 export const InterfaceFieldSpecSchema = z.object({
+  evidence: z.string().optional(),
+  evidenceRefs: z.array(DocumentEvidenceSchema).optional(),
+  reviewStatus: DocumentReviewStatusSchema.optional(),
   /** Field name as it appears in code (English). */
   nameEn: z.string().min(1),
   /** Korean field label. Renderers fall back to `nameEn` when blank. */
@@ -91,6 +95,7 @@ export type InterfaceAuthScheme = z.infer<typeof InterfaceAuthSchemeSchema>;
  * handler, ...) onto the same shape.
  */
 export const InterfaceEndpointSchema = z.object({
+  evidenceRefs: z.array(DocumentEvidenceSchema).optional(),
   /** HTTP method or channel-specific verb, uppercase (GET, POST, PUBLISH, ...). */
   method: z.string().min(1),
   /** URL path or logical address. `method + path` must be unique per document. */
@@ -171,6 +176,7 @@ export type InterfaceSpecTemplatePreset = z.infer<typeof InterfaceSpecTemplatePr
 
 /** Provenance of the collected endpoints. */
 export const InterfaceSpecSourceSchema = z.object({
+  revision: z.string().optional(),
   codebaseName: z.string().min(1),
   codebasePath: z.string().default(''),
   language: z.string().default(''),
@@ -233,6 +239,8 @@ export const InterfaceSpecManualFieldDraftSchema = z.object({
   note: z.string().default(''),
   suggested: z.boolean().optional(),
   evidence: z.string().default(''),
+  evidenceRefs: z.array(DocumentEvidenceSchema).optional(),
+  reviewStatus: DocumentReviewStatusSchema.optional(),
 });
 
 export const InterfaceSpecManualEndpointDraftSchema = z.object({
@@ -338,6 +346,9 @@ export function createInterfaceSpecDocumentFromManualDraft(
         maxSize: field.maxSize,
         required: field.required,
         note: field.note,
+        evidence: field.evidence,
+        evidenceRefs: field.evidenceRefs,
+        reviewStatus: field.reviewStatus === 'edited' ? 'edited' : 'accepted',
       })),
       responseFields: (endpoint.responseMode === 'none' ? [] : endpoint.responseFields).map((field) => ({
         nameEn: field.nameEn,
@@ -347,6 +358,9 @@ export function createInterfaceSpecDocumentFromManualDraft(
         maxSize: field.maxSize,
         required: field.required,
         note: field.note,
+        evidence: field.evidence,
+        evidenceRefs: field.evidenceRefs,
+        reviewStatus: field.reviewStatus === 'edited' ? 'edited' : 'accepted',
       })),
     })),
   });

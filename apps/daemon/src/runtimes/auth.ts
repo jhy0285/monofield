@@ -284,6 +284,9 @@ export function classifyAgentServiceFailure(
 ): AgentServiceFailureCode | null {
   const value = String(text || '');
   if (!value.trim()) return null;
+  if (/no auth type is selected|no api key (?:found|configured|set)|no api keys were provided|missing api key for \S+ provider|(?:you )?need to sign in to use/i.test(value)) {
+    return 'AGENT_AUTH_REQUIRED';
+  }
   if (AGENT_AUTH_FAILURE_RE.test(value)) return 'AGENT_AUTH_REQUIRED';
   if (AGENT_RATE_FAILURE_RE.test(value)) return 'RATE_LIMITED';
   if (AGENT_UPSTREAM_FAILURE_RE.test(value)) return 'UPSTREAM_UNAVAILABLE';

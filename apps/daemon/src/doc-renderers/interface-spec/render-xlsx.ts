@@ -7,6 +7,7 @@ import type {
   InterfaceSpecDocument,
 } from '@open-design/contracts';
 import { validateInterfaceSpecDocument } from '@open-design/contracts';
+import { interfaceEvidenceRows } from './evidence.js';
 import {
   ACTION_PREFIXES,
   COVER_SHEET_LAYOUT,
@@ -973,6 +974,17 @@ export async function renderInterfaceSpecXlsx(
 
   applyCoverSheetPreset(coverWs, theme);
   applyListSheetPreset(listWs, theme);
+
+  const evidenceRows = interfaceEvidenceRows(doc);
+  if (evidenceRows.length) {
+    const evidence = wb.addWorksheet('문서 근거');
+    evidence.addRow(['인터페이스', '구분', '필드', '근거 유형', '출처', '행', '리비전', 'SHA-256', '설명', '검토', '심볼', '수집 시각']);
+    for (const row of evidenceRows) evidence.addRow(row);
+    evidence.getRow(1).font = { bold: true };
+    evidence.columns.forEach((column, index) => { column.width = [24, 14, 24, 16, 44, 8, 18, 22, 48, 18][index] ?? 20; });
+    evidence.views = [{ state: 'frozen', ySplit: 1 }];
+    evidence.autoFilter = { from: 'A1', to: `L${evidenceRows.length + 1}` };
+  }
 
   const buffer = await convertSheetLinksToInternal(Buffer.from(await wb.xlsx.writeBuffer()));
   return {

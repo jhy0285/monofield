@@ -36,6 +36,7 @@ import { DISCOVERY_AND_PHILOSOPHY } from './discovery.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
 import { MEDIA_GENERATION_CONTRACT } from './media-contract.js';
 import { DATABASE_DEVELOPMENT_CONTEXT } from './database-development.js';
+import { renderLeanMemoryContext } from './memory-context.js';
 
 export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
 const ELEVENLABS_VOICE_PROMPT_OPTION_LIMIT = 100;
@@ -389,6 +390,7 @@ export function composeSystemPrompt({
   // than the active design system.
   if (memoryBody && memoryBody.trim().length > 0) {
     parts.push(
+      isLeanResponseMode ? renderLeanMemoryContext(memoryBody) :
       `\n\n## Personal memory (auto-extracted from past chats)\n\nThe following facts have been sedimented from this user's previous conversations and edited in the settings panel. Treat them as preferences and context, NOT hard rules: when they collide with the active design system tokens, the brand wins; when they collide with the active skill's workflow, the skill wins. They are still authoritative for tone, voice, terminology, and what the user already told you about themselves and their goals — never re-ask the user about something already captured here.\n\nUse memory as a task-intent gateway. When the user's request is short or underspecified, silently expand it into an internal task brief before acting: infer the task type, user/profile background, project/artifact context, delivery preferences, known feedback meanings, constraints, and validation/finish line. Proceed from that richer brief so the user does not need to repeat setup. Ask a clarifying question only when a critical target, permission, or conflict cannot be resolved from the current request plus memory. Do not dump the full internal brief unless the user asks to inspect it. Expanding intent this way changes only WHAT you know going in; it never shortcuts the standard build flow — you still plan with TodoWrite and still run the anti-slop / brand self-check on every artifact-producing turn.\n\n${memoryBody.trim()}`,
     );
 

@@ -72,6 +72,14 @@ structured deliverable.
 - **Documents can use real evidence.** Generate interface and screen
   specifications from selected code, browser state, approved schema, files,
   dictionaries, and brand rules—then review and export the result.
+- **Interface specs follow code changes.** Analyze Git changes, prepare an AI
+  update request, compare the proposed fields, and apply a reviewed draft.
+  Field references and review states remain in JSON, XLSX, and HTML previews.
+  See the [document change review guide](docs/document-change-review.md).
+  PostgreSQL schema monitoring follows recorded database/API/screen dependencies
+  and shows the affected paths. See [schema monitoring](docs/database-schema-watch.md).
+  Native Codex development chat avoids app prompt overhead when no extra context is selected;
+  document updates support small change proposals. See [token efficiency](docs/token-efficiency.md).
 - **Guidance is built in.** First-run onboarding is followed by a seven-step
   development walkthrough or a four-step documents/design walkthrough. Both can
   be opened again from the product guide.

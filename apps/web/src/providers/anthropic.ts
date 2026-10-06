@@ -49,11 +49,7 @@ export async function streamMessage(
   history: ChatMessage[],
   signal: AbortSignal,
   handlers: StreamHandlers,
-  // Only the senseaudio / aihubmix branches read `context.projectId`
-  // today (so the daemon-side `generate_image` tool can write into the
-  // active project's folder). Other branches accept and ignore — keeping the
-  // signature uniform means the single call site in ProjectView passes
-  // the same shape regardless of protocol.
+  // Context supplies project-local images and approved media tool output paths.
   context?: ProxyContext,
 ): Promise<void> {
   // Prefer the explicit Settings protocol; keep the legacy heuristic as a
@@ -74,7 +70,7 @@ export async function streamMessage(
     return streamMessageAIHubMix(cfg, system, history, signal, handlers, context);
   }
   if (cfg.apiProtocol === 'openai' || (!cfg.apiProtocol && isOpenAICompatible(cfg.model, cfg.baseUrl))) {
-    return streamMessageOpenAI(cfg, system, history, signal, handlers);
+    return streamMessageOpenAI(cfg, system, history, signal, handlers, context);
   }
 
   if (usesAnthropicProxy(cfg) || isStoredByokApiKey(cfg.apiKey)) {

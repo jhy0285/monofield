@@ -1013,10 +1013,10 @@ async function readCodexGeneratedImage(generatedRoot: string, threadId: string):
   const threadDir = path.join(generatedRoot, threadId);
   const entries = await readdir(threadDir);
   const match = entries
-    .filter((name) => /^ig_.*\.(?:png|jpe?g|webp)$/i.test(name))
+    .filter((name) => /^(?:ig_|exec-).*\.(?:png|jpe?g|webp)$/i.test(name))
     .sort()[0];
   if (!match) {
-    throw new Error(`codex imagegen produced no ig_* image in ${threadDir}`);
+    throw new Error(`codex imagegen produced no supported image artifact in ${threadDir}`);
   }
   const imagePath = path.join(threadDir, match);
   const bytes = await readFile(imagePath);

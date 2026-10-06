@@ -32,6 +32,7 @@ import {
   composeSystemPrompt,
   resolveExclusiveSurface,
 } from './prompts/system.js';
+import { isNativeCodexChat, nativeCodexUserRequest } from './prompts/native-codex.js';
 import { emittedRenderableQuestionForm } from './question-form-detect.js';
 import { resolveProjectRoot } from './project-root.js';
 import { preflightInterfaceSpecSource } from './interface-spec-source-preflight.js';
@@ -325,7 +326,7 @@ import { attachPiRpcSession } from './pi-rpc.js';
 import { stageAmrImagePaths } from './media/amr-image-staging.js';
 import { ingestRoutineConnectorEvolution } from './automation-routine-evolution.js';
 import { createClaudeStreamHandler } from './runtimes/claude-stream.js';
-import { createAgentTitleMarkerStripper } from './title-marker.js';
+import { createAgentTitleMarkerStripper, localConversationTitle } from './title-marker.js';
 import { createRoleMarkerGuard } from './role-marker-guard.js';
 import { createToolLoopGuard, resolveToolLoopMode, type ToolLoopVerdict } from './tool-loop-guard.js';
 import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
@@ -642,6 +643,9 @@ import { registerMonoFieldPublicMetadataRoutes } from './routes/monofield-public
 import { registerMemoryRoutes } from './routes/memory.js';
 import { registerDatabaseRoutes } from './routes/database.js';
 import { registerDevelopmentRoutes } from './routes/development.js';
+import { registerDocumentImpactRoutes } from './routes/document-impact.js';
+import { registerSchemaWatchRoutes } from './routes/database-schema-watch.js';
+import { DatabaseSchemaWatchService } from './services/database-schema-watch.js';
 import { registerDocumentRenderRoutes } from './routes/document-render.js';
 import { DevelopmentServerService } from './development-server.js';
 import {
@@ -4161,6 +4165,17 @@ export async function startServer({
     appConfig: { readAppConfig },
   });
 
+  const schemaWatch = new DatabaseSchemaWatchService({
+    dataRoot: RUNTIME_DATA_DIR, broker: desktopDatabaseBroker,
+    binding: (projectId) => {
+      const project = getProject(db, projectId);
+      const context = activeDevelopmentDatabaseContext(project?.metadata);
+      if (!context?.useForDevelopment || !context.connectionId) return null;
+      return { connectionId: context.connectionId, workspacePath: project?.metadata?.development?.activeProjectPath ?? '.' };
+    },
+  });
+  await schemaWatch.start();
+  registerSchemaWatchRoutes(app, { db, http: { requireLocalDaemonRequest }, schemaWatch });
   registerDatabaseRoutes(app, {
     desktopDatabaseBroker,
     requireLocalDaemonRequest,
@@ -5321,6 +5336,13 @@ export async function startServer({
     paths: pathDeps,
     projectFiles: projectFileDeps,
   });
+  registerDocumentImpactRoutes(app, {
+    db,
+    http: httpDeps,
+    paths: pathDeps,
+    projectFiles: projectFileDeps,
+    schemaWatch,
+  });
   registerPluginAssetRoutes(app, {
     db,
     pluginAssetCache,
@@ -6269,7 +6291,7 @@ export async function startServer({
       ...(projectBaseDir ? [projectBaseDir] : []),
       ...linkedDirs,
     ]));
-    const cwdHint = cwd
+    let cwdHint = cwd
       ? `${formatDesignFilesWorkspaceHint(cwd, existingProjectFiles, existingProjectFolders)}${
           developmentWorkspaceRoot
             ? `\n\nDevelopment workspace boundary: \`${developmentWorkspaceRoot}\`. The active module above is the default cwd, but this user-selected workspace root is also writable. Inspect and update sibling modules only when the request spans them.`
@@ -6467,7 +6489,7 @@ export async function startServer({
       toolTokenRevoked = true;
       toolTokenRegistry.revokeToken(toolTokenGrant.token, reason);
     };
-    const runtimeToolPrompt = createAgentRuntimeToolPrompt(daemonUrl, toolTokenGrant);
+    let runtimeToolPrompt = createAgentRuntimeToolPrompt(daemonUrl, toolTokenGrant);
     const commentHint = renderCommentAttachmentHint(safeCommentAttachments);
 
     // Resolve external MCP config + stored OAuth tokens up-front so the
@@ -6575,6 +6597,19 @@ export async function startServer({
         // Default ON; set OD_BUNDLED_ATOM_PROMPTS=0 to opt out.
         appliedPluginSnapshotId: run?.appliedPluginSnapshotId ?? null,
       });
+
+    const nativeCodexChat = isNativeCodexChat({ agentId: def.id, sessionMode: runSessionMode,
+      streamFormat: def.streamFormat, executionProfile });
+    if (nativeCodexChat) {
+      // Codex receives cwd via its native CLI arguments and discovers files itself.
+      // Keep explicit sibling-module authority, but do not send a root inventory.
+      cwdHint = developmentWorkspaceRoot
+        ? `\n\nAdditional writable workspace root: \`${developmentWorkspaceRoot}\`. Update siblings only when the request requires them.`
+        : '';
+      if (!run.browserUse?.requested && !research?.enabled && !financialGroundingRequired && !daemonSystemPrompt) {
+        runtimeToolPrompt = '';
+      }
+    }
 
     run.designSystemId = designSystemSelection?.id ?? null;
     run.designSystemRequestedId = designSystemSelection?.requestedId ?? null;
@@ -6722,7 +6757,7 @@ export async function startServer({
           })
         : { resumeSessionId: null as string | null, newSessionId: undefined as string | undefined, isResuming: false, storedStablePromptHash: null as string | null };
     let capturedAgentSessionId: string | null = null;
-    const userRequestPrompt = composeChatUserRequestForAgent(
+    const renderedUserRequest = composeChatUserRequestForAgent(
       message,
       currentPrompt,
       // Only trim to the latest turn when we are actually resuming an
@@ -6731,6 +6766,8 @@ export async function startServer({
       // is seeded with prior context.
       { skipTranscript: agentResumeCtx.isResuming },
     );
+    const userRequestPrompt = nativeCodexChat
+      ? nativeCodexUserRequest(renderedUserRequest, currentPrompt) : renderedUserRequest;
     // The stable instruction slice (daemon prompt + tool contract + system
     // prompt = design system / skills / memory) is identical across turns of
     // a conversation in the common case. A resumed Claude session already
@@ -6739,7 +6776,9 @@ export async function startServer({
     // turns and changed-hash turns send the full block (byte-identical to the
     // previous behavior); non-resume agents have isResuming === false and so
     // always send the full block.
-    const stableInstructionFingerprint = [daemonSystemPrompt, runtimeToolPrompt, systemPrompt]
+    const stableInstructionFingerprint = [daemonSystemPrompt, runtimeToolPrompt, systemPrompt,
+      ...(nativeCodexChat ? [`Native working folder: ${cwd ?? ''}`, `Additional writable root: ${developmentWorkspaceRoot ?? ''}`] : []),
+    ]
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
       .join('\n\n---\n\n');
     const currentStableHash = hashStableInstructions(stableInstructionFingerprint);
@@ -6756,6 +6795,9 @@ export async function startServer({
       storedStablePromptHash: agentResumeCtx.storedStablePromptHash,
       currentStableHash,
     });
+    const nativeContextResetPrompt = nativeCodexChat && agentResumeCtx.isResuming && includeStableInstructions
+      ? `Current Working folder: ${JSON.stringify(cwd)}. Previously supplied MonoField context is historical; the selected context below replaces it. Continue honoring the user's conversation constraints and Codex's native instructions.`
+      : '';
     const browserUsePromptGuard = renderBrowserUseUnavailablePrompt(run.browserUse ?? null);
     const automaticBrowserVerificationPrompt = normalizedBrowserVerification && run.browserUse?.available
       ? [
@@ -6775,7 +6817,7 @@ export async function startServer({
       typeof titleGeneration === 'object' &&
       titleGeneration.enabled === true &&
       !agentResumeCtx.isResuming;
-    const titleGenerationPrompt = titleGenerationRequested
+    const titleGenerationPrompt = titleGenerationRequested && !nativeCodexChat
       ? [
           'Internal title task:',
           'Before answering the user request, emit exactly one short title marker:',
@@ -6785,7 +6827,7 @@ export async function startServer({
         ].join('\n')
       : '';
     const clientInstructionParts = includeStableInstructions
-      ? [researchCommandContract, financialGroundingPrompt, runContextPrompt, browserUsePromptGuard, automaticBrowserVerificationPrompt, titleGenerationPrompt, interfaceSpecCollectionResetPrompt, interfaceSpecSourceRequiredPrompt, systemPrompt]
+      ? [nativeContextResetPrompt, researchCommandContract, financialGroundingPrompt, runContextPrompt, browserUsePromptGuard, automaticBrowserVerificationPrompt, titleGenerationPrompt, interfaceSpecCollectionResetPrompt, interfaceSpecSourceRequiredPrompt, systemPrompt]
       : [researchCommandContract, financialGroundingPrompt, runContextPrompt, browserUsePromptGuard, automaticBrowserVerificationPrompt, titleGenerationPrompt, interfaceSpecCollectionResetPrompt, interfaceSpecSourceRequiredPrompt];
     const clientInstructionPrompt = clientInstructionParts
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
@@ -6812,7 +6854,9 @@ export async function startServer({
       safeImages,
       amrStagedImages,
     );
-    const composed = [
+    const bareCodexPrompt = nativeCodexChat && !instructionPrompt && !cwdHint && !linkedDirsHint
+      && !formOverride && !attachmentHint && !commentHint && promptImagePaths.length === 0;
+    const composed = bareCodexPrompt ? userRequestPrompt : [
       instructionPrompt
         ? `# Instructions (read first)\n\n${formOverride}${instructionPrompt}${cwdHint}${linkedDirsHint}${ECHO_GUARD}\n\n---\n`
         : cwdHint
@@ -6827,6 +6871,13 @@ export async function startServer({
         ? `\n\n${promptImagePaths.map((p) => `@${p}`).join(' ')}`
         : '',
     ].join('');
+    run.promptContext = {
+      profile: nativeCodexChat ? 'codex-native' : 'assisted',
+      composedCharacters: composed.length,
+      requestCharacters: userRequestPrompt.length,
+      addedCharacters: Math.max(0, composed.length - userRequestPrompt.length),
+      stableCharactersSkipped: includeStableInstructions ? 0 : stableInstructionFingerprint.length,
+    };
     run.promptTelemetry = buildPromptStackTelemetry({
       composedPrompt: composed,
       sections: [
@@ -6834,14 +6885,14 @@ export async function startServer({
         // Phase 1 explicitly needs redactedContent for these aggregate prompts:
         // they are the quickest way to inspect the system context sent to the
         // model when diagnosing Langfuse traces.
-        { kind: 'daemonSystemPrompt', content: daemonSystemPrompt },
-        { kind: 'runtimeToolPrompt', content: runtimeToolPrompt },
+        { kind: 'daemonSystemPrompt', content: includeStableInstructions ? daemonSystemPrompt : '' },
+        { kind: 'runtimeToolPrompt', content: includeStableInstructions ? runtimeToolPrompt : '' },
         { kind: 'researchCommandContract', content: researchCommandContract },
         { kind: 'financialGroundingPrompt', content: financialGroundingPrompt },
         { kind: 'runContextPrompt', content: runContextPrompt },
         { kind: 'browserUsePromptGuard', content: browserUsePromptGuard },
         { kind: 'clientSystemPrompt', content: clientInstructionPrompt },
-        { kind: 'echoGuard', content: ECHO_GUARD },
+        { kind: 'echoGuard', content: instructionPrompt || cwdHint || linkedDirsHint || formOverride ? ECHO_GUARD : '' },
         { kind: 'userRequest', content: userRequestPrompt },
         { kind: 'skillPrompt', content: promptTelemetryParts?.skillPrompt },
         {
@@ -8656,9 +8707,13 @@ export async function startServer({
     const runGuard = createRoleMarkerGuard('run');
     let runWarned = false;
     const titleMarkerStripper = createAgentTitleMarkerStripper({
-      enabled: Boolean(titleGenerationRequested),
+      enabled: Boolean(titleGenerationRequested && !nativeCodexChat),
       emitTitle: (title) => send('agent', { type: 'conversation_title', title }),
     });
+    if (titleGenerationRequested && nativeCodexChat) {
+      const title = localConversationTitle(typeof currentPrompt === 'string' ? currentPrompt : message);
+      if (title) send('agent', { type: 'conversation_title', title });
+    }
 
     function flushAgentTitleMarkerBuffer() {
       const visible = titleMarkerStripper.flush();
@@ -9431,7 +9486,7 @@ export async function startServer({
         typeof acpSession?.completedSuccessfully === 'function' &&
         acpSession.completedSuccessfully();
       const runArtifactSideEffects = scanRunEventsForRetrySideEffects(run.events);
-      const status = classifyChatRunCloseStatus({
+      let status = classifyChatRunCloseStatus({
         cancelRequested: !!run.cancelRequested,
         code,
         signal,
@@ -9695,15 +9750,22 @@ export async function startServer({
         status === 'succeeded'
         && automaticBrowserVerificationRequested
         && normalizedBrowserVerification
-        && desktopBrowserAutomation
       ) {
-        const verification = await runAutomaticBrowserVerification({
+        const verification = desktopBrowserAutomation ? await runAutomaticBrowserVerification({
           execute: desktopBrowserAutomation,
           evidence: browserVerificationEvidence,
           sessionId: normalizedBrowserVerification.sessionId,
           startedAt: automaticBrowserVerificationStartedAt,
           url: normalizedBrowserVerification.url,
-        });
+        }) : { ok: false, error: 'The approved browser backend is unavailable.', verifiedActions: [], interactionActions: [] };
+        run.verification = { ...verification, checkedAt: new Date().toISOString(), scope: 'browser-capture' };
+        if (run.cancelRequested) {
+          status = 'canceled';
+        } else if (!verification.ok) {
+          status = 'failed';
+          run.error = verification.error ?? 'Required browser verification failed.';
+          run.errorCode = 'BROWSER_VERIFICATION_FAILED';
+        }
         const korean = typeof locale === 'string' && locale.toLowerCase().startsWith('ko');
         const interaction = verification.interactionActions.length > 0
           ? verification.interactionActions.join(', ')
@@ -10306,6 +10368,7 @@ export async function startServer({
   routineService.start();
 
   assertServerContextSatisfiesRoutes({
+    schemaWatch,
     db,
     design,
     http: httpDeps,
@@ -10404,11 +10467,13 @@ export async function startServer({
       composioConnectorProvider.stopCatalogRefreshLoop();
       orbitService.stop();
       routineService?.stop();
+      void schemaWatch.stop();
     };
     const shutdownDaemonRuns = async () => {
       if (daemonShutdownStarted) return;
       daemonShutdownStarted = true;
       daemonShuttingDown = true;
+      await schemaWatch.stop();
       await design.runs.shutdownActive({ graceMs: resolveChatRunShutdownGraceMs() });
       await terminalService.shutdownActive();
       await developmentServers.shutdown();

@@ -30,6 +30,7 @@
  * the Anthropic path sends as `system`.
  */
 import { renderOfficialDesignerPrompt } from './official-system.js';
+import { canSkipNativeCodexInstructions } from './native-codex.js';
 import { renderDiscoveryAndPhilosophy, renderSharedFramesBlock } from './discovery.js';
 import { renderDirectionSpecBlock } from './directions.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
@@ -39,6 +40,7 @@ import { renderPanelPrompt } from './panel.js';
 import { defaultCritiqueConfig, type CritiqueConfig } from '@open-design/contracts/critique';
 import {
   DATABASE_DEVELOPMENT_CONTEXT,
+  renderLeanMemoryContext,
   executionProfileFromStreamFormat,
   type ChatSessionMode,
   type ExecutionProfile,
@@ -571,7 +573,9 @@ export interface ComposeInput {
   executionProfile?: ExecutionProfile | undefined;
 }
 
-export function composeSystemPrompt({
+export function composeSystemPrompt(input: ComposeInput): string {
+  if (canSkipNativeCodexInstructions(input)) return '';
+  const {
   agentId,
   includeCodexImagegenOverride = true,
   skillBody,
@@ -608,7 +612,7 @@ export function composeSystemPrompt({
   projectInstructions,
   mediaExecution,
   executionProfile,
-}: ComposeInput): string {
+  } = input;
   // Injection resistance goes FIRST — before everything else — so no later
   // section (skill body, user instructions, project instructions, tool result)
   // can instruct the model to disregard it.
@@ -739,6 +743,7 @@ export function composeSystemPrompt({
 
   if (memoryBody && memoryBody.trim().length > 0) {
     parts.push(
+      isLeanResponseMode ? renderLeanMemoryContext(memoryBody) :
       `\n\n## Personal memory (auto-extracted from past chats)\n\nThe following facts have been sedimented from this user's previous conversations and edited in the settings panel. Treat them as preferences and context, NOT hard rules: when they collide with the active design system tokens, the brand wins; when they collide with the active skill's workflow, the skill wins. They are still authoritative for tone, voice, terminology, and what the user already told you about themselves and their goals — never re-ask the user about something already captured here.\n\nUse memory as a task-intent gateway. When the user's request is short or underspecified, silently expand it into an internal task brief before acting: infer the task type, user/profile background, project/artifact context, delivery preferences, known feedback meanings, constraints, and validation/finish line. Proceed from that richer brief so the user does not need to repeat setup. Ask a clarifying question only when a critical target, permission, or conflict cannot be resolved from the current request plus memory. Do not dump the full internal brief unless the user asks to inspect it. Expanding intent this way changes only WHAT you know going in; it never shortcuts the standard build flow — you still plan with TodoWrite and still run the anti-slop / brand self-check on every artifact-producing turn.\n\n${memoryBody.trim()}`,
     );
 
@@ -921,7 +926,7 @@ export function composeSystemPrompt({
     || resolvedExclusiveSurface === 'audio';
   if (isMediaSurface) {
     parts.push(renderMediaGenerationContract(mediaExecution));
-  } else if (!isLeanResponseMode) {
+  } else if (!isLeanResponseMode && !isStructuredSpecificationWorkflow) {
     // Non-media projects (prototype, deck, etc.): inject a lightweight hint
     // so the agent uses `od media generate` if the user asks for an image/video
     // mid-session, rather than hunting for provider API keys in the environment.

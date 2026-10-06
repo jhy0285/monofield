@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { generateMedia } from '../../src/media/index.js';
+import { appConfigDir } from '../../src/app-config.js';
 
 const PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2uoAAAAASUVORK5CYII=';
 const VIDEO_BASE64 = Buffer.from([0, 0, 0, 24, 102, 116, 121, 112]).toString('base64');
@@ -121,6 +122,7 @@ describe('OpenAI-compatible media providers', () => {
       expectedConfigExcludes?: string;
       expectedArgsIncludes?: string;
       expectedArgsExcludes?: string;
+      imageFileName?: string;
     } = {},
   ) {
     const runner = path.join(root, `${threadId}.mjs`);
@@ -162,7 +164,7 @@ process.stdin.on('end', () => {
   if (!stdin.includes('$imagegen') || !generatedRoot) process.exit(7);
   const outDir = path.join(generatedRoot, '${threadId}');
   mkdirSync(outDir, { recursive: true });
-  writeFileSync(path.join(outDir, 'ig_0001.png'), Buffer.from(pngBase64, 'base64'));
+  writeFileSync(path.join(outDir, ${JSON.stringify(options.imageFileName ?? 'ig_0001.png')}), Buffer.from(pngBase64, 'base64'));
   process.stdout.write(JSON.stringify({ type: 'thread.started', thread_id: '${threadId}' }) + '\\n');
 });
 `, 'utf8');
@@ -538,6 +540,16 @@ process.stdin.on('end', () => {
     expect(bytes.length).toBeGreaterThan(0);
   });
 
+  it('accepts native Codex exec image filenames without reporting a generated image as missing', async () => {
+    const generatedHome = path.join(root, 'exec-image-codex-home');
+    await writeCodexAuth(generatedHome, { auth_mode: 'chatgpt', OPENAI_API_KEY: null });
+    await installFakeCodex(generatedHome, 'exec-image-thread', { imageFileName: 'exec-77358a46-5d03-45d4-9d48-670d260fc48a.png' });
+    const result = await generateMedia({ projectRoot, projectsRoot, projectId: 'project-1', surface: 'image', model: 'gpt-image-2', prompt: 'A blue square', output: 'exec-image.png' });
+    expect(result.providerId).toBe('codex');
+    expect(result.usedStubFallback).toBe(false);
+    expect(await readFile(path.join(projectsRoot, 'project-1', result.name))).toEqual(Buffer.from(PNG_BASE64, 'base64'));
+  });
+
   it('prefers the Codex subscription path for gpt-image-2 even when an OpenAI key is configured', async () => {
     const generatedHome = path.join(root, 'subscription-before-api-codex-home');
     await writeCodexAuth(generatedHome, {
@@ -777,7 +789,7 @@ process.stdin.on('end', () => {
   });
 
   it('uses default app-config Codex CLI env overrides when OD_DATA_DIR is absent', async () => {
-    const dataDir = path.join(projectRoot, '.od');
+    const dataDir = appConfigDir(projectRoot);
     const generatedHome = path.join(root, 'default-codex-home');
     const codexBin = path.join(root, 'default-codex.mjs');
     const wrongCodexBin = path.join(root, 'wrong-default-codex.mjs');

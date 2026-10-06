@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { runSchemaWatchCli } from './services/schema-watch-cli.js';
 
 export async function runDatabaseCli(args: string[], helpers: {
   baseUrl: (flags: Record<string, unknown>) => Promise<string>;
@@ -6,6 +7,7 @@ export async function runDatabaseCli(args: string[], helpers: {
   positionalArgs: (args: string[], stringFlags: Set<string>) => string[];
 }): Promise<void> {
   const subcommand = args[0];
+  if (subcommand === 'watch') return runSchemaWatchCli(args.slice(1), helpers);
   if (!subcommand || subcommand === "help" || args.includes("--help") || args.includes("-h")) {
     console.log(`Usage:
   monofield database list [--json] [--daemon-url <url>]
@@ -16,6 +18,7 @@ export async function runDatabaseCli(args: string[], helpers: {
   monofield database inspect [connection-id] --tables-file <path> [--limit <1-20>] [--concurrency <8|16|32>] [--json] [--daemon-url <url>]
   monofield database mutate [connection-id] --request-file <path> [--json] [--daemon-url <url>]
   monofield database candidates <project-id> [--schema <schema>] [--json] [--daemon-url <url>]
+  monofield database watch <project-id> <status|enable|disable|check|acknowledge> [--interval <seconds>] [--expected-sha <sha256>] [--json]
 
 Agent runtime form:
   "$MONOFIELD_NODE_BIN" "$MONOFIELD_BIN" database <command> ...

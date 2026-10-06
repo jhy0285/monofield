@@ -25,6 +25,7 @@ describe('structured specification prompt budget', () => {
 
       expect(scoped).toContain('# Structured specification workflow');
       expect(scoped).toContain('## Active skill');
+      expect(scoped).not.toContain('## Media generation (if asked)');
       expect(scoped).not.toContain('# Identity and workflow charter (background)');
       expect(scoped.length).toBeLessThan(generic.length - 35_000);
     },

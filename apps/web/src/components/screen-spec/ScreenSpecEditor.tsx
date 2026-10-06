@@ -31,6 +31,7 @@ import {
 import { CalloutTable, CheckpointEditor, MetadataPanel, RelationEditor } from './panels';
 import { ScreenSpecCanvas } from './ScreenSpecCanvas';
 import { DocumentRenderActions } from '../document-spec/DocumentRenderActions';
+import { DocumentDependencyPanel } from '../document-spec/DocumentDependencyPanel';
 import styles from './ScreenSpecEditor.module.css';
 
 /**
@@ -294,6 +295,7 @@ export function ScreenSpecEditor({ projectId, file, onFileSaved, onOpenFile }: P
           </div>
         )}
         {saveError && <div className={styles.errorBanner}>{saveError}</div>}
+        <DocumentDependencyPanel projectId={projectId} dirty={dirty} />
         {fatalIssues.length > 0 && (
           <div className={styles.warnBanner}>
             {t('screenSpec.fatalIssues', { count: fatalIssues.length })}{' '}

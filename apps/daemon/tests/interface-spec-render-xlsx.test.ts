@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
 import type { InterfaceSpecDocument } from '@open-design/contracts';
+import { renderInterfaceSpecHtml } from '../src/doc-renderers/interface-spec/render-html.js';
 import { parseInterfaceSpecDocument } from '@open-design/contracts';
 import {
   InterfaceSpecRenderError,
@@ -77,6 +78,25 @@ async function readBack(buffer: Buffer): Promise<ExcelJS.Workbook> {
 }
 
 describe('renderInterfaceSpecXlsx', () => {
+  it('exports field provenance and review state while escaping HTML evidence', async () => {
+    const doc = sampleDocument();
+    const field = doc.endpoints[0]?.responseFields[0];
+    if (!field) throw new Error('Expected sample field');
+    field.reviewStatus = 'accepted';
+    field.evidenceRefs = [{ kind: 'code', ref: 'src/order.ts', line: 12, symbol: 'Order.id',
+      capturedAt: '2026-10-01T00:00:00Z', sha256: 'a'.repeat(64), summary: '<script>untrusted()</script>' }];
+    const result = await renderInterfaceSpecXlsx(doc);
+    const workbook = await readBack(result.buffer);
+    const evidence = workbook.getWorksheet('문서 근거');
+    expect(evidence?.getCell('E2').value).toBe('src/order.ts');
+    expect(evidence?.getCell('J2').value).toBe('accepted');
+    expect(evidence?.getCell('K2').value).toBe('Order.id');
+    expect(evidence?.getCell('L2').value).toBe('2026-10-01T00:00:00Z');
+    const html = renderInterfaceSpecHtml(doc);
+    expect(html).toContain('&lt;script&gt;untrusted()&lt;/script&gt;');
+    expect(html).not.toContain('<script>untrusted()');
+  });
+
   it('uses a generic cover label when no brand was supplied', async () => {
     const doc = sampleDocument();
     doc.cover.brand = '';

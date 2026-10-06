@@ -39,10 +39,12 @@ import { attachPiRpcSession } from './pi-rpc.js';
 import { createClaudeStreamHandler } from './runtimes/claude-stream.js';
 import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
+import { createQoderStreamHandler } from './runtimes/qoder-stream.js';
 import { createJsonEventStreamHandler } from './runtimes/json-event-stream.js';
 import { agentCliEnvForAgent, validateAgentCliEnv } from './app-config.js';
 import {
   classifyAgentAuthFailure,
+  classifyAgentServiceFailure,
   cursorAuthGuidance,
   probeAgentAuthStatus,
 } from './runtimes/auth.js';
@@ -669,6 +671,8 @@ export function redactSecrets(
     .replace(/Bearer\s+[A-Za-z0-9_\-.+/=]+/gi, 'Bearer [REDACTED]')
     .replace(/(x-api-key|api-key|x-goog-api-key)\s*[:=]\s*[^\s,;"']+/gi, '$1: [REDACTED]')
     .replace(/([?&](?:key|api_key|api-key)=)[^&#\s]+/gi, '$1[REDACTED]')
+    .replace(/([?&](?:user_code|device_code)=)[^&#\s]+/gi, '$1[REDACTED]')
+    .replace(/(code (?:shown )?matches:\s*)[A-Z0-9]{4}-[A-Z0-9]{4}/gi, '$1[REDACTED]')
     .replace(
       /(\b(?:jdbc:)?(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|redis):\/\/[^:\s/@]+:)[^@\s/]+(@)/gi,
       '$1[REDACTED]$2',
@@ -1790,6 +1794,13 @@ function attachAgentStreamHandlers(
     const copilot = createCopilotStreamHandler((ev: unknown) => send('agent', ev));
     child.stdout?.on('data', (chunk: string) => copilot.feed(chunk));
     child.on('close', () => copilot.flush());
+  } else if (def.streamFormat === 'qoder-stream-json') {
+    const qoder = createQoderStreamHandler((ev: unknown) => send('agent', ev));
+    child.stdout?.on('data', (chunk: string) => {
+      appendRawStdout?.(chunk);
+      qoder.feed(chunk);
+    });
+    child.on('close', () => qoder.flush());
   } else if (def.streamFormat === 'pi-rpc') {
     acpSession = attachPiRpcSession({
       child,
@@ -1960,6 +1971,25 @@ async function testAgentConnectionInternal(
     };
   };
 
+  const serviceFailureResult = (
+    text: string,
+    overrides: Partial<ConnectionTestDiagnostics> = {},
+  ): ConnectionTestResponse | null => {
+    const auth = classifyAgentAuthFailure(input.agentId, text);
+    const code = auth?.status === 'missing' ? 'AGENT_AUTH_REQUIRED' : classifyAgentServiceFailure(text);
+    if (!code) return null;
+    return {
+      ok: false,
+      kind: code === 'AGENT_AUTH_REQUIRED' ? 'agent_auth_required'
+        : code === 'RATE_LIMITED' ? 'rate_limited' : 'upstream_unavailable',
+      latencyMs: Date.now() - start,
+      model,
+      agentName: def.name,
+      detail: redactSecrets(auth?.message ?? text).slice(0, 1000),
+      diagnostics: buildDiagnostics(overrides),
+    };
+  };
+
   const resultFromAgentText = (
     text: string,
     exit?: { code: number | null; signal: NodeJS.Signals | null },
@@ -1967,6 +1997,10 @@ async function testAgentConnectionInternal(
     const latencyMs = Date.now() - start;
     const rawSample = truncateSample(text);
     const sample = redactSecrets(rawSample);
+    if (!isSmokeOkReply(text)) {
+      const failure = serviceFailureResult(text, { phase: 'output_parse', ...(exit ? { exitCode: exit.code, signal: exit.signal } : {}) });
+      if (failure) return failure;
+    }
     if (rawSample && isLikelyModelErrorText(rawSample)) {
       const detail = redactSecrets(smokeFailureDetail(rawSample));
       console.warn(
@@ -2019,19 +2053,8 @@ async function testAgentConnectionInternal(
     const detail = redactSecrets(
       error instanceof Error ? error.message : String(error),
     );
-    const auth = classifyAgentAuthFailure(input.agentId, detail);
-    if (auth?.status === 'missing') {
-      console.warn(`[test:agent] ${def.name} → auth_required: ${detail}`);
-      return {
-        ok: false,
-        kind: 'agent_auth_required',
-        latencyMs,
-        model,
-        agentName: def.name,
-        detail: auth.message ?? cursorAuthGuidance(),
-        diagnostics: buildDiagnostics(),
-      };
-    }
+    const serviceFailure = serviceFailureResult(detail);
+    if (serviceFailure) return serviceFailure;
     if (detail && isLikelyModelErrorText(detail)) {
       console.warn(
         `[test:agent] ${def.name} → not_found_model: ${detail}`,
@@ -2063,6 +2086,10 @@ async function testAgentConnectionInternal(
   const resultFromCancellation = (
     kind: 'timeout' | 'aborted',
   ): ConnectionTestResponse => {
+    if (kind === 'timeout') {
+      const failure = serviceFailureResult([sink.getStderrTail(), sink.getRawStdout(), sink.getText()].join('\n'));
+      if (failure) return failure;
+    }
     const latencyMs = Date.now() - start;
     console.warn(`[test:agent] ${def.name} → ${kind} in ${(latencyMs / 1000).toFixed(1)}s`);
     return {
@@ -2343,23 +2370,10 @@ async function testAgentConnectionInternal(
           };
         }
       }
-      const auth = classifyAgentAuthFailure(input.agentId, rawDetail);
-      if (auth?.status === 'missing') {
-        console.warn(`[test:agent] ${def.name} → auth_required: ${redactSecrets(rawDetail)}`);
-        return {
-          ok: false,
-          kind: 'agent_auth_required',
-          latencyMs,
-          model,
-          agentName: def.name,
-          detail: auth.message ?? cursorAuthGuidance(),
-          diagnostics: buildDiagnostics({
-            phase: 'connection_smoke_test',
-            exitCode: winner.code,
-            signal: winner.signal,
-          }),
-        };
-      }
+      const serviceFailure = serviceFailureResult([stderrTail, sink.getRawStdout(), visibleText].join('\n'), {
+        phase: 'connection_smoke_test', exitCode: winner.code, signal: winner.signal,
+      });
+      if (serviceFailure) return serviceFailure;
       const claudeDiagnostic = diagnoseClaudeCliFailure({
         agentId: input.agentId,
         exitCode: winner.code,

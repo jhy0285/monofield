@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DocumentEvidenceSchema } from './evidence.js';
 
 /**
  * screen-spec document contract (v1).
@@ -56,6 +57,7 @@ export type ScreenSpecPosition = z.infer<typeof ScreenSpecPositionSchema>;
 
 /** One red numbered marker with its description-table row. */
 export const ScreenSpecCalloutSchema = z.object({
+  evidenceRefs: z.array(DocumentEvidenceSchema).optional(),
   no: z.number().int().min(1),
   label: z.string().default(''),
   description: z.string().default(''),
@@ -81,6 +83,7 @@ export const ScreenSpecVisualSettingsSchema = z.object({
 export type ScreenSpecVisualSettings = z.infer<typeof ScreenSpecVisualSettingsSchema>;
 
 export const ScreenSpecScreenSchema = z.object({
+  evidenceRefs: z.array(DocumentEvidenceSchema).optional(),
   id: z.string().min(1),
   pageTitle: z.string().default(''),
   /** 화면ID/명 metadata row. */

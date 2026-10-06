@@ -51,7 +51,7 @@ describe('managed plugin asset routes', () => {
     registerPluginAssetRoutes(app, {
       db,
       pluginAssetCache: { get: async () => ({ buf: Buffer.alloc(0), contentType: '' }) },
-      AssetCacheError: class AssetCacheError extends Error { status = 500; },
+      AssetCacheError: class AssetCacheError extends Error { status = 500; constructor(...args: unknown[]) { super(String(args[0] ?? '')); } },
       assetCacheRewriteUrl: (url) => url,
       isCacheableExternalUrl: () => false,
       assembleExample: () => '',

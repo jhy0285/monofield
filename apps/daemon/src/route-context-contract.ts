@@ -4,6 +4,8 @@ import type { RegisterAutomationRoutesDeps } from './routes/automation.js';
 import type { RegisterChatRoutesDeps } from './routes/chat.js';
 import type { RegisterDeployRoutesDeps, RegisterDeploymentCheckRoutesDeps } from './routes/deploy.js';
 import type { RegisterDictionaryRoutesDeps } from './routes/dictionaries.js';
+import type { RegisterDocumentImpactRoutesDeps } from './routes/document-impact.js';
+import type { RegisterSchemaWatchRoutesDeps } from './routes/database-schema-watch.js';
 import type { RegisterDocumentRenderRoutesDeps } from './routes/document-render.js';
 import type { RegisterFinalizeRoutesDeps, RegisterImportRoutesDeps, RegisterProjectExportRoutesDeps } from './import-export-routes.js';
 import type { RegisterGenuiRoutesDeps } from './routes/genui.js';
@@ -29,6 +31,8 @@ type AllRegisteredRouteDeps =
   & RegisterDeployRoutesDeps
   & RegisterDeploymentCheckRoutesDeps
   & RegisterDictionaryRoutesDeps
+  & RegisterDocumentImpactRoutesDeps
+  & RegisterSchemaWatchRoutesDeps
   & RegisterDocumentRenderRoutesDeps
   & RegisterFinalizeRoutesDeps
   & RegisterGenuiRoutesDeps

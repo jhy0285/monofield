@@ -8,7 +8,7 @@
     },
     {
       "type": "status",
-      "label": "running"
+      "label": "thinking"
     },
     {
       "type": "tool_use",

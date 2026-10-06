@@ -7,6 +7,12 @@ import * as platform from '@open-design/platform';
 import { startServer } from '../src/server.js';
 import { AIHUBMIX_APP_CODE } from '../src/integrations/aihubmix.js';
 
+// Provider requests and DNS are mocked together; these tests do not use external services.
+vi.mock('node:dns', async () => {
+  const actual = await vi.importActual<typeof import('node:dns')>('node:dns');
+  return { ...actual, promises: { ...actual.promises, lookup: vi.fn(async () => [{ address: '93.184.216.34', family: 4 }]) } };
+});
+
 type FetchInput = Parameters<typeof fetch>[0];
 type FetchInit = Parameters<typeof fetch>[1];
 
@@ -35,6 +41,44 @@ describe('API proxy routes', () => {
   });
 
   afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
+
+  it.each(['gpt-5', 'gpt-4o'])('forwards a screenshot as native image input for %s', async (model) => {
+    const responsesApi = model === 'gpt-5';
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => String(input).startsWith(baseUrl)
+      ? realFetch(input, init) : Promise.resolve(sseResponse(responsesApi
+        ? 'data: {"type":"response.completed","response":{}}\n\n' : 'data: [DONE]\n\n')));
+    vi.stubGlobal('fetch', fetchMock);
+    const response = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
+        baseUrl: 'https://api.openai.com/v1', apiKey: 'test', model,
+        messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } }] }],
+      }),
+    });
+    expect(await response.text()).toContain('event: end');
+    const request = fetchMock.mock.calls.find(([input]) => String(input).startsWith('https://api.openai.com'));
+    const payload = JSON.parse(String(request?.[1]?.body));
+    expect(responsesApi ? payload.input[0].content[0] : payload.messages[0].content[0]).toMatchObject(responsesApi
+      ? { type: 'input_image', image_url: 'data:image/png;base64,AAAA' }
+      : { type: 'image_url', image_url: { url: 'data:image/png;base64,AAAA' } });
+  });
+
+  it.each(['completed', 'incomplete', 'disconnected'])('handles Responses %s through the HTTP stream', async (outcome) => {
+    const frames = ['data: {"type":"response.output_text.delta","delta":"grounded"}\n\n'];
+    if (outcome === 'completed') frames.push('data: {"type":"response.completed","response":{"usage":{"input_tokens":10,"output_tokens":2}}}\n\n');
+    if (outcome === 'incomplete') frames.push('data: {"type":"response.incomplete","response":{"incomplete_details":{"reason":"max_output_tokens"}}}\n\n');
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => String(input).startsWith(baseUrl)
+      ? realFetch(input, init) : Promise.resolve(sseResponse(frames.join(''))));
+    vi.stubGlobal('fetch', fetchMock);
+    const response = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ baseUrl: 'https://api.openai.com/v1', apiKey: 'test', model: 'gpt-5', messages: [{ role: 'user', content: 'review' }] }),
+    });
+    const stream = await response.text();
+    expect(stream).toContain('"delta":"grounded"');
+    expect(fetchMock).toHaveBeenCalledWith('https://api.openai.com/v1/responses', expect.objectContaining({ body: expect.stringContaining('"store":false') }));
+    if (outcome === 'completed') { expect(stream).toContain('event: end'); expect(stream).toContain('input_tokens'); }
+    else { expect(stream).toContain('event: error'); expect(stream).not.toContain('event: end'); }
+  });
 
   it('converts OpenAI-compatible CRLF SSE chunks into proxy delta/end events', async () => {
     const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
@@ -288,6 +332,8 @@ describe('API proxy routes', () => {
   });
 
   it('reports malformed proxy env before sending the start event on Anthropic streams', async () => {
+    const lowercaseProxy = Object.fromEntries(['http_proxy', 'https_proxy', 'all_proxy'].map((key) => [key, process.env[key]]));
+    for (const key of Object.keys(lowercaseProxy)) delete process.env[key];
     const originalHttpProxy = process.env.HTTP_PROXY;
     const originalHttpsProxy = process.env.HTTPS_PROXY;
     const originalAllProxy = process.env.ALL_PROXY;
@@ -313,6 +359,7 @@ describe('API proxy routes', () => {
       expect(text).toContain('INTERNAL_ERROR');
       expect(text).not.toContain('event: start');
     } finally {
+      for (const [key, value] of Object.entries(lowercaseProxy)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
       if (originalHttpProxy === undefined) delete process.env.HTTP_PROXY;
       else process.env.HTTP_PROXY = originalHttpProxy;
       if (originalHttpsProxy === undefined) delete process.env.HTTPS_PROXY;

@@ -1,3 +1,5 @@
+import { DocumentEvidenceSchema, type DocumentEvidence, type DocumentReviewStatus } from '@open-design/contracts';
+
 /**
  * Parser for inline <question-form>...</question-form> blocks the agent
  * emits to ask the user a structured set of clarifying questions before
@@ -70,6 +72,8 @@ export interface InterfaceSpecManualFieldDraft {
   note: string;
   suggested?: boolean;
   evidence: string;
+  evidenceRefs?: DocumentEvidence[];
+  reviewStatus?: DocumentReviewStatus;
 }
 
 export interface InterfaceSpecManualReferenceFile {
@@ -700,6 +704,12 @@ export function parseInterfaceSpecManualDraft(raw: unknown): InterfaceSpecManual
         note: text(field.note),
         ...(field.suggested === true ? { suggested: true } : {}),
         evidence: text(field.evidence),
+        ...(Array.isArray(field.evidenceRefs) ? { evidenceRefs: field.evidenceRefs.flatMap((ref) => {
+          const parsed = DocumentEvidenceSchema.safeParse(ref);
+          return parsed.success ? [parsed.data] : [];
+        }) } : {}),
+        ...(field.reviewStatus === 'edited' || field.reviewStatus === 'accepted' || field.reviewStatus === 'unreviewed'
+          ? { reviewStatus: field.reviewStatus } : {}),
       }];
     });
 

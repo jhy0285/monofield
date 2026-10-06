@@ -373,7 +373,7 @@ describe('archive installer', () => {
     const tarball = await buildFixtureTarball({ rootPrefix: 'sample-plugin-1.0.0' });
     const integrity = `sha256:${createHash('sha256').update(tarball).digest('hex')}`;
     const policy = {
-      allowedVisibilities: ['enterprise'] as const,
+      allowedVisibilities: ['enterprise' as const],
       allowedHosts: ['packages.company.example'],
       allowedLicenses: ['Apache-2.0'],
       requireHttps: true,

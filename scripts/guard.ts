@@ -25,6 +25,8 @@ const repoRoot = path.resolve(import.meta.dirname, "..");
 const allowedE2eScripts = new Set([
   "e2e/scripts/playwright.ts",
   "e2e/scripts/release-smoke.ts",
+  // Explicit provider benchmark; ordinary e2e tests continue to use mocks.
+  "e2e/scripts/token-benchmark.ts",
   "e2e/scripts/visual-report.ts",
 ]);
 

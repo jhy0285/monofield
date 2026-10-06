@@ -3,6 +3,9 @@
 Start with the maintained product documents:
 
 - [Install guide](install-guide.md)
+- [Document change review](document-change-review.md)
+- [Database schema monitoring and dependency analysis](database-schema-watch.md)
+- [Token efficiency](token-efficiency.md)
 - [Windows troubleshooting](windows-troubleshooting.md)
 - [Docker deployment](deployment/docker.md)
 - [Plugin publishing](publishing-a-plugin.md)

@@ -452,7 +452,7 @@ function FieldGrid({
   }
 
   function patchFieldAsUser(index: number, patch: Partial<InterfaceSpecManualFieldDraft>) {
-    patchField(index, { ...patch, suggested: false, evidence: '' });
+    patchField(index, { ...patch, suggested: false, reviewStatus: 'edited' });
   }
 
   function changeMode(nextMode: InterfaceSpecManualFieldMode) {

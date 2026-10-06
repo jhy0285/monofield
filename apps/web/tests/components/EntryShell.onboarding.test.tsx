@@ -323,19 +323,14 @@ describe('EntryShell settings menu', () => {
     }) as typeof fetch;
     const props = renderHome();
 
-    await waitFor(() => {
-      expect(screen.getByText('1.2k online')).toBeTruthy();
-    });
-
     fireEvent.click(screen.getByTestId('entry-settings-menu-trigger'));
 
     expect(props.onOpenSettings).not.toHaveBeenCalled();
     expect(screen.getByTestId('entry-settings-menu')).toBeTruthy();
     expect(screen.getByText('Language')).toBeTruthy();
     expect(screen.getByText('Appearance')).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: /Join Discord/i })).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: /1.2k online/i })).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: /Follow @OpenDocsHQ on X/i })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Get help/i })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Report a problem/i })).toBeTruthy();
 
     fireEvent.click(screen.getByTestId('entry-settings-open-details'));
 

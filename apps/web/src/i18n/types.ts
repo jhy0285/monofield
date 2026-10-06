@@ -30,6 +30,24 @@ export const LOCALE_LABEL: Record<Locale, string> = {
 // flat (not deeply nested) so missing-key TS errors point straight at the
 // offending string instead of a generic object mismatch.
 export interface Dict {
+  "docs.impact.change": string;
+  "docs.evidence": string;
+  "docs.impact.title": string;
+  "docs.impact.scope": string;
+  "docs.impact.analyze": string;
+  "docs.impact.failed": string;
+  "docs.impact.conflict": string;
+  "docs.impact.proposalMissing": string;
+  "docs.impact.saveFirst": string;
+  "docs.impact.summary": string;
+  "docs.impact.noGit": string;
+  "docs.impact.request": string;
+  "docs.impact.review": string;
+  "docs.impact.reviewHint": string;
+  "docs.impact.before": string;
+  "docs.impact.after": string;
+  "docs.impact.apply": string;
+
   // Common
   'common.cancel': string;
   'chat.selectFromLibrary': string;
@@ -3998,6 +4016,7 @@ export interface Dict {
   'development.autoVerifyHint': string;
   'development.autoVerify': string;
   'development.localApp': string;
+  'development.environment': string;
   'development.configureRun': string;
   'development.runSettingsHint': string;
   'development.springProfile': string;
@@ -4059,4 +4078,31 @@ export interface Dict {
   'screenSpec.author': string;
   'screenSpec.date': string;
   'screenSpec.version': string;
+  "docs.graph.title": string;
+  "docs.graph.scope": string;
+  "docs.graph.files": string;
+  "docs.graph.analyze": string;
+  "docs.graph.failed": string;
+  "docs.graph.summary": string;
+  "docs.graph.warnings": string;
+  "docs.graph.unlinked": string;
+  "docs.watch.title": string;
+  "docs.watch.interval": string;
+  "docs.watch.enable": string;
+  "docs.watch.disable": string;
+  "docs.watch.check": string;
+  "docs.watch.acknowledge": string;
+  "docs.watch.unconfigured": string;
+  "docs.watch.changes": string;
+  "docs.watch.status.disabled": string;
+  "docs.watch.status.pending": string;
+  "docs.watch.status.current": string;
+  "docs.watch.status.changed": string;
+  "docs.watch.status.error": string;
+  "docs.watch.change.table-added": string;
+  "docs.watch.change.table-removed": string;
+  "docs.watch.change.table-changed": string;
+  "docs.watch.change.column-added": string;
+  "docs.watch.change.column-removed": string;
+  "docs.watch.change.column-changed": string;
 }

@@ -1,5 +1,6 @@
 import type { InterfaceEndpoint, InterfaceSpecDocument } from '@open-design/contracts';
 import { validateInterfaceSpecDocument } from '@open-design/contracts';
+import { interfaceEvidenceRows } from './evidence.js';
 import {
   COVER_SHEET_LAYOUT,
   DETAIL_FIELD_HEADERS,
@@ -215,5 +216,6 @@ ${banner}
 </div>
 ${listSection(models)}
 ${models.map((d, i) => detailSection(d, i)).join('\n')}
+${interfaceEvidenceRows(doc).length ? `<section class="detail"><h3>문서 근거 / Evidence</h3><table class="fields"><thead><tr>${['인터페이스', '구분', '필드', '근거 유형', '출처', '행', '리비전', 'SHA-256', '설명', '검토', '심볼', '수집 시각'].map((label) => `<th>${esc(label)}</th>`).join('')}</tr></thead><tbody>${interfaceEvidenceRows(doc).map((row) => `<tr>${row.map((cell) => `<td>${esc(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table></section>` : ''}
 </body></html>`;
 }

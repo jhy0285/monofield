@@ -12,6 +12,8 @@ import { parseInterfaceSpecDocument, validateInterfaceSpecDocument } from '@open
 import type { ArtifactManifest } from '../../artifacts/types';
 import { useI18n } from '../../i18n';
 import { fetchProjectFileText, writeProjectTextFileDetailed } from '../../providers/registry';
+import { DocumentImpactPanel, documentContentHash } from '../document-spec/DocumentImpactPanel';
+import { DocumentDependencyPanel } from '../document-spec/DocumentDependencyPanel';
 import { DocumentRenderActions } from '../document-spec/DocumentRenderActions';
 import styles from './InterfaceSpecEditor.module.css';
 
@@ -23,6 +25,7 @@ type Props = {
   file: ProjectFile;
   onFileSaved?: () => Promise<void> | void;
   onOpenFile?: (name: string) => void;
+  onRequestDocumentUpdate?: (prompt: string) => void;
 };
 
 function emptyField(): InterfaceFieldSpec {
@@ -57,7 +60,7 @@ function emptyEndpoint(endpoints: InterfaceEndpoint[]): InterfaceEndpoint {
   };
 }
 
-export function InterfaceSpecEditor({ projectId, file, onFileSaved, onOpenFile }: Props) {
+export function InterfaceSpecEditor({ projectId, file, onFileSaved, onOpenFile, onRequestDocumentUpdate }: Props) {
   const { locale, t } = useI18n();
   const ko = locale === 'ko';
   const copy = ko ? KO_COPY : EN_COPY;
@@ -71,6 +74,7 @@ export function InterfaceSpecEditor({ projectId, file, onFileSaved, onOpenFile }
   const [endpointIndex, setEndpointIndex] = useState(0);
   const [reloadKey, setReloadKey] = useState(0);
   const [diskChanged, setDiskChanged] = useState(false);
+  const loadedHash = useRef<string>();
   const dirtyRef = useRef(false);
   dirtyRef.current = dirty;
 
@@ -79,6 +83,7 @@ export function InterfaceSpecEditor({ projectId, file, onFileSaved, onOpenFile }
     if (text == null) throw new Error(copy.loadFailed);
     const parsed = parseInterfaceSpecDocument(JSON.parse(text));
     if (!parsed.ok) throw new Error(parsed.error);
+    loadedHash.current = await documentContentHash(text);
     setDoc(parsed.doc);
     setDirty(false);
     setDiskChanged(false);
@@ -130,7 +135,7 @@ export function InterfaceSpecEditor({ projectId, file, onFileSaved, onOpenFile }
     const endpoint = doc.endpoints[endpointIndex];
     if (!endpoint) return;
     patchEndpoint({
-      [kind]: endpoint[kind].map((field, index) => index === fieldIndex ? { ...field, ...patch } : field),
+      [kind]: endpoint[kind].map((field, index) => index === fieldIndex ? { ...field, ...patch, reviewStatus: 'edited' } : field),
     });
   }
 
@@ -149,12 +154,14 @@ export function InterfaceSpecEditor({ projectId, file, onFileSaved, onOpenFile }
       sourceSkillId: file.artifactManifest?.sourceSkillId,
       designSystemId: file.artifactManifest?.designSystemId,
     };
-    const result = await writeProjectTextFileDetailed(projectId, file.name, JSON.stringify(doc, null, 2), { artifactManifest: manifest });
+    const content = JSON.stringify(doc, null, 2);
+    const result = await writeProjectTextFileDetailed(projectId, file.name, content, { artifactManifest: manifest, expectedContentSha256: loadedHash.current });
     setSaving(false);
     if (!result.ok) {
       setSaveError(result.message);
       return false;
     }
+    loadedHash.current = await documentContentHash(content);
     setDirty(false);
     setSaved(true);
     window.setTimeout(() => setSaved(false), 1500);
@@ -198,6 +205,9 @@ export function InterfaceSpecEditor({ projectId, file, onFileSaved, onOpenFile }
         {saveError ? <div className={styles.error} role="alert">{saveError}</div> : null}
         {fatalIssues.length > 0 ? <IssueList title={copy.fatal(fatalIssues.length)} tone="fatal" issues={fatalIssues.map((issue) => issue.message)} /> : null}
         {warningIssues.length > 0 ? <IssueList title={copy.warnings(warningIssues.length)} tone="warning" issues={warningIssues.map((issue) => issue.message)} /> : null}
+
+        <DocumentImpactPanel projectId={projectId} inputFile={file.name} doc={doc} loadedContentSha256={loadedHash.current} dirty={dirty} onRequestUpdate={onRequestDocumentUpdate} onApplyProposal={(proposal) => mutate(() => proposal)} />
+        <DocumentDependencyPanel projectId={projectId} dirty={dirty} />
 
         <section className={styles.documentPanel}>
           <div className={styles.sectionHeading}><div><h3>{copy.documentInfo}</h3><p>{copy.source}: {doc.source.mode === 'manual' ? copy.manualSource : [doc.source.language, doc.source.framework, doc.source.codebaseName].filter(Boolean).join(' · ')}</p></div></div>
@@ -256,9 +266,10 @@ type EditorCopy = typeof EN_COPY & {
 };
 
 function FieldTable({ title, fields, onAdd, onDelete, onPatch, copy }: { title: string; fields: InterfaceFieldSpec[]; onAdd: () => void; onDelete: (index: number) => void; onPatch: (index: number, patch: Partial<InterfaceFieldSpec>) => void; copy: EditorCopy }) {
+  const { t } = useI18n();
   return <div className={styles.fieldSection}>
     <div className={styles.fieldSectionHead}><div><h4>{title}</h4><p>{copy.sizeHint}</p></div><button type="button" onClick={onAdd}>+ {copy.addField}</button></div>
-    {fields.length === 0 ? <div className={styles.emptyFields}>{copy.emptyFields}</div> : <div className={styles.tableWrap}><table><thead><tr><th>{copy.fieldNameEn}</th><th>{copy.fieldNameKo}</th><th>{copy.dataType}</th><th>{copy.min}</th><th>{copy.max}</th><th>{copy.required}</th><th>{copy.note}</th><th /></tr></thead><tbody>{fields.map((field, index) => <tr key={`${field.path ?? field.nameEn}-${index}`}>
+    {fields.length === 0 ? <div className={styles.emptyFields}>{copy.emptyFields}</div> : <div className={styles.tableWrap}><table><thead><tr><th>{copy.fieldNameEn}</th><th>{copy.fieldNameKo}</th><th>{copy.dataType}</th><th>{copy.min}</th><th>{copy.max}</th><th>{copy.required}</th><th>{copy.note}</th><th>{t('docs.evidence')}</th><th /></tr></thead><tbody>{fields.map((field, index) => <tr key={`${field.path ?? field.nameEn}-${index}`}>
       <td><input aria-label={`${title} ${index + 1} ${copy.fieldNameEn}`} value={field.nameEn} onChange={(event) => onPatch(index, { nameEn: event.target.value })} /></td>
       <td><input value={field.nameKo} onChange={(event) => onPatch(index, { nameKo: event.target.value })} /></td>
       <td><input value={field.dataType} onChange={(event) => onPatch(index, { dataType: event.target.value })} /></td>
@@ -266,6 +277,7 @@ function FieldTable({ title, fields, onAdd, onDelete, onPatch, copy }: { title: 
       <td><input value={field.maxSize} onChange={(event) => onPatch(index, { maxSize: event.target.value })} /></td>
       <td><select value={field.required} onChange={(event) => onPatch(index, { required: event.target.value as InterfaceFieldSpec['required'] })}><option value="TBD">TBD</option><option value="Y">Y</option><option value="N">N</option></select></td>
       <td><input value={field.note} onChange={(event) => onPatch(index, { note: event.target.value })} /></td>
+      <td><small>{field.reviewStatus ?? 'unreviewed'}</small><div>{field.evidence}</div>{field.evidenceRefs?.map((ref, evidenceIndex) => <div key={evidenceIndex}><code>{ref.ref}{ref.line ? `:${ref.line}` : ''}</code><small>{ref.summary}</small></div>)}</td>
       <td><button aria-label={`${title} ${index + 1} ${copy.delete}`} type="button" onClick={() => onDelete(index)}>×</button></td>
     </tr>)}</tbody></table></div>}
   </div>;

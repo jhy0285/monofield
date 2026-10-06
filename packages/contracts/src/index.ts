@@ -53,6 +53,7 @@ export * from './sse/common.js';
 export * from './sse/chat.js';
 export * from './sse/proxy.js';
 export * from './prompts/system.js';
+export * from './prompts/memory-context.js';
 export * from './prompts/database-development.js';
 export * from './prompts/plugin-block.js';
 export * from './prompts/atom-block.js';
@@ -63,3 +64,8 @@ export * from './analytics/public-params.js';
 export * from './docs/interface-spec.js';
 export * from './docs/screen-spec.js';
 export * from './api/interface-spec-intent.js';
+
+export * from './docs/evidence.js';
+export * from './docs/interface-spec-proposal.js';
+export * from './api/document-impact.js';
+export * from './api/document-graph.js';

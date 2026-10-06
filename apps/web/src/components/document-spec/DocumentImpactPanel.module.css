@@ -1,0 +1,16 @@
+.root { padding: 18px; border: 1px solid var(--border); background: var(--bg-panel); border-radius: 8px; margin-bottom: 18px; }
+.heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.heading h3 { margin: 0 0 6px; }
+.heading p { margin: 0; opacity: .75; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.root li span { display: block; font-size: 12px; overflow-wrap: anywhere; opacity: .75; }
+.error { color: var(--red); white-space: pre-wrap; }
+.comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+.comparison pre { max-height: 360px; overflow: auto; padding: 10px; background: var(--bg); color: var(--text); font: 11px var(--font-mono); }
+.changes { max-height: 360px; overflow: auto; margin: 12px 0; }
+.changes table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.changes th, .changes td { padding: 8px; border: 1px solid var(--border); text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; }
+.changes thead th { position: sticky; top: 0; background: var(--bg-panel); }
+@media (max-width: 700px) { .comparison { grid-template-columns: 1fr; } .heading { flex-direction: column; } }
+.root textarea { display: block; width: 100%; box-sizing: border-box; margin-top: 6px; resize: vertical; }
+.root fieldset { border: 1px solid var(--border); border-radius: 6px; margin-bottom: 14px; }

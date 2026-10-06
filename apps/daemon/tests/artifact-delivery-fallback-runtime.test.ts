@@ -88,15 +88,17 @@ describe('host-owned artifact fallback runtime', { timeout: 120_000 }, () => {
           projectId: string | null;
         });
       expect(attempts).toHaveLength(1);
-      expect(attempts[0].stdin).toContain('# API mode — no tools available');
-      expect(attempts[0].stdin).toContain('## Text-artifact handoff');
-      expect(attempts[0].stdin).not.toContain('## Filesystem handoff');
-      expect(attempts[0].args).toContain('shell_tool');
-      expect(attempts[0].args).toContain('unified_exec');
-      expect(attempts[0].args).toContain('mcp_servers={}');
-      expect(attempts[0].toolToken).toBeNull();
-      expect(attempts[0].projectId).toBeNull();
-      expect(attempts[0].cwd.replace(/\\/g, '/')).toContain('/runtime/text-artifact/');
+      const attempt = attempts[0];
+      if (!attempt) throw new Error('Expected one fallback attempt');
+      expect(attempt.stdin).toContain('# API mode — no tools available');
+      expect(attempt.stdin).toContain('## Text-artifact handoff');
+      expect(attempt.stdin).not.toContain('## Filesystem handoff');
+      expect(attempt.args).toContain('shell_tool');
+      expect(attempt.args).toContain('unified_exec');
+      expect(attempt.args).toContain('mcp_servers={}');
+      expect(attempt.toolToken).toBeNull();
+      expect(attempt.projectId).toBeNull();
+      expect(attempt.cwd.replace(/\\/g, '/')).toContain('/runtime/text-artifact/');
 
       const events = await readRunEvents(run.eventsLogPath);
       expect(events.filter((event) => (

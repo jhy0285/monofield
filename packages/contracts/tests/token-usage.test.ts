@@ -6,6 +6,12 @@ import {
 } from '../src/index.js';
 
 describe('token usage normalization', () => {
+  it('counts Responses API cache reads as a subset of input, without adding them twice', () => {
+    expect(normalizeProviderTokenUsage({
+      input_tokens: 1000, input_tokens_details: { cached_tokens: 800 },
+      output_tokens: 50, total_tokens: 1050,
+    })).toMatchObject({ inputTokens: 1000, cachedInputTokens: 800, outputTokens: 50, totalTokens: 1050 });
+  });
   it('normalizes Anthropic cache fields into effective input', () => {
     expect(normalizeProviderTokenUsage({
       input_tokens: 100,

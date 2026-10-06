@@ -25,6 +25,34 @@ function minimalDocument(): unknown {
 }
 
 describe('interface-spec document contract', () => {
+  it('keeps human edit status and its source context in the reviewed document', () => {
+    const result = createInterfaceSpecDocumentFromManualDraft({ documentName: 'Orders', reviewStage: 'review',
+      endpoints: [{ interfaceName: 'Orders', method: 'GET', path: '/orders', responseFields: [{
+        nameEn: 'id', dataType: 'String', required: 'Y', reviewStatus: 'edited', evidence: 'Original requirement',
+      }] }],
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.doc.endpoints[0]?.responseFields[0]).toMatchObject({ reviewStatus: 'edited', evidence: 'Original requirement' });
+  });
+  it('preserves accepted field evidence through conversion and a JSON round trip', () => {
+    const evidenceRefs = [{ kind: 'requirement', ref: 'requirements/orders.md', revision: 'abc123', summary: 'Section 7' }];
+    const result = createInterfaceSpecDocumentFromManualDraft({
+      documentName: 'Orders', assistMode: 'ai', reviewStage: 'review',
+      endpoints: [{ interfaceName: 'Orders', method: 'GET', path: '/orders',
+        responseFields: [{ nameEn: 'orderId', dataType: 'String', required: 'Y', suggested: false,
+          evidence: 'Requirements section 7', evidenceRefs }],
+      }],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const roundTrip = parseInterfaceSpecDocument(JSON.parse(JSON.stringify(result.doc)));
+    expect(roundTrip.ok).toBe(true);
+    if (!roundTrip.ok) return;
+    expect(roundTrip.doc.endpoints[0]?.responseFields[0]).toMatchObject({
+      evidence: 'Requirements section 7', evidenceRefs, reviewStatus: 'accepted',
+    });
+  });
+
   it('parses a minimal agent-produced document and fills defaults', () => {
     const result = parseInterfaceSpecDocument(minimalDocument());
     expect(result.ok).toBe(true);

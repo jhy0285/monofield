@@ -25,6 +25,17 @@ describe('classifyAgentServiceFailure', () => {
     }
   });
 
+  it('recognizes current CLI missing-auth messages without treating a configured auth type as a failure', () => {
+    for (const text of [
+      'No auth type is selected. Please configure an auth type before running in non-interactive mode.',
+      'No API key found. Starting login flow...',
+      'Internal error: You need to sign in to use this model.',
+      'json-rpc id 2: Missing API key for mistral provider.',
+      'No LLM model was specified and no API keys were provided.',
+    ]) expect(classifyAgentServiceFailure(text)).toBe('AGENT_AUTH_REQUIRED');
+    expect(classifyAgentServiceFailure('Auth type is selected. API key found.')).toBeNull();
+  });
+
   it('classifies upstream/provider failures', () => {
     for (const text of [
       'Error: 529 {"type":"overloaded_error"}',

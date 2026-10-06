@@ -13,6 +13,17 @@ afterEach(async () => {
 });
 
 describe('project file optimistic writes', () => {
+  it('allows only one concurrent save against the same document revision', async () => {
+    const projectsRoot = await mkdtemp(path.join(os.tmpdir(), 'monofield-file-concurrent-'));
+    temporaryRoots.push(projectsRoot);
+    const original = Buffer.from('original');
+    await writeProjectFile(projectsRoot, 'project-1', 'spec.json', original);
+    const expectedContentSha256 = createHash('sha256').update(original).digest('hex');
+    const saves = await Promise.allSettled(Array.from({ length: 4 }, (_, index) =>
+      writeProjectFile(projectsRoot, 'project-1', 'spec.json', Buffer.from(`draft-${index}`), { expectedContentSha256 })));
+    expect(saves.filter((save) => save.status === 'fulfilled')).toHaveLength(1);
+    for (const save of saves) if (save.status === 'rejected') expect(save.reason).toMatchObject({ code: 'ESTALE' });
+  });
   it('rejects an interleaved stale save without overwriting the newer disk content', async () => {
     const projectsRoot = await mkdtemp(path.join(os.tmpdir(), 'monofield-file-cas-'));
     temporaryRoots.push(projectsRoot);

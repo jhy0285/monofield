@@ -199,7 +199,17 @@ async function readWorkingTreeChanges(cwd: string, scoped = false): Promise<GitC
   ]);
   if (tracked.code !== 0) throw new Error(tracked.stderr.trim() || 'Unable to read Git status');
   if (untracked.code !== 0) throw new Error(untracked.stderr.trim() || 'Unable to list untracked files');
-  return [...parseGitPorcelain(tracked.stdout), ...parseGitUntracked(untracked.stdout)];
+  // Porcelain always reports paths from the repository root, even with
+  // status.relativePaths=true; ls-files already reports paths from cwd.
+  // The diff and file-opening APIs use the selected module as their base.
+  const root = gitWorkspaceRootPath(cwd);
+  const modulePath = (path: string) => relative(resolve(cwd), resolve(root, path)).replace(/\\/g, '/');
+  const trackedFiles = parseGitPorcelain(tracked.stdout).map((file) => ({
+    ...file,
+    path: modulePath(file.path),
+    ...(file.oldPath ? { oldPath: modulePath(file.oldPath) } : {}),
+  }));
+  return [...trackedFiles, ...parseGitUntracked(untracked.stdout)];
 }
 
 export function parseGitNameStatus(output: string): GitChangedFile[] {
@@ -422,7 +432,7 @@ async function readGitWorkspaceStatus(cwd: string, comparisonBranch?: string | n
   const selectedBranch = comparisonBranch ? await resolveComparisonBranch(cwd, comparisonBranch) : null;
   const [files, branch, head] = await Promise.all([
     selectedBranch
-      ? runGit(cwd, ['diff', '--name-status', '-z', '--find-renames', `${selectedBranch.fullName}...HEAD`, '--', '.'])
+      ? runGit(cwd, ['diff', '--name-status', '-z', '--find-renames', '--relative', `${selectedBranch.fullName}...HEAD`, '--', '.'])
         .then((result) => {
           if (result.code !== 0) throw new Error(result.stderr.trim() || 'Unable to read Git status');
           return parseGitNameStatus(result.stdout);
@@ -448,7 +458,11 @@ export async function gitWorkspaceStatus(
 ): Promise<GitWorkspaceStatusResponse> {
   const root = gitCacheRoot(cwd);
   if (options.refresh) invalidateStatusCache(root);
-  const key = `${root}\0${comparisonBranch?.trim() ?? ''}`;
+  const selectedPath = resolve(cwd).replace(/\\/g, '/');
+  const moduleKey = process.platform === 'win32' ? selectedPath.toLowerCase() : selectedPath;
+  // Contents are module-specific; generations remain shared across the
+  // worktree so switching branches invalidates every module snapshot.
+  const key = `${root}\0${moduleKey}\0${comparisonBranch?.trim() ?? ''}`;
   const cached = statusCache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
   const generation = statusGeneration.get(root) ?? 0;

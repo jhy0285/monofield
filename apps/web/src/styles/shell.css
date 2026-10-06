@@ -25,7 +25,7 @@
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: 36px minmax(0, 1fr);
+  grid-template-rows: 38px minmax(0, 1fr) 32px;
   background: var(--bg-app);
   overflow: hidden;
 }

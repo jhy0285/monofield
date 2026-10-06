@@ -1,5 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 
+import { Button } from '@open-design/components';
+
 import type {
   DatabaseConnectionSummary,
   DevelopmentConfigsResponse,
@@ -273,10 +275,13 @@ export function DevelopmentWorkspaceControls({
   const [launchElapsedSeconds, setLaunchElapsedSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [environmentOpen, setEnvironmentOpen] = useState(false);
+  const environmentTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [runSettingsOpen, setRunSettingsOpen] = useState(false);
   const [runSettingsProjectKey, setRunSettingsProjectKey] = useState<string | null>(null);
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
+  const [documentVisible, setDocumentVisible] = useState(() => !document.hidden);
   const [draftProfile, setDraftProfile] = useState('');
   const [draftArguments, setDraftArguments] = useState('');
   const [draftPort, setDraftPort] = useState('');
@@ -548,12 +553,20 @@ export function DevelopmentWorkspaceControls({
       setBrowserVerificationActive(Boolean(getActiveBrowserVerification(projectId)));
     }
   }), [projectId]);
+  const hasActiveRuntimes = runtimeStatuses.some((status) => status.state === 'starting' || status.state === 'ready');
   useEffect(() => {
-    const active = runtimeStatuses.some((status) => status.state === 'starting' || status.state === 'ready');
-    if (!active) return;
+    const onVisibilityChange = () => {
+      setDocumentVisible(!document.hidden);
+      if (!document.hidden) void loadRuntimeSummaries(true);
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, [loadRuntimeSummaries]);
+  useEffect(() => {
+    if (!hasActiveRuntimes || !documentVisible) return;
     const timer = window.setInterval(() => { void loadRuntimeSummaries(true); }, 2_500);
     return () => window.clearInterval(timer);
-  }, [loadRuntimeSummaries, runtimeStatuses]);
+  }, [documentVisible, hasActiveRuntimes, loadRuntimeSummaries]);
   useEffect(() => {
     if (!projectMenuOpen) return;
     const frame = window.requestAnimationFrame(() => {
@@ -587,7 +600,7 @@ export function DevelopmentWorkspaceControls({
   }, [busy, runtime?.startedAt, runtime?.state]);
   useEffect(() => {
     const shouldPoll = runtime?.state === 'starting' || logsOpen;
-    if (!shouldPoll) return;
+    if (!shouldPoll || !documentVisible) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let controller: AbortController | null = null;
@@ -627,7 +640,7 @@ export function DevelopmentWorkspaceControls({
       controller?.abort();
       if (timer) clearTimeout(timer);
     };
-  }, [activeProjectPath, logsOpen, onOpenUrl, projectId, rememberRuntimes, runtime?.state, t]);
+  }, [activeProjectPath, documentVisible, logsOpen, onOpenUrl, projectId, rememberRuntimes, runtime?.state, t]);
 
   function persistDevelopment(next: Partial<NonNullable<ProjectMetadata['development']>>) {
     const currentMetadata = metadataRef.current;
@@ -955,6 +968,7 @@ export function DevelopmentWorkspaceControls({
     return <span className={styles.notice}>{t('development.folderRequired')}</span>;
   }
 
+  const environmentExpanded = environmentOpen || runSettingsOpen || guideOpen;
   const state = busy === 'start' ? 'starting' : runtime?.state ?? 'idle';
   const canStop = state === 'starting' || state === 'ready' || Boolean(runtime?.pid);
   const launchConfig = runtime?.config ?? selected;
@@ -1009,7 +1023,7 @@ export function DevelopmentWorkspaceControls({
               aria-haspopup="menu"
               aria-expanded={projectMenuOpen}
               aria-controls={`development-project-menu-${projectId}`}
-              title={activeProject?.path ?? activeProjectPath}
+              title={`${activeProject?.path ?? activeProjectPath} · ${runtimeStateLabel(state)}`}
               disabled={busy === 'start' || busy === 'stop'}
               onClick={() => setProjectMenuOpen((open) => !open)}
             >
@@ -1056,6 +1070,12 @@ export function DevelopmentWorkspaceControls({
             {runningCount} {t('development.ready')}
           </span>
         ) : null}
+        {canStop ? (
+          <Button variant={canStop ? 'ghost' : 'primary'} className={styles.action} data-testid="development-run-action" onClick={() => void stop()} disabled={busy != null}><Icon name="stop" size={13} />{t('development.stop')}</Button>
+        ) : (
+          <Button variant={canStop ? 'ghost' : 'primary'} className={styles.action} data-testid="development-run-action" onClick={() => void start()} disabled={busy != null || !selected || selectedRequiresManualSetup} title={manualSetupMessage}><Icon name="play" size={13} />{t('development.start')}</Button>
+        )}
+        <button type="button" className={styles.action} data-testid="development-open-changes" onClick={onOpenChanges}><Icon name="fork" size={13} />{t('gitChanges.title')}</button>
         <button
           type="button"
           className={styles.action}
@@ -1065,6 +1085,48 @@ export function DevelopmentWorkspaceControls({
         >
           <Icon name="terminal" size={13} />{t('development.logs')}
         </button>
+        <Button
+          ref={environmentTriggerRef}
+          variant="subtle"
+          className={styles.environmentTrigger}
+          data-testid="development-environment-toggle"
+          aria-expanded={environmentExpanded}
+          aria-controls={`development-environment-${projectId}`}
+          onClick={() => {
+            if (environmentExpanded) {
+              setRunSettingsOpen(false);
+              setRunSettingsProjectKey(null);
+              setGuideOpen(false);
+            }
+            setEnvironmentOpen(!environmentExpanded);
+          }}
+        >
+          <Icon name="settings" size={14} />
+          {t('development.environment')}
+          <Icon name="chevron-down" size={12} />
+        </Button>
+      </div>
+      {manualSetupMessage ? (
+        <div className={styles.notice} data-testid="development-manual-run-setup" title={manualSetupMessage}>
+          {manualSetupMessage}
+        </div>
+      ) : null}
+      <section
+        id={`development-environment-${projectId}`}
+        className={styles.environmentPanel}
+        data-testid="development-environment-panel"
+        hidden={!environmentExpanded}
+        aria-label={t('development.environment')}
+        onKeyDown={(event) => {
+          if (event.key !== 'Escape' || guideOpen) return;
+          event.preventDefault();
+          setEnvironmentOpen(false);
+          setRunSettingsOpen(false);
+          setRunSettingsProjectKey(null);
+          environmentTriggerRef.current?.focus();
+        }}
+      >
+      <div className={styles.environmentConfig}>
         <select
           className={`${styles.select} ${styles.runSelect}`}
           data-testid="development-run-config"
@@ -1088,11 +1150,6 @@ export function DevelopmentWorkspaceControls({
         >
           <Icon name="settings" size={13} />
         </button>
-        {canStop ? (
-          <button type="button" className={styles.action} data-testid="development-run-action" onClick={() => void stop()} disabled={busy != null}><Icon name="stop" size={13} />{t('development.stop')}</button>
-        ) : (
-          <button type="button" className={styles.action} data-testid="development-run-action" onClick={() => void start()} disabled={busy != null || !selected || selectedRequiresManualSetup} title={manualSetupMessage}><Icon name="play" size={13} />{t('development.start')}</button>
-        )}
         <button
           type="button"
           className={`${styles.action} ${styles.refreshAction}`}
@@ -1107,13 +1164,7 @@ export function DevelopmentWorkspaceControls({
           <Icon name={busy === 'detect' ? 'spinner' : 'reload'} size={13} />
           <span>{busy === 'detect' ? t('common.loading') : t('development.detectAgain')}</span>
         </button>
-        <button type="button" className={styles.action} data-testid="development-open-changes" onClick={onOpenChanges}><Icon name="fork" size={13} />{t('gitChanges.title')}</button>
       </div>
-      {manualSetupMessage ? (
-        <div className={styles.notice} data-testid="development-manual-run-setup" title={manualSetupMessage}>
-          {manualSetupMessage}
-        </div>
-      ) : null}
       <div className={styles.contextGroup}>
         <select className={`${styles.select} ${styles.databaseSelect}`} data-testid="development-database" aria-label={t('development.database')} title={activeDatabaseContext?.label ?? t('development.noDatabase')} value={activeDatabaseContext?.connectionId ?? ''} onChange={(event) => selectDatabase(event.target.value)}>
           <option value="">{t('development.noDatabase')}</option>
@@ -1147,18 +1198,6 @@ export function DevelopmentWorkspaceControls({
           <Icon name="help-circle" size={13} />
         </button>
       </div>
-      {busy === 'detect' ? (
-        <div
-          className={styles.projectLoading}
-          data-testid="development-project-loading"
-          role="status"
-          aria-live="polite"
-          aria-busy="true"
-        >
-          <Icon name="spinner" size={12} />
-          <span>{activeProjectPath || t('workspaceTabs.project')} · {t('common.loading')}</span>
-        </div>
-      ) : null}
       {runSettingsOpen && selected ? (
         <div className={styles.runSettings} data-testid="development-run-settings-panel">
           <div className={styles.runSettingsHeading}>
@@ -1244,6 +1283,19 @@ export function DevelopmentWorkspaceControls({
           {displayedProfile ? <strong>SPRING_PROFILES_ACTIVE={displayedProfile}</strong> : <strong>{displayedConfig.framework}</strong>}
           <code>{displayedCommand}</code>
           <span>{displayedUrl}{displayedPort ? ` · ${runCopy.port} ${displayedPort}` : ''}</span>
+        </div>
+      ) : null}
+      </section>
+      {busy === 'detect' ? (
+        <div
+          className={styles.projectLoading}
+          data-testid="development-project-loading"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <Icon name="spinner" size={12} />
+          <span>{activeProjectPath || t('workspaceTabs.project')} · {t('common.loading')}</span>
         </div>
       ) : null}
       {state === 'starting' ? (

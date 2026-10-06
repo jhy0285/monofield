@@ -382,6 +382,15 @@ export interface ChatRunCreateResponse {
 }
 
 export interface ChatRunStatusResponse {
+  /** Successful capture is evidence collection; it does not assert task behavior. */
+  verification?: {
+    scope: 'browser-capture';
+    ok: boolean;
+    error: string | null;
+    checkedAt: string;
+    verifiedActions: string[];
+    interactionActions: string[];
+  } | null;
   id: string;
   projectId: string | null;
   conversationId: string | null;
@@ -429,6 +438,14 @@ export interface ChatRunStatusResponse {
     stablePromptHash: string;
     hit: boolean;
     missReason: 'new-session' | 'missing-stored-hash' | 'stable-prompt-changed' | null;
+  };
+  /** Host-added text only; character counts are not provider token or cost measurements. */
+  promptContext?: {
+    profile: 'codex-native' | 'assisted';
+    composedCharacters: number;
+    requestCharacters: number;
+    addedCharacters: number;
+    stableCharactersSkipped: number;
   };
   /** Browser Use availability for runs that requested in-app browser automation. */
   browserUse?: BrowserUseRunState;

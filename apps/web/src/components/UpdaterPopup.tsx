@@ -6,6 +6,7 @@ import { Icon } from './Icon';
 import { popoverIn } from '../motion';
 import {
   deriveUpdaterModel,
+  downloadUpdaterUpdate,
   openUpdaterInstaller,
   quitAfterUpdaterInstallerOpen,
   readUpdaterStatus,
@@ -111,9 +112,11 @@ function updaterErrorCode(model: UpdaterModel): string | undefined {
 export function UpdaterPopup({
   appVersionInfo = null,
   desktopNotificationsEnabled = false,
+  showLabel = false,
 }: {
   appVersionInfo?: AppVersionInfo | null;
   desktopNotificationsEnabled?: boolean;
+  showLabel?: boolean;
 }) {
   const t = useT();
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -204,6 +207,11 @@ export function UpdaterPopup({
   ]);
 
   const nativeReady = model.environment === 'desktop' && model.shouldShowControl;
+  const nativePending = Boolean(
+    model.environment === 'desktop' && model.enabled && model.supported &&
+    model.availableVersion &&
+    (model.status?.state === 'available' || model.status?.state === 'downloading'),
+  );
   const manualReady = manualRelease != null && !nativeReady;
   // A failed update check is not proof that an update exists. Only surface an
   // automatic failure prompt when the native updater had already identified a
@@ -241,8 +249,10 @@ export function UpdaterPopup({
   );
   const installBusy = installState === 'opening' || installState === 'handoff';
   const canStartInstall = ready || installState === 'recoverable';
-  const showControl = ready || installState !== 'idle';
-  const controlLabel = manualReady || nativeErrorReady
+  const showControl = ready || nativePending || installState !== 'idle';
+  const controlLabel = nativePending
+    ? model.busy ? t('updater.downloading') : t('updater.available')
+    : manualReady || nativeErrorReady
     ? t('updater.openReleasePage')
     : model.updateKind === 'payload'
       ? t('updater.installRestart')
@@ -486,6 +496,12 @@ export function UpdaterPopup({
         <span className="entry-updater-menu__glyph">
           <Icon name="arrow-up" size={18} strokeWidth={2.25} />
         </span>
+        {showLabel ? (
+          <span aria-live="polite">
+            {nativePending ? controlLabel : nativeErrorReady ? t('updater.failed') : t('updater.available')}
+            {model.downloadProgress?.percent != null ? ` · ${model.downloadProgress.percent}%` : ''}
+          </span>
+        ) : null}
       </button>
       <AnimatePresence>
         {panelOpen ? (
@@ -506,29 +522,20 @@ export function UpdaterPopup({
               <h2 id="updater-popup-title">
                 {nativeErrorReady
                   ? t('updater.failed')
-                  : manualReady
+                  : manualReady || nativePending
                     ? t('updater.available')
                     : t('updater.ready')}
               </h2>
               <p>
                 {nativeErrorReady
                   ? t('updater.openFailedFallback')
+                  : nativePending
+                    ? t('updater.availableBody', { version: model.availableVersion ?? '' })
                   : manualReady && manualRelease
                   ? t('updater.availableBody', { version: manualRelease.version })
                   : versionText(t, displayModel)}
               </p>
               {channelLabel != null ? <span className="updater-popup__badge">{channelLabel}</span> : null}
-              <button
-                className="updater-popup__star"
-                data-testid="updater-star-button"
-                type="button"
-                onClick={() => {
-                  void openExternalUrl(GITHUB_REPO_URL);
-                }}
-              >
-                <Icon name="github-filled" size={14} aria-hidden />
-                {t('community.starAction')}
-              </button>
             </div>
             <div className="updater-popup__actions">
               <button className="updater-popup__button" disabled={installBusy} type="button" onClick={close}>
@@ -537,13 +544,21 @@ export function UpdaterPopup({
               <button
                 className="updater-popup__button updater-popup__button--primary"
                 data-testid="updater-install-button"
-                disabled={installBusy}
+                disabled={installBusy || (nativePending && !model.canDownload)}
                 type="button"
                 onClick={() => {
-                  void installAndQuit();
+                  if (nativePending) {
+                    void downloadUpdaterUpdate({ payload: { source: 'updater-prompt' } }).then((result) => {
+                      if (result.ok) setModel(result.model);
+                    });
+                  } else {
+                    void installAndQuit();
+                  }
                 }}
               >
-                {manualReady || nativeErrorReady
+                {nativePending
+                  ? model.busy ? t('updater.downloading') : t('updater.download')
+                  : manualReady || nativeErrorReady
                   ? t('updater.openReleasePage')
                   : installActionText(t, displayModel, installBusy)}
               </button>

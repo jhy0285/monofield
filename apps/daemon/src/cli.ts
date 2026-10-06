@@ -897,6 +897,57 @@ async function runArtifacts(args) {
 }
 
 async function runDocs(args) {
+  if (args[0] === 'graph') {
+    const flags = parseFlags(args.slice(1), { string: ['project', 'inputs-file', 'daemon-url'], boolean: ['json', 'help'] });
+    if (flags.help || !flags.project) {
+      console.log('Usage: monofield docs graph --project <id> [--inputs-file <JSON-array-file>] [--json] [--daemon-url <url>]');
+      process.exit(flags.help ? 0 : 2);
+    }
+    const body = flags['inputs-file'] ? { inputFiles: JSON.parse(readFileSync(flags['inputs-file'], 'utf8')) } : {};
+    const base = await cliDaemonBaseUrl(flags);
+    const response = await fetch(`${base}/api/projects/${encodeURIComponent(flags.project)}/documents/graph`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    });
+    if (!response.ok) return structuredHttpFailure(response);
+    const result = await response.json();
+    if (flags.json) process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    else console.log(`${result.nodes.length} dependency nodes; ${result.impacts.length} affected paths; ${result.unlinkedNodeIds.length} items without dependencies; ${result.warnings.length} warnings.`);
+    return;
+  }
+  if (args[0] === 'proposal') {
+    const flags = parseFlags(args.slice(1), { string: ['project', 'input', 'proposal', 'expected-sha', 'daemon-url'], boolean: ['json', 'help', 'include-document'] });
+    if (flags.help || !flags.project || !flags.input || !flags.proposal || !flags['expected-sha']) {
+      console.log('Usage: monofield docs proposal --project <id> --input <original.json> --proposal <proposal.json> --expected-sha <sha256> [--json] [--include-document]');
+      process.exit(flags.help ? 0 : 2);
+    }
+    const base = await cliDaemonBaseUrl(flags);
+    const response = await fetch(`${base}/api/projects/${encodeURIComponent(flags.project)}/documents/proposal`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
+        inputFile: flags.input, proposalFile: flags.proposal, expectedContentSha256: flags['expected-sha'], includeDocument: !!flags['include-document'],
+      }),
+    });
+    if (!response.ok) return structuredHttpFailure(response);
+    const result = await response.json();
+    if (flags.json) process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    else console.log(`Valid ${result.format} proposal; ${result.changesApplied ?? 'full document'} changes. Original unchanged.`);
+    return;
+  }
+  if (args[0] === 'impact') {
+    const flags = parseFlags(args.slice(1), { string: ['project', 'input', 'daemon-url'], boolean: ['json', 'help'] });
+    if (flags.help || !flags.project || !flags.input) {
+      console.log('Usage: monofield docs impact --project <id> --input <project-relative.json> [--json] [--daemon-url <url>]');
+      process.exit(flags.help ? 0 : 2);
+    }
+    const base = await cliDaemonBaseUrl(flags);
+    const response = await fetch(`${base}/api/projects/${encodeURIComponent(flags.project)}/documents/impact`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ inputFile: flags.input }),
+    });
+    if (!response.ok) return structuredHttpFailure(response);
+    const result = await response.json();
+    if (flags.json) process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    else console.log(`${result.affected.length} affected interfaces; ${result.untrackedEndpointIndexes.length} without code references.\n\n${result.updatePrompt}`);
+    return;
+  }
   const { exitCode } = await runDocsCli(args);
   process.exit(exitCode);
 }

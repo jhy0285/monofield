@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -139,5 +139,80 @@ describe('Git workspace branch mutations', () => {
     const switched = await switchGitWorkspaceBranch(root, 'refs/heads/release', 'stash');
     expect(switched).toMatchObject({ previousBranch: 'feature/orders', currentBranch: 'release', stashed: true });
     expect(execFileSync('git', ['stash', 'list'], { cwd: root, encoding: 'utf8', windowsHide: true })).toContain('MonoField branch switch');
+  });
+});
+
+describe('Git workspace nested modules', () => {
+  let root = '';
+  let backend = '';
+  let frontend = '';
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true });
+
+  beforeAll(async () => {
+    root = await mkdtemp(join(tmpdir(), 'monofield-git-modules-'));
+    backend = join(root, 'backend');
+    frontend = join(root, 'frontend');
+    await mkdir(backend);
+    await mkdir(frontend);
+    git('init', '--quiet');
+    await writeFile(join(backend, 'server.txt'), 'backend before\n');
+    await writeFile(join(frontend, 'server.txt'), 'frontend before\n');
+    await writeFile(join(backend, 'old.txt'), 'renamed contents\n');
+    git('add', '.');
+    git('-c', 'user.name=MonoField Test', '-c', 'user.email=test@monofield.local', 'commit', '--quiet', '-m', 'baseline');
+    git('branch', 'comparison-base');
+    await writeFile(join(backend, 'committed.txt'), 'backend committed\n');
+    await writeFile(join(frontend, 'committed.txt'), 'frontend committed\n');
+    git('add', '.');
+    git('-c', 'user.name=MonoField Test', '-c', 'user.email=test@monofield.local', 'commit', '--quiet', '-m', 'module features');
+    await writeFile(join(backend, 'server.txt'), 'backend after\n');
+    await writeFile(join(frontend, 'server.txt'), 'frontend after\n');
+    await writeFile(join(backend, 'new.txt'), 'backend untracked\n');
+    await writeFile(join(frontend, 'new.txt'), 'frontend untracked\n');
+    git('mv', 'backend/old.txt', 'backend/renamed.txt');
+  });
+
+  afterAll(async () => {
+    if (root) await rm(root, { recursive: true, force: true });
+  });
+
+  test('returns module-relative tracked, renamed and untracked paths with actual patches', async () => {
+    const status = await gitWorkspaceStatus(backend, null, { refresh: true });
+    expect(status.files.map((file) => file.path).sort()).toEqual(['new.txt', 'renamed.txt', 'server.txt']);
+    expect(status.files.find((file) => file.path === 'renamed.txt')).toMatchObject({ oldPath: 'old.txt', staged: true });
+    const tracked = await gitWorkspaceDiff(backend, 'server.txt', 'working');
+    expect(tracked.patch).toContain('-backend before');
+    expect(tracked.patch).toContain('+backend after');
+    expect((await gitWorkspaceDiff(backend, 'new.txt', 'working')).patch).toContain('+backend untracked');
+    expect((await gitWorkspaceDiff(backend, 'renamed.txt', 'staged')).patch).toContain('renamed contents');
+  });
+
+  test('keeps sibling and root status snapshots distinct without requiring refresh', async () => {
+    await gitWorkspaceStatus(backend, null, { refresh: true });
+    const sibling = await gitWorkspaceStatus(frontend);
+    expect(sibling.files.map((file) => file.path).sort()).toEqual(['new.txt', 'server.txt']);
+    const whole = await gitWorkspaceStatus(root);
+    expect(whole.files).toHaveLength(5);
+    expect(whole.files).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: 'backend/server.txt' }),
+      expect.objectContaining({ path: 'frontend/server.txt' }),
+    ]));
+    expect((await gitWorkspaceDiff(frontend, 'server.txt', 'working')).patch).toContain('+frontend after');
+  });
+
+  test('uses module-relative paths for committed branch comparisons', async () => {
+    const status = await gitWorkspaceStatus(backend, 'comparison-base', { refresh: true });
+    expect(status.files.map((file) => file.path)).toEqual(['committed.txt']);
+    expect((await gitWorkspaceDiff(backend, 'committed.txt', 'branch', 'comparison-base')).patch).toContain('+backend committed');
+  });
+
+  test('invalidates every module snapshot when a branch changes through a sibling', async () => {
+    await gitWorkspaceStatus(backend, null, { refresh: true });
+    await gitWorkspaceStatus(frontend);
+    await gitWorkspaceStatus(root);
+    await createGitWorkspaceBranch(frontend, 'feature/module-cache', 'keep');
+    for (const cwd of [backend, frontend, root]) {
+      expect((await gitWorkspaceStatus(cwd)).branch).toBe('feature/module-cache');
+    }
   });
 });

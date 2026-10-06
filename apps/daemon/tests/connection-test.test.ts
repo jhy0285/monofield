@@ -3754,6 +3754,12 @@ process.exit(1);
 });
 
 describe('connection test helpers', () => {
+  it('removes device-login challenge codes from diagnostic output', () => {
+    const detail = redactSecrets('https://example.com/auth?user_code=ABCD-1234&device_code=one-time-secret\nconfirm that the code shown matches: ABCD-1234');
+    expect(detail).not.toContain('ABCD-1234');
+    expect(detail).not.toContain('one-time-secret');
+    expect(detail).toContain('user_code=[REDACTED]');
+  });
   it('redacts named credentials and connection URL passwords while preserving env references', () => {
     const detail = redactSecrets([
       'password: local-secret',
@@ -4033,5 +4039,39 @@ describe('validateBaseUrlResolved (DNS-aware base URL validation)', () => {
     const result = await validateBaseUrlResolved('https://offline.example.com/v1', failingLookup);
     expect(result.error).toBeUndefined();
     expect(failingLookup).toHaveBeenCalledOnce();
+  });
+});
+
+describe('connection failures observed with installed vendor CLIs', () => {
+  it('rejects Codebuddy login instructions even when the CLI exits successfully', async () => {
+    await withFakeAgent('codebuddy', `
+if (process.argv.includes('--version')) { console.log('2.161.0'); process.exit(0); }
+if (process.argv.includes('--help')) { console.log(''); process.exit(0); }
+console.log(JSON.stringify({type:'assistant',message:{role:'assistant',content:[{type:'text',text:'Authentication required. Please use /login command to sign in to your account'}]}}));
+console.log(JSON.stringify({type:'result',subtype:'success',is_error:false,result:'Authentication required. Please use /login command to sign in to your account'}));
+process.exit(0);
+`, async () => {
+      const result = await testAgentConnection({ agentId: 'codebuddy' });
+      expect(result.ok).toBe(false);
+      expect(result.kind).toBe('agent_auth_required');
+    });
+  });
+
+  it.each([
+    ['No auth type is selected. Please configure an auth type.', 'agent_auth_required'],
+    ['HTTP 401 unauthorized: AuthenticateToken authentication failed', 'agent_auth_required'],
+    ['HTTP 429 Too Many Requests', 'rate_limited'],
+    ['HTTP 503 Service temporarily unavailable', 'upstream_unavailable'],
+  ])('preserves the service reason for a plain CLI failure: %s', async (message, kind) => {
+    await withFakeAgent('qwen', `
+if (process.argv.includes('--version')) { console.log('0.24.7'); process.exit(0); }
+if (process.argv.includes('--help')) { console.log(''); process.exit(0); }
+console.error(${JSON.stringify(message)});
+process.exit(1);
+`, async () => {
+      const result = await testAgentConnection({ agentId: 'qwen' });
+      expect(result.ok).toBe(false);
+      expect(result.kind).toBe(kind);
+    });
   });
 });

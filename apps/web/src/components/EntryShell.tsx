@@ -9,6 +9,7 @@
 // thin wrapper that passes data and callbacks through to this shell.
 
 import {
+  lazy,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -88,10 +89,10 @@ import type {
 import { CenteredLoader } from './Loading';
 import { DesignsTab } from './DesignsTab';
 import { DesignSystemsTab } from './DesignSystemsTab';
-import { BrandsTab } from './BrandsTab';
 import { EntryNavRail, type EntryView as EntryViewKind } from './EntryNavRail';
 import { LibrarySection } from './LibrarySection';
 import { HomeView } from './HomeView';
+import { EntryViewPane } from './EntryViewPane';
 import {
   createPluginAuthoringHandoff,
   createPluginUseHandoff,
@@ -103,22 +104,19 @@ import type { PluginUseAction } from './plugins-home/useActions';
 import { Icon } from './Icon';
 import { AgentIcon } from './AgentIcon';
 import { LanguageMenu } from './LanguageMenu';
-import { IntegrationsView, type IntegrationTab } from './IntegrationsView';
+import type { IntegrationTab } from './IntegrationsView';
 import { InlineModelSwitcher } from './InlineModelSwitcher';
 import {
   EntrySettingsMenu,
   type EntrySettingsSection,
 } from './EntrySettingsMenu';
 import { NewProjectModal } from './NewProjectModal';
-import { PluginsView } from './PluginsView';
-import { OpenWorkView } from './OpenWorkView';
 import type { CreateInput, CreateTab, ImportClaudeDesignOutcome } from './NewProjectPanel';
 import type { PluginLoopSubmit } from './PluginLoopHome';
 import {
   type PluginShareAction,
   type PluginShareProjectOutcome,
 } from '../state/projects';
-import { TasksView } from './TasksView';
 import {
   API_KEY_PLACEHOLDERS,
   API_PROTOCOL_TABS,
@@ -186,6 +184,12 @@ function writeStoredRailOpen(open: boolean): void {
 }
 
 const ONBOARDING_DROPDOWN_OPEN_EVENT = 'open-design:onboarding-dropdown-open';
+const BrandsTab = lazy(() => import('./BrandsTab').then((module) => ({ default: module.BrandsTab })));
+const IntegrationsView = lazy(() => import('./IntegrationsView').then((module) => ({ default: module.IntegrationsView })));
+const PluginsView = lazy(() => import('./PluginsView').then((module) => ({ default: module.PluginsView })));
+const OpenWorkView = lazy(() => import('./OpenWorkView').then((module) => ({ default: module.OpenWorkView })));
+const TasksView = lazy(() => import('./TasksView').then((module) => ({ default: module.TasksView })));
+
 const ENABLE_AMR_RUNTIME = false;
 
 // The topbar chips (GitHub star, model switcher, Use everywhere)
@@ -427,20 +431,6 @@ function featureGuideForView(next: EntryViewKind): EntryFeatureGuideId | null {
     case 'integrations': return 'integrations';
     default: return null;
   }
-}
-
-// Tab views stay mounted (so previews/thumbnails survive a tab switch) but the
-// inactive ones must leave layout, the accessibility tree, and tab order.
-// `content-visibility: hidden` still reserves the hidden pane's block size,
-// which pushes later sidebar destinations far below the sticky topbar.
-function inactiveViewProps(active: boolean) {
-  return {
-    style: active ? undefined : ({ display: 'none' } as const),
-    // React 18 types `inert` as boolean but warns when the boolean reaches
-    // the DOM. The empty-string form is the native boolean-attribute value.
-    inert: active ? undefined : ('' as unknown as boolean),
-    'aria-hidden': !active,
-  };
 }
 
 export function EntryShell({
@@ -826,7 +816,7 @@ export function EntryShell({
               view === 'home' ? '' : ' entry-main__inner--wide'
             }`}
           >
-            <div data-testid="entry-view-home" data-active={view === 'home' ? 'true' : 'false'} {...inactiveViewProps(view === 'home')}>
+            <EntryViewPane name="home" active={view === 'home'}>
               <HomeView
                 isActive={view === 'home'}
                 projects={projects}
@@ -852,8 +842,8 @@ export function EntryShell({
                 promptTemplates={promptTemplates}
                 executionSwitcher={view === 'home' ? homeExecutionSwitcher : undefined}
               />
-            </div>
-            <div data-testid="entry-view-projects" data-active={view === 'projects' ? 'true' : 'false'} {...inactiveViewProps(view === 'projects')}>
+            </EntryViewPane>
+            <EntryViewPane name="projects" active={view === 'projects'}>
               {projectsLoading || skillsLoading || designSystemsLoading ? (
                 <CenteredLoader label={t('common.loading')} />
               ) : (
@@ -875,31 +865,31 @@ export function EntryShell({
                   />
                 </div>
               )}
-            </div>
-            <div data-testid="entry-view-open-work" data-active={view === 'open-work' ? 'true' : 'false'} {...inactiveViewProps(view === 'open-work')}>
+            </EntryViewPane>
+            <EntryViewPane name="open-work" active={view === 'open-work'}>
               {view === 'open-work' ? (
                 <OpenWorkView
                   onUse={usePluginFromLibrary}
                   onManagePlugins={() => changeView('plugins')}
                 />
               ) : null}
-            </div>
-            <div data-testid="entry-view-tasks" data-active={view === 'tasks' ? 'true' : 'false'} {...inactiveViewProps(view === 'tasks')}>
+            </EntryViewPane>
+            <EntryViewPane name="tasks" active={view === 'tasks'}>
               <TasksView
                 skills={skills}
                 designTemplates={designTemplates}
                 connectors={connectors}
                 connectorsLoading={connectorsLoading}
               />
-            </div>
-            <div data-testid="entry-view-plugins" data-active={view === 'plugins' ? 'true' : 'false'} {...inactiveViewProps(view === 'plugins')}>
+            </EntryViewPane>
+            <EntryViewPane name="plugins" active={view === 'plugins'}>
               <PluginsView
                 onCreatePlugin={startPluginAuthoring}
                 onUsePlugin={usePluginFromLibrary}
                 onCreatePluginShareProject={onCreatePluginShareProject}
               />
-            </div>
-            <div data-testid="entry-view-design-systems" data-active={view === 'design-systems' ? 'true' : 'false'} {...inactiveViewProps(view === 'design-systems')}>
+            </EntryViewPane>
+            <EntryViewPane name="design-systems" active={view === 'design-systems'}>
               {designSystemsLoading ? (
                 <div className="entry-section">
                   <header className="entry-section__head">
@@ -932,31 +922,31 @@ export function EntryShell({
                   />
                 </div>
               )}
-            </div>
+            </EntryViewPane>
             {LIBRARY_UI_VISIBLE ? (
-              <div data-testid="entry-view-library" data-active={view === 'library' ? 'true' : 'false'} {...inactiveViewProps(view === 'library')}>
+              <EntryViewPane name="library" active={view === 'library'}>
                 <LibrarySection
                   active={view === 'library'}
                   onOpenProject={(projectId, fileName) =>
                     navigate({ kind: 'project', projectId, conversationId: null, fileName: fileName ?? null })
                   }
                 />
-              </div>
+              </EntryViewPane>
             ) : null}
-            <div data-testid="entry-view-brands" data-active={view === 'brands' ? 'true' : 'false'} {...inactiveViewProps(view === 'brands')}>
+            <EntryViewPane name="brands" active={view === 'brands'}>
               <BrandsTab
                 onApplyDesignSystem={onChangeDefaultDesignSystem}
                 onOpenProject={onOpenProject}
               />
-            </div>
-            {view === 'integrations' ? (
+            </EntryViewPane>
+            <EntryViewPane name="integrations" active={view === 'integrations'}>
               <IntegrationsView
                 config={config}
                 initialTab={integrationTab}
                 composioConfigLoading={composioConfigLoading}
                 onPersistComposioKey={onPersistComposioKey}
               />
-            ) : null}
+            </EntryViewPane>
           </div>
         </main>
       </div>

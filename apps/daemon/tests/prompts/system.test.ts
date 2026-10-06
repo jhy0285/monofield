@@ -86,7 +86,7 @@ describe('composeSystemPrompt — activeStageBlocks splice (spec §23.4)', () =>
 });
 
 describe('composeSystemPrompt', () => {
-  it('keeps ask and software-development sessions on the lean prompt path', () => {
+  it('uses Codex native instructions for unaugmented ask and development sessions', () => {
     const prompt = composeSystemPrompt({
       agentId: 'codex',
       sessionMode: 'chat',
@@ -94,11 +94,7 @@ describe('composeSystemPrompt', () => {
       locale: 'ko',
     });
 
-    expect(prompt).toContain('# Ask / software development mode');
-    expect(prompt).not.toContain('# Identity and workflow charter');
-    expect(prompt).not.toContain('RULE 1 — turn 1 must emit');
-    expect(prompt).not.toContain('## Media generation (if asked)');
-    expect(prompt.length).toBeLessThan(8_000);
+    expect(prompt).toBe('');
   });
 
   it('keeps a connected-database development turn below the live prompt budget', () => {
@@ -436,7 +432,7 @@ describe('composeSystemPrompt', () => {
       expect(apiPrompt).not.toContain('# Connected project database');
     });
 
-    it('keeps development writes native and stops on inaccessible UNC working folders', () => {
+    it('adds no app charter to native Codex and keeps filesystem rules with selected context', () => {
       const prompt = composeSystemPrompt({
         agentId: 'codex',
         sessionMode: 'chat',
@@ -444,9 +440,14 @@ describe('composeSystemPrompt', () => {
         executionProfile: 'filesystem',
       });
 
-      expect(prompt).toContain('do not use MonoField artifact or project-file wrappers for ordinary source files');
-      expect(prompt).toContain('report the exact error and stop');
-      expect(prompt).toContain('never switch projects, copy the repository to a temporary folder, or claim a UNC/network limitation');
+      expect(prompt).toBe('');
+      const assisted = composeSystemPrompt({
+        agentId: 'codex', sessionMode: 'chat', streamFormat: 'jsonl',
+        executionProfile: 'filesystem', projectInstructions: 'Preserve the current workspace.',
+      });
+      expect(assisted).toContain('do not use MonoField artifact or project-file wrappers for ordinary source files');
+      expect(assisted).toContain('report the exact error and stop');
+      expect(assisted).toContain('never switch projects, copy the repository to a temporary folder, or claim a UNC/network limitation');
     });
 
     it('forbids wrapping in-place-edit-only turns in an artifact block', () => {

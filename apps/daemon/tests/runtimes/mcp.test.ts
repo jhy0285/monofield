@@ -62,7 +62,7 @@ test('MCP-capable agents can discover equivalent live artifact and connector too
 
   for (const tool of tools) {
     assert.equal(typeof tool.description, 'string');
-    assert.match(tool.description, /POSIX equivalent: `"\$OD_NODE_BIN" "\$OD_BIN" tools /u);
+    assert.match(tool.description, /POSIX equivalent: `"\$MONOFIELD_NODE_BIN" "\$MONOFIELD_BIN" tools /u);
     assert.equal(tool.inputSchema.type, 'object');
   }
 

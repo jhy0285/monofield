@@ -170,10 +170,10 @@ describe('DesignBrowserPanel <webview> navigation', () => {
     expect(screen.queryByRole('button', { name: 'Edit live DOM' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Mark' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Draw on screenshot' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Inspect' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Tweaks' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Inspect' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Tweaks' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Comment' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Screenshot' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Screenshot' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Browser menu' }));
 
@@ -183,6 +183,11 @@ describe('DesignBrowserPanel <webview> navigation', () => {
     expect(screen.queryByRole('menuitem', { name: 'Mark' })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: 'Comment' })).toBeNull();
     expect(screen.getByRole('menuitem', { name: 'Copy Screenshot' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'Inspect' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'Tweaks' })).toBeTruthy();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Browser menu' }));
   });
 
   it('exposes local-preview mark, selection, and source implementation handoff tools', async () => {
@@ -218,8 +223,9 @@ describe('DesignBrowserPanel <webview> navigation', () => {
 
     expect(screen.getByRole('button', { name: 'Mark' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Draw on screenshot' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Inspect' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Tweaks' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Browser menu' }));
+    expect(screen.getByRole('menuitem', { name: 'Inspect' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Tweaks' }));
 
     await waitFor(() => expect(screen.getByTestId('browser-inspect-panel')).toBeTruthy());
     fireEvent.change(screen.getByLabelText('Size'), { target: { value: '20' } });
@@ -261,7 +267,8 @@ describe('DesignBrowserPanel <webview> navigation', () => {
     );
 
     expect(screen.getByRole('button', { name: 'Browser access: View' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '灵感' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Browser menu' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '灵感' }));
     expect(screen.getByRole('button', { name: 'Browser access: Inspect' })).toBeTruthy();
     expect(screen.getByText(/no clicks, typing, storage, form values, or credentials/i)).toBeTruthy();
     fireEvent.change(screen.getByRole('searchbox', { name: '搜索灵感' }), {
@@ -1214,7 +1221,8 @@ describe('DesignBrowserPanel <webview> navigation', () => {
     expect(screen.getByRole('button', { name: 'Mark' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Comment' })).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Screenshot' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Browser menu' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Copy Screenshot' }));
 
     await waitFor(() => expect(capturePage).toHaveBeenCalledTimes(1));
   });

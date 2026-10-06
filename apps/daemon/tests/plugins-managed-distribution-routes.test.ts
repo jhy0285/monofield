@@ -216,7 +216,7 @@ describe('managed plugin distribution routes', () => {
   it('hides unapproved installed plugins and their older snapshots', async () => {
     const { baseUrl, applyBakedPreviews } = await start();
 
-    const plugins = await fetch(`${baseUrl}/api/plugins`).then((response) => response.json());
+    const plugins = await fetch(`${baseUrl}/api/plugins`).then((response) => response.json()) as { plugins: Array<{ id: string }> };
     expect(plugins.plugins.map((plugin: { id: string }) => plugin.id)).toEqual([
       approvedPlugin.id,
     ]);

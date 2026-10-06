@@ -1,0 +1,24 @@
+{
+  "agent": "gemini",
+  "trace": "04a7f865-1dad-452f-8fe5-c408196dd347",
+  "events": [
+    {
+      "type": "status",
+      "label": "initializing",
+      "model": "gemini-2.5-pro"
+    },
+    {
+      "type": "text_delta",
+      "delta": "<artifact identifier=\"taskora-ios-prototype\" type=\"text/html\" title=\"Taskora iOS Prototype Gallery\">\n<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>Taskora Prototype - Gallery</title>\n  <style>\n    :root {\n      --bg: oklch(97.14% 0.0012 63.8);\n      --surface: oklch(100% 0 0);\n      --fg: oklch(18.91% 0.0197 259.69);\n      --muted: oklch(51.86% 0.0211 258.4);\n      --accent: oklch(55.22% 0.231 292.6);\n      --font-family: -apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"SF Pro Text\", system-ui, sans-serif;\n    }\n\n    body {\n      overflow: auto;\n      padding: 40px;\n      display: flex;\n      flex-direction: column;\n      gap: 40px;\n      align-items: center;\n      background: #f0f0f2;\n      font-family: var(--font-family);\n      margin: 0;\n    }\n\n    .gallery-title {\n      text-align: center;\n      margin-bottom: 20px;\n    }\n    \n    .title-large { font-size: 32px; font-weight: 700; letter-spacing: -0.02em; margin: 0; color: var(--fg); }\n    .text-metadata { font-size: 13px; font-weight: 500; color: var(--muted); margin: 4px 0 0; text-transform: uppercase; letter-spacing: 0.1em; }\n\n    .frames-container {\n      display: flex;\n      flex-wrap: wrap;\n      gap: 40px;\n      justify-content: center;\n    }\n    .frame-wrapper {\n      display: flex;\n      flex-direction: column;\n      align-items: center;\n      gap: 12px;\n    }\n    .frame-label {\n      font-size: 14px;\n      font-weight: 600;\n      color: var(--muted);\n      text-transform: uppercase;\n      letter-spacing: 0.1em;\n    }\n    iframe {\n      border: none;\n      box-shadow: 0 40px 100px -20px rgba(0,0,0,0.2);\n      border-radius: 54px;\n      background: white;\n    }\n  </style>\n</head>\n<body>\n  <div class=\"gallery-title\">\n    <h1 class=\"title-large\">TASKORA</h1>\n    <p class=\"text-metadata\">iOS App Prototype Master Gallery</p>\n  </div>\n\n  <div class=\"frames-container\">\n    <div class=\"frame-wrapper\">\n      <span class=\"frame-label\">01 Splash</span>\n      <iframe src=\"/frames/iphone-15-pro.html?screen=screens/01-splash.html\" width=\"390\" height=\"844\" loading=\"lazy\"></iframe>\n    </div>\n    <div class=\"frame-wrapper\">\n      <span class=\"frame-label\">02 Home</span>\n      <iframe src=\"/frames/iphone-15-pro.html?screen=screens/02-home.html\" width=\"390\" height=\"844\" loading=\"lazy\"></iframe>\n    </div>\n    <div class=\"frame-wrapper\">\n      <span class=\"frame-label\">03 Errand Planner</span>\n      <iframe src=\"/frames/iphone-15-pro.html?screen=screens/03-errand-planner.html\" width=\"390\" height=\"844\" loading=\"lazy\"></iframe>\n    </div>\n    <div class=\"frame-wrapper\">\n      <span class=\"frame-label\">04 Supplies</span>\n      <iframe src=\"/frames/iphone-15-pro.html?screen=screens/04-supplies.html\" width=\"390\" height=\"844\" loading=\"lazy\"></iframe>\n    </div>\n    <div class=\"frame-wrapper\">\n      <span class=\"frame-label\">06 Projects</span>\n      <iframe src=\"/frames/iphone-15-pro.html?screen=screens/06-projects.html\" width=\"390\" height=\"844\" loading=\"lazy\"></iframe>\n    </div>\n    <div class=\"frame-wrapper\">\n      <span class=\"frame-label\">13 Info Dialog</span>\n      <iframe src=\"/frames/iphone-15-pro.html?screen=screens/13-info.html\" width=\"390\" height=\"844\" loading=\"lazy\"></iframe>\n    </div>\n  </div>\n</body>\n</html>\n</artifact>"
+    },
+    {
+      "type": "usage",
+      "usage": {
+        "input_tokens": 0,
+        "output_tokens": 518292,
+        "cached_read_tokens": 0
+      },
+      "durationMs": 155003
+    }
+  ]
+}

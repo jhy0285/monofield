@@ -25,6 +25,33 @@ afterEach(async () => {
 });
 
 describe('automation source ingestion', () => {
+  it.each(['balanced', 'aggressive'] as const)('preserves late constraints and distinct facts with %s compression', async (tokenCompression) => {
+    const constraint = '필수: 고객 식별자는 외부 서비스로 전송하면 안 됩니다.';
+    const bodyMarkdown = '# Requirements\n\n' + 'Shared background. '.repeat(400) + '\n\n' + constraint;
+    const result = await ingestAutomationSource(dataDir, {
+      sourceKind: 'repo', title: 'Requirements', bodyMarkdown, tokenCompression,
+    });
+    const proposal = result.proposals.find((item) => item.targetKind === 'memory-node');
+    const memory = JSON.parse(proposal!.patch.after!);
+    expect(memory.body).toContain(constraint);
+    expect(result.packet.bodyMarkdown).toBe(bodyMarkdown);
+    const applied = await applyAutomationProposal(dataDir, proposal!.id);
+    const entry = await readMemoryEntry(dataDir, (applied.result as { memoryId: string }).memoryId);
+    expect(entry?.body).toContain(constraint);
+  });
+
+  it('keeps oversized distinct requirements and fenced code intact', async () => {
+    const requirements = Array.from({ length: 100 }, (_, index) => `필수 ${index}: 필드 field_${index}는 반드시 보존합니다.`).join('\n');
+    const code = '```ts\nwrite();\nwrite();\n```';
+    const result = await ingestAutomationSource(dataDir, {
+      sourceKind: 'repo', title: 'Unique requirements', bodyMarkdown: `${requirements}\n\n${code}`, tokenCompression: 'aggressive',
+    });
+    const proposal = result.proposals.find((item) => item.targetKind === 'memory-node');
+    const memory = JSON.parse(proposal!.patch.after!);
+    for (let index = 0; index < 100; index += 1) expect(memory.body).toContain(`필수 ${index}:`);
+    expect(memory.body).toContain(code);
+  });
+
   it('persists a connector source packet and creates an applyable memory proposal', async () => {
     const result = await ingestAutomationSource(dataDir, {
       templateId: 'connector-digest-design-context',

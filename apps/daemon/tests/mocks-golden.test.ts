@@ -35,10 +35,11 @@ const RECORDINGS_DIR = join(REPO, 'mocks/recordings');
 // Median-tool-count successful traces per agent (selected from manifest
 // 2026-05-29). Each one's `.jsonl` lives in `mocks/recordings/` after
 // `bash mocks/scripts/fetch-recordings.sh`.
-const CASES: Array<{ agent: 'claude' | 'codex' | 'opencode'; trace: string }> = [
+const CASES: Array<{ agent: 'claude' | 'codex' | 'opencode' | 'gemini'; trace: string }> = [
   { agent: 'claude',   trace: '314d6833-0377-4ac4-ba11-2b8d7eca5511' },
   { agent: 'codex',    trace: 'dcdff3b3-cd39-4dcd-be83-372830a29639' },
   { agent: 'opencode', trace: '9a9522ec-575f-432f-aeed-efc491e900aa' },
+  { agent: 'gemini', trace: '04a7f865-1dad-452f-8fe5-c408196dd347' },
 ];
 
 // Replace per-spawn-volatile fields with stable sentinels so the

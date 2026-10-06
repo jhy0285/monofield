@@ -270,13 +270,6 @@ describe('UpdaterPopup', () => {
       idleStatus(),
       { ...idleStatus(), state: 'not-available' as const },
       downloadedStatus({
-        progress: {
-          receivedBytes: 50,
-          totalBytes: 100,
-        },
-        state: 'downloading',
-      }),
-      downloadedStatus({
         downloadPath: undefined,
         error: {
           code: 'update-store-invalid-shape',
@@ -304,6 +297,42 @@ describe('UpdaterPopup', () => {
       restoreHost?.();
       restoreHost = null;
     }
+  });
+
+  it('shows a quiet availability indicator before download and only offers download', async () => {
+    const download = vi.fn(async () => downloadedStatus({ state: 'downloading', downloadPath: undefined }));
+    const install = vi.fn();
+    restoreHost = installMockOpenDesignHost({ host: { updater: {
+      status: vi.fn(async () => downloadedStatus({ state: 'available', downloadPath: undefined })),
+      download,
+      install,
+    } } });
+    render(<UpdaterPopup showLabel />);
+    const indicator = await screen.findByTestId('entry-nav-updater');
+    expect(indicator.textContent).toContain('Update available');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    fireEvent.click(indicator);
+    expect(screen.getByRole('dialog', { name: 'Update available' })).toBeTruthy();
+    const action = screen.getByTestId('updater-install-button');
+    expect(action.textContent).toBe('Download update');
+    fireEvent.click(action);
+    await waitFor(() => expect(download).toHaveBeenCalledTimes(1));
+    expect(install).not.toHaveBeenCalled();
+  });
+
+  it('shows real byte progress without implying that a downloading update is installed', async () => {
+    restoreHost = installMockOpenDesignHost({ host: { updater: {
+      status: vi.fn(async () => downloadedStatus({
+        state: 'downloading', downloadPath: undefined,
+        progress: { receivedBytes: 25, totalBytes: 100 },
+      })),
+    } } });
+    render(<UpdaterPopup showLabel />);
+    const indicator = await screen.findByTestId('entry-nav-updater');
+    expect(indicator.textContent).toContain('Downloading update · 25%');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    fireEvent.click(indicator);
+    expect((screen.getByTestId('updater-install-button') as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('opens the install prompt automatically when a native update is ready', async () => {
@@ -367,7 +396,7 @@ describe('UpdaterPopup', () => {
       });
 
       expect(screen.getByRole('dialog', { name: '업데이트 사용 가능' })).toBeTruthy();
-      expect(screen.getByText('MonoField 0.2.0 새 버전이 나왔습니다. 릴리스 페이지에서 내 운영체제에 맞는 설치 파일을 선택해 다운로드하세요.')).toBeTruthy();
+      expect(screen.getByText('MonoField 0.2.0 새 버전이 나왔습니다.')).toBeTruthy();
       const action = screen.getByTestId('updater-install-button');
       expect(action.textContent).toBe('릴리스 페이지 열기');
       fireEvent.click(action);
@@ -490,20 +519,6 @@ describe('UpdaterPopup', () => {
     expect(await screen.findByText('MonoField 1.2.3-beta.5 is ready. MonoField will close and open the installer.')).toBeTruthy();
   });
 
-  it('opens the MonoField repository from the update Star action', async () => {
-    restoreHost = installMockOpenDesignHost({
-      host: {
-        updater: {
-          status: vi.fn(async () => downloadedStatus()),
-        },
-      },
-    });
-
-    render(<UpdaterPopup />);
-    fireEvent.click(await screen.findByTestId('updater-star-button'));
-
-    await waitFor(() => expect(openExternalUrl).toHaveBeenCalledWith(GITHUB_REPO_URL));
-  });
 
   it('shows one version-specific desktop notification when the enabled app is in the background', async () => {
     const hiddenSpy = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);

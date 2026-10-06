@@ -42,6 +42,8 @@ describe('automatic browser verification', () => {
 
   it('does not claim success when a required capture step fails', async () => {
     const evidence = new BrowserVerificationEvidenceStore();
+    // A previous successful capture must not mask a failed final pass.
+    evidence.record('session_12345678901234567890', 'screenshot', true, 10);
     const result = await runAutomaticBrowserVerification({
       execute: async (input: any) => ({
         action: input.action,

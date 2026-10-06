@@ -57,6 +57,21 @@ afterEach(() => {
 });
 
 describe('GitChangesPanel', () => {
+  it.each([
+    ['backend', 'backend/src/main/resources/application.yml'],
+    ['.', 'src/main/resources/application.yml'],
+  ])('opens the %s module diff as a workspace-relative source path', async (projectPath, expectedPath) => {
+    const onOpenFile = vi.fn();
+    render(
+      <I18nProvider initial="ko">
+        <GitChangesPanel projectId={`project-open-${projectPath}`} projectPath={projectPath} onOpenFile={onOpenFile} />
+      </I18nProvider>,
+    );
+    await screen.findByText('port: 9081');
+    fireEvent.click(screen.getByRole('button', { name: '파일 열기' }));
+    expect(onOpenFile).toHaveBeenCalledWith(expectedPath);
+  });
+
   it('waits for the active module to resolve before requesting Git data', async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockClear();

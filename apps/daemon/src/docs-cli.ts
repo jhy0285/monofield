@@ -11,6 +11,9 @@ import { renderScreenSpecPptx } from './doc-renderers/screen-spec/render-pptx.js
 import { renderScreenSpecHtml } from './doc-renderers/screen-spec/render-html.js';
 
 const USAGE = `Usage:
+  monofield docs graph --project <id> [--inputs-file <JSON-array-file>] [--json] [--daemon-url <url>]
+  monofield docs impact --project <id> --input <project-relative.json> [--json] [--daemon-url <url>]
+  monofield docs proposal --project <id> --input <original.json> --proposal <proposal.json> --expected-sha <sha256> [--json]
   monofield docs create-manual-interface-spec --input <manual-draft.json> [--out <interface-spec.json>]
   monofield docs render-interface-spec  --input <interface-spec.json> [--out <workbook.xlsx>] [--style <style.json>]
   monofield docs preview-interface-spec --input <interface-spec.json> [--out <preview.html>]

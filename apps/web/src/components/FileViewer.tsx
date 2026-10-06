@@ -957,6 +957,7 @@ interface Props {
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[], images?: File[]) => Promise<boolean | void> | boolean | void;
   onFileSaved?: () => Promise<void> | void;
   onOpenFile?: (name: string) => void;
+  onRequestDocumentUpdate?: (prompt: string) => void;
   // Open `openName` as a tab (focusing it) and close `closeName` in one
   // atomic tab-state update. The React module pointer uses this to jump to the
   // HTML entry that renders a module and drop the dead-end module tab.
@@ -994,6 +995,7 @@ export function FileViewer({
   onSavePreviewComment,
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
+  onRequestDocumentUpdate,
   onFileSaved,
   onOpenFile,
   onOpenFileReplacing,
@@ -1068,7 +1070,7 @@ export function FileViewer({
     return <SvgViewer projectId={projectId} file={file} />;
   }
   if (rendererMatch?.renderer.id === 'interface-spec') {
-    return <InterfaceSpecEditor projectId={projectId} file={file} onFileSaved={onFileSaved} onOpenFile={onOpenFile} />;
+    return <InterfaceSpecEditor projectId={projectId} file={file} onFileSaved={onFileSaved} onOpenFile={onOpenFile} onRequestDocumentUpdate={onRequestDocumentUpdate} />;
   }
   if (rendererMatch?.renderer.id === 'screen-spec') {
     return <ScreenSpecEditor projectId={projectId} file={file} onFileSaved={onFileSaved} onOpenFile={onOpenFile} />;

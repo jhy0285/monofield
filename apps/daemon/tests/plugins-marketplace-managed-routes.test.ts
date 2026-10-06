@@ -84,7 +84,7 @@ async function startManagedMarketplaceRoutes(
     managedAllowedCatalogUrls: administratorAllowedCatalogUrls,
     managedAllowedHosts: administratorAllowedHosts,
     managedAllowedLicenses: administratorAllowedLicenses,
-    managedAuthEnv: options.authEnv,
+    managedAuthEnv: options.authEnv ?? null,
     createMarketplaceFetcher: (_seedId, _bundled, authEnv, allowedCatalogUrls) => {
       fetcherAuthEnvs.push(authEnv);
       fetcherAllowedCatalogUrls.push(allowedCatalogUrls);

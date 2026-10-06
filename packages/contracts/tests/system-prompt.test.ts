@@ -41,6 +41,16 @@ describe('DISCOVERY_AND_PHILOSOPHY (contracts copy) — TodoWrite plan item coun
     expect(prompt.length).toBeLessThan(4_000);
   });
 
+  it('preserves memory constraints with compact framing in chat without artifact-only coaching', () => {
+    const memory = 'Use Korean terminology.\nDo not send customer data.\nNever discard approved document edits.';
+    const base = composeSystemPrompt({ sessionMode: 'chat' });
+    const prompt = composeSystemPrompt({ sessionMode: 'chat', memoryBody: memory });
+    expect(prompt).toContain(memory);
+    expect(prompt).toContain('The current user request takes precedence');
+    expect(prompt).not.toContain('Expanding intent this way');
+    expect(prompt.length - base.length - memory.length).toBeLessThan(400);
+  });
+
   it('uses a top-level Docs mode guidance override for explanatory questions', () => {
     const prompt = composeSystemPrompt({ sessionMode: 'docs' });
 

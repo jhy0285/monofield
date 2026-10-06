@@ -2,6 +2,7 @@ import type { Express } from 'express';
 import type { SkillInfo } from './skills.js';
 import type { DesignSystemSummary } from './design-systems/index.js';
 import type { RoutineRoutesService } from './routes/routine.js';
+import type { DatabaseSchemaWatchService } from './services/database-schema-watch.js';
 import type { MonoFieldPublicMetadataService } from './services/monofield-public-metadata.js';
 
 export interface HttpDeps {
@@ -99,6 +100,7 @@ export interface TelemetryDeps {
 }
 
 export interface ServerContext {
+  schemaWatch: DatabaseSchemaWatchService;
   db: any;
   design: any;
   http: HttpDeps;

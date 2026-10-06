@@ -28,7 +28,7 @@ import { migrateCustomPetAtlas } from './components/pet/pets';
 import { ProjectView } from './components/ProjectView';
 import { TooltipLayer } from './components/TooltipLayer';
 import { openWorkspaceTab, WorkspaceTabsBar } from './components/WorkspaceTabsBar';
-import { UpdaterPopup } from './components/UpdaterPopup';
+import { WorkspaceStatusBar } from './components/WorkspaceStatusBar';
 import {
   DesignSystemCreationFlow,
   DesignSystemDetailView,
@@ -2365,16 +2365,14 @@ function AppInner() {
           route={route}
           projects={projects}
           onboardingCompleted={config.onboardingCompleted === true}
-          actions={(
-            <UpdaterPopup
-              appVersionInfo={appVersionInfo}
-              desktopNotificationsEnabled={config.notifications?.desktopEnabled === true}
-            />
-          )}
         />
         <div className="workspace-shell__body">
           {appMain}
         </div>
+        <WorkspaceStatusBar
+          appVersionInfo={appVersionInfo}
+          desktopNotificationsEnabled={config.notifications?.desktopEnabled === true}
+        />
       </div>
       {clientType === 'desktop' ? null : (
         <PetOverlay

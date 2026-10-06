@@ -154,27 +154,37 @@ export async function buildProxyMessages(
   history: ChatMessage[],
   context?: ProxyContext,
 ): Promise<ProxyMessage[]> {
-  if (!usesAnthropicMessagesPayload(endpoint) || !context?.projectId) {
+  if (!usesNativeImagePayload(endpoint) || !context?.projectId) {
     return history.map((m) => ({ role: m.role, content: m.content }));
   }
 
   const out: ProxyMessage[] = [];
+  // Request-local caching never reuses another project's or an older request's bytes.
+  const imageCache = new Map<string, Promise<ProxyImageContentBlock | null>>();
+  const seenImages = new Map<string, { userMessage: number; image: number }>();
+  let userMessage = 0;
   for (const message of history) {
+    if (message.role === 'user') userMessage += 1;
     out.push({
       role: message.role,
-      content: await buildAnthropicMessageContent(message, context.projectId),
+      content: await buildNativeImageMessageContent(message, context.projectId, { imageCache, seenImages, userMessage }),
     });
   }
   return out;
 }
 
-function usesAnthropicMessagesPayload(endpoint: string): boolean {
-  return endpoint.includes('/api/proxy/anthropic/');
+function usesNativeImagePayload(endpoint: string): boolean {
+  return endpoint.includes('/api/proxy/anthropic/') || endpoint.includes('/api/proxy/openai/');
 }
 
-async function buildAnthropicMessageContent(
+async function buildNativeImageMessageContent(
   message: ChatMessage,
   projectId: string,
+  context: {
+    imageCache: Map<string, Promise<ProxyImageContentBlock | null>>;
+    seenImages: Map<string, { userMessage: number; image: number }>;
+    userMessage: number;
+  },
 ): Promise<ProxyMessageContent> {
   const imageAttachments = sortAttachmentsByUserOrder(
     (message.attachments ?? []).filter((attachment) => attachment.kind === 'image'),
@@ -188,10 +198,22 @@ async function buildAnthropicMessageContent(
     blocks.push({ type: 'text', text: message.content });
   }
 
-  for (const attachment of imageAttachments) {
-    const block = await readAnthropicImageBlock(projectId, attachment.path);
+  for (const [index, attachment] of imageAttachments.entries()) {
+    let pending = context.imageCache.get(attachment.path);
+    if (!pending) {
+      pending = readAnthropicImageBlock(projectId, attachment.path);
+      context.imageCache.set(attachment.path, pending);
+    }
+    const block = await pending;
     if (block) {
-      blocks.push(block);
+      const identity = `${block.source.media_type};${block.source.data}`;
+      const previous = context.seenImages.get(identity);
+      if (previous) {
+        blocks.push({ type: 'text', text: `Image ${index + 1} (${attachment.name}, ${attachment.path}): identical to image ${previous.image} in user message ${previous.userMessage} above.` });
+      } else {
+        context.seenImages.set(identity, { userMessage: context.userMessage, image: index + 1 });
+        blocks.push(block);
+      }
     } else if (isAnthropicSupportedImagePath(attachment.path)) {
       blocks.push({
         type: 'text',

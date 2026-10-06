@@ -1,5 +1,5 @@
 import { symlinkSync } from 'node:fs';
-import { test, vi } from 'vitest';
+import { afterAll, test, vi } from 'vitest';
 import { homedir } from 'node:os';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,6 +12,11 @@ import { getRememberedLiveModels } from '../../src/runtimes/models.js';
 
 const fsTest = process.platform === 'win32' ? test.skip : test;
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
+
+// This suite exercises the optional AMR adapter. The registry reads its
+// feature flag at import time, so enable it before the static imports run.
+vi.hoisted(() => vi.stubEnv('OD_ENABLE_AMR', '1'));
+afterAll(() => vi.unstubAllEnvs());
 
 function writeExecutableFixture(dir: string, name: string): string {
   const filePath = join(dir, process.platform === 'win32' ? `${name}.CMD` : name);

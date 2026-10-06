@@ -1,3 +1,4 @@
+import { buildOpenAICompatibleMessages, buildOpenAIResponsesPayload, parseOpenAIResponsesFrame, shouldUseOpenAIResponses } from '../integrations/openai-responses.js';
 import type { Express } from 'express';
 import type { RouteDeps } from '../server-context.js';
 import { seedProviderIfMissing } from '../media/config.js';
@@ -1068,7 +1069,8 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     });
     if (reasoningDenial) return sendReasoningEgressDenial(res, reasoningDenial);
 
-    const url = appendVersionedApiPath(baseUrl, '/chat/completions');
+    const responsesApi = shouldUseOpenAIResponses(validated.parsed!.hostname, model, proxyBody.apiFormat);
+    const url = appendVersionedApiPath(baseUrl, responsesApi ? '/responses' : '/chat/completions');
     console.log(
       `[proxy:openai] ${req.method} ${validated.parsed!.hostname} model=${model}`,
     );
@@ -1078,7 +1080,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       payloadMessages.unshift({ role: 'system', content: systemPrompt });
     }
 
-    const payload: any = {
+    let payload: any = {
       model,
       messages: payloadMessages,
       ...buildOpenAIChatTokenParam(
@@ -1096,6 +1098,14 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       payload.stream_options = { include_usage: true };
     }
 
+    try {
+      if (responsesApi) payload = buildOpenAIResponsesPayload({ model, systemPrompt, messages: Array.isArray(messages) ? messages : [], maxTokens });
+      else payload.messages = buildOpenAICompatibleMessages(payloadMessages);
+    } catch (error) {
+      return sendApiError(res, 400, 'BAD_REQUEST', error instanceof Error ? error.message : String(error));
+    }
+    const upstreamAbort = new AbortController();
+    res.once('close', () => upstreamAbort.abort());
     const sse = createSseResponse(res);
     let proxyDispatcher: ReturnType<typeof proxyDispatcherRequestInit> | null = null;
     try {
@@ -1114,6 +1124,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         },
         body: JSON.stringify(payload),
         redirect: 'error',
+        signal: upstreamAbort.signal,
       });
 
       if (!response.ok) {
@@ -1133,6 +1144,19 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       let usage: Record<string, unknown> | null = null;
       const guard = createDeltaGuard(sse);
       await streamUpstreamSse(response, ({ payload, data }: any) => {
+        if (responsesApi) {
+          if (!data) return false;
+          const frame = parseOpenAIResponsesFrame(data);
+          if (frame.delta) guard.sendDelta(frame.delta);
+          if (frame.usage) sse.send('usage', { usage: frame.usage });
+          if (frame.error) sendProxyError(sse, frame.error, { code: 'UPSTREAM_ERROR' });
+          if (frame.terminal || guard.contaminated) {
+            if (!frame.error) sse.send('end', {});
+            ended = true;
+            return true;
+          }
+          return false;
+        }
         if (payload === '[DONE]') {
           if (usage) sse.send('usage', { usage });
           sse.send('end', {});
@@ -1158,6 +1182,10 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         }
         return false;
       });
+      if (!ended && responsesApi) {
+        sendProxyError(sse, 'OpenAI response stream ended before completion.', { code: 'UPSTREAM_ERROR' });
+        ended = true;
+      }
       if (!ended) {
         if (usage) sse.send('usage', { usage });
         sse.send('end', {});

@@ -34,6 +34,13 @@ const validStamp = {
 };
 
 describe("open-design sidecar contract", () => {
+  it('accepts metadata snapshot requests and rejects credentials or SQL in the broker protocol', () => {
+    const message = { type: SIDECAR_MESSAGES.DATABASE, input: { action: 'schema-snapshot', connectionId: 'db-1', background: true } };
+    expect(normalizeDesktopSidecarMessage(message)).toEqual(message);
+    expect(() => normalizeDesktopSidecarMessage({ ...message, input: { ...message.input, sql: 'SELECT 1' } })).toThrow();
+    expect(() => normalizeDesktopSidecarMessage({ ...message, input: { ...message.input, connectionString: 'postgresql://user:pass@host/db' } })).toThrow();
+    expect(() => normalizeDesktopSidecarMessage({ ...message, input: { ...message.input, background: 'true' } })).toThrow();
+  });
   it("exports the canonical five-field stamp descriptor", () => {
     expect(SIDECAR_STAMP_FIELDS).toEqual(["app", "mode", "namespace", "ipc", "source"]);
     expect(OPEN_DESIGN_SIDECAR_CONTRACT.stampFlags).toEqual({

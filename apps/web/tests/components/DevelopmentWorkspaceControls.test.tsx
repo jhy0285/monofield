@@ -37,6 +37,61 @@ afterEach(() => {
 });
 
 describe('DevelopmentWorkspaceControls', () => {
+  it('keeps the environment out of the default tab order and restores focus on Escape', async () => {
+    localStorage.setItem('monofield:development-workspace-tutorial:v2', 'done');
+    const onOpenChanges = vi.fn();
+    render(<I18nProvider initial="en"><DevelopmentWorkspaceControls
+      projectId={PROJECT_ID} metadata={{ kind: 'other', workMode: 'development' }}
+      resolvedDir="/workspace/demo" onMetadataChange={vi.fn()}
+      onOpenUrl={vi.fn()} onOpenChanges={onOpenChanges}
+    /></I18nProvider>);
+    const toggle = screen.getByTestId('development-environment-toggle');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('combobox', { name: 'Project database' })).toBeNull();
+    fireEvent.click(screen.getByTestId('development-open-changes'));
+    expect(onOpenChanges).toHaveBeenCalledTimes(1);
+    fireEvent.click(toggle);
+    const database = screen.getByRole('combobox', { name: 'Project database' });
+    database.focus();
+    fireEvent.keyDown(database, { key: 'Escape' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(toggle);
+    expect(screen.queryByRole('combobox', { name: 'Project database' })).toBeNull();
+  });
+
+  it('pauses runtime polling in a hidden window and refreshes on return', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    let hidden = false;
+    const visibility = vi.spyOn(document, 'hidden', 'get').mockImplementation(() => hidden);
+    const status = { projectId: PROJECT_ID, projectPath: '.', state: 'ready', config: null,
+      pid: 800, url: 'http://localhost:3000', startedAt: null, error: null, logs: [] };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      const payload = url.includes('/development/configs')
+        ? { configs: [], projects: [], recommendedConfigId: null, activeProjectPath: '.', scannedAt: '2026-10-02' }
+        : url.includes('/development/servers') ? { servers: [status] } : status;
+      return new Response(JSON.stringify(payload), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      render(<DevelopmentWorkspaceControls projectId={PROJECT_ID}
+        metadata={{ kind: 'other', workMode: 'development' }} resolvedDir="/workspace/demo"
+        onMetadataChange={vi.fn()} onOpenUrl={vi.fn()} onOpenChanges={vi.fn()} />);
+      await waitFor(() => expect(screen.getByTestId('development-running-count')).toBeTruthy());
+      hidden = true;
+      fireEvent(document, new Event('visibilitychange'));
+      const requests = fetchMock.mock.calls.length;
+      vi.advanceTimersByTime(10_000);
+      expect(fetchMock.mock.calls.length).toBe(requests);
+      hidden = false;
+      fireEvent(document, new Event('visibilitychange'));
+      await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(requests));
+    } finally {
+      visibility.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps database selections and their connection policies isolated by workspace module', () => {
     const legacy: ProjectMetadata = {
       kind: 'other',
@@ -1102,6 +1157,7 @@ describe('DevelopmentWorkspaceControls', () => {
       </I18nProvider>,
     );
 
+    fireEvent.click(screen.getByTestId('development-environment-toggle'));
     const checkbox = await screen.findByRole('checkbox', { name: '자동 검증' });
     expect((checkbox as HTMLInputElement).checked).toBe(true);
     fireEvent.click(checkbox);
@@ -1126,6 +1182,7 @@ describe('DevelopmentWorkspaceControls', () => {
       </I18nProvider>,
     );
 
+    fireEvent.click(screen.getByTestId('development-environment-toggle'));
     const checkbox = await screen.findByRole('checkbox', { name: /자동 검증.*로컬 CLI 전용/ });
     expect((checkbox as HTMLInputElement).disabled).toBe(true);
     expect((checkbox as HTMLInputElement).checked).toBe(false);

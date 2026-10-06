@@ -510,6 +510,36 @@ empty `codebasePath`, and the selected root `templatePreset`. For a codebase
 document, use `source.mode: "codebase"` and the current default
 `templatePreset: "si-standard"` unless an explicit supported override exists.
 
+Preserve field-level `evidence` from the reviewed manual draft. Add
+`evidenceRefs` to endpoints and fields when a source was actually inspected:
+each reference has `kind` (`code`, `requirement`, `browser`, `database`, or
+`manual`) and `ref`, with optional `line`, `symbol`, `revision`, `sha256`,
+`capturedAt`, and `summary`. Use project-relative code paths. Record the Git
+commit in `source.revision` for codebase collections when available; a commit
+alone does not identify uncommitted content, so record the inspected file hash
+as well. AI-updated fields remain `reviewStatus: "unreviewed"` until reviewed.
+Never turn inferred information into a browser or database observation.
+
+For a change-review request that explicitly names a proposal file, preserve the
+original, stable interface IDs, accepted human edits, and existing evidence.
+Inspect changed source files and their DTO dependencies. Prefer a small JSON
+proposal with `schemaVersion: 1`, `kind: "interface-spec-proposal"`,
+`baseContentSha256` from `monofield docs impact`, and `changes` containing
+JSON Pointer `test`, `add`, `remove`, or `replace` operations. Test an endpoint's
+`interfaceId` before editing it; change only inspected fields and source metadata.
+The daemon validates and merges these changes into the original without a model
+call. A complete interface-spec JSON remains supported when restructuring is
+needed. Validate with `monofield docs proposal --project <id> --input <original>
+--proposal <proposal> --expected-sha <sha> --json`; the default result is a small
+summary. Do not overwrite or export the original before the user reviews the
+proposal. Report unresolved fields and validation failures. The desktop editor
+compares the reconstructed proposal and applies it as a draft.
+
+Change review of this exact existing document uses its recorded collection
+options. A new source or output workbook still requires the new-collection
+options above. For a large original, extract the relevant endpoint indexes
+locally instead of printing the whole document into model context.
+
 Before export, preview and then render through the daemon; never construct an
 XLSX file by hand:
 

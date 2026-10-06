@@ -11,6 +11,7 @@ import { link, lstat, mkdir, readdir, readFile, realpath, rename, rm, stat, unli
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import JSZip from 'jszip';
+import { withProjectFileWrite } from './services/project-file-writes.js';
 import {
   inferLegacyManifest,
   parsePersistedManifest,
@@ -866,115 +867,117 @@ export async function writeProjectFile(
   projectId,
   name,
   body,
-  { overwrite = true, artifactManifest = null, expectedContentSha256 = null } = {},
+  { overwrite = true, artifactManifest = null, expectedContentSha256 = null }: { overwrite?: boolean; artifactManifest?: Record<string, unknown> | null; expectedContentSha256?: string | null } = {},
   metadata?,
 ) {
   const dir = await ensureProject(projectsRoot, projectId, metadata);
   const safeName = sanitizePath(name);
   const target = await resolveSafeReal(dir, safeName);
-  if (expectedContentSha256) {
-    let current;
-    try {
-      current = await readFile(target);
-    } catch (error) {
-      if (error?.code !== 'ENOENT') throw error;
-      const conflict = new Error('file changed since it was loaded');
-      conflict.code = 'ESTALE';
-      throw conflict;
-    }
-    const currentSha256 = createHash('sha256').update(current).digest('hex');
-    if (currentSha256 !== expectedContentSha256) {
-      const conflict = new Error('file changed since it was loaded');
-      conflict.code = 'ESTALE';
-      throw conflict;
-    }
-  }
-  body = normalizeArtifactRuntimeImports(safeName, body);
-  if (!overwrite) {
-    try {
-      await stat(target);
-      const err = new Error('file already exists');
-      err.code = 'EEXIST';
-      throw err;
-    } catch (err) {
-      if (!err || err.code !== 'ENOENT') throw err;
-    }
-  }
-  await mkdir(path.dirname(target), { recursive: true });
-  let stubGuardWarning = null;
-  let validatedManifest = null;
-  if (artifactManifest && typeof artifactManifest === 'object') {
-    const validated = validateArtifactManifestInput(artifactManifest, safeName);
-    if (validated.ok && validated.value) {
-      validatedManifest = validated.value;
-      // Publication guard: HTML/deck artifacts that still contain template
-      // placeholders (e.g. pitch-deck `Name to confirm`, `$X.XM`) must not
-      // land as published files. Runs at the write boundary so it covers
-      // every artifact that flows through writeProjectFile, regardless of
-      // which agent/atom produced the body. Throws
-      // ArtifactPublicationBlockedError which the route layer maps to 422.
-      if (isPublicationGuardedArtifactKind(validatedManifest.kind)) {
-        assertArtifactPublicationAllowed(body);
+  return withProjectFileWrite(target, async () => {
+    if (expectedContentSha256) {
+      let current;
+      try {
+        current = await readFile(target);
+      } catch (error) {
+        if (error?.code !== 'ENOENT') throw error;
+        const conflict = new Error('file changed since it was loaded');
+        conflict.code = 'ESTALE';
+        throw conflict;
       }
-      const identifier = typeof validatedManifest.metadata?.identifier === 'string'
-        ? validatedManifest.metadata.identifier
-        : '';
-      // Stub-guard applies to HTML-rendered manifest kinds (html, deck).
-      // Other kinds (markdown, svg, code-snippet) can legitimately be small
-      // and are skipped.
-      if (identifier.length > 0 && STUB_GUARDED_MANIFEST_KINDS.has(validatedManifest.kind)) {
-        // Scan the directory the new file actually lands in, not the project
-        // root — writeProjectFile accepts nested paths like reports/X.html
-        // and a root-only scan would miss prior siblings in subdirectories.
-        const guard = await evaluateArtifactStubGuard({
-          scanDir: path.dirname(target),
-          identifier,
-          newSize: Buffer.byteLength(body),
-          config: readArtifactStubGuardConfigFromEnv(),
-        });
-        if ((guard.outcome === 'reject' || guard.outcome === 'warn') && guard.warning) {
-          // Operator-visible signal regardless of mode, so on-call can see
-          // how often the guard fires without combing through 422s.
-          console.warn(
-            `[stub-guard] ${guard.outcome} identifier=${guard.warning.identifier} ` +
-              `newSize=${guard.warning.newSize} priorSize=${guard.warning.priorSize} ` +
-              `priorName=${guard.warning.priorName} project=${projectId}`,
-          );
+      const currentSha256 = createHash('sha256').update(current).digest('hex');
+      if (currentSha256 !== expectedContentSha256) {
+        const conflict = new Error('file changed since it was loaded');
+        conflict.code = 'ESTALE';
+        throw conflict;
+      }
+    }
+    body = normalizeArtifactRuntimeImports(safeName, body);
+    if (!overwrite) {
+      try {
+        await stat(target);
+        const err = new Error('file already exists');
+        err.code = 'EEXIST';
+        throw err;
+      } catch (err) {
+        if (!err || err.code !== 'ENOENT') throw err;
+      }
+    }
+    await mkdir(path.dirname(target), { recursive: true });
+    let stubGuardWarning = null;
+    let validatedManifest = null;
+    if (artifactManifest && typeof artifactManifest === 'object') {
+      const validated = validateArtifactManifestInput(artifactManifest, safeName);
+      if (validated.ok && validated.value) {
+        validatedManifest = validated.value;
+        // Publication guard: HTML/deck artifacts that still contain template
+        // placeholders (e.g. pitch-deck `Name to confirm`, `$X.XM`) must not
+        // land as published files. Runs at the write boundary so it covers
+        // every artifact that flows through writeProjectFile, regardless of
+        // which agent/atom produced the body. Throws
+        // ArtifactPublicationBlockedError which the route layer maps to 422.
+        if (isPublicationGuardedArtifactKind(validatedManifest.kind)) {
+          assertArtifactPublicationAllowed(body);
         }
-        if (guard.outcome === 'reject' && guard.warning) {
-          throw new ArtifactRegressionError(guard.warning.message, {
-            identifier: guard.warning.identifier,
-            newSize: guard.warning.newSize,
-            priorSize: guard.warning.priorSize,
-            priorName: guard.warning.priorName,
+        const identifier = typeof validatedManifest.metadata?.identifier === 'string'
+          ? validatedManifest.metadata.identifier
+          : '';
+        // Stub-guard applies to HTML-rendered manifest kinds (html, deck).
+        // Other kinds (markdown, svg, code-snippet) can legitimately be small
+        // and are skipped.
+        if (identifier.length > 0 && STUB_GUARDED_MANIFEST_KINDS.has(validatedManifest.kind)) {
+          // Scan the directory the new file actually lands in, not the project
+          // root — writeProjectFile accepts nested paths like reports/X.html
+          // and a root-only scan would miss prior siblings in subdirectories.
+          const guard = await evaluateArtifactStubGuard({
+            scanDir: path.dirname(target),
+            identifier,
+            newSize: Buffer.byteLength(body),
+            config: readArtifactStubGuardConfigFromEnv(),
           });
-        }
-        if (guard.outcome === 'warn' && guard.warning) {
-          stubGuardWarning = guard.warning;
+          if ((guard.outcome === 'reject' || guard.outcome === 'warn') && guard.warning) {
+            // Operator-visible signal regardless of mode, so on-call can see
+            // how often the guard fires without combing through 422s.
+            console.warn(
+              `[stub-guard] ${guard.outcome} identifier=${guard.warning.identifier} ` +
+                `newSize=${guard.warning.newSize} priorSize=${guard.warning.priorSize} ` +
+                `priorName=${guard.warning.priorName} project=${projectId}`,
+            );
+          }
+          if (guard.outcome === 'reject' && guard.warning) {
+            throw new ArtifactRegressionError(guard.warning.message, {
+              identifier: guard.warning.identifier,
+              newSize: guard.warning.newSize,
+              priorSize: guard.warning.priorSize,
+              priorName: guard.warning.priorName,
+            });
+          }
+          if (guard.outcome === 'warn' && guard.warning) {
+            stubGuardWarning = guard.warning;
+          }
         }
       }
     }
-  }
-  await writeFile(target, body);
-  if (validatedManifest) {
-    const manifestFileName = artifactManifestNameFor(safeName);
-    const manifestTarget = await resolveSafeReal(dir, manifestFileName);
-    await writeFile(manifestTarget, JSON.stringify(validatedManifest, null, 2));
-  }
-  const st = await stat(target);
-  const persistedManifest = await readManifestForPath(dir, safeName);
-  const result = {
-    name: safeName,
-    path: safeName,
-    size: st.size,
-    mtime: st.mtimeMs,
-    kind: kindFor(safeName),
-    mime: mimeFor(safeName),
-    artifactKind: persistedManifest?.kind,
-    artifactManifest: persistedManifest,
-  };
-  if (stubGuardWarning) result.stubGuardWarning = stubGuardWarning;
-  return result;
+    await writeFile(target, body);
+    if (validatedManifest) {
+      const manifestFileName = artifactManifestNameFor(safeName);
+      const manifestTarget = await resolveSafeReal(dir, manifestFileName);
+      await writeFile(manifestTarget, JSON.stringify(validatedManifest, null, 2));
+    }
+    const st = await stat(target);
+    const persistedManifest = await readManifestForPath(dir, safeName);
+    const result = {
+      name: safeName,
+      path: safeName,
+      size: st.size,
+      mtime: st.mtimeMs,
+      kind: kindFor(safeName),
+      mime: mimeFor(safeName),
+      artifactKind: persistedManifest?.kind,
+      artifactManifest: persistedManifest,
+    };
+    if (stubGuardWarning) result.stubGuardWarning = stubGuardWarning;
+    return result;
+  });
 }
 
 function artifactManifestNameFor(name) {

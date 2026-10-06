@@ -468,6 +468,7 @@ export type DesktopUpdateResult = DesktopUpdateStatusSnapshot;
 // Electron main process or encrypted OS-backed storage.
 export type DesktopDatabaseRequest =
   | { action: "list" }
+  | { action: "schema-snapshot"; connectionId: string; background: boolean }
   | { action: "schemas"; connectionId: string; selectedByUser?: boolean }
   | { action: "describe"; connectionId: string; schema: string; table: string }
   | { action: "sample"; connectionId: string; schema: string; table: string; limit?: number }
@@ -998,6 +999,11 @@ function normalizeDesktopDatabaseInput(input: unknown): DesktopDatabaseRequest {
       connectionId: normalizeNonEmptyString(value.connectionId, "desktop database connectionId"),
       ...(value.selectedByUser == null ? {} : { selectedByUser: value.selectedByUser }),
     };
+  }
+  if (action === "schema-snapshot") {
+    assertKnownKeys(value, ["action", "connectionId", "background"], "desktop database input");
+    if (typeof value.background !== "boolean") throw new Error("desktop database snapshot background must be a boolean");
+    return { action, connectionId: normalizeNonEmptyString(value.connectionId, "desktop database connectionId"), background: value.background };
   }
   if (action === "describe") {
     assertKnownKeys(value, ["action", "connectionId", "schema", "table"], "desktop database input");

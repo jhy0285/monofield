@@ -39,6 +39,7 @@ const runConfigGeneration = new Map<string, number>();
 const executablePathCache = new Map<string, string>();
 
 type RuntimeRecord = DevelopmentServerStatus & {
+  allowLoggedUrl: boolean;
   child: ChildProcess | null;
   cwdIdentity: string;
   desktopProcessKey: string;
@@ -1153,9 +1154,22 @@ function safeRuntimeError(value: unknown): string {
 function appendLog(record: RuntimeRecord, chunk: unknown): void {
   const lines = String(chunk).replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '').split(/\r?\n/).map((line) => line.trimEnd()).filter(Boolean);
   record.logs = [...record.logs, ...lines].slice(-MAX_LOG_LINES);
+  // An explicit readiness URL (or a detected application context path) is
+  // authoritative. A startup banner often prints only the server origin.
+  if (!record.allowLoggedUrl) return;
   for (const line of lines) {
     const match = /https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(?::\d+)?[^\s]*/i.exec(line);
-    if (match) record.url = match[0].replace('0.0.0.0', '127.0.0.1').replace('[::1]', '127.0.0.1');
+    if (!match) continue;
+    const candidate = match[0].replace('0.0.0.0', '127.0.0.1').replace('[::1]', '127.0.0.1');
+    try {
+      const parsed = new URL(candidate);
+      const port = Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80));
+      // Logs can also mention a database, proxy or another service. Those
+      // URLs cannot satisfy this process's readiness check.
+      if (port === record.config?.port) record.url = candidate;
+    } catch {
+      // Keep the configured URL when a log line contains a malformed URL.
+    }
   }
 }
 
@@ -1266,6 +1280,7 @@ export class DevelopmentServerService {
     const record = this.records.get(this.runtimeKey(projectId, normalizedPath));
     if (!record) return { projectId, projectPath: normalizedPath, state: 'idle', config: null, pid: null, url: null, startedAt: null, error: null, logs: [] };
     const {
+      allowLoggedUrl: _allowLoggedUrl,
       child: _child,
       cwdIdentity: _cwdIdentity,
       desktopProcessKey: _desktopProcessKey,
@@ -1483,6 +1498,9 @@ export class DevelopmentServerService {
       cwdIdentity,
     );
     const record: RuntimeRecord = {
+      allowLoggedUrl: overrides?.url == null
+        && new URL(config.url).pathname === '/'
+        && new URL(config.url).search === '',
       projectId,
       projectPath: selectedProjectPath,
       state: 'starting',

@@ -37,7 +37,7 @@ describe('splitOnQuestionForms', () => {
             auth: 'bearer',
             requestMode: 'ai',
             responseMode: 'manual',
-            requestFields: [{ name: 'customerId', type: 'UUID', minSize: '1', maxSize: '36', required: 'TBD', suggested: true, evidence: '용어사전.xlsx' }],
+            requestFields: [{ name: 'customerId', type: 'UUID', minSize: '1', maxSize: '36', required: 'TBD', suggested: true, evidence: '용어사전.xlsx', evidenceRefs: [{ kind: 'requirement', ref: 'terms.xlsx', summary: 'Customer ID' }], reviewStatus: 'edited' }],
             responseFields: [{ nameEn: 'orderId', required: 'Y' }],
           }],
         },
@@ -56,7 +56,7 @@ describe('splitOnQuestionForms', () => {
       businessContext: '주문 생성 업무',
       referenceFiles: [{ name: '용어사전.xlsx', role: 'dictionary' }],
       templatePreset: 'review',
-      endpoints: [{ method: 'POST', auth: 'bearer', requestMode: 'ai', responseMode: 'manual', requestFields: [{ nameEn: 'customerId', dataType: 'UUID', minSize: '1', maxSize: '36', required: 'TBD', suggested: true, evidence: '용어사전.xlsx' }] }],
+      endpoints: [{ method: 'POST', auth: 'bearer', requestMode: 'ai', responseMode: 'manual', requestFields: [{ nameEn: 'customerId', dataType: 'UUID', minSize: '1', maxSize: '36', required: 'TBD', suggested: true, evidence: '용어사전.xlsx', evidenceRefs: [{ kind: 'requirement', ref: 'terms.xlsx', summary: 'Customer ID' }], reviewStatus: 'edited' }] }],
     });
     expect(JSON.parse(String(question?.defaultValue))).toEqual(question?.interfaceSpecDraft);
   });

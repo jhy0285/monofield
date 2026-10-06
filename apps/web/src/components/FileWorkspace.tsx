@@ -2499,6 +2499,7 @@ export function FileWorkspace({
             onSavePreviewComment={onSavePreviewComment}
             onRemovePreviewComment={onRemovePreviewComment}
             onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+            onRequestDocumentUpdate={onRequestBrowserUsePrompt}
             onFileSaved={onRefreshFiles}
             onOpenFile={openFile}
             onOpenFileReplacing={openFileReplacing}

@@ -1135,8 +1135,20 @@ export function DesignBrowserPanel({
       setBrowserUseOpen(false);
       setBrowserAccessOpen(false);
     };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setMenuOpen(false);
+      setSuggestionsOpen(false);
+      setBrowserUseOpen(false);
+      setBrowserAccessOpen(false);
+      chromeRef.current?.querySelector<HTMLButtonElement>('.db-action-menu button')?.focus();
+    };
     document.addEventListener('pointerdown', onPointerDown);
-    return () => document.removeEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
   }, [browserAccessOpen, browserUseOpen, menuOpen, suggestionsOpen]);
 
   const commitHistory = useCallback((url: string, meta: { title?: string; iconUrl?: string } = {}, options: { countVisit?: boolean } = {}) => {
@@ -2635,36 +2647,6 @@ export function DesignBrowserPanel({
               </IconTooltipButton>
             </>
           ) : null}
-          {domSelectionToolsAvailable ? (
-            <>
-              <IconTooltipButton
-                label={browserAccessText.mode.inspect}
-                wrapperClassName="db-action-item db-action-local-tool"
-                className={activeTool === 'inspect' ? 'is-active' : ''}
-                onClick={() => toggleBrowserTool('inspect')}
-              >
-                <Icon name="eye" size={15} />
-              </IconTooltipButton>
-              <IconTooltipButton
-                label={editableProjectHtml ? t('fileViewer.edit') : t('fileViewer.tweaks')}
-                wrapperClassName="db-action-item db-action-local-tool"
-                className={activeTool === 'edit' ? 'is-active' : ''}
-                onClick={() => toggleBrowserTool('edit')}
-              >
-                <Icon name="pencil" size={15} />
-              </IconTooltipButton>
-            </>
-          ) : null}
-          {desktopHostAvailable ? (
-            <IconTooltipButton
-              label={t('fileViewer.screenshot')}
-              wrapperClassName="db-action-item db-action-secondary db-action-screenshot"
-              disabled={isBlank || savingAction != null}
-              onClick={takeScreenshot}
-            >
-              <RemixIcon name="screenshot-2-line" size={15} />
-            </IconTooltipButton>
-          ) : null}
           <span className="db-browser-access">
             <IconTooltipButton
               label={`${browserAccessText.access}: ${browserAccessText.mode[browserAccessMode]}`}
@@ -2700,28 +2682,14 @@ export function DesignBrowserPanel({
               />
             ) : null}
           </span>
-          <IconTooltipButton
-            label={t('browserUse.title')}
-            wrapperClassName="db-action-item db-action-browser-use"
-            className={browserUseOpen ? 'is-active' : ''}
-            onClick={toggleBrowserUseMenu}
-          >
-            <Icon name="lightbulb" size={15} />
-          </IconTooltipButton>
           {browserUseOpen ? (
             <BrowserUseMenu mode={browserAccessMode} onPick={requestBrowserUsePrompt} />
           ) : null}
           <IconTooltipButton
-            label={isKo ? '페이지 요약 저장' : 'Save page brief'}
-            wrapperClassName="db-action-item db-action-secondary db-action-save"
-            disabled={isBlank || savingAction != null}
-            onClick={savePageBrief}
-          >
-            <Icon name="file-code" size={15} />
-          </IconTooltipButton>
-          <IconTooltipButton
             label={isKo ? '브라우저 메뉴' : 'Browser menu'}
             wrapperClassName="db-action-item db-action-menu"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
             onClick={() => {
               setMenuOpen((open) => !open);
               setBrowserUseOpen(false);
@@ -2733,6 +2701,20 @@ export function DesignBrowserPanel({
           </IconTooltipButton>
           {menuOpen ? (
             <div className="db-menu" role="menu">
+              {domSelectionToolsAvailable ? (
+                <>
+                  <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); toggleBrowserTool('inspect'); }}>
+                    <Icon name="eye" size={14} />{browserAccessText.mode.inspect}
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); toggleBrowserTool('edit'); }}>
+                    <Icon name="pencil" size={14} />{editableProjectHtml ? t('fileViewer.edit') : t('fileViewer.tweaks')}
+                  </button>
+                </>
+              ) : null}
+              <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); toggleBrowserUseMenu(); }}>
+                <Icon name="lightbulb" size={14} />{t('browserUse.title')}
+              </button>
+              <span className="db-menu-separator" />
               <button type="button" role="menuitem" onClick={takeScreenshot} disabled={isBlank || savingAction != null}>
                 <Icon name="image" size={14} />
                 {isKo ? '스크린샷 복사' : 'Copy Screenshot'}

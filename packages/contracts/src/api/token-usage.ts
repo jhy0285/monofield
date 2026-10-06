@@ -32,6 +32,7 @@ export interface ProviderTokenUsagePayload {
   cache_read_tokens?: number;
   cache_write_tokens?: number;
   prompt_tokens_details?: { cached_tokens?: number };
+  input_tokens_details?: { cached_tokens?: number };
   output_tokens_details?: { reasoning_tokens?: number };
 }
 
@@ -81,6 +82,7 @@ export function normalizeProviderTokenUsage(
     usage.cached_read_tokens,
     usage.cache_read_tokens,
     usage.prompt_tokens_details?.cached_tokens,
+    usage.input_tokens_details?.cached_tokens,
   );
   // Cache *reads* are the reused subset the UI should show. Cache creation /
   // writes are newly processed input, not a cache hit. Anthropic reports all

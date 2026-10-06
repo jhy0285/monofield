@@ -71,6 +71,23 @@ describe("DatabaseBroker access approval", () => {
     });
     ({ DatabaseBroker } = await import("../../src/main/database-broker.js"));
   });
+  it('never opens a read approval dialog for background schema polling', async () => {
+    const broker = new DatabaseBroker();
+    const connection = await broker.save({ label: 'Monitoring', connectionString: 'postgresql://user:pass@localhost:5432/app' });
+    await expect(broker.execute({ action: 'schema-snapshot', connectionId: connection.id, background: true })).rejects.toThrow('not approved');
+    expect(electronState.messageBoxCalls).toBe(0);
+    expect(pgState.clientFactory).not.toHaveBeenCalled();
+    await broker.setReadApproval(connection.id, 'always');
+    pgState.client.query.mockResolvedValue({ rows: [{ schema: 'public', table: 'orders', name: 'id', type: 'character varying(20)', nullable: 'NO' }] });
+    await expect(broker.execute({ action: 'schema-snapshot', connectionId: connection.id, background: true })).resolves.toEqual({
+      tables: [{ schema: 'public', table: 'orders', columns: [{ name: 'id', type: 'character varying(20)', nullable: 'NO' }] }],
+    });
+    expect(electronState.messageBoxCalls).toBe(0);
+    expect(pgState.clientFactory).toHaveBeenCalledWith(expect.objectContaining({ options: expect.stringContaining('default_transaction_read_only=on') }));
+    await broker.setReadApproval(connection.id, 'prompt');
+    await expect(broker.execute({ action: 'schema-snapshot', connectionId: connection.id, background: true })).rejects.toThrow('not approved');
+    expect(electronState.messageBoxCalls).toBe(0);
+  });
 
   it("defaults to prompt and resets approval when a label targets another URL", async () => {
     const broker = new DatabaseBroker();
