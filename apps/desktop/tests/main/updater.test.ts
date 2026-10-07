@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { mkdir, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
@@ -216,7 +216,8 @@ function serverAddress(server: Server): string {
 }
 
 function makeRoot(): string {
-  return mkdtempSync(join(tmpdir(), "od-updater-test-"));
+  // Match updater filesystem paths when Windows TEMP uses an 8.3 alias.
+  return realpathSync(mkdtempSync(join(tmpdir(), "od-updater-test-")));
 }
 
 function updaterEnv(metadataUrl: string, platform = "darwin"): NodeJS.ProcessEnv {
