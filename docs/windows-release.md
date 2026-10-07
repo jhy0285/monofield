@@ -30,6 +30,14 @@ updater explicitly uses the GitHub latest-release API; publishing a new stable
 release updates this discovery feed. Existing 0.11.5 installs already have this
 feed configured.
 
+After publishing, run the same workflow with `verify_public_update=true`,
+`previous_version=0.11.5`, `release_version=0.11.6`, and `publish=false`. This
+read-only Windows job installs the previous public binary, verifies its GitHub
+SHA-256 digest, and applies the actual latest public payload through the
+existing packaged lifecycle test. It captures both app versions, checks
+launcher state and health after relaunch, then uninstalls the app. It never
+builds a substitute old installer or publishes a fixture release.
+
 After publishing, verify the actual downloads and hashes, the updater's selected
 version, and the download site's version. Update the site's static application
 metadata and screenshot captions only when the new installer is available.

@@ -126,7 +126,7 @@ describe("Windows release workflow", () => {
     expect(workflow).toContain('name = "latest.yml"');
     expect(workflow).toContain('Join-Path $assetsRoot "SHA256SUMS.txt"');
 
-    expect(publish).toContain("if: ${{ inputs.publish }}");
+    expect(publish).toContain("if: ${{ inputs.publish && !inputs.verify_public_update }}");
     expect(publish).toContain("permissions:\n      contents: write");
     expect(publish).toContain("uses: actions/download-artifact@v8");
     expect(publish).toContain("sha256sum --check --strict SHA256SUMS.txt");

@@ -27,6 +27,16 @@ on:
         required: true
         default: false
         type: boolean
+      verify_public_update:
+        description: Verify an existing Windows release against the actual public feed without publishing
+        required: true
+        default: false
+        type: boolean
+      previous_version:
+        description: Previously published installer version for public update verification
+        required: true
+        default: '0.11.5'
+        type: string
 
 permissions:
   contents: read
@@ -38,6 +48,7 @@ concurrency:
 jobs:
   build:
     name: Build and verify Windows release
+    if: ${{ !inputs.verify_public_update }}
     runs-on: windows-2025
     timeout-minutes: 120
     outputs:
@@ -280,7 +291,7 @@ jobs:
 
   publish:
     name: Publish GitHub Release
-    if: ${{ inputs.publish }}
+    if: ${{ inputs.publish && !inputs.verify_public_update }}
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -371,3 +382,98 @@ jobs:
 
           gh release upload "$tag" "$ASSETS_ROOT"/* --repo "$RELEASE_REPOSITORY" --clobber
           gh release edit "$tag" --repo "$RELEASE_REPOSITORY" --notes-file "$notes" --draft=false --latest
+
+  verify_public_update:
+    name: Verify published Windows update
+    if: ${{ inputs.verify_public_update }}
+    runs-on: windows-2025
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout verification source
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+
+      - name: Download and verify the previous public installer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIOUS_VERSION: ${{ inputs.previous_version }}
+          PUBLISH_RELEASE: ${{ inputs.publish }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          if ($env:PUBLISH_RELEASE -eq "true") { throw "verify_public_update requires publish=false" }
+          foreach ($version in @($env:PREVIOUS_VERSION, $env:RELEASE_VERSION)) {
+            if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "verification versions must be stable x.y.z" }
+          }
+          if ([version]$env:PREVIOUS_VERSION -ge [version]$env:RELEASE_VERSION) {
+            throw "previous_version must be older than release_version"
+          }
+          $feed = "https://api.github.com/repos/jhy0285/monofield/releases/latest"
+          $latest = Invoke-RestMethod -Uri $feed -Headers @{ Accept = "application/vnd.github+json" }
+          if ($latest.draft -or $latest.prerelease -or $latest.tag_name -ne "v$env:RELEASE_VERSION") {
+            throw "the actual public feed does not advertise the requested stable version"
+          }
+          $previous = Invoke-RestMethod -Uri "https://api.github.com/repos/jhy0285/monofield/releases/tags/v$env:PREVIOUS_VERSION"
+          if ($previous.draft -or $previous.prerelease) { throw "previous release must be public and stable" }
+          $asset = @($previous.assets | Where-Object { $_.name -eq "MonoField-default-setup.exe" })
+          if ($asset.Count -ne 1 -or $asset[0].digest -notmatch '^sha256:[0-9a-f]{64}$') {
+            throw "previous public installer must have a GitHub SHA-256 digest"
+          }
+          $verificationRoot = Join-Path $env:RUNNER_TEMP "monofield-public-update"
+          $builder = Join-Path $verificationRoot "tools-pack\out\win\namespaces\default\builder"
+          New-Item -ItemType Directory -Force -Path $builder | Out-Null
+          gh release download "v$env:PREVIOUS_VERSION" --repo jhy0285/monofield --pattern MonoField-default-setup.exe --dir $builder
+          if ($LASTEXITCODE -ne 0) { throw "previous public installer download failed" }
+          $installer = Join-Path $builder "MonoField-default-setup.exe"
+          $sha256 = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($sha256 -ne $asset[0].digest.Substring(7) -or (Get-Item -LiteralPath $installer).Length -ne $asset[0].size) {
+            throw "previous public installer checksum or size mismatch"
+          }
+          [ordered]@{
+            installer = $asset[0]
+            installerSha256 = $sha256
+            latest = $latest
+            metadataUrl = $feed
+            previousVersion = $env:PREVIOUS_VERSION
+            targetVersion = $env:RELEASE_VERSION
+            verificationCommit = (git rev-parse HEAD).Trim()
+          } | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath (Join-Path $verificationRoot "provenance.json") -Encoding utf8
+
+      - name: Install the public build and apply the actual public payload
+        shell: pwsh
+        env:
+          OD_PACKAGED_E2E_WIN: '1'
+          OD_PACKAGED_E2E_NAMESPACE: default
+          OD_PACKAGED_E2E_RELEASE_CHANNEL: stable
+          OD_PACKAGED_E2E_RELEASE_VERSION: ${{ inputs.previous_version }}
+          OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: full
+          OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: https://api.github.com/repos/jhy0285/monofield/releases/latest
+          OD_PACKAGED_E2E_WIN_UPDATE_VERSION: ${{ inputs.release_version }}
+          OD_PACKAGED_E2E_WIN_UPDATE_READY_TIMEOUT_MS: '300000'
+          OD_PACKAGED_E2E_WIN_TEST_TIMEOUT_MS: '900000'
+        run: |
+          $ErrorActionPreference = "Stop"
+          $verificationRoot = Join-Path $env:RUNNER_TEMP "monofield-public-update"
+          $env:OD_PACKAGED_E2E_TOOLS_PACK_DIR = Join-Path $verificationRoot "tools-pack"
+          $env:OD_PACKAGED_E2E_REPORT_DIR = Join-Path $verificationRoot "report"
+          $env:MONOFIELD_WINDOWS_SHELL_APPDATA = [Environment]::GetFolderPath([Environment+SpecialFolder]::ApplicationData)
+          pnpm --filter @open-design/e2e exec vitest run -c vitest.config.ts specs/win.spec.ts --testNamePattern "installs, starts, inspects"
+          if ($LASTEXITCODE -ne 0) { throw "actual public Windows update verification failed" }
+
+      - name: Upload public update verification evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: monofield-public-update-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}\monofield-public-update\provenance.json
+            ${{ runner.temp }}\monofield-public-update\report
+          if-no-files-found: warn
+          retention-days: 30
