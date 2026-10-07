@@ -358,7 +358,15 @@ jobs:
           updater feed, and SHA-256 checksums. Existing stable installs use the
           GitHub latest-release feed to discover this version.
           EOF
-          tag_commit="$(gh api "repos/$RELEASE_REPOSITORY/commits/$tag" --jq '.sha' 2>/dev/null || true)"
+          if tag_commit="$(gh api "repos/$RELEASE_REPOSITORY/commits/$tag" --jq '.sha' 2>/dev/null)"; then
+            if [[ ! "$tag_commit" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "release tag lookup did not return a commit SHA" >&2
+              exit 1
+            fi
+          else
+            # gh api can write an error JSON body to stdout for a missing tag.
+            tag_commit=""
+          fi
           if [ -n "$tag_commit" ] && [ "$tag_commit" != "$RELEASE_COMMIT" ]; then
             echo "refusing to publish $tag because it points to $tag_commit instead of $RELEASE_COMMIT" >&2
             exit 1
