@@ -137,6 +137,19 @@ jobs:
             Remove-Item -LiteralPath $pfxPath -Force -ErrorAction SilentlyContinue
           }
 
+      - name: Install NSIS compiler
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          choco install nsis --version=3.11 --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { throw "NSIS installation failed" }
+          $makensis = Join-Path ([Environment]::GetEnvironmentVariable("ProgramFiles(x86)")) "NSIS\makensis.exe"
+          if (-not (Test-Path -LiteralPath $makensis -PathType Leaf)) {
+            throw "NSIS did not install makensis.exe at $makensis"
+          }
+          & $makensis /VERSION
+          if ($LASTEXITCODE -ne 0) { throw "NSIS compiler version check failed" }
+
       - name: Build, validate payload, and run packaged smoke
         shell: pwsh
         env:
@@ -252,6 +265,18 @@ jobs:
           if-no-files-found: error
           retention-days: 30
           compression-level: 0
+
+      - name: Upload failed Windows smoke diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: monofield-windows-failure-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}\monofield-release-work\report
+            ${{ runner.temp }}\monofield-release-work\build-index.json
+            ${{ runner.temp }}\monofield-release-work\build-outputs.json
+          if-no-files-found: ignore
+          retention-days: 7
 
   publish:
     name: Publish GitHub Release

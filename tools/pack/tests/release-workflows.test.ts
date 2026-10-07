@@ -44,6 +44,8 @@ describe("Windows release workflow", () => {
     expect(build).toContain("uses: ./.github/actions/setup-workspace");
     expect(build).toContain("pnpm --filter @open-design/tools-pack exec vitest run\n");
     expect(build).toContain("tests/main/updater.test.ts");
+    expect(build).toContain("choco install nsis --version=3.11 --yes --no-progress");
+    expect(build).toContain('throw "NSIS compiler version check failed"');
     expect(build).toContain("tools\\release\\scripts\\build-platform.ps1");
     expect(build).toContain("-ReleaseNamespace default");
     expect(build).toContain("-BuildTarget all");

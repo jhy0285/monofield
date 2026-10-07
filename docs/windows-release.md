@@ -4,6 +4,10 @@ The `release-windows` workflow builds on a native Windows runner, validates the
 launcher payload, and runs installation, runtime, update, and cleanup smoke
 checks before publishing immutable GitHub release assets.
 
+The Windows job installs NSIS 3.11 and checks `makensis.exe` before packaging;
+the hosted runner does not include this compiler. Failed smoke reports and
+build timings are retained separately from verified release assets.
+
 Versions must match the checked-out workspace. Use an exact commit in `ref`.
 Publishing is limited to `jhy0285/monofield`; the build job has read-only access
 and the publish job verifies all SHA-256 checksums before making the release
