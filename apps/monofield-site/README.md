@@ -28,11 +28,11 @@ The site-local `vercel.json` specifies the static output and skips installation 
 
 Git integration requires the Vercel account to have access to this GitHub repository. CLI linking and deployment require authentication with the account or team that owns the existing project. Do not create an unrelated project to replace the existing domain.
 
-## Published downloads and UI previews
+## Published downloads and app captures
 
 Download links are initialized to the existing Windows installer, portable ZIP, and checksum assets. The browser reads the public GitHub latest-release API to update the version, sizes, and exact artifact URLs. It rejects draft/prerelease metadata and external artifact origins. If an artifact is missing, its action opens the release page. If the API is unavailable, the existing download links remain usable.
 
-Workspace screenshots are actual app captures of the upcoming 0.11.6 UI and are labeled as previews. They do not imply a new installer has been published. The published version is obtained independently from the release API. The static SoftwareApplication metadata currently records the publicly available 0.11.5 version; update it when publishing a new stable release.
+Workspace screenshots are actual app captures of the 0.11.6 UI. The download version, sizes, and URLs are obtained independently from the public release API. The static SoftwareApplication metadata records the published 0.11.6 version; update it when publishing another stable release.
 
 Microsoft Store is hidden until a valid listing ID is configured in `index.html`. Do not invent a listing or display an unverified Store download button.
 
