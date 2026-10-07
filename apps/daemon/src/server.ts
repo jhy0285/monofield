@@ -32,7 +32,7 @@ import {
   composeSystemPrompt,
   resolveExclusiveSurface,
 } from './prompts/system.js';
-import { isNativeCodexChat, nativeCodexUserRequest } from './prompts/native-codex.js';
+import { isNativeCodexChat, nativeCodexUserRequest, nativeCodexWorkspaceContext } from './prompts/native-codex.js';
 import { emittedRenderableQuestionForm } from './question-form-detect.js';
 import { resolveProjectRoot } from './project-root.js';
 import { preflightInterfaceSpecSource } from './interface-spec-source-preflight.js';
@@ -624,6 +624,7 @@ import { registerPluginMarketplaceRoutes } from './routes/plugins/marketplaces.j
 import { registerPluginEventRoutes, registerPluginRoutes, registerProjectPluginRoutes } from './routes/plugins/index.js';
 import { registerMcpRoutes } from './mcp-routes.js';
 import { registerXaiRoutes } from './routes/xai.js';
+import { registerJevRoutes } from './routes/jev.js';
 import { registerLiveArtifactRoutes } from './routes/live-artifact.js';
 import { registerDesignSystemToolRoutes } from './routes/design-system-tool.js';
 import { registerDeployRoutes, registerDeploymentCheckRoutes } from './routes/deploy.js';
@@ -1514,8 +1515,9 @@ function renderWorkspaceContextToolHints(items) {
   return hints.join('\n');
 }
 
-function renderRunContextPrompt(selection, metadata) {
+function renderRunContextPrompt(selection, metadata, nativeWorkingFolder = null) {
   const context = mergeRunContextSelections(projectMetadataContextSelection(metadata), selection);
+  context.workspaceItems = nativeCodexWorkspaceContext(context.workspaceItems ?? [], nativeWorkingFolder);
   const lines = [];
   if (Array.isArray(context.workspaceItems) && context.workspaceItems.length > 0) {
     lines.push('### Active workspace context');
@@ -4671,6 +4673,7 @@ export async function startServer({
     http: httpDeps,
     paths: pathDeps,
   });
+  registerJevRoutes(app, { http: httpDeps, paths: pathDeps });
   // Project workspace
   registerActiveContextRoutes(app, {
     db,
@@ -6266,7 +6269,6 @@ export async function startServer({
         ? getProject(db, projectId)
         : null;
     const activeProjectMetadata = metadataWithActiveDevelopmentDatabaseContext(projectRecord?.metadata);
-    const runContextPrompt = renderRunContextPrompt(context, activeProjectMetadata);
     const linkedDirs = (() => {
       if (!Array.isArray(projectRecord?.metadata?.linkedDirs)) return [];
       const v = validateLinkedDirs(projectRecord.metadata.linkedDirs);
@@ -6600,6 +6602,7 @@ export async function startServer({
 
     const nativeCodexChat = isNativeCodexChat({ agentId: def.id, sessionMode: runSessionMode,
       streamFormat: def.streamFormat, executionProfile });
+    const runContextPrompt = renderRunContextPrompt(context, activeProjectMetadata, nativeCodexChat ? cwd : null);
     if (nativeCodexChat) {
       // Codex receives cwd via its native CLI arguments and discovers files itself.
       // Keep explicit sibling-module authority, but do not send a root inventory.

@@ -1,4 +1,13 @@
 import type { ComposeInput } from './system.js';
+import path from 'node:path';
+import type { WorkspaceContextItem } from '@open-design/contracts';
+
+/** The native CLI already receives this root through cwd; keep more specific targets. */
+export function nativeCodexWorkspaceContext(items: WorkspaceContextItem[], workingFolder: string | null): WorkspaceContextItem[] {
+  if (!workingFolder) return items;
+  const root = path.resolve(workingFolder);
+  return items.filter(item => item.kind !== 'design-files' || !item.absolutePath || path.resolve(item.absolutePath) !== root);
+}
 
 export function isNativeCodexChat(input: Pick<ComposeInput, 'agentId' | 'sessionMode' | 'streamFormat' | 'executionProfile'>): boolean {
   return input.agentId === 'codex' && input.sessionMode === 'chat'

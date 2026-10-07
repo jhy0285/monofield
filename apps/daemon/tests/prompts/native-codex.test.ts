@@ -1,9 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { canSkipNativeCodexInstructions, nativeCodexUserRequest } from '../../src/prompts/native-codex.js';
+import { canSkipNativeCodexInstructions, nativeCodexUserRequest, nativeCodexWorkspaceContext } from '../../src/prompts/native-codex.js';
+import type { WorkspaceContextItem } from '@open-design/contracts';
 import { composeSystemPrompt } from '../../src/prompts/system.js';
 
 describe('native Codex context preservation', () => {
   const native = { agentId: 'codex', sessionMode: 'chat' as const, streamFormat: 'json-event-stream' };
+  it('omits only the root already supplied as native cwd, preserving file, subfolder, browser and terminal targets', () => {
+    const items: WorkspaceContextItem[] = [
+      { id: 'root', kind: 'design-files', label: 'Docs Files', absolutePath: '/project' },
+      { id: 'module', kind: 'design-files', label: 'Module', absolutePath: '/project/module' },
+      { id: 'file', kind: 'file', label: 'server.ts', path: 'server.ts' },
+      { id: 'browser', kind: 'browser', label: 'Preview', url: 'http://localhost:3000' },
+      { id: 'terminal', kind: 'terminal', label: 'Shell' },
+    ];
+    expect(nativeCodexWorkspaceContext(items, '/project/.')).toEqual(items.slice(1));
+    expect(nativeCodexWorkspaceContext(items, null)).toEqual(items);
+    expect(nativeCodexWorkspaceContext(items, '/different')).toEqual(items);
+    expect(items).toHaveLength(5);
+  });
   it('does not remove seeded history or text merely containing a user marker', () => {
     const history = '## user\nFirst request\n\n## assistant\nPrior answer\n\n## user\nNext request';
     expect(nativeCodexUserRequest(history, 'Next request')).toBe(history);

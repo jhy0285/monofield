@@ -83,6 +83,10 @@ structured deliverable.
 - **Guidance is built in.** First-run onboarding is followed by a seven-step
   development walkthrough or a four-step documents/design walkthrough. Both can
   be opened again from the product guide.
+- **Optional decision models.** Configure hosted TypeSafe/JEV or a compatible
+  local server for typed classification, scoring, and uncertainty. The local
+  Laya option runs without a TypeSafe key; it is a separate model. See the
+  [decision model guide](docs/jev-decisions.md).
 
 ## Runtime capability boundary
 

@@ -30,6 +30,33 @@ export const LOCALE_LABEL: Record<Locale, string> = {
 // flat (not deeply nested) so missing-key TS errors point straight at the
 // offending string instead of a generic object mismatch.
 export interface Dict {
+  'jev.title': string;
+  'jev.tabHint': string;
+  'jev.description': string;
+  'jev.backend': string;
+  'jev.hosted': string;
+  'jev.local': string;
+  'jev.localHelp': string;
+  'jev.hostedHelp': string;
+  'jev.url': string;
+  'jev.key': string;
+  'jev.model': string;
+  'jev.save': string;
+  'jev.test': string;
+  'jev.clearKey': string;
+  'jev.saved': string;
+  'jev.connected': string;
+  'jev.missingKey': string;
+  'jev.input': string;
+  'jev.placeholder': string;
+  'jev.evaluate': string;
+  'jev.running': string;
+  'jev.kind': string;
+  'jev.risk': string;
+  'jev.clarification': string;
+  'jev.usage': string;
+  'jev.advisory': string;
+  'jev.raw': string;
   "docs.impact.change": string;
   "docs.evidence": string;
   "docs.impact.title": string;

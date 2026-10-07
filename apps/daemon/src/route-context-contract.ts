@@ -23,6 +23,7 @@ import type { RegisterSocialShareRoutesDeps } from './routes/social-share.js';
 import type { RegisterStaticResourceRoutesDeps } from './routes/static-resource.js';
 import type { RegisterVelaRoutesDeps } from './routes/vela.js';
 import type { RegisterXaiRoutesDeps } from './routes/xai.js';
+import type { RegisterJevRoutesDeps } from './routes/jev.js';
 
 type AllRegisteredRouteDeps =
   & RegisterActiveContextRoutesDeps
@@ -54,6 +55,7 @@ type AllRegisteredRouteDeps =
   & RegisterSocialShareRoutesDeps
   & RegisterStaticResourceRoutesDeps
   & RegisterVelaRoutesDeps
+  & RegisterJevRoutesDeps
   & RegisterXaiRoutesDeps;
 
 type Assert<T extends true> = T;

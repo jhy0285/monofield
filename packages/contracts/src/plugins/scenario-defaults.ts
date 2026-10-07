@@ -89,8 +89,11 @@ export function defaultScenarioPluginIdForKind(
 }
 
 export function defaultScenarioPluginIdForProjectMetadata(
-  metadata: Pick<ProjectMetadata, 'kind' | 'intent'> | null | undefined,
+  metadata: Pick<ProjectMetadata, 'kind' | 'intent' | 'workMode'> | null | undefined,
 ): DefaultScenarioPluginId | null {
+  // Development requests use the coding agent's native workflow. A document
+  // scenario is included only when the user explicitly selects a plugin.
+  if (metadata?.workMode === 'development') return null;
   if (metadata?.intent === 'live-artifact') return 'example-live-artifact';
   return defaultScenarioPluginIdForKind(metadata?.kind);
 }

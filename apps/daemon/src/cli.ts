@@ -341,6 +341,10 @@ const PLUGIN_LIST_BOOLEAN_FLAGS = new Set([
 ]);
 
 const SUBCOMMAND_MAP = {
+  jev: async (args: string[]) => {
+    const { runJevCli } = await import('./services/jev-cli.js');
+    return runJevCli(args, { baseUrl: cliDaemonBaseUrl, parseFlags, positionalArgs: collectCliPositionals });
+  },
   browser: runBrowser,
   artifacts: runArtifacts,
   media: runMedia,

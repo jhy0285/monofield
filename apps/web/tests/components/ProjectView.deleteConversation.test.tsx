@@ -32,6 +32,8 @@ const saveTabs = vi.fn();
 // streaming machinery that isn't relevant to the projects-refresh
 // regression we want to pin).
 const chatPaneProps: {
+  onNewConversation?: () => Promise<void> | void;
+  messages?: unknown[];
   onDeleteConversation?: (id: string) => Promise<void> | void;
   onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
   activeConversationId?: string | null;
@@ -103,11 +105,15 @@ vi.mock('../../src/components/AvatarMenu', () => ({
 
 vi.mock('../../src/components/ChatPane', () => ({
   ChatPane: (props: {
+    onNewConversation?: () => Promise<void> | void;
+    messages?: unknown[];
     onDeleteConversation?: (id: string) => Promise<void> | void;
     onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
     activeConversationId?: string | null;
     conversations?: Array<{ id: string; title?: string | null }>;
   }) => {
+    chatPaneProps.onNewConversation = props.onNewConversation;
+    chatPaneProps.messages = props.messages;
     chatPaneProps.onDeleteConversation = props.onDeleteConversation;
     chatPaneProps.onOpenQuestions = props.onOpenQuestions;
     chatPaneProps.activeConversationId = props.activeConversationId;
@@ -156,7 +162,7 @@ function renderProjectView(onProjectsRefresh: () => void) {
   );
 }
 
-describe('ProjectView conversation delete', () => {
+describe('ProjectView conversation actions', () => {
   beforeEach(() => {
     listProjectRuns.mockResolvedValue([]);
   });
@@ -165,11 +171,37 @@ describe('ProjectView conversation delete', () => {
     cleanup();
     vi.clearAllMocks();
     chatPaneProps.onDeleteConversation = undefined;
+    chatPaneProps.onNewConversation = undefined;
+    chatPaneProps.messages = undefined;
     chatPaneProps.onOpenQuestions = undefined;
     chatPaneProps.activeConversationId = undefined;
     chatPaneProps.conversations = undefined;
     fileWorkspaceProps.questionFormInteractive = undefined;
     fileWorkspaceProps.questionFormSubmittedAnswers = undefined;
+  });
+
+  it.each(['chat', 'docs'] as const)('keeps %s mode when starting a new conversation', async (sessionMode) => {
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation 1', sessionMode }]);
+    listMessages.mockResolvedValue([{ id: 'message-1', role: 'user', content: 'Previous request', createdAt: 1 }]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    reattachDaemonRun.mockResolvedValue(undefined);
+    createConversation.mockResolvedValue({ id: 'conv-new', title: null, sessionMode });
+
+    renderProjectView(vi.fn());
+    await waitFor(() => expect(chatPaneProps.activeConversationId).toBe('conv-1'));
+    await waitFor(() => expect(chatPaneProps.messages).toHaveLength(1));
+    await act(async () => { await chatPaneProps.onNewConversation!(); });
+
+    expect(createConversation).toHaveBeenCalledWith('project-1', undefined, { sessionMode });
+    await waitFor(() => expect(chatPaneProps.activeConversationId).toBe('conv-new'));
   });
 
   // Issue #1202: the home `Needs input` badge is rendered from the

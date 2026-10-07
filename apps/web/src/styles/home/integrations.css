@@ -2,6 +2,20 @@
    Integrations route — entry-shell tabbed workspace
    ============================================================ */
 
+.jev-panel { max-width: 760px; }
+.jev-panel__fields { border: 0; padding: 0; margin: 16px 0; display: grid; gap: 12px; }
+.jev-panel label { display: grid; gap: 6px; font-size: 13px; }
+.jev-panel input, .jev-panel select, .jev-panel textarea { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-panel); color: var(--text); font: inherit; }
+.jev-panel__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.jev-panel__evaluate { display: grid; gap: 10px; border-top: 1px solid var(--border); padding-top: 16px; }
+.jev-panel__evaluate > button { justify-self: start; }
+.jev-panel__result { margin-top: 16px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); }
+.jev-panel__result dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.jev-panel__result dt { color: var(--text-muted); font-size: 12px; }
+.jev-panel__result dd { margin: 6px 0 0; }
+.jev-panel__result pre { overflow: auto; max-height: 300px; font-size: 12px; }
+.jev-panel [role='alert'] { color: var(--danger, #b64040); }
+
 .integrations-view {
   display: flex;
   flex-direction: column;

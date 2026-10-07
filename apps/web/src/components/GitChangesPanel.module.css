@@ -242,10 +242,10 @@
 }
 .splitCanvas {
   display: grid;
-  grid-template-columns: minmax(540px, max-content) minmax(540px, max-content);
+  grid-template-columns: repeat(2, minmax(240px, 1fr));
   align-content: start;
-  width: max-content;
-  min-width: max(1080px, 100%);
+  width: 100%;
+  min-width: 480px;
 }
 .splitPatch:focus-visible {
   outline: 2px solid var(--focus-ring);
@@ -263,7 +263,7 @@
   position: sticky;
   top: 0;
   z-index: 3;
-  min-width: 540px;
+  min-width: 0;
   padding: 0 12px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-panel);
@@ -288,8 +288,8 @@
 }
 .splitCell {
   display: grid;
-  grid-template-columns: 42px 18px minmax(max-content, 1fr);
-  min-width: 540px;
+  grid-template-columns: 42px 18px minmax(0, 1fr);
+  min-width: 0;
   min-height: 18px;
   white-space: pre;
 }
@@ -311,6 +311,8 @@
   box-shadow: none;
   color: inherit;
   font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .splitCell_deleted { background: color-mix(in srgb, var(--red) 13%, transparent); color: color-mix(in srgb, var(--red) 82%, var(--text)); }
 .splitCell_added { background: color-mix(in srgb, var(--green) 13%, transparent); color: color-mix(in srgb, var(--green) 82%, var(--text)); }

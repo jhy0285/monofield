@@ -49,6 +49,12 @@ describe('defaultScenarioPluginIdForKind', () => {
     expect(defaultScenarioPluginIdForProjectMetadata(undefined)).toBeNull();
   });
 
+  it('does not attach document or prototype workflows to software development', () => {
+    expect(defaultScenarioPluginIdForProjectMetadata({ kind: 'prototype', ...{ workMode: 'development' as const } })).toBeNull();
+    expect(defaultScenarioPluginIdForProjectMetadata({ kind: 'deck', ...{ workMode: 'development' as const } })).toBeNull();
+    expect(defaultScenarioPluginIdForProjectMetadata({ kind: 'prototype', ...{ workMode: 'creation' as const } })).toBe('example-web-prototype');
+  });
+
   it('exposes the hidden free-form Home fallback plugin separately from kind defaults', () => {
     expect(DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID).toBe('od-default');
     expect(DEFAULT_SCENARIO_PLUGIN_BY_KIND.other).toBe('od-new-generation');

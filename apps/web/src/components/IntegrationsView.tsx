@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { AppConfig } from '../types';
 import { useAnalytics } from '../analytics/provider';
 import {
@@ -12,8 +12,9 @@ import { Icon } from './Icon';
 import { McpClientSection } from './McpClientSection';
 import { UseEverywhereGuidePanel } from './UseEverywhereModal';
 import { useT } from '../i18n';
+const JevSettingsPanel = lazy(() => import('./JevSettingsPanel').then(module => ({ default: module.JevSettingsPanel })));
 
-export type IntegrationTab = 'mcp' | 'connectors' | 'use-everywhere';
+export type IntegrationTab = 'mcp' | 'connectors' | 'use-everywhere' | 'jev';
 
 interface Props {
   config: AppConfig;
@@ -28,10 +29,11 @@ const INTEGRATION_TABS: ReadonlyArray<{
   { id: 'mcp' },
   { id: 'connectors' },
   { id: 'use-everywhere' },
+  { id: 'jev' },
 ];
 
 function integrationTabToTrackingElement(
-  id: IntegrationTab,
+  id: Exclude<IntegrationTab, 'jev'>,
 ): 'mcp' | 'connectors' | 'use_everywhere' {
   if (id === 'use-everywhere') return 'use_everywhere';
   return id;
@@ -101,7 +103,7 @@ export function IntegrationsView({
               aria-selected={active}
               className={`integrations-view__tab${active ? ' is-active' : ''}`}
               onClick={() => {
-                trackIntegrationsTabClick(analytics.track, {
+                if (tab.id !== 'jev') trackIntegrationsTabClick(analytics.track, {
                   page_name: 'integrations',
                   area: 'integrations_tab',
                   element: integrationTabToTrackingElement(tab.id),
@@ -118,6 +120,7 @@ export function IntegrationsView({
       </nav>
 
       <div className="integrations-view__panel">
+        {activeTab === 'jev' ? <Suspense fallback={<p className="hint" role="status">{t('common.loading')}</p>}><JevSettingsPanel /></Suspense> : null}
         {activeTab === 'mcp' ? <McpClientSection /> : null}
 
         {activeTab === 'connectors' ? (
@@ -161,6 +164,7 @@ export function IntegrationsView({
 
 function integrationTabLabel(id: IntegrationTab, t: ReturnType<typeof useT>): string {
   switch (id) {
+    case 'jev': return t('jev.title');
     case 'mcp': return t('integrations.tabLabel.mcp');
     case 'connectors': return t('entry.tabConnectors');
     case 'use-everywhere': return t('entry.useEverywhereTitle');
@@ -169,6 +173,7 @@ function integrationTabLabel(id: IntegrationTab, t: ReturnType<typeof useT>): st
 
 function integrationTabHint(id: IntegrationTab, t: ReturnType<typeof useT>): string {
   switch (id) {
+    case 'jev': return t('jev.tabHint');
     case 'mcp': return t('integrations.tabHint.mcp');
     case 'connectors': return t('integrations.tabHint.connectors');
     case 'use-everywhere': return t('integrations.tabHint.useEverywhere');

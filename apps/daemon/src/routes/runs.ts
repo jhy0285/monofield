@@ -369,10 +369,11 @@ function toProjectFiles(value: unknown): ProjectFileEntry[] {
 
 function toScenarioProjectMetadata(
   metadata: ProjectMetadata,
-): Pick<ContractProjectMetadata, 'kind' | 'intent'> | null {
+): Pick<ContractProjectMetadata, 'kind' | 'intent' | 'workMode'> | null {
   if (!metadata || typeof metadata.kind !== 'string') return null;
   return {
     kind: metadata.kind as ContractProjectMetadata['kind'],
+    ...(metadata.workMode === 'development' || metadata.workMode === 'creation' ? { workMode: metadata.workMode } : {}),
     ...(metadata.intent === 'live-artifact' ? { intent: metadata.intent } : {}),
   };
 }
