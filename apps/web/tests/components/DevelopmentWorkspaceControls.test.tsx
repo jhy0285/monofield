@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProjectMetadata } from '@open-design/contracts';
+import { StrictMode } from 'react';
 
 import {
   activeModuleDatabaseContext,
@@ -37,6 +38,22 @@ afterEach(() => {
 });
 
 describe('DevelopmentWorkspaceControls', () => {
+  it('finishes module detection after a StrictMode effect cleanup and remount', async () => {
+    localStorage.setItem('monofield:development-workspace-tutorial:v2', 'done');
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const payload = String(input).includes('/development/configs')
+        ? { configs: [], recommendedConfigId: null, projects: [{ path: '.', label: 'library', markers: ['package.json'] }], activeProjectPath: '.', scannedAt: '2026-10-07' }
+        : String(input).includes('/development/servers') ? { servers: [] }
+          : { projectId: PROJECT_ID, projectPath: '.', state: 'idle', config: null, pid: null, url: null, startedAt: null, error: null, logs: [] };
+      return Response.json(payload);
+    }));
+    const selection = vi.fn();
+    render(<StrictMode><I18nProvider initial="en"><DevelopmentWorkspaceControls
+      projectId={PROJECT_ID} metadata={{ kind: 'other', workMode: 'development' }} resolvedDir="/workspace/library"
+      onMetadataChange={vi.fn()} onOpenUrl={vi.fn()} onOpenChanges={vi.fn()} onActiveProjectStateChange={selection}
+    /></I18nProvider></StrictMode>);
+    await waitFor(() => expect(selection).toHaveBeenLastCalledWith({ projectPath: '.', ready: true }));
+  });
   it('keeps the environment out of the default tab order and restores focus on Escape', async () => {
     localStorage.setItem('monofield:development-workspace-tutorial:v2', 'done');
     const onOpenChanges = vi.fn();

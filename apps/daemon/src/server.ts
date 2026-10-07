@@ -644,6 +644,8 @@ import { registerMonoFieldPublicMetadataRoutes } from './routes/monofield-public
 import { registerMemoryRoutes } from './routes/memory.js';
 import { registerDatabaseRoutes } from './routes/database.js';
 import { registerDevelopmentRoutes } from './routes/development.js';
+import { registerVerificationRoutes } from './routes/verification.js';
+import { DevelopmentVerificationService } from './services/development-verification.js';
 import { registerDocumentImpactRoutes } from './routes/document-impact.js';
 import { registerSchemaWatchRoutes } from './routes/database-schema-watch.js';
 import { DatabaseSchemaWatchService } from './services/database-schema-watch.js';
@@ -3729,6 +3731,7 @@ export async function startServer({
   const app = express();
   installRouteRegistrationGuard(app);
   const developmentServers = new DevelopmentServerService(desktopDevelopmentProcessBroker);
+  const verification = new DevelopmentVerificationService(RUNTIME_DATA_DIR);
   const browserVerificationEvidence = new BrowserVerificationEvidenceStore();
   const interfaceSpecRuntimeSourceModes = new Map();
   // Clipper page captures are self-contained HTML with inlined images plus a
@@ -5333,6 +5336,7 @@ export async function startServer({
     paths: pathDeps,
     developmentServers,
   });
+  registerVerificationRoutes(app, { db, http: httpDeps, paths: pathDeps, verification });
   registerDocumentRenderRoutes(app, {
     db,
     http: httpDeps,
@@ -10371,6 +10375,7 @@ export async function startServer({
   routineService.start();
 
   assertServerContextSatisfiesRoutes({
+    verification,
     schemaWatch,
     db,
     design,
@@ -10480,6 +10485,7 @@ export async function startServer({
       await design.runs.shutdownActive({ graceMs: resolveChatRunShutdownGraceMs() });
       await terminalService.shutdownActive();
       await developmentServers.shutdown();
+      await verification.shutdown();
       await design.analytics.shutdown();
     };
     let server;

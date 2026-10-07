@@ -24,6 +24,7 @@ export * from './api/finalize.js';
 export * from './api/github.js';
 export * from './api/handoff.js';
 export * from './api/jev.js';
+export * from './api/verification.js';
 export * from './api/library.js';
 export * from './api/live-artifacts.js';
 export * from './api/media.js';

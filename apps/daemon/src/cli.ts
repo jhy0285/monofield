@@ -341,6 +341,10 @@ const PLUGIN_LIST_BOOLEAN_FLAGS = new Set([
 ]);
 
 const SUBCOMMAND_MAP = {
+  verify: async (args: string[]) => {
+    const { runVerificationCli } = await import('./services/verification-cli.js');
+    return runVerificationCli(args, { baseUrl: cliDaemonBaseUrl, parseFlags, positionalArgs: collectCliPositionals });
+  },
   jev: async (args: string[]) => {
     const { runJevCli } = await import('./services/jev-cli.js');
     return runJevCli(args, { baseUrl: cliDaemonBaseUrl, parseFlags, positionalArgs: collectCliPositionals });
@@ -654,10 +658,11 @@ if (dispatchedSubcommand) {
     // are gone. With connection: close on every request nothing keeps the
     // event loop alive, so let the process drain naturally; the timer is a
     // hang backstop, unref'd so it cannot itself keep the process alive.
-    process.exitCode = 0;
-    setTimeout(() => process.exit(0), 5000).unref();
+    const exitCode = Number(process.exitCode ?? 0);
+    process.exitCode = exitCode;
+    setTimeout(() => process.exit(exitCode), 5000).unref();
   } else {
-    process.exit(0);
+    process.exit(Number(process.exitCode ?? 0));
   }
 }
 

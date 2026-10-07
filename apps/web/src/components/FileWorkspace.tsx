@@ -175,6 +175,7 @@ interface Props {
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[], images?: File[]) => Promise<boolean | void> | boolean | void;
   onSendBrowserReviewBatch?: (prompt: string, attachments: ChatCommentAttachment[], images?: File[]) => Promise<boolean | void> | boolean | void;
   onRequestBrowserUsePrompt?: (prompt: string) => void;
+  onRequestVerificationRepair?: (prompt: string) => void;
   onPluginFolderAgentAction?: (
     relativePath: string,
     action: PluginFolderAgentAction,
@@ -441,6 +442,7 @@ export function FileWorkspace({
   onSendBoardCommentAttachments,
   onSendBrowserReviewBatch,
   onRequestBrowserUsePrompt,
+  onRequestVerificationRepair,
   onPluginFolderAgentAction,
   activePluginActionPaths,
   hiddenPluginActionPaths,
@@ -2430,6 +2432,9 @@ export function FileWorkspace({
             projectPath={activeDevelopmentProjectSelection.projectPath}
             projectSelectionReady={activeDevelopmentProjectSelection.ready}
             onOpenFile={openFile}
+            onRequestRepair={onRequestVerificationRepair}
+            filesRefreshKey={filesRefreshKey}
+            agentBusy={streaming}
           />
         ) : isBrowserTabId(activeTab) ? (
           null

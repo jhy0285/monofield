@@ -7954,6 +7954,7 @@ export function ProjectView({
           onSendBoardCommentAttachments={handleSendBoardCommentAttachments}
           onSendBrowserReviewBatch={handleSendBrowserReviewBatch}
           onRequestBrowserUsePrompt={handleBrowserUsePrompt}
+          onRequestVerificationRepair={handleBrowserUsePrompt}
           onPluginFolderAgentAction={handlePluginFolderAgentAction}
           activePluginActionPaths={activePluginActionPaths}
           preferredPreviewFile={currentProject.metadata?.entryFile ?? null}

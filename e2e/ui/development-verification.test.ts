@@ -1,0 +1,60 @@
+import { execFileSync } from 'node:child_process';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { test, expect } from '@/playwright/suite';
+import { T } from '@/timeouts';
+
+test('[P1] verifies a legacy module, prepares repair, passes and invalidates stale evidence', async ({ page, toolsDev }, testInfo) => {
+  test.setTimeout(2 * T.xlong);
+  await page.setViewportSize({ width: 1500, height: 1000 });
+  const root = join(toolsDev.root, 'scratch', 'legacy-billing'); await mkdir(root, { recursive: true });
+  const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', ...args], { cwd: root });
+  git('init', '--quiet');
+  await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'legacy-billing', private: true, scripts: { test: 'node --test billing.test.cjs', build: 'node --check billing.cjs' } }, null, 2));
+  await writeFile(join(root, 'billing.cjs'), 'module.exports = (amount, rate) => amount * rate;\n');
+  await writeFile(join(root, 'billing.test.cjs'), "const test = require('node:test'); const assert = require('node:assert/strict'); const total = require('./billing.cjs');\ntest('invoice includes the original subtotal', () => assert.equal(total(100, 0.1), 110));\ntest('zero tax retains subtotal', () => assert.equal(total(40, 0), 40));\n");
+  git('add', '.'); git('commit', '-qm', 'legacy billing baseline');
+  const imported = await page.request.post('/api/import/folder', { data: { baseDir: root, name: 'Legacy billing · verification' } });
+  expect(imported.ok()).toBeTruthy();
+  const { project } = await imported.json() as { project: { id: string; metadata: Record<string, unknown> } };
+  const changed = await page.request.patch(`/api/projects/${project.id}`, { data: { metadata: { ...project.metadata, workMode: 'development' } } }); expect(changed.ok()).toBeTruthy();
+  const config = { mode: 'daemon', onboardingCompleted: true, privacyDecisionAt: 1,
+    telemetry: { metrics: false, content: false, artifactManifest: false }, skillId: null, designSystemId: null };
+  await page.request.put('/api/app-config', { data: config });
+  await page.addInitScript(saved => {
+    localStorage.setItem('open-design:config', JSON.stringify(saved));
+    localStorage.setItem('open-design:locale', 'ko'); localStorage.setItem('open-design:locale-source', 'manual');
+    localStorage.setItem('monofield:development-workspace-tutorial:v2', 'done');
+  }, config);
+  await page.goto(`/projects/${project.id}`);
+  await expect(page.getByTestId('development-open-changes')).toBeVisible({ timeout: T.xlong });
+  await page.getByTestId('development-open-changes').click();
+  const panel = page.getByTestId('development-verification'); await expect(panel).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('01-entry.png'), fullPage: true });
+  await panel.getByRole('button', { name: /변경 검증/ }).click();
+  await expect(panel.getByRole('button', { name: '선택한 검사 실행' })).toBeEnabled();
+  await panel.getByRole('button', { name: '선택한 검사 실행' }).click();
+  await expect(panel.getByText('invoice includes the original subtotal', { exact: false }).first()).toBeVisible({ timeout: T.long });
+  await expect(panel.getByRole('button', { name: '오류 수정 요청 작성' })).toBeEnabled();
+  await page.screenshot({ path: testInfo.outputPath('02-real-failure.png'), fullPage: true });
+  await panel.getByRole('button', { name: '오류 수정 요청 작성' }).click();
+  const composer = page.locator('.composer-input-wrap [contenteditable="true"]');
+  await expect(composer).toContainText('npm run test');
+  await expect(composer).toContainText('verification-output');
+  await page.screenshot({ path: testInfo.outputPath('03-repair-draft.png'), fullPage: true });
+  // This test repairs the fixture directly; no mock is presented as an AI completion.
+  await writeFile(join(root, 'billing.cjs'), 'module.exports = (amount, rate) => amount + amount * rate;\n');
+  await panel.getByRole('button', { name: '선택한 검사 실행' }).click();
+  await expect(panel.getByText('선택한 검사 통과 · 현재 코드').first()).toBeVisible({ timeout: T.long });
+  await page.screenshot({ path: testInfo.outputPath('04-current-pass.png'), fullPage: true });
+  const downloaded = page.waitForEvent('download'); await panel.getByRole('button', { name: '검사 기록 내보내기' }).click();
+  const receiptFile = testInfo.outputPath('receipt.json'); await (await downloaded).saveAs(receiptFile);
+  const receipt = JSON.parse(await readFile(receiptFile, 'utf8')); expect(receipt.verified).toBe(true); expect(receipt.run.steps[0].exitCode).toBe(0);
+  expect(receipt.run.sourceBefore.digest).toBe(receipt.run.sourceAfter.digest);
+  await writeFile(join(root, 'billing.cjs'), 'module.exports = (amount, rate) => amount;\n');
+  await panel.getByRole('button', { name: '검사 새로고침' }).click();
+  await expect(panel.getByText('재검증 필요').first()).toBeVisible();
+  expect(await panel.getByText('선택한 검사 통과 · 현재 코드').count()).toBe(0);
+  await page.screenshot({ path: testInfo.outputPath('05-stale-receipt.png'), fullPage: true });
+  await testInfo.attach('verification-receipt', { path: receiptFile, contentType: 'application/json' });
+});

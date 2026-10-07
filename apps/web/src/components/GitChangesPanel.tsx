@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import type {
   GitBranchMutationResponse,
@@ -15,11 +15,16 @@ import { splitUnifiedDiff, type SplitDiffCell } from '../runtime/git-diff';
 import { Icon } from './Icon';
 import styles from './GitChangesPanel.module.css';
 
+const DevelopmentVerificationPanel = lazy(() => import('./DevelopmentVerificationPanel').then(module => ({ default: module.DevelopmentVerificationPanel })));
+
 type Props = {
   projectId: string;
   projectPath?: string | null;
   projectSelectionReady?: boolean;
   onOpenFile: (path: string) => void;
+  onRequestRepair?: (prompt: string) => void;
+  filesRefreshKey?: number;
+  agentBusy?: boolean;
 };
 
 type GitWorkspaceUiSnapshot = {
@@ -81,6 +86,9 @@ export function GitChangesPanel({
   projectPath,
   projectSelectionReady = true,
   onOpenFile,
+  onRequestRepair,
+  filesRefreshKey,
+  agentBusy = false,
 }: Props) {
   const t = useT();
   const [status, setStatus] = useState<GitWorkspaceStatusResponse | null>(null);
@@ -416,6 +424,17 @@ export function GitChangesPanel({
 
   return (
     <section className={styles.root} data-testid="git-changes-panel">
+      <Suspense fallback={null}>
+        <DevelopmentVerificationPanel
+          key={workspaceKey}
+          projectId={projectId}
+          projectPath={projectPath}
+          ready={projectSelectionReady && workspaceRestored}
+          revisionKey={`${status?.generatedAt ?? ''}:${filesRefreshKey ?? ''}`}
+          agentBusy={agentBusy}
+          onRequestRepair={onRequestRepair}
+        />
+      </Suspense>
       <header className={styles.header}>
         <div className={styles.titleGroup}>
           <Icon name="fork" size={15} />

@@ -504,6 +504,9 @@ export function DevelopmentWorkspaceControls({
   useEffect(() => () => {
     loadAbortRef.current?.abort();
     runtimeSummaryAbortRef.current?.abort();
+    // React StrictMode cleans up and reruns effects while retaining refs.
+    // A cancelled first load must not suppress the second setup.
+    initialLoadKeyRef.current = '';
   }, []);
   useEffect(() => {
     let cancelled = false;

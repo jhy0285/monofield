@@ -24,6 +24,7 @@ import type { RegisterStaticResourceRoutesDeps } from './routes/static-resource.
 import type { RegisterVelaRoutesDeps } from './routes/vela.js';
 import type { RegisterXaiRoutesDeps } from './routes/xai.js';
 import type { RegisterJevRoutesDeps } from './routes/jev.js';
+import type { RegisterVerificationRoutesDeps } from './routes/verification.js';
 
 type AllRegisteredRouteDeps =
   & RegisterActiveContextRoutesDeps
@@ -56,6 +57,7 @@ type AllRegisteredRouteDeps =
   & RegisterStaticResourceRoutesDeps
   & RegisterVelaRoutesDeps
   & RegisterJevRoutesDeps
+  & RegisterVerificationRoutesDeps
   & RegisterXaiRoutesDeps;
 
 type Assert<T extends true> = T;

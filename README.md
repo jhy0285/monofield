@@ -87,6 +87,11 @@ structured deliverable.
   local server for typed classification, scoring, and uncertainty. The local
   Laya option runs without a TypeSafe key; it is a separate model. See the
   [decision model guide](docs/jev-decisions.md).
+- **Check the code you are reviewing.** Run discovered project checks from the
+  Changes view, keep real exit codes and logs with a source fingerprint, and
+  prepare a repair request in your existing agent's composer. Changed source
+  invalidates old success. The same flow is available through `monofield verify`;
+  see [change verification](docs/change-verification.md).
 
 ## Runtime capability boundary
 
