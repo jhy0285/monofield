@@ -217,7 +217,7 @@ function serverAddress(server: Server): string {
 
 function makeRoot(): string {
   // Match updater filesystem paths when Windows TEMP uses an 8.3 alias.
-  return realpathSync(mkdtempSync(join(tmpdir(), "od-updater-test-")));
+  return realpathSync.native(mkdtempSync(join(tmpdir(), "od-updater-test-")));
 }
 
 function updaterEnv(metadataUrl: string, platform = "darwin"): NodeJS.ProcessEnv {
