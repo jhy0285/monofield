@@ -17,6 +17,11 @@ on:
         required: true
         default: false
         type: boolean
+      allow_unsigned:
+        description: Explicitly allow a verified unsigned Windows public release
+        required: true
+        default: false
+        type: boolean
       publish:
         description: Publish a GitHub Release after build and smoke verification
         required: true
@@ -52,6 +57,7 @@ jobs:
         id: release
         shell: pwsh
         env:
+          ALLOW_UNSIGNED_RELEASE: ${{ inputs.allow_unsigned }}
           PUBLISH_RELEASE: ${{ inputs.publish }}
           RELEASE_REPOSITORY: ${{ github.repository }}
           RELEASE_VERSION: ${{ inputs.release_version }}
@@ -62,8 +68,8 @@ jobs:
           if ($version -notmatch '^\d+\.\d+\.\d+$') {
             throw "release_version must be a stable x.y.z version; got '$version'"
           }
-          if ($env:PUBLISH_RELEASE -eq "true" -and $env:SIGN_RELEASE -ne "true") {
-            throw "public GitHub releases must use signed=true"
+          if ($env:PUBLISH_RELEASE -eq "true" -and $env:SIGN_RELEASE -ne "true" -and $env:ALLOW_UNSIGNED_RELEASE -ne "true") {
+            throw "public GitHub releases must use signed=true or allow_unsigned=true"
           }
           if ($env:PUBLISH_RELEASE -eq "true" -and $env:RELEASE_REPOSITORY -ne "jhy0285/monofield") {
             throw "public releases may only be published from jhy0285/monofield"
@@ -93,7 +99,7 @@ jobs:
       - name: Test packaging and updater release contracts
         shell: pwsh
         run: |
-          pnpm --filter @open-design/tools-pack test -- tests/resources.test.ts tests/package-file-patterns.test.ts tests/release-workflows.test.ts tests/win-resources.test.ts tests/win-sign.test.ts tests/win-targets.test.ts
+          pnpm --filter @open-design/tools-pack exec vitest run
           if ($LASTEXITCODE -ne 0) { throw "tools-pack release contract tests failed" }
           pnpm --filter @open-design/desktop exec vitest run -c vitest.config.ts --maxWorkers=1 tests/main/updater.test.ts tests/main/updater-host-boundary.test.ts
           if ($LASTEXITCODE -ne 0) { throw "desktop updater contract tests failed" }
@@ -163,6 +169,7 @@ jobs:
           RELEASE_COMMIT: ${{ steps.release.outputs.release_commit }}
           RELEASE_VERSION: ${{ steps.release.outputs.release_version }}
           SIGNED_RELEASE: ${{ inputs.signed }}
+          UNSIGNED_RELEASE_APPROVED: ${{ inputs.allow_unsigned }}
         run: |
           $ErrorActionPreference = "Stop"
           $workRoot = Join-Path $env:RUNNER_TEMP "monofield-release-work"
@@ -223,6 +230,7 @@ jobs:
             releaseVersion = $env:RELEASE_VERSION
             schemaVersion = 1
             signed = $env:SIGNED_RELEASE -eq "true"
+            unsignedApproved = $env:UNSIGNED_RELEASE_APPROVED -eq "true"
             tag = "v$env:RELEASE_VERSION"
             updaterMetadataUrl = "https://api.github.com/repos/${{ github.repository }}/releases/latest"
           }
@@ -264,6 +272,7 @@ jobs:
       - name: Verify release evidence
         shell: bash
         env:
+          ALLOW_UNSIGNED_RELEASE: ${{ inputs.allow_unsigned }}
           EVIDENCE_ROOT: ${{ runner.temp }}/monofield-release-evidence
           RELEASE_COMMIT: ${{ needs.build.outputs.release_commit }}
           RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
@@ -271,8 +280,8 @@ jobs:
           set -euo pipefail
           manifest="$EVIDENCE_ROOT/release-manifest.json"
           assets="$EVIDENCE_ROOT/assets"
-          jq -e --arg version "$RELEASE_VERSION" --arg commit "$RELEASE_COMMIT" \
-            '.schemaVersion == 1 and .releaseVersion == $version and .releaseCommit == $commit and .signed == true and .tag == ("v" + $version)' \
+          jq -e --arg version "$RELEASE_VERSION" --arg commit "$RELEASE_COMMIT" --argjson allow_unsigned "$ALLOW_UNSIGNED_RELEASE" \
+            '.schemaVersion == 1 and .releaseVersion == $version and .releaseCommit == $commit and (.signed == true or ($allow_unsigned and .signed == false and .unsignedApproved == true)) and .tag == ("v" + $version)' \
             "$manifest" >/dev/null
           test -f "$assets/MonoField-default-setup.exe"
           test -f "$assets/MonoField-default-payload.7z"
@@ -290,9 +299,29 @@ jobs:
           RELEASE_COMMIT: ${{ needs.build.outputs.release_commit }}
           RELEASE_REPOSITORY: ${{ github.repository }}
           RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
+          SIGNED_RELEASE: ${{ inputs.signed }}
         run: |
           set -euo pipefail
           tag="v$RELEASE_VERSION"
+          notes="$RUNNER_TEMP/monofield-release-notes.md"
+          printf '# MonoField %s\n\n' "$RELEASE_VERSION" > "$notes"
+          if [ "$SIGNED_RELEASE" != "true" ]; then
+            cat >> "$notes" <<'EOF'
+          Windows binaries in this release are unsigned. Verify downloads against
+          SHA256SUMS.txt from this release; Windows may show an unrecognized publisher.
+
+          EOF
+          fi
+          cat >> "$notes" <<'EOF'
+          - A cleaner workspace, simpler development controls, and a visible update indicator.
+          - Project-scoped development, browser verification, and Git diff review improvements.
+          - Database schema change watching and document impact review.
+          - Smaller Codex prompt overhead and fixes to agent connection contracts.
+
+          Downloads include the Windows installer, portable ZIP, launcher payload,
+          updater feed, and SHA-256 checksums. Existing stable installs use the
+          GitHub latest-release feed to discover this version.
+          EOF
           tag_commit="$(gh api "repos/$RELEASE_REPOSITORY/commits/$tag" --jq '.sha' 2>/dev/null || true)"
           if [ -n "$tag_commit" ] && [ "$tag_commit" != "$RELEASE_COMMIT" ]; then
             echo "refusing to publish $tag because it points to $tag_commit instead of $RELEASE_COMMIT" >&2
@@ -304,7 +333,7 @@ jobs:
               --repo "$RELEASE_REPOSITORY" \
               --target "$RELEASE_COMMIT" \
               --title "MonoField $RELEASE_VERSION" \
-              --generate-notes \
+              --notes-file "$notes" \
               --draft
           else
             draft="$(jq -r '.isDraft' <<<"$existing")"
@@ -316,4 +345,4 @@ jobs:
           fi
 
           gh release upload "$tag" "$ASSETS_ROOT"/* --repo "$RELEASE_REPOSITORY" --clobber
-          gh release edit "$tag" --repo "$RELEASE_REPOSITORY" --draft=false --latest
+          gh release edit "$tag" --repo "$RELEASE_REPOSITORY" --notes-file "$notes" --draft=false --latest

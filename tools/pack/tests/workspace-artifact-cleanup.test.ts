@@ -1,4 +1,4 @@
-import { copyFile, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -15,7 +15,9 @@ describe("workspace artifact cleanup script", () => {
   it.runIf(process.platform === "win32")(
     "removes only approved artifact trees and unlinks nested junctions without traversing them",
     async () => {
-      const root = await mkdtemp(join(tmpdir(), "monofield-workspace-cleanup-test-"));
+      // Windows runners can expose TEMP through an 8.3 alias. PowerShell uses
+      // the full directory name, so create and compare all fixture paths there.
+      const root = await realpath(await mkdtemp(join(tmpdir(), "monofield-workspace-cleanup-test-")));
       fixtureRoots.push(root);
       const scriptDirectory = join(root, "tools", "release", "scripts");
       await mkdir(scriptDirectory, { recursive: true });

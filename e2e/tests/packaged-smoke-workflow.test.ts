@@ -66,7 +66,7 @@ describe("packaged smoke workflow", () => {
     expect(validate).toContain("windows_tools_pack_payload_tests");
   });
 
-  it("[P2] keeps public release writes behind version, repository, and signing gates", async () => {
+  it("[P2] keeps public release writes behind version, repository, and signing or explicit unsigned approval", async () => {
     const workflow = await readFile(releaseWorkflowPath, "utf8");
     const build = sectionBetween(workflow, "  build:\n", "  publish:\n");
     const publish = workflow.slice(workflow.indexOf("  publish:\n"));
@@ -79,6 +79,8 @@ describe("packaged smoke workflow", () => {
     expect(workflow).toContain("permissions:\n  contents: read");
     expect(build).not.toContain("contents: write");
     expect(workflow).toContain("public GitHub releases must use signed=true");
+    expect(workflow).toContain("allow_unsigned:");
+    expect(workflow).toContain('$env:ALLOW_UNSIGNED_RELEASE -ne "true"');
     expect(workflow).toContain("public releases may only be published from jhy0285/monofield");
     for (const packageJson of [
       "package.json",
@@ -96,6 +98,7 @@ describe("packaged smoke workflow", () => {
     expect(workflow).toContain("Get-AuthenticodeSignature");
     expect(publish).toContain("permissions:\n      contents: write");
     expect(publish).toContain(".signed == true");
+    expect(publish).toContain(".signed == false and .unsignedApproved == true");
   });
 
   it("[P2] builds all canonical Windows artifacts and preserves smoke evidence", async () => {

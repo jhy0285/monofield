@@ -42,10 +42,7 @@ describe("Windows release workflow", () => {
     expect(build).not.toContain("contents: write");
     expect(build).toContain("uses: actions/checkout@v6.0.2");
     expect(build).toContain("uses: ./.github/actions/setup-workspace");
-    expect(build).toContain("tests/resources.test.ts");
-    expect(build).toContain("tests/release-workflows.test.ts");
-    expect(build).toContain("tests/win-resources.test.ts");
-    expect(build).toContain("tests/win-sign.test.ts");
+    expect(build).toContain("pnpm --filter @open-design/tools-pack exec vitest run\n");
     expect(build).toContain("tests/main/updater.test.ts");
     expect(build).toContain("tools\\release\\scripts\\build-platform.ps1");
     expect(build).toContain("-ReleaseNamespace default");
@@ -101,7 +98,7 @@ describe("Windows release workflow", () => {
     );
   });
 
-  it("requires Authenticode signing before publishing updater-compatible GitHub assets", async () => {
+  it("requires signing or explicit unsigned approval before publishing verified GitHub assets", async () => {
     const [workflow, packConfig, updater, site, readme] = await Promise.all([
       readFile(new URL("../../../.github/workflows/release-windows.yml", import.meta.url), "utf8").then((content) =>
         content.replaceAll("\r\n", "\n"),
@@ -113,7 +110,9 @@ describe("Windows release workflow", () => {
     ]);
     const publish = sectionAfter(workflow, "  publish:\n");
 
-    expect(workflow).toContain('throw "public GitHub releases must use signed=true"');
+    expect(workflow).toContain('throw "public GitHub releases must use signed=true or allow_unsigned=true"');
+    expect(workflow).toContain('allow_unsigned:');
+    expect(workflow).toContain('$env:ALLOW_UNSIGNED_RELEASE -ne "true"');
     expect(workflow).toContain('throw "public releases may only be published from jhy0285/monofield"');
     expect(workflow).toContain("secrets.OD_WIN_SIGN_CERT_PFX_BASE64");
     expect(workflow).toContain("secrets.OD_WIN_SIGN_CERT_PASSWORD");
@@ -131,6 +130,8 @@ describe("Windows release workflow", () => {
     expect(publish).toContain("sha256sum --check --strict SHA256SUMS.txt");
     expect(publish).toContain('test "$(find "$assets" -maxdepth 1 -type f | wc -l)" -eq 5');
     expect(publish).toContain(".signed == true");
+    expect(publish).toContain(".signed == false and .unsignedApproved == true");
+    expect(publish).toContain("Windows binaries in this release are unsigned");
     expect(publish).toContain("gh release create");
     expect(publish).toContain('gh api "repos/$RELEASE_REPOSITORY/commits/$tag"');
     expect(publish).toContain("refusing to publish $tag because it points to $tag_commit instead of $RELEASE_COMMIT");
