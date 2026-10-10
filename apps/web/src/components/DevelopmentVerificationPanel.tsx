@@ -26,6 +26,7 @@ export function DevelopmentVerificationPanel({ projectId, projectPath, ready = t
   const [status, setStatus] = useState<VerificationStatus | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [runId, setRunId] = useState('');
+  const [adviceRevision, setAdviceRevision] = useState(0);
   const [adviceSnapshot, setAdviceSnapshot] = useState<string | null>(null);
   const invalidateAdvice = useCallback(() => setAdviceSnapshot(null), []);
   const [busy, setBusy] = useState(false);
@@ -46,7 +47,7 @@ export function DevelopmentVerificationPanel({ projectId, projectPath, ready = t
     return params.size ? `?${params}` : '';
   }, [projectPath, runId]);
 
-  const load = useCallback(async (discover = false, live = false) => {
+  const load = useCallback(async (discover = false, live = false, preserveError = false) => {
     if (!ready) return;
     abortRef.current?.abort(); const controller = new AbortController(); abortRef.current = controller;
     const version = ++readRef.current;
@@ -57,13 +58,13 @@ export function DevelopmentVerificationPanel({ projectId, projectPath, ready = t
         discover ? fetch(`${base}/plan${projectPath ? `?${new URLSearchParams({ projectPath })}` : ''}`, options).then(r => json<VerificationPlan>(r)) : Promise.resolve(null),
       ]);
       if (version !== readRef.current || controller.signal.aborted) return;
-      setStatus(next); setError('');
+      setStatus(next); if (!preserveError) setError('');
       if (found) { setPlan(found); setSelected(previous => previous.length ? previous.filter(id => found.checks.some(c => c.id === id)) : found.checks.filter(c => c.recommended).map(c => c.id)); }
     } catch (e) { if (!controller.signal.aborted && version === readRef.current) setError(e instanceof Error ? e.message : String(e)); }
   }, [agentBusy, base, projectPath, query, ready]);
 
   useEffect(() => {
-    setPlan(null); setStatus(null); setSelected([]); setAdviceSnapshot(null); setRunId(''); setError(''); setBusy(false); setRepairReady(false);
+    setPlan(null); setStatus(null); setSelected([]); setAdviceSnapshot(null); setAdviceRevision(0); setRunId(''); setError(''); setBusy(false); setRepairReady(false);
     return () => { ++readRef.current; abortRef.current?.abort(); };
   }, [key]);
   useEffect(() => {
@@ -92,7 +93,7 @@ export function DevelopmentVerificationPanel({ projectId, projectPath, ready = t
       const target = kind === 'run' ? base : `${base}/${encodeURIComponent(status?.run?.id ?? '')}/${kind}`;
       const response = await fetch(target, { method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ ...(projectPath ? { projectPath } : {}), ...(kind === 'run' ? { checkIds: selected, ...(adviceSnapshot ? { expectedAdviceSnapshotSha256: adviceSnapshot } : {}) } : {}) }) });
-      if (response.status === 409 && kind === 'run' && keyRef.current === sourceKey) { setAdviceSnapshot(null); void load(true); }
+      if (response.status === 409 && kind === 'run' && keyRef.current === sourceKey) { setAdviceSnapshot(null); setAdviceRevision(v => v + 1); void load(true, false, true); }
       const data = await json<VerificationRun | VerificationStatus | VerificationRepairResponse>(response);
       if (!mountedRef.current || keyRef.current !== sourceKey) return;
       if (kind === 'run') {
@@ -129,7 +130,7 @@ export function DevelopmentVerificationPanel({ projectId, projectPath, ready = t
         {open ? '▾' : '▸'} {t('verification.title')}
       </Button>
       <span className={styles.badge} data-verdict={verified ? 'verified' : running ? 'running' : status?.run ? 'attention' : 'none'} role="status">{badge}</span>
-      {open ? <Button variant="ghost" disabled={busy || running || !ready} onClick={() => { setAdviceSnapshot(null); void load(true); }}>{t('verification.refresh')}</Button> : null}
+      {open ? <Button variant="ghost" disabled={busy || running || !ready} onClick={() => { setAdviceSnapshot(null); setAdviceRevision(v => v + 1); void load(true); }}>{t('verification.refresh')}</Button> : null}
     </div>
     {open ? <div id="verification-body" className={styles.body}>
       <p className={styles.description}>{t('verification.description')}</p>
@@ -142,7 +143,7 @@ export function DevelopmentVerificationPanel({ projectId, projectPath, ready = t
             <span><strong>{check.label}</strong><code>{check.command} {check.args.join(' ')}</code>{check.script ? <small title={check.script}>{check.script}</small> : null}</span>
           </label>)}
         </fieldset>
-        <VerificationAdviceAssistant projectId={projectId} projectPath={projectPath} revisionKey={revisionKey} plan={plan}
+        <VerificationAdviceAssistant projectId={projectId} projectPath={projectPath} revisionKey={`${revisionKey ?? ''}:${adviceRevision}`} plan={plan}
           disabled={busy || running || agentBusy || !ready} onInvalidate={invalidateAdvice} onRequestReview={onRequestRepair}
           onApply={(ids, snapshot) => { setSelected(previous => [...new Set([...ids, ...previous])]); setAdviceSnapshot(snapshot); }} />
         <div className={styles.actions}>

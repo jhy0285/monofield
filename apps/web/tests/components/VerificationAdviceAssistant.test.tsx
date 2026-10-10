@@ -62,6 +62,25 @@ describe('explicit verification suggestion flow', () => {
     await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('Source changed'));
     expect(screen.queryByRole('button', { name: 'Add suggested checks' })).toBeNull();
   });
+  it('keeps an execution conflict visible after refreshing and clears the expired advice', async () => {
+    vi.mocked(fetch).mockImplementation(async (url, init) => {
+      if (String(url).includes('/plan')) return Response.json({ projectPath: '.', checks: [check] });
+      if (String(url).includes('/advice')) return Response.json(advice);
+      if (init?.method === 'POST') return Response.json({ error: { message: 'Source changed after suggestion' } }, { status: 409 });
+      return Response.json({ run: null, verified: false, freshness: 'unknown', history: [] });
+    });
+    render(<I18nProvider><DevelopmentVerificationPanel projectId="p" /></I18nProvider>);
+    fireEvent.click(screen.getByRole('button', { name: /Verify changes/ }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Suggest related checks/ })).toBeTruthy());
+    open(); input(); suggest();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add suggested checks' })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Add suggested checks' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run selected checks' }));
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/plan'))).toHaveLength(2));
+    expect(screen.getByRole('alert').textContent).toBe('Source changed after suggestion');
+    expect(screen.queryByRole('button', { name: 'Add suggested checks' })).toBeNull();
+    expect(vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(2);
+  });
   it('adds recommendations without removing defaults and forwards their snapshot only on explicit run', async () => {
     const types: VerificationCheck = { ...check, id: 'node:typecheck', label: 'typecheck', kind: 'types' };
     const build: VerificationCheck = { ...check, id: 'node:build', label: 'build', kind: 'build', recommended: false };
