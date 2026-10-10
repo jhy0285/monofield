@@ -81,7 +81,7 @@ export class DevelopmentVerificationService {
   }
 
   async suggest(cwd: string, projectPath: string, request: unknown, signal?: AbortSignal) {
-    return suggestVerification(this.dataDir, cwd, projectPath, request, { signal });
+    return suggestVerification(this.dataDir, cwd, projectPath, request, signal ? { signal } : {});
   }
 
   async start(projectId: string, projectPath: string, cwd: string, checkIds: unknown, timeout: unknown, expectedAdviceSnapshotSha256?: unknown): Promise<VerificationRun> {

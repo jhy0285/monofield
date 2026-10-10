@@ -199,7 +199,7 @@ jobs:
     name: Validate Nix flake
     needs: [scopes]
     if: ${{ needs.scopes.outputs.run_nix_validation == 'true' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
       contents: read
@@ -407,7 +407,7 @@ jobs:
     name: Preflight
     needs: [scopes]
     if: ${{ needs.scopes.outputs.run_preflight == 'true' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
 
     steps:
@@ -529,7 +529,7 @@ jobs:
     name: Web workspace tests
     needs: [scopes]
     if: ${{ needs.scopes.outputs.run_web_workspace_tests == 'true' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
 
     steps:
@@ -549,7 +549,7 @@ jobs:
     name: E2E Vitest
     needs: [scopes]
     if: ${{ needs.scopes.outputs.run_e2e_vitest == 'true' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
 
     steps:
@@ -578,7 +578,7 @@ jobs:
     name: Playwright critical (${{ matrix.group }})
     needs: [scopes]
     if: ${{ needs.scopes.outputs.run_playwright_critical == 'true' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -621,7 +621,7 @@ jobs:
     name: UI P0 smoke
     needs: [scopes]
     if: ${{ needs.scopes.outputs.run_ui_p0 == 'true' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
 
     steps:
@@ -668,7 +668,7 @@ jobs:
     name: UI P0 (${{ matrix.name }})
     needs: [scopes]
     if: ${{ needs.scopes.outputs.run_ui_p0 == 'true' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -719,7 +719,7 @@ jobs:
     name: Playwright visual (${{ matrix.name }})
     needs: [scopes]
     if: ${{ needs.scopes.outputs.run_playwright_visual == 'true' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -803,7 +803,7 @@ jobs:
     name: Docker image build
     needs: [scopes]
     if: ${{ needs.scopes.outputs.run_docker_build == 'true' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read
