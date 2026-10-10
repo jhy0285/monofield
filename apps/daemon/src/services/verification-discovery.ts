@@ -2,6 +2,10 @@ import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { VerificationCheck } from '@open-design/contracts';
 
+export function verificationScriptNeedsManualSelection(script: string | null): boolean {
+  return /(?:--watch(?:\b|[=A-Z])|--fix\b|--write\b|\bvitest\s*$)/.test(script ?? '');
+}
+
 const exists = async (target: string) => stat(target).then(() => true).catch(() => false);
 export async function discoverVerificationChecks(cwd: string): Promise<VerificationCheck[]> {
   const checks: VerificationCheck[] = [];
@@ -20,7 +24,7 @@ export async function discoverVerificationChecks(cwd: string): Promise<Verificat
       if (typeof script !== 'string' || !script.trim()) continue;
       if (script.length > 8_000) throw new Error(`Verification script ${name} exceeds 8000 characters`);
       checks.push({ id: `node:${name}`, label: name, kind, command: manager, args: ['run', name], source: 'package.json', script,
-        recommended: (name !== 'test:unit' || !pkg.scripts?.test) && name !== 'build' && !/(?:--watch\b|--fix\b|--write\b|\bvitest\s*$)/.test(script) });
+        recommended: (name !== 'test:unit' || !pkg.scripts?.test) && name !== 'build' && !verificationScriptNeedsManualSelection(script) });
     }
   }
   if (await exists(join(cwd, 'Cargo.toml'))) checks.push({ id: 'rust:test', label: 'cargo test', kind: 'test', command: 'cargo', args: ['test', '--locked'], source: 'Cargo.toml', script: null, recommended: true });

@@ -43,6 +43,6 @@ export function buildVerificationAdviceRequest(request: string, checks: Verifica
 
 /** Review templates are reminders, never completed browser evidence. */
 export function verificationManualReview(request: string): VerificationManualReview[] {
-  if (!/(?:\b(?:ui|ux|css|design|layout|responsive|accessibility|a11y|button|modal|page|clone)\b|디자인|화면|버튼|레이아웃|반응형|접근성|클론)/i.test(request)) return [];
+  if (!/(?:\b(?:ui|ux|css|design|layout|responsive|accessibility|a11y|button|modal|page|clone|color|contrast|spacing|typography|font|navigation|hero|landing|carousel|hover|focus)\b|디자인|화면|버튼|레이아웃|반응형|접근성|클론|색상|색 대비|간격|타이포|폰트|글꼴|메뉴|내비게이션|랜딩|헤더|푸터|호버|포커스)/i.test(request)) return [];
   return ['browser', 'keyboard', 'responsive', 'contrast'];
 }

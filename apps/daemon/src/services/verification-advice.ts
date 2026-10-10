@@ -1,7 +1,7 @@
 import type { JevEvaluation, JevRequest, VerificationAdvice, VerificationCheck, VerificationSource } from '@open-design/contracts';
 import { buildVerificationAdviceRequest, verificationManualReview } from '@open-design/contracts';
 import { evaluateJev, readJevConfig } from '../integrations/jev.js';
-import { discoverVerificationChecks } from './verification-discovery.js';
+import { discoverVerificationChecks, verificationScriptNeedsManualSelection } from './verification-discovery.js';
 import { verificationSource } from './verification-source.js';
 import { verificationAdviceSnapshot } from './verification-advice-snapshot.js';
 
@@ -29,14 +29,16 @@ export async function suggestVerification(dataDir: string, cwd: string, projectP
   const checks = await discover(cwd), before = await source(cwd);
   checkCancelled();
   const snapshotSha256 = verificationAdviceSnapshot(projectPath, checks, before);
+  // Watching and auto-fixing scripts remain explicit manual selections.
+  const candidates = checks.filter(c => !verificationScriptNeedsManualSelection(c.script));
   const advice: VerificationAdvice = { schemaVersion: 1, projectPath, availableCheckIds: checks.map(c => c.id),
     suggestedCheckIds: checks.filter(c => c.recommended).map(c => c.id), priorityCheckId: null,
     snapshotSha256, source: before, reason: 'rules', manualReview: verificationManualReview(request),
     elapsedMs: 0, evaluationAttempts: 0, usage: null, probabilities: null, relevance: null };
   if (!snapshotSha256) advice.reason = 'source-unavailable';
-  else if (!checks.length) advice.reason = 'none';
+  else if (!candidates.length) advice.reason = 'none';
   else if (value.mode === 'model' && request.length > 400) advice.reason = 'long-request';
-  else if (value.mode === 'model' && checks.length > 6) advice.reason = 'too-many-checks';
+  else if (value.mode === 'model' && candidates.length > 6) advice.reason = 'too-many-checks';
   else if (value.mode === 'model') {
     const timeoutMs = options.timeoutMs ?? 2_000;
     const controller = new AbortController();
@@ -53,7 +55,7 @@ export async function suggestVerification(dataDir: string, cwd: string, projectP
       const evaluation = await Promise.race([(async () => {
         const config = await (options.config ?? readJevConfig)(dataDir);
         if (signal.aborted) throw options.signal?.aborted ? cancelled() : fail('Decision deadline exceeded', 504);
-        return (options.evaluate ?? evaluateJev)(dataDir, buildVerificationAdviceRequest(request, checks, config.model), { signal, timeoutMs });
+        return (options.evaluate ?? evaluateJev)(dataDir, buildVerificationAdviceRequest(request, candidates, config.model), { signal, timeoutMs });
       })(), stop]);
       checkCancelled();
       const result = evaluation.result;
@@ -61,20 +63,20 @@ export async function suggestVerification(dataDir: string, cwd: string, projectP
       const answer = result.answers.priority;
       if (answer?.type !== 'choice') throw fail('Invalid priority response');
       const ordered = Object.entries(answer.probabilities).sort((a, b) => b[1] - a[1]);
-      advice.probabilities = Object.fromEntries(ordered.map(([id, score]) => [id === 'NONE' ? 'NONE' : checks[Number(id.slice(1)) - 1]?.id ?? id, score]));
-      const relevance = Object.fromEntries(checks.map((check, i) => {
+      advice.probabilities = Object.fromEntries(ordered.map(([id, score]) => [id === 'NONE' ? 'NONE' : candidates[Number(id.slice(1)) - 1]?.id ?? id, score]));
+      const relevance = Object.fromEntries(candidates.map((check, i) => {
         const fit = result.answers[`fit_C${i + 1}`];
         if (fit?.type !== 'noul') throw fail('Invalid relevance response');
         return [check.id, fit.noul];
       }));
       advice.relevance = relevance;
       const winner = ordered[0], next = ordered[1]?.[1] ?? 0;
-      const candidate = checks[Number(answer.choice.slice(1)) - 1];
+      const candidate = candidates[Number(answer.choice.slice(1)) - 1];
       // Thresholds are conservative heuristics, not cross-model calibrated confidence.
       const accepted = candidate && winner?.[0] === answer.choice && winner[1] >= 0.8
         && winner[1] - next >= 0.5 && relevance[candidate.id]! >= 0.8;
       advice.suggestedCheckIds = accepted
-        ? [candidate.id, ...checks.filter(c => c.id !== candidate.id && relevance[c.id]! >= 0.8).map(c => c.id)]
+        ? [candidate.id, ...candidates.filter(c => c.id !== candidate.id && relevance[c.id]! >= 0.8).map(c => c.id)]
         : [];
       advice.priorityCheckId = accepted ? candidate.id : null;
       advice.reason = answer.choice === 'NONE' && winner?.[0] === 'NONE' && winner[1] >= 0.8 ? 'none' : accepted ? 'model' : 'uncertain';

@@ -39,6 +39,26 @@ describe('verification suggestions are bounded advisory decisions', () => {
     const result = await suggestVerification('data', 'cwd', '.', brief, deps);
     expect(result.reason).toBe('uncertain'); expect(result.suggestedCheckIds).toEqual([]); expect(result.priorityCheckId).toBeNull();
   });
+  it('keeps watch and auto-fixing scripts out of model candidates', async () => {
+    const deps = setup();
+    deps.discover.mockResolvedValue([{ ...checks[0]!, script: 'vitest --watchAll', recommended: false },
+      { ...checks[1]!, script: 'lint --fix', recommended: false }]);
+    const result = await suggestVerification('data', 'cwd', '.', brief, deps);
+    expect(result.reason).toBe('none'); expect(result.availableCheckIds).toEqual(['node:test', 'node:build']);
+    expect(result.suggestedCheckIds).toEqual([]); expect(deps.evaluate).not.toHaveBeenCalled();
+  });
+  it('maps filtered opaque candidates back to the correct registered check', async () => {
+    const deps = setup();
+    deps.discover.mockResolvedValue([{ ...checks[0]!, script: 'vitest --watch', recommended: false }, checks[1]!]);
+    deps.evaluate.mockResolvedValue({ backend: 'local', requestedModel: 'fixture', elapsedMs: 1, result: { model: 'fixture',
+      usage: { input_tokens: 72, output_tokens: 0 }, answers: {
+        priority: { type: 'choice', choice: 'C1', confidence: 0.94, probabilities: { C1: 0.94, NONE: 0.06 } },
+        fit_C1: { type: 'noul', noul: 0.96 },
+      } } });
+    const result = await suggestVerification('data', 'cwd', '.', brief, deps);
+    expect(result.priorityCheckId).toBe('node:build'); expect(result.suggestedCheckIds).toEqual(['node:build']);
+    expect(Object.keys(deps.evaluate.mock.calls[0]![1].questions)).toEqual(['priority', 'fit_C1']);
+  });
   it('supports NONE instead of forcing an irrelevant command', async () => {
     const deps = setup(); deps.evaluate.mockResolvedValue(response('NONE'));
     const result = await suggestVerification('data', 'cwd', '.', brief, deps);

@@ -4022,7 +4022,7 @@ export const en: Dict = {
   "verification.advice.apply": "Add suggested checks",
   "verification.advice.applied": "Suggestion added. Review the commands, then start checks.",
   "verification.advice.priority": "First suggested check: {label}",
-  "verification.advice.elapsed": "Suggestion: {ms} ms · model evaluations: {count}",
+  "verification.advice.elapsed": "Suggestion: {ms} ms · model evaluation attempts: {count}",
   "verification.advice.unknownUsage": "Provider token usage unavailable",
   "verification.advice.manualTitle": "Browser review still needed",
   "verification.advice.manual.browser": "Check the changed flow, loading, empty and error states in the browser.",

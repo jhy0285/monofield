@@ -508,6 +508,28 @@ jobs:
           pnpm guard
           pnpm i18n:check
 
+      - name: Setup Playwright for verification browser flow
+        if: ${{ needs.scopes.outputs.daemon_tests_required == 'true' }}
+        uses: ./.github/actions/setup-playwright
+        with:
+          package-json-path: e2e/package.json
+          install-command: pnpm -C e2e exec playwright install --with-deps chromium
+
+      - name: Verification browser flow
+        if: ${{ needs.scopes.outputs.daemon_tests_required == 'true' }}
+        env:
+          OD_PLAYWRIGHT_WORKERS: "1"
+        run: pnpm -C e2e exec playwright test -c playwright.config.ts ui/development-verification.test.ts --workers=1 --retries=0
+
+      - name: Upload verification browser evidence
+        if: ${{ always() && needs.scopes.outputs.daemon_tests_required == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-browser-${{ github.run_id }}
+          path: e2e/ui/reports/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
   windows_tools_pack_payload_tests:
     name: Windows tools-pack payload tests
     needs: [scopes]

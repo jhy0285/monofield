@@ -4022,7 +4022,7 @@ export const ko: Dict = {
   "verification.advice.apply": "추천 검사 추가",
   "verification.advice.applied": "추천을 추가했습니다. 명령을 확인한 뒤 검사를 실행하세요.",
   "verification.advice.priority": "먼저 추천하는 검사: {label}",
-  "verification.advice.elapsed": "추천 소요 {ms}ms · 모델 평가 {count}회",
+  "verification.advice.elapsed": "추천 소요 {ms}ms · 모델 평가 시도 {count}회",
   "verification.advice.unknownUsage": "제공자 토큰 사용량 미확인",
   "verification.advice.manualTitle": "브라우저에서 확인할 항목",
   "verification.advice.manual.browser": "변경한 흐름과 로딩·빈 화면·오류 상태를 브라우저에서 확인합니다.",

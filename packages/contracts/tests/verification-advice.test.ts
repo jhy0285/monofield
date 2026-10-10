@@ -14,7 +14,7 @@ describe('closed verification fan-out contract', () => {
     expect(JSON.stringify(request)).not.toContain('"command"');
     expect(JSON.stringify(request)).not.toContain('"args"');
   });
-  it.each(['애플 클론 화면을 반응형으로 수정', 'Adjust UI button layout', 'Improve keyboard accessibility'])('adds observed browser review reminders for %s', request => {
+  it.each(['애플 클론 화면을 반응형으로 수정', 'Adjust UI button layout', 'Improve keyboard accessibility', 'Improve text contrast', '메뉴의 포커스 표시 수정'])('adds observed browser review reminders for %s', request => {
     expect(verificationManualReview(request)).toEqual(['browser', 'keyboard', 'responsive', 'contrast']);
   });
   it('does not add visual review to a plain backend brief', () => {
