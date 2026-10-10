@@ -906,6 +906,16 @@ async function runArtifacts(args) {
 }
 
 async function runDocs(args) {
+  if (args[0] === 'plan') {
+    const flags = parseFlags(args.slice(1), { string: ['project', 'inputs-file', 'rules-file', 'simulate-file', 'prompt-file', 'daemon-url'], boolean: ['json', 'help'] });
+    if (flags.help || !flags.project) {
+      console.log('Usage: monofield docs plan --project ID [--inputs-file <JSON-array-file|->] [--rules-file <project-relative.json>] [--simulate-file <JSON-node-ID-array>] [--prompt-file <path|->] [--json] [--daemon-url URL]');
+      process.exit(flags.help ? 0 : 2);
+    }
+    const { runChangePlanCli } = await import('./services/change-plan-cli.js');
+    await runChangePlanCli(flags, await cliDaemonBaseUrl(flags));
+    return;
+  }
   if (args[0] === 'graph') {
     const flags = parseFlags(args.slice(1), { string: ['project', 'inputs-file', 'daemon-url'], boolean: ['json', 'help'] });
     if (flags.help || !flags.project) {

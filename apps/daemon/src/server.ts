@@ -5349,6 +5349,7 @@ export async function startServer({
     paths: pathDeps,
     projectFiles: projectFileDeps,
     schemaWatch,
+    verification,
   });
   registerPluginAssetRoutes(app, {
     db,

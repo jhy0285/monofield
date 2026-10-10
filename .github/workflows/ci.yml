@@ -496,15 +496,15 @@ jobs:
         env:
           OD_WATCHER_TEST_DEBUG: "1"
         run: |
-          pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts tests/project-watchers.test.ts tests/development-verification.test.ts tests/verification-advice.test.ts tests/verification-advice-provider.test.ts tests/verification-routes-cli.test.ts
+          pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts tests/project-watchers.test.ts tests/development-verification.test.ts tests/verification-advice.test.ts tests/verification-advice-provider.test.ts tests/verification-routes-cli.test.ts tests/services/change-plan.test.ts tests/services/document-graph.test.ts tests/change-plan-route.test.ts tests/document-impact-route.test.ts
 
-      - name: Verification advisor contracts and web checks
+      - name: Verification and ontology contracts and web checks
         if: ${{ needs.scopes.outputs.daemon_tests_required == 'true' }}
         run: |
           pnpm --filter @open-design/contracts typecheck
           pnpm --filter @open-design/daemon typecheck
           pnpm --filter @open-design/web typecheck
-          pnpm --filter @open-design/web exec vitest run tests/components/VerificationAdviceAssistant.test.tsx tests/components/DevelopmentVerificationPanel.test.tsx
+          pnpm --filter @open-design/web exec vitest run tests/components/VerificationAdviceAssistant.test.tsx tests/components/DevelopmentVerificationPanel.test.tsx tests/components/ChangePlanPanel.test.tsx
 
 
       - name: Setup Playwright for verification browser flow
@@ -518,7 +518,7 @@ jobs:
         if: ${{ needs.scopes.outputs.daemon_tests_required == 'true' }}
         env:
           OD_PLAYWRIGHT_WORKERS: "1"
-        run: pnpm -C e2e exec playwright test -c playwright.config.ts ui/development-verification.test.ts --workers=1 --retries=0
+        run: pnpm -C e2e exec playwright test -c playwright.config.ts ui/development-verification.test.ts ui/change-plan.test.ts --workers=1 --retries=0
 
       - name: Upload verification browser evidence
         if: ${{ always() && needs.scopes.outputs.daemon_tests_required == 'true' }}

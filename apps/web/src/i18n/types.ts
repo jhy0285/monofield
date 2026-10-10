@@ -30,6 +30,35 @@ export const LOCALE_LABEL: Record<Locale, string> = {
 // flat (not deeply nested) so missing-key TS errors point straight at the
 // offending string instead of a generic object mismatch.
 export interface Dict {
+  "changePlan.title": string;
+  "changePlan.description": string;
+  "changePlan.request": string;
+  "changePlan.rulesFile": string;
+  "changePlan.policyHint": string;
+  "changePlan.analyze": string;
+  "changePlan.mode.observed": string;
+  "changePlan.mode.simulation": string;
+  "changePlan.summary": string;
+  "changePlan.elapsed": string;
+  "changePlan.passMeaning": string;
+  "changePlan.simulateTitle": string;
+  "changePlan.simulateHint": string;
+  "changePlan.simulate": string;
+  "changePlan.why": string;
+  "changePlan.handoff": string;
+  "changePlan.handoffHint": string;
+  "changePlan.state.needs-run": string;
+  "changePlan.state.passed-current": string;
+  "changePlan.state.stale": string;
+  "changePlan.state.missing-check": string;
+  "changePlan.state.manual-review": string;
+  "changePlan.state.coverage-gap": string;
+  "changePlan.review.browser": string;
+  "changePlan.review.keyboard": string;
+  "changePlan.review.responsive": string;
+  "changePlan.review.contrast": string;
+  "changePlan.review.schema": string;
+  "changePlan.review.migration": string;
   "verification.advice.title": string;
   "verification.advice.description": string;
   "verification.advice.input": string;

@@ -1,56 +1,70 @@
 import type { Express } from 'express';
-import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { applyInterfaceSpecProposal, parseInterfaceSpecDocument, parseScreenSpecDocument, validateInterfaceSpecDocument } from '@open-design/contracts';
+import { applyInterfaceSpecProposal, parseInterfaceSpecDocument, validateInterfaceSpecDocument } from '@open-design/contracts';
 import { getProject } from '../db.js';
 import { resolveProjectDir, resolveProjectFilePath, listFiles } from '../projects.js';
-import { buildDocumentGraph, type GraphDocument } from '../services/document-graph.js';
+import { isDocumentPath, loadProjectDocumentGraph } from '../services/project-document-graph.js';
+import { buildChangePlan } from '../services/change-plan.js';
+import { parseChangePolicy } from '../services/change-policy.js';
+import { discoverVerificationChecks } from '../services/verification-discovery.js';
+import { verificationSource } from '../services/verification-source.js';
 import type { DatabaseSchemaWatchService } from '../services/database-schema-watch.js';
 import { analyzeDocumentImpact } from '../services/document-impact.js';
 import type { RouteDeps } from '../server-context.js';
 
-export interface RegisterDocumentImpactRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'projectFiles'> { schemaWatch: DatabaseSchemaWatchService }
-
-function isDocumentPath(value: unknown): value is string {
-  return typeof value === 'string' && /\.json$/i.test(value) && value.length <= 1024
-    && !path.isAbsolute(value) && !/^[a-z]:/i.test(value)
-    && !value.replace(/\\/g, '/').split('/').includes('..');
-}
+export interface RegisterDocumentImpactRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'projectFiles' | 'verification'> { schemaWatch: DatabaseSchemaWatchService }
 
 export function registerDocumentImpactRoutes(app: Express, deps: RegisterDocumentImpactRoutesDeps): void {
+  async function selected(id: string) {
+    const project = getProject(deps.db, id);
+    if (!project) throw Object.assign(new Error('Project not found.'), { status: 404 });
+    const root = resolveProjectDir(deps.paths.PROJECTS_DIR, id, project.metadata);
+    const read = async (name: string) => {
+      const info = await resolveProjectFilePath(deps.paths.PROJECTS_DIR, id, name, project.metadata);
+      if (info.size > 2 * 1024 * 1024) throw new Error('Document exceeds the 2 MB analysis limit.');
+      return deps.projectFiles.readProjectFile(deps.paths.PROJECTS_DIR, id, name, project.metadata);
+    };
+    const load = (inputFiles: unknown) => loadProjectDocumentGraph({
+      projectRoot: root, inputFiles, read,
+      list: async () => (await listFiles(deps.paths.PROJECTS_DIR, id, { metadata: project.metadata })).map(file => file.name),
+      schemaWatch: deps.schemaWatch.get(id),
+    });
+    return { root, read, load };
+  }
+  const fail = (res: import('express').Response, error: unknown, code: string) => {
+    const status = Number((error as { status?: number })?.status) || 400;
+    deps.http.sendApiError(res, status, status === 404 ? 'PROJECT_NOT_FOUND' : code, error instanceof Error ? error.message : String(error));
+  };
   app.post('/api/projects/:id/documents/graph', deps.http.requireLocalDaemonRequest, async (req, res) => {
     try {
-      const project = getProject(deps.db, req.params.id);
-      if (!project) { res.status(404).json({ error: { code: 'PROJECT_NOT_FOUND', message: 'Project not found.' } }); return; }
-      let inputs: unknown = req.body?.inputFiles;
-      const explicit = inputs !== undefined;
-      if (!explicit) inputs = (await listFiles(deps.paths.PROJECTS_DIR, project.id, { metadata: project.metadata })).filter((file) => /\.json$/i.test(file.name) && !/\.proposed\.json$/i.test(file.name)).map((file) => file.name);
-      if (!Array.isArray(inputs) || inputs.length > 200 || !inputs.every(isDocumentPath)) throw new Error('Select at most 200 project-relative JSON files for graph analysis.');
-      const documents: GraphDocument[] = [], changedFiles = new Set<string>(), warnings: string[] = [];
-      let totalBytes = 0;
-      for (const name of [...new Set(inputs as string[])]) {
-        const info = await resolveProjectFilePath(deps.paths.PROJECTS_DIR, project.id, name, project.metadata);
-        if (info.size > 2 * 1024 * 1024 || totalBytes + info.size > 20 * 1024 * 1024) throw new Error('Graph analysis is limited to 2 MB per document and 20 MB total.');
-        const file = await deps.projectFiles.readProjectFile(deps.paths.PROJECTS_DIR, project.id, name, project.metadata);
-        totalBytes += file.buffer.length;
-        if (file.buffer.length > 2 * 1024 * 1024 || totalBytes > 20 * 1024 * 1024) throw new Error('Graph analysis is limited to 2 MB per document and 20 MB total.');
-        let value: unknown;
-        try { value = JSON.parse(file.buffer.toString('utf8')); } catch { if (explicit) warnings.push(`Invalid JSON: ${name}`); continue; }
-        const kind = (value as { kind?: string } | null)?.kind;
-        if (kind !== 'interface-spec' && kind !== 'screen-spec') { if (explicit) warnings.push(`Not a specification document: ${name}`); continue; }
-        const parsed = kind === 'interface-spec' ? parseInterfaceSpecDocument(value) : parseScreenSpecDocument(value);
-        if (!parsed.ok) { warnings.push(`Invalid specification: ${name}`); continue; }
-        documents.push({ file: file.name, doc: parsed.doc });
-        if (parsed.doc.kind === 'interface-spec') {
-          const impact = await analyzeDocumentImpact({ projectRoot: resolveProjectDir(deps.paths.PROJECTS_DIR, project.id, project.metadata),
-            inputFile: file.name, content: file.buffer, doc: parsed.doc });
-          for (const changed of impact.changedFiles) changedFiles.add(path.posix.normalize(path.posix.join(parsed.doc.source.codebasePath?.replace(/\\/g, '/') || '.', changed)));
-          if (!impact.repository) warnings.push(`Git change coverage unavailable: ${name}`);
-        }
-      }
-      res.set('Cache-Control', 'no-store');
-      res.json(buildDocumentGraph({ documents, changedFiles: [...changedFiles], schemaWatch: deps.schemaWatch.get(project.id), warnings }));
-    } catch (error) { res.status(400).json({ error: { code: 'DOCUMENT_GRAPH_FAILED', message: error instanceof Error ? error.message : 'Graph analysis failed.' } }); }
+      const target = await selected(req.params.id);
+      res.set('Cache-Control', 'no-store').json((await target.load(req.body?.inputFiles)).graph);
+    } catch (error) { fail(res, error, 'DOCUMENT_GRAPH_FAILED'); }
+  });
+  app.post('/api/projects/:id/documents/plan', deps.http.requireLocalDaemonRequest, async (req, res) => {
+    const started = performance.now();
+    try {
+      const body = req.body ?? {};
+      if (body.request !== undefined && (typeof body.request !== 'string' || body.request.length > 2000)) throw new Error('request must be text of at most 2000 characters');
+      if (body.simulateNodeIds !== undefined && (!Array.isArray(body.simulateNodeIds) || body.simulateNodeIds.length > 32
+        || body.simulateNodeIds.some((id: unknown) => typeof id !== 'string' || id.length > 4096))) throw new Error('Select at most 32 graph node IDs');
+      if (body.rulesFile !== undefined && !isDocumentPath(body.rulesFile)) throw new Error('rulesFile must be a project-relative JSON file');
+      const target = await selected(req.params.id);
+      const before = await verificationSource(target.root);
+      const { graph, changedFiles } = await target.load(body.inputFiles);
+      const policy = body.rulesFile === undefined ? undefined : parseChangePolicy(JSON.parse((await target.read(body.rulesFile)).buffer.toString('utf8')));
+      const checks = await discoverVerificationChecks(target.root);
+      const status = await deps.verification.status(req.params.id, '.', target.root, undefined, true);
+      const source = await verificationSource(target.root);
+      if (before.digest && source.digest && before.digest !== source.digest) throw Object.assign(new Error('Project source changed during planning. Analyze again.'), { status: 409 });
+      if (!before.digest) { source.digest = null; source.reason = before.reason; }
+      const report = buildChangePlan({ graph, changedFiles, checks, source, receipt: status.run,
+        ...(policy ? { policy } : {}), ...(body.simulateNodeIds ? { simulateNodeIds: body.simulateNodeIds } : {}),
+        ...(body.request === undefined ? {} : { request: body.request }),
+      });
+      report.elapsedMs = Math.round(performance.now() - started);
+      res.set('Cache-Control', 'no-store').json(report);
+    } catch (error) { fail(res, error, 'CHANGE_PLAN_FAILED'); }
   });
   app.post('/api/projects/:id/documents/impact', deps.http.requireLocalDaemonRequest, async (req, res) => {
     try {
