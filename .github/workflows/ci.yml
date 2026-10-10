@@ -496,7 +496,7 @@ jobs:
         env:
           OD_WATCHER_TEST_DEBUG: "1"
         run: |
-          pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts tests/project-watchers.test.ts tests/development-verification.test.ts tests/verification-advice.test.ts tests/verification-routes-cli.test.ts
+          pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts tests/project-watchers.test.ts tests/development-verification.test.ts tests/verification-advice.test.ts tests/verification-advice-provider.test.ts tests/verification-routes-cli.test.ts
 
       - name: Verification advisor contracts and web checks
         if: ${{ needs.scopes.outputs.daemon_tests_required == 'true' }}
@@ -505,8 +505,7 @@ jobs:
           pnpm --filter @open-design/daemon typecheck
           pnpm --filter @open-design/web typecheck
           pnpm --filter @open-design/web exec vitest run tests/components/VerificationAdviceAssistant.test.tsx tests/components/DevelopmentVerificationPanel.test.tsx
-          pnpm guard
-          pnpm i18n:check
+
 
       - name: Setup Playwright for verification browser flow
         if: ${{ needs.scopes.outputs.daemon_tests_required == 'true' }}
@@ -529,6 +528,14 @@ jobs:
           path: e2e/ui/reports/test-results
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: Check repository policies after verification evidence
+        if: ${{ always() && needs.scopes.outputs.daemon_tests_required == 'true' }}
+        run: pnpm guard
+
+      - name: Check translation structure after verification evidence
+        if: ${{ always() && needs.scopes.outputs.daemon_tests_required == 'true' }}
+        run: pnpm i18n:check
 
   windows_tools_pack_payload_tests:
     name: Windows tools-pack payload tests
