@@ -5,8 +5,9 @@ import { Button } from '@open-design/components';
 import type { DatabaseSchemaWatchState, DocumentGraphResponse } from '@open-design/contracts';
 import { useI18n } from '../../i18n';
 import styles from './DocumentImpactPanel.module.css';
+import { ChangePlanPanel } from './ChangePlanPanel';
 
-export function DocumentDependencyPanel({ projectId, dirty }: { projectId: string; dirty: boolean }) {
+export function DocumentDependencyPanel({ projectId, dirty, onRequestDraft }: { projectId: string; dirty: boolean; onRequestDraft?: ((prompt: string) => void) | undefined }) {
   const { t } = useI18n();
   const [watch, setWatch] = useState<DatabaseSchemaWatchState | null>(null);
   const [report, setReport] = useState<DocumentGraphResponse | null>(null);
@@ -84,6 +85,7 @@ export function DocumentDependencyPanel({ projectId, dirty }: { projectId: strin
     <div className={styles.actions}><Button disabled={busy || dirty} onClick={() => void action('graph')}>{t('docs.graph.analyze')}</Button></div>
     {dirty ? <p>{t('docs.impact.saveFirst')}</p> : null}
     {error ? <p className={styles.error} role="alert">{error}</p> : null}
+    <ChangePlanPanel projectId={projectId} dirty={dirty} inputFiles={files} onRequestDraft={onRequestDraft} />
     {report ? <div>
       <time dateTime={report.analyzedAt}>{new Date(report.analyzedAt).toLocaleString()}</time>
       <p>{t('docs.graph.summary', { documents: report.documents.length, affected: new Set(report.impacts.map((impact) => impact.nodeId)).size, unknown: report.unlinkedNodeIds.length })}</p>

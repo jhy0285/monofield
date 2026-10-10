@@ -36,6 +36,19 @@ describe('development verification with real commands and source', () => {
     await expect(service.start('p', '.', root, ['node:inject'], undefined)).rejects.toThrow('no longer available');
     await expect(service.start('p', '.', root, [], undefined)).rejects.toThrow('Select');
   });
+  it('rejects stale applied advice before any command or receipt is created, then runs fresh advice', async () => {
+    await packageWith('node -e "require(\'node:fs\').writeFileSync(\'ignored.txt\', \'ran\')"');
+    const advice = await service.suggest(root, '.', { request: 'Check this change', mode: 'rules' });
+    expect(advice.snapshotSha256).toMatch(/^[a-f0-9]{64}$/);
+    await writeFile(join(root, 'sum.cjs'), '// changed after advice');
+    await expect(service.start('p', '.', root, ['node:test'], undefined, advice.snapshotSha256)).rejects.toMatchObject({ status: 409 });
+    expect((await readdir(root))).not.toContain('ignored.txt');
+    expect((await service.status('p', '.', root)).run).toBeNull();
+    const fresh = await service.suggest(root, '.', { request: 'Check current change', mode: 'rules' });
+    const started = await service.start('p', '.', root, ['node:test'], undefined, fresh.snapshotSha256);
+    expect((await settle(started.id)).verified).toBe(true);
+    expect(await readFile(join(root, 'ignored.txt'), 'utf8')).toBe('ran');
+  });
   it('records a real failing assertion, prepares bounded repair data, then verifies the corrected source', async () => {
     const failed = await service.start('p', '.', root, ['node:test'], undefined);
     const failure = await settle(failed.id);
