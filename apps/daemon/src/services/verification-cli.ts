@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import type { VerificationRun, VerificationStatus } from '@open-design/contracts';
 
 export async function runVerificationCli(args: string[], helpers: {
@@ -6,13 +6,13 @@ export async function runVerificationCli(args: string[], helpers: {
   parseFlags: (args: string[], options: { string: Set<string>; boolean: Set<string> }) => Record<string, unknown>;
   positionalArgs: (args: string[], stringFlags: Set<string>) => string[];
 }): Promise<void> {
-  const strings = new Set(['daemon-url', 'project', 'project-path', 'checks', 'run-id', 'timeout-ms', 'prompt-file']);
+  const strings = new Set(['daemon-url', 'project', 'project-path', 'checks', 'run-id', 'timeout-ms', 'prompt-file', 'mode', 'advice-snapshot']);
   const flags = helpers.parseFlags(args, { string: strings, boolean: new Set(['json', 'help', 'wait']) });
   const [command = 'status'] = helpers.positionalArgs(args, strings);
   if (flags.help) {
-    console.log('Usage: monofield verify <plan|run|status|cancel|repair|export> --project ID [--project-path PATH] [--checks node:test,node:typecheck] [--run-id ID] [--timeout-ms 120000] [--wait] [--prompt-file <path|->] [--json] [--daemon-url URL]'); return;
+    console.log('Usage: monofield verify <plan|suggest|run|status|cancel|repair|export> --project ID [--project-path PATH] [--checks node:test,node:typecheck] [--run-id ID] [--timeout-ms 120000] [--wait] [--prompt-file <path|->] [--mode rules|model] [--advice-snapshot SHA256] [--json] [--daemon-url URL]'); return;
   }
-  if (!['plan', 'run', 'status', 'cancel', 'repair', 'export'].includes(command)) throw new Error('Unknown verification command');
+  if (!['plan', 'suggest', 'run', 'status', 'cancel', 'repair', 'export'].includes(command)) throw new Error('Unknown verification command');
   if (typeof flags.project !== 'string' || !flags.project) throw new Error('--project is required');
   const base = `${(await helpers.baseUrl(flags)).replace(/\/$/, '')}/api/projects/${encodeURIComponent(flags.project)}/development/verification`;
   const query = new URLSearchParams();
@@ -28,10 +28,28 @@ export async function runVerificationCli(args: string[], helpers: {
   const scope = typeof flags['project-path'] === 'string' ? { projectPath: flags['project-path'] } : {};
   let result: unknown;
   if (command === 'plan') result = await call('/plan');
-  else if (command === 'run') {
+  else if (command === 'suggest') {
+    const input = flags['prompt-file'];
+    if (typeof input !== 'string') throw new Error('--prompt-file <path|-> is required');
+    let request: string;
+    if (input === '-') {
+      const parts: Buffer[] = []; let size = 0;
+      for await (const part of process.stdin) {
+        const chunk = Buffer.from(part); size += chunk.length;
+        if (size > 16 * 1024) throw new Error('Suggestion input exceeds 16 KiB');
+        parts.push(chunk);
+      }
+      request = Buffer.concat(parts).toString('utf8');
+    } else {
+      if ((await stat(input)).size > 16 * 1024) throw new Error('Suggestion input exceeds 16 KiB');
+      request = await readFile(input, 'utf8');
+    }
+    result = await call('/advice', 'POST', { ...scope, request, mode: flags.mode ?? 'rules' });
+  } else if (command === 'run') {
     if (typeof flags.checks !== 'string') throw new Error('--checks must name commands returned by verify plan');
     let run = await call<VerificationRun>('', 'POST', { ...scope, checkIds: flags.checks.split(','),
-      ...(flags['timeout-ms'] === undefined ? {} : { timeoutMs: Number(flags['timeout-ms']) }) });
+      ...(flags['timeout-ms'] === undefined ? {} : { timeoutMs: Number(flags['timeout-ms']) }),
+      ...(flags['advice-snapshot'] === undefined ? {} : { expectedAdviceSnapshotSha256: flags['advice-snapshot'] }) });
     query.set('runId', run.id);
     if (flags.wait) {
       while (run.state === 'running') {

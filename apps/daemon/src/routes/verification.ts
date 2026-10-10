@@ -24,6 +24,17 @@ export function registerVerificationRoutes(app: Express, deps: RegisterVerificat
       res.set('Cache-Control', 'no-store').json({ projectPath: target.project.path, checks: await discoverVerificationChecks(target.root) });
     } catch (e) { fail(res, e); }
   });
+  app.post(`${base}/advice`, gate, async (req, res) => {
+    const controller = new AbortController();
+    const abort = () => { if (!res.writableEnded) controller.abort(); };
+    req.once('aborted', abort); res.once('close', abort);
+    try {
+      const target = await selected(req.params.id, req.body?.projectPath);
+      const advice = await deps.verification.suggest(target.root, target.project.path, req.body, controller.signal);
+      if (!controller.signal.aborted) res.set('Cache-Control', 'no-store').json(advice);
+    } catch (e) { if (!controller.signal.aborted) fail(res, e); }
+    finally { req.removeListener('aborted', abort); res.removeListener('close', abort); }
+  });
   app.get(base, gate, async (req, res) => {
     try {
       const target = await selected(req.params.id, req.query.projectPath);
@@ -34,7 +45,7 @@ export function registerVerificationRoutes(app: Express, deps: RegisterVerificat
   app.post(base, gate, async (req, res) => {
     try {
       const target = await selected(req.params.id, req.body?.projectPath);
-      res.status(202).json(await deps.verification.start(req.params.id, target.project.path, target.root, req.body?.checkIds, req.body?.timeoutMs));
+      res.status(202).json(await deps.verification.start(req.params.id, target.project.path, target.root, req.body?.checkIds, req.body?.timeoutMs, req.body?.expectedAdviceSnapshotSha256));
     } catch (e) { fail(res, e); }
   });
   app.post(`${base}/:runId/cancel`, gate, async (req, res) => {

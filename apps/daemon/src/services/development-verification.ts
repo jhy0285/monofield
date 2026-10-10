@@ -8,6 +8,8 @@ import type { VerificationCheck, VerificationRun, VerificationStatus, Verificati
 import { gitWorkspaceRootPath } from '../git-workspace.js';
 import { discoverVerificationChecks } from './verification-discovery.js';
 import { verificationSource } from './verification-source.js';
+import { suggestVerification } from './verification-advice.js';
+import { assertVerificationAdviceSnapshot, verificationAdviceSnapshot } from './verification-advice-snapshot.js';
 
 const LOG_LIMIT = 32 * 1024;
 const HISTORY_LIMIT = 10;
@@ -78,7 +80,11 @@ export class DevelopmentVerificationService {
     await writeFile(temp, JSON.stringify(rows), { mode: 0o600 }); await rename(temp, file);
   }
 
-  async start(projectId: string, projectPath: string, cwd: string, checkIds: unknown, timeout: unknown): Promise<VerificationRun> {
+  async suggest(cwd: string, projectPath: string, request: unknown, signal?: AbortSignal) {
+    return suggestVerification(this.dataDir, cwd, projectPath, request, { signal });
+  }
+
+  async start(projectId: string, projectPath: string, cwd: string, checkIds: unknown, timeout: unknown, expectedAdviceSnapshotSha256?: unknown): Promise<VerificationRun> {
     if (this.closing) throw error('The daemon is shutting down', 503);
     if (!Array.isArray(checkIds) || !checkIds.length || checkIds.length > 8 || checkIds.some(id => typeof id !== 'string')) throw error('Select between 1 and 8 discovered checks');
     const timeoutMs = timeout === undefined ? 120_000 : Number(timeout);
@@ -95,8 +101,10 @@ export class DevelopmentVerificationService {
         if (!check) throw error(`Check ${id} is no longer available. Refresh the check list.`);
         return check;
       });
+      const sourceBefore = await verificationSource(cwd);
+      assertVerificationAdviceSnapshot(expectedAdviceSnapshotSha256, verificationAdviceSnapshot(projectPath, plan, sourceBefore));
       const run: VerificationRun = { schemaVersion: 1, id: randomUUID(), projectId, projectPath, state: 'running', startedAt: new Date().toISOString(), endedAt: null, timeoutMs,
-        sourceBefore: await verificationSource(cwd), sourceAfter: null, stableSource: false,
+        sourceBefore, sourceAfter: null, stableSource: false,
         steps: checks.map(check => ({ check, state: 'pending', startedAt: null, endedAt: null, exitCode: null, output: '', outputTruncated: false })), error: null };
       if (this.closing) throw error('The daemon is shutting down', 503);
       await this.save(run);

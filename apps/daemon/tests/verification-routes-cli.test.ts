@@ -28,6 +28,30 @@ describe('verification HTTP and CLI on an imported workspace', () => {
     expect(JSON.parse((await cli(['plan'])).stdout).checks[0]).toMatchObject({ id: 'node:test', command: 'npm' });
     expect(((await (await api()).json()) as { run: unknown }).run).toBeNull();
   });
+  it('exposes the same model-free advice through HTTP, CLI file and stdin without executing', async () => {
+    const prompt = join(root, 'advice.txt'); await writeFile(prompt, 'Check responsive checkout UI');
+    const fileAdvice = JSON.parse((await cli(['suggest', '--prompt-file', prompt, '--mode', 'rules'])).stdout);
+    expect(fileAdvice).toMatchObject({ evaluationAttempts: 0, suggestedCheckIds: ['node:test'],
+      manualReview: ['browser', 'keyboard', 'responsive', 'contrast'] });
+    expect(fileAdvice.snapshotSha256).toMatch(/^[a-f0-9]{64}$/);
+    const stdinAdvice = await new Promise<string>((resolveDone, reject) => {
+      const child = execFile(process.execPath, [resolve('dist/cli.js'), 'verify', 'suggest', '--prompt-file', '-', '--project', projectId,
+        '--json', '--daemon-url', server.url], (err, stdout) => err ? reject(err) : resolveDone(stdout));
+      child.stdin!.end('Check responsive checkout UI');
+    });
+    expect(JSON.parse(stdinAdvice).suggestedCheckIds).toEqual(fileAdvice.suggestedCheckIds);
+    expect(((await (await api()).json()) as { run: unknown }).run).toBeNull();
+    expect((await api('/advice', 'POST', { request: 'x', mode: 'model' }, { origin: 'https://untrusted.invalid' })).status).toBe(403);
+    expect((await api('/advice', 'POST', { request: 'x', mode: 'rules', projectPath: '../' })).status).toBeGreaterThanOrEqual(400);
+    expect((await api('/advice', 'POST', { request: '', mode: 'rules' })).status).toBe(400);
+    await writeFile(join(root, 'answer.cjs'), 'module.exports = 40;');
+    const denied = await api('', 'POST', { checkIds: fileAdvice.suggestedCheckIds, expectedAdviceSnapshotSha256: fileAdvice.snapshotSha256 });
+    expect(denied.status).toBe(409);
+    const cliDenied = await cli(['run', '--checks', 'node:test', '--advice-snapshot', fileAdvice.snapshotSha256]).then(() => null, e => e);
+    expect(cliDenied?.code).toBe(1);
+    expect(((await (await api()).json()) as { run: unknown }).run).toBeNull();
+    await writeFile(join(root, 'answer.cjs'), 'module.exports = 41;');
+  });
   it('returns failure as a machine-readable receipt and a nonzero CLI exit, then prepares a repair request', async () => {
     const failure = await cli(['run', '--checks', 'node:test', '--wait']).then(() => { throw new Error('Expected failing CLI'); }, e => e);
     expect(failure.code).toBe(1);

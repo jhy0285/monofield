@@ -71,3 +71,5 @@ export * from './docs/evidence.js';
 export * from './docs/interface-spec-proposal.js';
 export * from './api/document-impact.js';
 export * from './api/document-graph.js';
+
+export * from './api/verification-advice.js';

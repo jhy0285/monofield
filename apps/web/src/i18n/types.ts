@@ -30,6 +30,35 @@ export const LOCALE_LABEL: Record<Locale, string> = {
 // flat (not deeply nested) so missing-key TS errors point straight at the
 // offending string instead of a generic object mismatch.
 export interface Dict {
+  "verification.advice.title": string;
+  "verification.advice.description": string;
+  "verification.advice.input": string;
+  "verification.advice.placeholder": string;
+  "verification.advice.rules": string;
+  "verification.advice.model": string;
+  "verification.advice.modelHint": string;
+  "verification.advice.working": string;
+  "verification.advice.apply": string;
+  "verification.advice.applied": string;
+  "verification.advice.priority": string;
+  "verification.advice.elapsed": string;
+  "verification.advice.unknownUsage": string;
+  "verification.advice.manualTitle": string;
+  "verification.advice.manual.browser": string;
+  "verification.advice.manual.keyboard": string;
+  "verification.advice.manual.responsive": string;
+  "verification.advice.manual.contrast": string;
+  "verification.advice.review": string;
+  "verification.advice.reviewIntro": string;
+  "verification.advice.reason.rules": string;
+  "verification.advice.reason.model": string;
+  "verification.advice.reason.uncertain": string;
+  "verification.advice.reason.none": string;
+  "verification.advice.reason.long-request": string;
+  "verification.advice.reason.too-many-checks": string;
+  "verification.advice.reason.source-unavailable": string;
+  "verification.advice.reason.provider-unavailable": string;
+  "verification.advice.reason.timeout": string;
   'verification.title': string;
   'verification.description': string;
   'verification.verified': string;
