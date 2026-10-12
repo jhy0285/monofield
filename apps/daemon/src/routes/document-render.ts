@@ -62,9 +62,13 @@ async function inlineScreenImages(
   const inputDir = nodePath.posix.dirname(inputFile.replace(/\\/g, '/'));
   const screens = await Promise.all(doc.screens.map(async (screen) => {
     if (screen.imageDataUrl || !screen.imageRef) return screen;
-    const relative = normalizedProjectPath(nodePath.posix.join(inputDir, screen.imageRef));
-    if (!relative) return screen;
-    try {
+    // imageRef is project-relative in the public contract and the editor.
+    // Retain document-relative lookup for older documents after that lookup.
+    const candidates = [...new Set([
+      normalizedProjectPath(screen.imageRef),
+      normalizedProjectPath(nodePath.posix.join(inputDir, screen.imageRef)),
+    ].filter((value): value is string => value !== null))];
+    for (const relative of candidates) try {
       const file = await deps.projectFiles.readProjectFile(
         deps.paths.PROJECTS_DIR,
         project.id,
@@ -78,9 +82,8 @@ async function inlineScreenImages(
           ? 'image/webp'
           : 'image/png';
       return { ...screen, imageDataUrl: `data:${mime};base64,${file.buffer.toString('base64')}` };
-    } catch {
-      return screen;
-    }
+    } catch { /* Try the legacy relative reference, without escaping the project. */ }
+    return screen;
   }));
   return { ...doc, screens };
 }
