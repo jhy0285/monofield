@@ -16,6 +16,7 @@ import { Icon } from './Icon';
 import styles from './GitChangesPanel.module.css';
 
 const DevelopmentVerificationPanel = lazy(() => import('./DevelopmentVerificationPanel').then(module => ({ default: module.DevelopmentVerificationPanel })));
+const CodeOntologyPanel = lazy(() => import('./CodeOntologyPanel').then(module => ({ default: module.CodeOntologyPanel })));
 
 type Props = {
   projectId: string;
@@ -425,6 +426,15 @@ export function GitChangesPanel({
   return (
     <section className={styles.root} data-testid="git-changes-panel">
       <Suspense fallback={null}>
+        <CodeOntologyPanel
+          key={`ontology:${workspaceKey}`}
+          projectId={projectId}
+          projectPath={projectPath}
+          ready={projectSelectionReady && workspaceRestored}
+          revisionKey={String(filesRefreshKey ?? '')}
+          agentBusy={agentBusy}
+          onRequestDraft={onRequestRepair}
+        />
         <DevelopmentVerificationPanel
           key={workspaceKey}
           projectId={projectId}

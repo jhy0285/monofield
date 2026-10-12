@@ -647,6 +647,7 @@ import { registerDevelopmentRoutes } from './routes/development.js';
 import { registerVerificationRoutes } from './routes/verification.js';
 import { DevelopmentVerificationService } from './services/development-verification.js';
 import { registerDocumentImpactRoutes } from './routes/document-impact.js';
+import { registerCodeOntologyRoutes } from './routes/code-ontology.js';
 import { registerSchemaWatchRoutes } from './routes/database-schema-watch.js';
 import { DatabaseSchemaWatchService } from './services/database-schema-watch.js';
 import { registerDocumentRenderRoutes } from './routes/document-render.js';
@@ -5351,6 +5352,7 @@ export async function startServer({
     schemaWatch,
     verification,
   });
+  registerCodeOntologyRoutes(app, { db, http: httpDeps, paths: pathDeps });
   registerPluginAssetRoutes(app, {
     db,
     pluginAssetCache,

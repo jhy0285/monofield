@@ -30,7 +30,10 @@ The plan follows reverse dependency edges to find affected consumers. It retains
 one shortest recorded explanation path per affected item, terminates cycles and
 leaves unrelated items out. Changed specification documents are also seeds.
 Files without recorded links and unresolved references retain unknown coverage.
-No import/call graph is automatically inferred in this version.
+This specification-based endpoint does not infer an import/call graph. For a
+codebase without specifications, the separate
+[code ontology builder](code-ontology.md) extracts supported syntax and static
+relationship candidates through the Changes panel, API and CLI.
 
 ## Rules are data
 

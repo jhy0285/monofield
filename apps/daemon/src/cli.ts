@@ -906,6 +906,16 @@ async function runArtifacts(args) {
 }
 
 async function runDocs(args) {
+  if (args[0] === 'build-ontology') {
+    const flags = parseFlags(args.slice(1), { string: ['project', 'project-path', 'documents-file', 'prompt-file', 'daemon-url'], boolean: ['json', 'help'] });
+    if (flags.help || !flags.project) {
+      console.log('Usage: monofield docs build-ontology --project ID [--project-path PATH] [--documents-file <JSON-path-array|->] [--prompt-file <path|->] [--json] [--daemon-url URL]');
+      process.exit(flags.help ? 0 : 2);
+    }
+    const { runCodeOntologyCli } = await import('./services/code-ontology-cli.js');
+    await runCodeOntologyCli(flags, await cliDaemonBaseUrl(flags));
+    return;
+  }
   if (args[0] === 'plan') {
     const flags = parseFlags(args.slice(1), { string: ['project', 'inputs-file', 'rules-file', 'simulate-file', 'prompt-file', 'daemon-url'], boolean: ['json', 'help'] });
     if (flags.help || !flags.project) {

@@ -1,0 +1,18 @@
+.panel { border-bottom: 1px solid var(--border); background: var(--bg-panel); min-width: 0; }
+.header { display: flex; align-items: center; gap: 12px; padding: 8px 12px; }
+.body { padding: 4px 16px 16px; display: grid; gap: 10px; max-height: min(65vh, 740px); overflow: auto; }
+.body p { margin: 0; line-height: 1.5; font-size: 12px; }
+.body label { display: grid; gap: 5px; font-size: 12px; }
+.body textarea, .body select, .body input { width: 100%; border: 1px solid var(--border); border-radius: 7px; background: var(--bg); color: var(--text); padding: 8px; }
+.body .scope { display: flex; align-items: center; gap: 7px; }
+.scope input { width: auto; }
+.meta { color: var(--text-muted); font-size: 11px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.report { display: grid; gap: 10px; }
+.relations { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; max-height: 360px; overflow: auto; }
+.relations li { border: 1px solid var(--border); border-left: 3px solid var(--text-muted); border-radius: 7px; padding: 8px; display: grid; gap: 4px; font-size: 12px; overflow-wrap: anywhere; }
+.relations [data-basis='candidate'] { border-left-color: var(--amber); }
+.relations span, .body small { display: block; color: var(--text-muted); font-size: 11px; }
+.body small { overflow-wrap: anywhere; }
+.warning { color: var(--amber); }
+.error { color: var(--red); }

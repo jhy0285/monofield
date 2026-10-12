@@ -30,6 +30,46 @@ export const LOCALE_LABEL: Record<Locale, string> = {
 // flat (not deeply nested) so missing-key TS errors point straight at the
 // offending string instead of a generic object mismatch.
 export interface Dict {
+  "ontology.changed": string;
+  "ontology.title": string;
+  "ontology.description": string;
+  "ontology.support": string;
+  "ontology.documents": string;
+  "ontology.request": string;
+  "ontology.build": string;
+  "ontology.working": string;
+  "ontology.failed": string;
+  "ontology.counts": string;
+  "ontology.coverage": string;
+  "ontology.elapsed": string;
+  "ontology.cached": string;
+  "ontology.fresh": string;
+  "ontology.candidates": string;
+  "ontology.partial": string;
+  "ontology.inspect": string;
+  "ontology.workspace": string;
+  "ontology.all": string;
+  "ontology.candidate": string;
+  "ontology.syntax": string;
+  "ontology.evidence": string;
+  "ontology.issues": string;
+  "ontology.draft": string;
+  "ontology.export": string;
+  "ontology.relation.declares": string;
+  "ontology.relation.imports": string;
+  "ontology.relation.references": string;
+  "ontology.relation.calls": string;
+  "ontology.relation.serves": string;
+  "ontology.relation.requests": string;
+  "ontology.relation.maps-table": string;
+  "ontology.relation.documents": string;
+  "ontology.relation.associated-with": string;
+  "ontology.issue.unsupported-language": string;
+  "ontology.issue.parse-error": string;
+  "ontology.issue.unresolved-reference": string;
+  "ontology.issue.dynamic-expression": string;
+  "ontology.issue.excluded-file": string;
+  "ontology.issue.limit": string;
   "changePlan.title": string;
   "changePlan.description": string;
   "changePlan.request": string;
