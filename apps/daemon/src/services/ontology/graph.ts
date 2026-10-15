@@ -109,17 +109,44 @@ export function addBusinessDocuments(graph: ReturnType<typeof assembleOntology>,
   for (const doc of documents) {
     const docId = ontologyId('business-document', doc.path), evidence = { path: doc.path, sha256: doc.sha256, line: 1 };
     graph.nodes.push({ id: docId, kind: 'business-document', label: doc.path, evidence });
-    let count = 0;
+    let count = 0, rules = 0, currentConcept: string | null = null;
     for (const [index, line] of doc.text.split('\n').entries()) {
       if (graph.nodes.length >= 20000 || graph.edges.length >= 50000) throw new Error('Business concepts exceed the ontology graph limits');
       const heading = line.match(/^#{1,6}\s+(.{1,160})$/) ?? line.match(/^\s*[-*]\s+(.{1,100}?)\s*[:：]/);
+      // Deliberately bounded lexical rule candidates, never semantic verification.
+      // Exact text/line/hash is retained; prose outside these patterns stays unknown.
+      if (!/^\s*#/.test(line) && /\b(must|shall|required|minimum|maximum|only|unless|prohibit|at least|at most)\b|반드시|최소|최대|이상|이하|금지|예외|필수|해야|不得|必须|至少|至多/i.test(line) && rules < 64) {
+        const text = line.trim().replace(/^[-*]\s+/, '').slice(0, 400);
+        if (text) {
+          const ref = { ...evidence, line: index + 1 }, id = ontologyId('business-rule', doc.path, String(index), text);
+          graph.nodes.push({ id, kind: 'business-rule', label: text, evidence: ref });
+          graph.edges.push(edge(docId, id, 'documents', ref));
+          if (currentConcept) graph.edges.push(edge(id, currentConcept, 'constrains', ref, 'candidate'));
+          rules++;
+        }
+      }
       if (!heading || count++ >= 64) continue;
       const label = heading[1]!.trim(), id = ontologyId('concept', doc.path, label, String(index));
       const ref = { ...evidence, line: index + 1 };
       graph.nodes.push({ id, kind: 'concept', label, evidence: ref }); graph.edges.push(edge(docId, id, 'documents', ref));
+      // List glossary entries do not replace the enclosing section's domain.
+      if (/^\s*#/.test(line)) currentConcept = id;
       const alias = label.match(/\(([A-Za-z][A-Za-z0-9_ ]+)\)/)?.[1]?.replace(/\s/g, '').toLowerCase() ?? label.toLowerCase();
       for (const node of graph.nodes.filter(node => node.kind === 'class' || node.kind === 'function'))
         if (node.label.split('.').at(-1)?.toLowerCase() === alias) graph.edges.push(edge(id, node.id, 'associated-with', ref, 'candidate'));
     }
   }
+  if (graph.nodes.length > 20000 || graph.edges.length > 50000) throw new Error('Business concepts exceed the ontology graph limits');
+}
+
+export function businessRuleConflicts(nodes: CodeOntologyNode[]) {
+  const groups = new Map<string, Array<{ id: string; values: string }>>();
+  for (const node of nodes) if (node.kind === 'business-rule') {
+    const values = node.label.match(/-?\d+(?:\.\d+)?/g);
+    if (!values?.length) continue;
+    const signature = node.label.normalize('NFKC').toLowerCase().replace(/-?\d+(?:\.\d+)?/g,'#').replace(/\s+/g,' ').trim();
+    const items=groups.get(signature)??[];items.push({id:node.id,values:JSON.stringify(values)});groups.set(signature,items);
+  }
+  return [...groups.values()].filter(items=>new Set(items.map(i=>i.values)).size>1).slice(0,64)
+    .map(items=>({ruleIds:items.slice(0,16).map(i=>i.id),reason:'different-literal-values' as const}));
 }

@@ -1,6 +1,6 @@
 import { readFile, stat } from 'node:fs/promises';
 
-export async function runCodeOntologyCli(flags: Record<string, unknown>, base: string, operation: 'build' | 'plan' = 'build'): Promise<void> {
+export async function runCodeOntologyCli(flags: Record<string, unknown>, base: string, operation: 'build' | 'plan' | 'context' = 'build'): Promise<void> {
   async function input(file: string): Promise<string> {
     if (file !== '-') {
       if ((await stat(file)).size > 32 * 1024) throw new Error('Ontology CLI input exceeds 32 KiB');
@@ -13,13 +13,17 @@ export async function runCodeOntologyCli(flags: Record<string, unknown>, base: s
     }
     return Buffer.concat(chunks).toString('utf8');
   }
-  if (['documents-file', 'inputs-file', 'prompt-file'].filter(name => flags[name] === '-').length > 1) throw new Error('Only one input may use stdin');
+  if (['documents-file', 'inputs-file', 'prompt-file', 'focus-file'].filter(name => flags[name] === '-').length > 1) throw new Error('Only one input may use stdin');
   const body = {
     ...(typeof flags['project-path'] === 'string' ? { projectPath: flags['project-path'] } : {}),
     ...(typeof flags['documents-file'] === 'string' ? { businessFiles: JSON.parse(await input(flags['documents-file'])) } : {}),
     ...(typeof flags['prompt-file'] === 'string' ? { request: await input(flags['prompt-file']) } : {}),
     ...(typeof flags['inputs-file'] === 'string' ? { inputFiles: JSON.parse(await input(flags['inputs-file'])) } : {}),
     ...(typeof flags['rules-file'] === 'string' ? { rulesFile: flags['rules-file'] } : {}),
+    ...(flags['max-bytes'] !== undefined ? { maxBytes: Number(flags['max-bytes']) } : {}),
+    ...(flags['local-judge'] === true ? { localJudge: true } : {}),
+    ...(typeof flags['focus-file'] === 'string' ? { focusNodeIds: JSON.parse(await input(flags['focus-file'])) } : {}),
+    ...(typeof flags['evidence-mode'] === 'string' ? { evidenceMode: flags['evidence-mode'] } : {}),
   };
   const response = await fetch(`${base}/api/projects/${encodeURIComponent(String(flags.project))}/ontology/${operation}`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),

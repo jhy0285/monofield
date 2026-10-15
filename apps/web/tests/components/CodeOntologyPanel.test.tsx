@@ -13,7 +13,7 @@ const report: CodeOntologyResponse = { schemaVersion: 1, projectPath: '.', analy
   dependencyGraph: { ok: true, analyzedAt: '', documents: [], nodes: [], edges: [], changedNodeIds: [], impacts: [], unlinkedNodeIds: [], warnings: [], schemaWatch: null },
   handoff: 'Inspect current signal source before changing it.', elapsedMs: 100, cacheHit: false, modelCalls: 0,
 };
-beforeEach(() => { localStorage.setItem('open-design:locale', 'en'); vi.stubGlobal('fetch', vi.fn(async () => Response.json(report))); });
+beforeEach(() => { localStorage.setItem('open-design:locale', 'en'); localStorage.setItem('monofield:ontology-tutorial-dismissed:v1','true'); vi.stubGlobal('fetch', vi.fn(async () => Response.json(report))); });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 const props = { projectId: 'traffic', ready: true };
 const open = () => fireEvent.click(screen.getByRole('button', { name: 'Build ontology from code' }));
@@ -37,6 +37,8 @@ describe('explicit code-first ontology UI', () => {
   it('refreshes only after opting in, a saved revision, and an open panel', async () => {
     const view = render(<I18nProvider><CodeOntologyPanel {...props} revisionKey="one" /></I18nProvider>); open(); build();
     await waitFor(() => expect(screen.getByText('SignalController → GET /signals')).toBeTruthy());
+    expect(screen.getByText('No business documents · code-based draft')).toBeTruthy();
+    expect(screen.getByText(/0 documents · 0 concepts · 0 association candidates/)).toBeTruthy();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Refresh after saved changes while this panel is open' }));
     view.rerender(<I18nProvider><CodeOntologyPanel {...props} revisionKey="two" /></I18nProvider>);
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2), { timeout: 2500 });
@@ -61,12 +63,14 @@ describe('explicit code-first ontology UI', () => {
   });
   it('passes optional document paths and keeps source evidence and candidates visible', async () => {
     vi.mocked(fetch).mockResolvedValue(Response.json({ ...report, cacheHit: true, edges: [{ ...report.edges[0], basis: 'candidate' }],
-      coverage: { ...report.coverage, unsupportedFiles: 1 }, issues: [{ path: 'unknown.py', reason: 'unsupported-language', message: 'Not supported' }] }));
+      coverage: { ...report.coverage, businessDocuments: 1, unsupportedFiles: 1 }, issues: [{ path: 'unknown.py', reason: 'unsupported-language', message: 'Not supported' }] }));
     render(<I18nProvider><CodeOntologyPanel {...props} projectPath="backend" /></I18nProvider>); open();
     fireEvent.change(screen.getByLabelText('Optional business documents (module-relative Markdown/TXT paths, one per line)'), { target: { value: 'business.md' } }); build();
     await waitFor(() => expect(screen.getByText('Candidate · review needed', { exact: false })).toBeTruthy());
     expect(screen.getByText('Unsupported language', { exact: false })).toBeTruthy(); expect(screen.getByText('Unchanged-source graph reused', { exact: false })).toBeTruthy();
     expect(screen.getByText('SignalController.java:6')).toBeTruthy();
+    expect(screen.getByText('Business documents: 1 · candidate associations')).toBeTruthy();
+    expect(screen.getByText(/Document currency, code consistency/)).toBeTruthy();
     expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0]![1]?.body))).toMatchObject({ projectPath: 'backend', businessFiles: ['business.md'] });
   });
   it('aborts late analysis when modules or source revisions change', async () => {

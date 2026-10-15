@@ -5,6 +5,9 @@ import { Button } from '@open-design/components';
 import type { CodeOntologyResponse, CodeOntologyPlanResponse } from '@open-design/contracts';
 import { useT } from '../i18n';
 import styles from './CodeOntologyPanel.module.css';
+import { OntologyTutorial } from './OntologyTutorial';
+import { shouldShowOntologyTutorial } from '../state/ontology-tutorial';
+import { OntologyContextPanel } from './OntologyContextPanel';
 
 export function CodeOntologyPanel({ projectId, projectPath, ready = true, revisionKey, agentBusy = false, onRequestDraft }: {
   projectId: string; projectPath?: string | null | undefined; ready?: boolean | undefined;
@@ -20,6 +23,9 @@ export function CodeOntologyPanel({ projectId, projectPath, ready = true, revisi
   const [selected, setSelected] = useState(''), [draft, setDraft] = useState(false);
   const [search, setSearch] = useState('');
   const [stale, setStale] = useState(false);
+  const [tutorial, setTutorial] = useState(false);
+  const [contextBusy, setContextBusy] = useState(false);
+  const tutorialSeen = useRef(false);
   const reportRef = useRef(report); reportRef.current = report;
   const generation = useRef(0), abort = useRef<AbortController | null>(null);
   const lastOperation = useRef<'build' | 'plan'>('build');
@@ -34,10 +40,10 @@ export function CodeOntologyPanel({ projectId, projectPath, ready = true, revisi
     if (reportRef.current) { setStale(true); setDraft(false); }
   }, [revisionKey]);
   useEffect(() => {
-    if (!automatic || !open || !ready || agentBusy || busy || autoRevision.current === revisionKey) return;
+    if (!automatic || !open || tutorial || !ready || agentBusy || busy || contextBusy || autoRevision.current === revisionKey) return;
     const timer = window.setTimeout(() => { autoRevision.current = revisionKey; void build(lastOperation.current); }, 1200);
     return () => window.clearTimeout(timer);
-  }, [automatic, open, ready, agentBusy, busy, revisionKey]);
+  }, [automatic, open, tutorial, ready, agentBusy, busy, contextBusy, revisionKey]);
   async function build(operation: 'build' | 'plan' = 'build') {
     const current = ++generation.current;
     abort.current?.abort(); const controller = new AbortController(); abort.current = controller;
@@ -56,23 +62,43 @@ export function CodeOntologyPanel({ projectId, projectPath, ready = true, revisi
   const labels = new Map(report?.nodes.map(node => [node.id, node.kind === 'request' ? `${node.evidence.path} · ${node.label}` : node.label]));
   const related = report?.edges.filter(edge => !selected || edge.from === selected || edge.to === selected) ?? [];
   const selectable = report?.nodes.filter(node => node.kind !== 'external' && node.label.toLowerCase().includes(search.toLowerCase())) ?? [];
+  const documentCount = report?.businessContext?.documentCount ?? report?.coverage.businessDocuments ?? documents.split('\n').filter(name => name.trim()).length;
+  const contextTitle = documentCount ? t('ontology.context.documentsTitle', { count: documentCount }) : t('ontology.context.codeOnlyTitle');
+  const contextBody = documentCount ? t('ontology.context.documentsBody') : t('ontology.context.codeOnlyBody');
   return <section className={styles.panel} aria-label={t('ontology.title')}>
-    <div className={styles.header}><Button aria-expanded={open} onClick={() => setOpen(value => !value)}>{t('ontology.title')}</Button>
+    <div className={styles.header}><Button aria-expanded={open} onClick={() => {
+      if (!open && !tutorialSeen.current && shouldShowOntologyTutorial()) { tutorialSeen.current = true; setTutorial(true); }
+      setOpen(value => !value);
+    }}>{t('ontology.title')}</Button>
       {report ? <span className={styles.meta}>{t('ontology.counts', { nodes: report.nodes.length, edges: report.edges.length })}</span> : null}</div>
     {open ? <div className={styles.body}>
       <p>{t('ontology.description')}</p><p className={styles.meta}>{t('ontology.support')}</p>
+      <Button className={styles.guide} onClick={() => { tutorialSeen.current = true; setTutorial(true); }}>{t('ontology.tour.open')}</Button>
+      <aside className={styles.context} aria-label={t('ontology.context.label')}><strong>{contextTitle}</strong><p>{contextBody}</p>
+        {report ? <small>{t('ontology.context.counts', { documents: documentCount, concepts: report.businessContext?.conceptCount ?? report.nodes.filter(node => node.kind === 'concept').length,
+          associations: report.businessContext?.associationCount ?? report.edges.filter(edge => edge.relation === 'associated-with').length })} · {t('ontology.context.unverified')}</small> : null}</aside>
       <label className={styles.scope}><input type="checkbox" checked={automatic} onChange={event => setAutomatic(event.target.checked)} />{t('ontology.autoRefresh')}</label>
       <label className={styles.scope}><input type="checkbox" checked={workspace} onChange={event => setWorkspace(event.target.checked)} />{t('ontology.workspace')}</label>
       <label>{t('ontology.documents')}<textarea rows={2} value={documents} onChange={event => setDocuments(event.target.value)} placeholder="docs/business.md" /></label>
       <label>{t('ontology.request')}<textarea rows={2} maxLength={2000} value={request} onChange={event => setRequest(event.target.value)} /></label>
-      <div className={styles.actions}><Button disabled={busy || !ready || agentBusy} onClick={() => void build()}>{busy ? t('ontology.working') : t('ontology.build')}</Button>
-        <Button disabled={busy || !ready || agentBusy} onClick={() => void build('plan')}>{t('ontology.plan')}</Button>
+      <div className={styles.actions}><Button disabled={busy || contextBusy || !ready || agentBusy} onClick={() => void build()}>{busy ? t('ontology.working') : t('ontology.build')}</Button>
+        <Button disabled={busy || contextBusy || !ready || agentBusy} onClick={() => void build('plan')}>{t('ontology.plan')}</Button>
         {busy ? <Button onClick={() => { generation.current++; abort.current?.abort(); setBusy(false); }}>{t('common.cancel')}</Button> : null}</div>
       {error ? <p role="alert" className={styles.error}>{error}</p> : null}
+      <OntologyContextPanel projectId={projectId} projectPath={workspace ? '.' : projectPath} documents={documents} defaultQuestion={request}
+        selectedNodeId={selected} revisionKey={revisionKey} ready={ready && !agentBusy && !busy && !tutorial} onRequestDraft={onRequestDraft} onBusyChange={setContextBusy} />
       {report ? <div className={styles.report}>
         <p role="status">{t('ontology.coverage', { parsed: report.coverage.parsedFiles, scanned: report.coverage.scannedFiles, unsupported: report.coverage.unsupportedFiles })}</p>
         <p className={styles.meta}>{t('ontology.elapsed', { ms: report.elapsedMs })} · {report.cacheHit ? t('ontology.cached') : t('ontology.fresh')} · {report.coverage.languages.map(item => `${item.id}: ${item.files}`).join(' · ')}</p>
         <p>{t('ontology.candidates')}</p>
+        <p className={styles.meta}>{t('ontology.incremental', { reused: report.coverage.reusedParsedFiles ?? (report.cacheHit ? report.coverage.parsedFiles : 0), parsed: report.coverage.parsedNowFiles ?? (report.cacheHit ? 0 : report.coverage.parsedFiles) })}</p>
+        {report.nodes.some(node=>node.kind==='business-rule')?<details className={styles.rules}><summary>{t('ontology.rules.pending',{count:report.nodes.filter(node=>node.kind==='business-rule').length})}</summary>
+          <p>{t('ontology.rules.limit')}</p>
+          {report.businessRuleConflicts?.length?<p className={styles.warning}>{t('ontology.rules.conflicts',{count:report.businessRuleConflicts.length})}</p>:null}
+          <ul>{report.nodes.filter(node=>node.kind==='business-rule').slice(0,64).map(node=><li key={node.id}><strong>{node.label}</strong><small>{node.evidence.path}:{node.evidence.line}</small>
+            {report.businessRuleConflicts?.some(c=>c.ruleIds.includes(node.id))?<span className={styles.warning}>{t('ontology.rules.conflictCandidate')}</span>:null}
+            <Button onClick={()=>setSelected(node.id)}>{t('ontology.rules.focus')}</Button></li>)}</ul>
+        </details>:null}
         {stale ? <p role="status" className={styles.warning}>{t('ontology.changed')}</p> : null}
         {report.coverage.truncated ? <p role="alert" className={styles.warning}>{t('ontology.partial')}</p> : null}
         {change ? <section className={styles.plan} aria-label={t('ontology.plan')}>
@@ -109,5 +135,6 @@ export function CodeOntologyPanel({ projectId, projectPath, ready = true, revisi
         {draft ? <textarea readOnly rows={6} value={change?.plan.handoff ?? report.handoff} aria-label={t('ontology.draft')} /> : null}
       </div> : null}
     </div> : null}
+    {tutorial ? <OntologyTutorial hasDocuments={documentCount > 0} onClose={() => setTutorial(false)} /> : null}
   </section>;
 }

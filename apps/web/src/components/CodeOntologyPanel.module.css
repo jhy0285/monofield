@@ -8,6 +8,18 @@
 .scope input { width: auto; }
 .meta { color: var(--text-muted); font-size: 11px; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.guide { justify-self: start; }
+.context { padding: 10px 12px; border: 1px solid var(--border); border-radius: 7px; display: grid; gap: 5px; font-size: 12px; }
+.contextPanel { border: 1px solid var(--border); border-radius: 8px; padding: 10px; display: grid; gap: 10px; }
+.contextPanel > button { justify-self: start; }
+.contextBody { display: grid; gap: 10px; }
+.evidenceFiles { margin: 0; padding-left: 18px; max-height: 280px; overflow: auto; }
+.evidenceFiles li { font-size: 12px; padding: 6px 0; overflow-wrap: anywhere; }
+.evidenceFiles pre { white-space: pre-wrap; font-size: 11px; }
+.rules { border: 1px solid var(--border); border-radius: 7px; padding: 10px; font-size: 12px; }
+.rules ul { max-height: 260px; overflow: auto; padding-left: 18px; }
+.rules li { display: grid; gap: 5px; padding: 8px 0; }
+.rules button { justify-self: start; }
 .report { display: grid; gap: 10px; }
 .relations { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; max-height: 360px; overflow: auto; }
 .relations li { border: 1px solid var(--border); border-left: 3px solid var(--text-muted); border-radius: 7px; padding: 8px; display: grid; gap: 4px; font-size: 12px; overflow-wrap: anywhere; }

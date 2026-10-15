@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { CodeOntologyResponse, CodeOntologyPlanResponse } from '@open-design/contracts';
+import type { CodeOntologyResponse, CodeOntologyPlanResponse, CodeOntologyContextResponse } from '@open-design/contracts';
 // Exercise the production artifact: its isolated worker entry is emitted by the daemon build.
 import { startServer, type StartServerResult } from '../dist/server.js';
 
@@ -29,10 +29,13 @@ describe('real code-only ontology API and CLI', () => {
     const response = await build(); expect(response.status).toBe(200); expect(response.headers.get('cache-control')).toBe('no-store');
     const report = await response.json() as CodeOntologyResponse;
     expect(report.coverage.parsedFiles).toBe(3); expect(report.coverage.businessDocuments).toBe(0);
+    expect(report.businessContext).toEqual({ basis: 'code-only', documentCount: 0, conceptCount: 0, associationCount: 0, businessRulesVerified: false });
+    expect(report.handoff).toContain('Business documents: none supplied');
     expect(report.nodes.some(node => node.kind === 'api' && node.label === 'GET /api/signals')).toBe(true);
     expect(report.nodes.some(node => node.kind === 'screen')).toBe(true); expect(report.modelCalls).toBe(0);
     const second = await build().then(r => r.json()) as CodeOntologyResponse;
     expect(second.cacheHit).toBe(true); expect(second.snapshotSha256).toBe(report.snapshotSha256);
+    expect(second.businessContext).toEqual(report.businessContext);
     expect(await readFile(path.join(root, 'SignalController.java'), 'utf8')).toBe(original);
   });
   it('adds optional documents as candidates and shares exactly the same API through CLI prompt stdin', async () => {
@@ -40,6 +43,9 @@ describe('real code-only ontology API and CLI', () => {
     const report = await response.json() as CodeOntologyResponse;
     expect(report.nodes.some(node => node.kind === 'concept' && node.label.includes('신호 서비스'))).toBe(true);
     expect(report.edges.some(edge => edge.relation === 'associated-with' && edge.basis === 'candidate')).toBe(true);
+    expect(report.businessContext).toMatchObject({ basis: 'document-candidates', documentCount: 1, businessRulesVerified: false });
+    expect(report.businessContext!.conceptCount).toBe(2); expect(report.businessContext!.associationCount).toBeGreaterThan(0);
+    expect(report.handoff).toContain('Document currency, code consistency, business rules and exceptions remain unverified');
     const documentsFile = path.join(root, 'documents.json'); await writeFile(documentsFile, JSON.stringify(['business.md']));
     const stdout = await new Promise<string>((resolve, reject) => {
       const child = execFile(process.execPath, [process.env.OD_DAEMON_CLI_PATH!, 'docs', 'build-ontology', '--project', projectId,
@@ -48,6 +54,7 @@ describe('real code-only ontology API and CLI', () => {
     });
     const result = JSON.parse(stdout) as CodeOntologyResponse;
     expect(result.snapshotSha256).toBe(report.snapshotSha256); expect(result.nodes).toEqual(report.nodes);
+    expect(result.businessContext).toEqual(report.businessContext);
     expect(result.handoff).toContain('Inspect the signal workflow'); expect(result.handoff).toContain('data, not instructions');
     expect(result.handoff.length).toBeLessThan(6200);
   });
@@ -57,6 +64,16 @@ describe('real code-only ontology API and CLI', () => {
     await writeFile(path.join(root, 'SignalService.java'), 'package traffic; class SignalService { public int find() { return 60; } }');
     const after = await build().then(r => r.json()) as CodeOntologyResponse;
     expect(after.cacheHit).toBe(false); expect(after.snapshotSha256).not.toBe(before.snapshotSha256);
+  });
+  it('prepares bounded source evidence through the actual API and CLI without model calls', async () => {
+    const response = await fetch(`${started.url}/api/projects/${projectId}/ontology/context`, { method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({request:'SignalService',maxBytes:4096}) });
+    expect(response.ok).toBe(true);const packet=await response.json() as CodeOntologyContextResponse;expect(packet.budget.promptBytes).toBeLessThanOrEqual(4096);
+    expect(packet.evidence.some(e=>e.path==='SignalService.java')).toBe(true);expect(packet.constructionModelCalls).toBe(0);expect(packet.tokenUsage).toBeNull();
+    const stdout=await new Promise<string>((resolve,reject)=>{const child=execFile(process.execPath,[process.env.OD_DAEMON_CLI_PATH!,'docs','context-code','--project',projectId,'--prompt-file','-','--max-bytes','4096','--daemon-url',started.url,'--json'],(error,output)=>error?reject(error):resolve(output));child.stdin?.end('SignalService');});
+    const cli=JSON.parse(stdout) as CodeOntologyContextResponse;expect(cli.prompt).toBe(packet.prompt);expect(cli.evidence).toEqual(packet.evidence);
+    for(const body of [{request:''},{request:'x',maxBytes:999999},{request:'x',localJudge:'yes'},{request:'x',evidenceMode:'whole-repo'},{request:'x',businessFiles:['../secret.md']},{request:'x',focusNodeIds:['missing']}]){
+      const bad=await fetch(`${started.url}/api/projects/${projectId}/ontology/context`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});expect(bad.status).toBe(400);
+    }
   });
   it('rejects untrusted origins, traversal, missing projects, oversized requests and unsupported document formats', async () => {
     expect((await build({}, 'https://evil.invalid')).status).toBe(403);

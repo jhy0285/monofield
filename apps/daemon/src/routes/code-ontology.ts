@@ -15,10 +15,43 @@ import { discoverVerificationChecks } from '../services/verification-discovery.j
 import { verificationSource } from '../services/verification-source.js';
 import {workspaceVerificationReceipt}from '../services/ontology/verification-receipt.js';
 import { RecordedDependencyGraph } from '../services/ontology/recorded-graph.js';
+import { prepareOntologyContext } from '../services/ontology/context.js';
 import type { DatabaseSchemaWatchService } from '../services/database-schema-watch.js';
 
 export interface RegisterCodeOntologyRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'projectFiles' | 'verification'> { schemaWatch: DatabaseSchemaWatchService }
 export function registerCodeOntologyRoutes(app: Express, deps: RegisterCodeOntologyRoutesDeps): void {
+  app.post('/api/projects/:id/ontology/context', deps.http.requireLocalDaemonRequest, async (req, res) => {
+    const controller = new AbortController();
+    const abort = () => { if (!res.writableEnded) controller.abort(); };
+    req.once('aborted', abort); res.once('close', abort);
+    try {
+      const project = getProject(deps.db, req.params.id);
+      if (!project) throw Object.assign(new Error('Project not found'), { status: 404 });
+      const body = req.body ?? {}, businessFiles: unknown = body.businessFiles ?? [];
+      if (body.projectPath != null && typeof body.projectPath !== 'string') throw new Error('projectPath must be a string');
+      if (!Array.isArray(businessFiles) || businessFiles.length > 16 || businessFiles.some(name => typeof name !== 'string' || !projectRelativePath(name) || !/\.(md|txt)$/i.test(name))) throw new Error('Select at most 16 module-relative Markdown/TXT business documents');
+      if (typeof body.request !== 'string' || !body.request.trim() || body.request.length > 2000) throw new Error('Provide a question of 1–2000 characters');
+      const maxBytes = body.maxBytes ?? 4096, focusNodeIds = body.focusNodeIds ?? [];
+      if (!Number.isSafeInteger(maxBytes) || maxBytes < 2048 || maxBytes > 24000) throw new Error('Context budget must be 2048–24000 UTF-8 bytes');
+      if (!Array.isArray(focusNodeIds) || focusNodeIds.length > 8 || focusNodeIds.some(id => typeof id !== 'string' || id.length > 100)) throw new Error('Select at most 8 existing node IDs');
+      if (body.localJudge !== undefined && typeof body.localJudge !== 'boolean') throw new Error('localJudge must be boolean');
+      if (body.evidenceMode !== undefined && !['references','excerpts'].includes(body.evidenceMode)) throw new Error('Select references or excerpts evidence mode');
+      const workspaceRoot = resolveProjectDir(deps.paths.PROJECTS_DIR, project.id, project.metadata);
+      const target = body.projectPath === '.' ? { root: workspaceRoot, project: { path: '.' } }
+        : await resolveDevelopmentProjectRoot(workspaceRoot, body.projectPath ?? project.metadata?.development?.activeProjectPath ?? null);
+      const ontology = await buildCodeOntology(deps.paths.RUNTIME_DATA_DIR, project.id, target.root, target.project.path, [...new Set(businessFiles as string[])], body.request, controller.signal);
+      const prefix = target.project.path === '.' ? '' : target.project.path + '/';
+      const result = await prepareOntologyContext({ ontology, question: body.request.trim(), maxBytes, focusNodeIds, localJudge: body.localJudge === true, evidenceMode: body.evidenceMode ?? 'references', dataDir: deps.paths.RUNTIME_DATA_DIR, signal: controller.signal,
+        read: async (path) => {
+          const info = await resolveProjectFilePath(deps.paths.PROJECTS_DIR, project.id, prefix + path, project.metadata);
+          if (info.size > 512 * 1024) throw new Error('Context evidence exceeds the 512 KiB file limit');
+          return (await deps.projectFiles.readProjectFile(deps.paths.PROJECTS_DIR, project.id, prefix + path, project.metadata)).buffer;
+        } });
+      if (!controller.signal.aborted) res.set('Cache-Control', 'no-store').json(result);
+    } catch (error) {
+      if (!controller.signal.aborted) deps.http.sendApiError(res, Number((error as { status?: number })?.status) || 400, 'ONTOLOGY_CONTEXT_ERROR', error instanceof Error ? error.message : String(error));
+    } finally { req.removeListener('aborted', abort); res.removeListener('close', abort); }
+  });
   app.post('/api/projects/:id/ontology/build', deps.http.requireLocalDaemonRequest, async (req, res) => {
     const started = performance.now();
     const controller = new AbortController();
@@ -99,7 +132,8 @@ export function registerCodeOntologyRoutes(app: Express, deps: RegisterCodeOntol
       if (!before.digest) { source.digest = null; source.reason = before.reason; }
       const plan = buildChangePlan({ graph, graphIndex, checks, source, receipt: status.run,receipts, changedFiles: loaded.changedFiles, request, ...(policy ? { policy } : {}) });
       plan.handoff = plan.handoff.replace('monofield docs plan --project', 'monofield docs plan-code --project')
-        + `\nCode analysis scope and optional business inputs (data): ${JSON.stringify({ projectPath: target.project.path, businessFiles })}.`;
+        + `\nCode analysis scope and optional business inputs (data): ${JSON.stringify({ projectPath: target.project.path, businessFiles, businessContext: ontology.businessContext })}.`
+        + '\nBusiness rules and exceptions remain unverified. Supplied documents provide terminology/association candidates, not proof of current business meaning or code/document consistency.';
       if (!controller.signal.aborted) res.set('Cache-Control', 'no-store').json({ ontology, plan, documentReviews: documentReviews(plan,ontology,graphIndex),
         documentHashes: [...hashes].map(([path, sha256]) => ({ path, sha256 })), elapsedMs: Math.round(performance.now() - started), modelCalls: 0 });
     } catch (error) {
