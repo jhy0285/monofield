@@ -14,3 +14,5 @@
 @media (max-width: 700px) { .comparison { grid-template-columns: 1fr; } .heading { flex-direction: column; } }
 .root textarea { display: block; width: 100%; box-sizing: border-box; margin-top: 6px; resize: vertical; }
 .root fieldset { border: 1px solid var(--border); border-radius: 6px; margin-bottom: 14px; }
+.summary { cursor: pointer; font-size: 13px; font-weight: 600; }
+.dependencyBody { margin-top: 12px; }

@@ -8,6 +8,8 @@ export interface VerificationCheck {
   source: string;
   script: string | null;
   recommended: boolean;
+  /** Discovered child module, relative to the selected workspace. Not caller-supplied cwd. */
+  projectPath?: string;
 }
 
 export interface VerificationPlan {

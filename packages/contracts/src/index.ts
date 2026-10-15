@@ -73,5 +73,6 @@ export * from './api/document-impact.js';
 export * from './api/document-graph.js';
 export * from './api/change-plan.js';
 export * from './api/code-ontology.js';
+export * from './api/java-tools.js';
 
 export * from './api/verification-advice.js';

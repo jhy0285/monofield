@@ -14,10 +14,12 @@ export function DocumentDependencyPanel({ projectId, dirty, onRequestDraft }: { 
   const [files, setFiles] = useState('');
   const [interval, setIntervalSeconds] = useState(60);
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
+  const [open, setOpen] = useState(false);
   const scope = useRef(0);
   const busyRef = useRef(false);
   const watchUrl = `/api/projects/${encodeURIComponent(projectId)}/database/schema-watch`;
   useEffect(() => {
+    if (!open) return;
     const epoch = ++scope.current;
     busyRef.current = false;
     setWatch(null); setReport(null); setError(''); setBusy(false); setFiles('');
@@ -38,7 +40,7 @@ export function DocumentDependencyPanel({ projectId, dirty, onRequestDraft }: { 
     void refresh();
     const timer = window.setInterval(() => void refresh(), 5000);
     return () => { scope.current++; controller.abort(); window.clearInterval(timer); };
-  }, [watchUrl]);
+  }, [watchUrl, open]);
 
   async function action(operation: 'enable' | 'disable' | 'check' | 'acknowledge' | 'graph') {
     const epoch = scope.current;
@@ -64,7 +66,9 @@ export function DocumentDependencyPanel({ projectId, dirty, onRequestDraft }: { 
   }
   const labels = new Map(report?.nodes.map((node) => [node.id, node.label]));
   return <section className={styles.root} aria-label={t('docs.graph.title')}>
-    <h3>{t('docs.graph.title')}</h3><p>{t('docs.graph.scope')}</p>
+    <details open={open} onToggle={event => setOpen(event.currentTarget.open)}>
+    <summary className={styles.summary}>{t('docs.graph.title')}</summary>
+    {open ? <div className={styles.dependencyBody}><p>{t('docs.graph.scope')}</p>
     <fieldset disabled={busy}>
       <legend>{t('docs.watch.title')}</legend>
       <label>{t('docs.watch.interval')} <input type="number" min={10} max={86400} value={interval} onChange={(event) => setIntervalSeconds(Number(event.target.value))} /></label>
@@ -94,5 +98,7 @@ export function DocumentDependencyPanel({ projectId, dirty, onRequestDraft }: { 
       {report.warnings.length ? <details open><summary>{t('docs.graph.warnings')}</summary><ul>{report.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></details> : null}
       {report.unlinkedNodeIds.length ? <details><summary>{t('docs.graph.unlinked')}</summary><ul>{report.unlinkedNodeIds.map((id) => <li key={id}>{labels.get(id)}</li>)}</ul></details> : null}
     </div> : null}
+    </div> : null}
+    </details>
   </section>;
 }

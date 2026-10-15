@@ -6,6 +6,7 @@ import type { RegisterDeployRoutesDeps, RegisterDeploymentCheckRoutesDeps } from
 import type { RegisterDictionaryRoutesDeps } from './routes/dictionaries.js';
 import type { RegisterDocumentImpactRoutesDeps } from './routes/document-impact.js';
 import type { RegisterCodeOntologyRoutesDeps } from './routes/code-ontology.js';
+import type { RegisterJavaToolsRoutesDeps } from './routes/java-tools.js';
 import type { RegisterSchemaWatchRoutesDeps } from './routes/database-schema-watch.js';
 import type { RegisterDocumentRenderRoutesDeps } from './routes/document-render.js';
 import type { RegisterFinalizeRoutesDeps, RegisterImportRoutesDeps, RegisterProjectExportRoutesDeps } from './import-export-routes.js';
@@ -36,6 +37,7 @@ type AllRegisteredRouteDeps =
   & RegisterDictionaryRoutesDeps
   & RegisterDocumentImpactRoutesDeps
   & RegisterCodeOntologyRoutesDeps
+  & RegisterJavaToolsRoutesDeps
   & RegisterSchemaWatchRoutesDeps
   & RegisterDocumentRenderRoutesDeps
   & RegisterFinalizeRoutesDeps

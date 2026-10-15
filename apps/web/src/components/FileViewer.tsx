@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { JavaToolsPanel } from './workspace/JavaToolsPanel';
 import { createPortal, flushSync } from 'react-dom';
 import { Button, Input, Select } from '@open-design/components';
 import { APP_CHROME_FILE_ACTIONS_ID, APP_CHROME_FILE_ACTIONS_SELECTOR } from './AppChromeHeader';
@@ -1097,6 +1098,7 @@ export function FileViewer({
         projectId={projectId}
         file={file}
         onFileSaved={onFileSaved}
+        onOpenFile={onOpenFile}
       />
     );
   }
@@ -10552,11 +10554,14 @@ function TextViewer({
   projectId,
   file,
   onFileSaved,
+  onOpenFile,
 }: {
   projectId: string;
   file: ProjectFile;
   onFileSaved?: () => Promise<void> | void;
+  onOpenFile?: ((name:string)=>void)|undefined;
 }) {
+  const editorRef=useRef<HTMLTextAreaElement>(null);
   const { locale, t } = useI18n();
   const copy = locale === 'ko'
     ? {
@@ -10764,6 +10769,9 @@ function TextViewer({
 
   return (
     <div className="viewer text-viewer">
+      {file.name.endsWith('.java')&&baseText!==null&&!loading?<JavaToolsPanel projectId={projectId} file={file.name} text={draftText} dirty={dirty||diskChanged}
+        editorRef={editorRef} onText={value=>{setDraftText(value);setSaved(false);setSaveError('');}}
+        onRenamed={async()=>{await reloadFromDisk();await onFileSaved?.();}} onOpenFile={onOpenFile} />:null}
       <div className="viewer-toolbar">
         <div className="viewer-toolbar-left">
           {dirty ? <span className="text-editor-dirty" data-testid="text-editor-dirty">{copy.unsaved}</span> : null}
@@ -10828,6 +10836,7 @@ function TextViewer({
         ) : (
           <textarea
             className="text-editor-input"
+            ref={editorRef}
             data-testid="text-editor-input"
             aria-label={copy.editor}
             value={draftText}

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CodeOntologyResponse } from '@open-design/contracts';
+import type { CodeOntologyResponse, CodeOntologyPlanResponse } from '@open-design/contracts';
 import { I18nProvider } from '../../src/i18n';
 import { CodeOntologyPanel } from '../../src/components/CodeOntologyPanel';
 
@@ -19,6 +19,31 @@ const props = { projectId: 'traffic', ready: true };
 const open = () => fireEvent.click(screen.getByRole('button', { name: 'Build ontology from code' }));
 const build = () => fireEvent.click(screen.getByRole('button', { name: 'Build from code' }));
 describe('explicit code-first ontology UI', () => {
+  it('connects code impact to document review through an explicit plan action', async () => {
+    const result: CodeOntologyPlanResponse = { ontology: report,
+      plan: { schemaVersion: 1, mode: 'observed', graph: report.dependencyGraph, ontology: { nodes: [], edges: [] },
+        source: { scope: 'git-visible-worktree', head: null, digest: null, fileCount: 0, reason: 'No Git' }, checks: [], changedFiles: [], unmatchedChangedFiles: [], affectedNodeIds: [], obligations: [], warnings: [],
+        summary: { affected: 2, obligations: 0, passed: 0, outstanding: 0, coverageGaps: 1 }, handoff: 'Review the service change and its API document.', handoffTruncated: false, elapsedMs: 110, modelCalls: 0 },
+      documentReviews: [{ documentFile: 'docs/api.json', itemId: 'IF-1', label: 'Signal cycle', state: 'review-required', impactPath: ['Service.java','GET /signals','Signal cycle'] }], documentHashes: [], elapsedMs: 110, modelCalls: 0 };
+    vi.mocked(fetch).mockResolvedValue(Response.json(result)); const draft = vi.fn();
+    render(<I18nProvider><CodeOntologyPanel {...props} onRequestDraft={draft} /></I18nProvider>); open();
+    expect(fetch).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Build code and document change plan' }));
+    await waitFor(() => expect(screen.getByText('docs/api.json · IF-1')).toBeTruthy());
+    expect(screen.getByText('Review required')).toBeTruthy();
+    expect(fetch).toHaveBeenCalledTimes(1); expect(vi.mocked(fetch).mock.calls[0]![0]).toBe('/api/projects/traffic/ontology/plan');
+    fireEvent.click(screen.getByRole('button', { name: 'Prepare investigation request' })); expect(draft).toHaveBeenCalledWith(result.plan.handoff);
+  });
+  it('refreshes only after opting in, a saved revision, and an open panel', async () => {
+    const view = render(<I18nProvider><CodeOntologyPanel {...props} revisionKey="one" /></I18nProvider>); open(); build();
+    await waitFor(() => expect(screen.getByText('SignalController → GET /signals')).toBeTruthy());
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Refresh after saved changes while this panel is open' }));
+    view.rerender(<I18nProvider><CodeOntologyPanel {...props} revisionKey="two" /></I18nProvider>);
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2), { timeout: 2500 });
+    open();
+    view.rerender(<I18nProvider><CodeOntologyPanel {...props} revisionKey="three" /></I18nProvider>);
+    await new Promise(resolve => setTimeout(resolve, 1400)); expect(fetch).toHaveBeenCalledTimes(2);
+  });
   it('opts into a whole imported codebase without changing the active command module', async () => {
     render(<I18nProvider><CodeOntologyPanel {...props} projectPath="backend" /></I18nProvider>); open();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Include the full imported codebase (frontend/backend)' }));

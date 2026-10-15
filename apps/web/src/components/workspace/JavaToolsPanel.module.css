@@ -1,0 +1,16 @@
+.root { background:var(--bg-panel); border-bottom:1px solid var(--border); padding:8px 12px; font-size:12px; }
+.bar,.rename { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.rename { margin-top:8px; }
+.root input { border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text); padding:6px; }
+.root details summary { cursor:pointer; }
+.root p { margin:8px 0; }
+.error { color:var(--red); }
+.results { max-height:200px; overflow:auto; margin:8px 0; padding-left:18px; }
+.results li { margin:4px 0; }
+.root small { display:block; color:var(--text-muted); }
+.preview { max-height:360px; overflow:auto; padding-top:8px; }
+.compare { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.compare pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:240px; overflow:auto; font:11px var(--font-mono); background:var(--bg); padding:8px; }
+.debugOutput { max-height:240px; overflow:auto; white-space:pre-wrap; font:11px var(--font-mono); }
+.root h4 { margin:10px 0; }
+.root dd { margin:2px 0 8px; overflow-wrap:anywhere; color:var(--text-muted); }

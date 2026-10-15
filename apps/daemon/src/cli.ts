@@ -341,6 +341,10 @@ const PLUGIN_LIST_BOOLEAN_FLAGS = new Set([
 ]);
 
 const SUBCOMMAND_MAP = {
+  java: async (args:string[]) => {
+    const {runJavaToolsCli}=await import('./services/java/cli.js');
+    return runJavaToolsCli(args,{baseUrl:cliDaemonBaseUrl,parseFlags});
+  },
   verify: async (args: string[]) => {
     const { runVerificationCli } = await import('./services/verification-cli.js');
     return runVerificationCli(args, { baseUrl: cliDaemonBaseUrl, parseFlags, positionalArgs: collectCliPositionals });
@@ -906,14 +910,14 @@ async function runArtifacts(args) {
 }
 
 async function runDocs(args) {
-  if (args[0] === 'build-ontology') {
-    const flags = parseFlags(args.slice(1), { string: ['project', 'project-path', 'documents-file', 'prompt-file', 'daemon-url'], boolean: ['json', 'help'] });
+  if (args[0] === 'build-ontology' || args[0] === 'plan-code') {
+    const flags = parseFlags(args.slice(1), { string: ['project', 'project-path', 'documents-file', 'inputs-file', 'rules-file', 'prompt-file', 'daemon-url'], boolean: ['json', 'help'] });
     if (flags.help || !flags.project) {
-      console.log('Usage: monofield docs build-ontology --project ID [--project-path PATH] [--documents-file <JSON-path-array|->] [--prompt-file <path|->] [--json] [--daemon-url URL]');
+      console.log(`Usage: monofield docs ${args[0]} --project ID [--project-path PATH] [--documents-file <JSON-path-array|->] [--inputs-file <JSON-path-array|->] [--rules-file <project-relative.json>] [--prompt-file <path|->] [--json] [--daemon-url URL]`);
       process.exit(flags.help ? 0 : 2);
     }
     const { runCodeOntologyCli } = await import('./services/code-ontology-cli.js');
-    await runCodeOntologyCli(flags, await cliDaemonBaseUrl(flags));
+    await runCodeOntologyCli(flags, await cliDaemonBaseUrl(flags), args[0] === 'plan-code' ? 'plan' : 'build');
     return;
   }
   if (args[0] === 'plan') {

@@ -3,6 +3,7 @@ import { InterfaceSpecDocumentSchema, ScreenSpecDocumentSchema, type Verificatio
 import { buildDocumentGraph } from '../../src/services/document-graph.js';
 import { buildChangePlan } from '../../src/services/change-plan.js';
 import { matchesChangeSelector, parseChangePolicy } from '../../src/services/change-policy.js';
+import {workspaceVerificationReceipt}from '../../src/services/ontology/verification-receipt.js';
 
 const check: VerificationCheck = { id: 'node:test', label: 'test', kind: 'test', command: 'npm', args: ['run', 'test'], script: 'node --test', source: 'package.json', recommended: true };
 const types: VerificationCheck = { ...check, id: 'node:typecheck', label: 'typecheck', kind: 'types', script: 'tsc --noEmit' };
@@ -27,6 +28,19 @@ function receipt(): VerificationRun {
   };
 }
 describe('ontology-driven change planning', () => {
+  it('credits an unchanged module receipt in a workspace plan, without crediting other commands or scopes',()=>{
+    const base=inputs(),moduleCheck={...check,id:'backend::node:test',projectPath:'backend',source:'backend/package.json'};
+    const moduleRun={...receipt(),id:'backend-real-run',projectPath:'backend',steps:[receipt().steps[0]!]};
+    const proof=workspaceVerificationReceipt(moduleRun,'backend');
+    const graph={...base.graph,nodes:base.graph.nodes.map(node=>node.kind==='code'?{...node,label:'backend/'+node.label}:node)};
+    const options={...base,graph,checks:[moduleCheck],receipt:null,receipts:[proof]};
+    const plan=buildChangePlan(options);
+    expect(plan.obligations.filter(item=>item.checkId===moduleCheck.id).every(item=>item.state==='passed-current'&&item.receiptId==='backend-real-run')).toBe(true);
+    expect(plan.summary.passed).toBeGreaterThan(0);expect(moduleRun.steps[0]?.check.id).toBe('node:test');
+    expect(buildChangePlan({...options,source:{...base.source,digest:'changed'}}).summary.passed).toBe(0);
+    expect(buildChangePlan({...options,checks:[{...moduleCheck,args:['run','test','--changed']}]}).summary.passed).toBe(0);
+    expect(()=>workspaceVerificationReceipt(moduleRun,'frontend')).toThrow('does not match');
+  });
   it('traces code → API → screen and emits explicit if conditions and manual design obligations', () => {
     const plan = buildChangePlan(inputs());
     expect(plan.affectedNodeIds.map(id => plan.graph.nodes.find(n => n.id === id)?.label)).toEqual(['src/prices.ts', 'Prices', 'Storefront']);

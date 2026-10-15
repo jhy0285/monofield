@@ -13,7 +13,9 @@ export function registerVerificationRoutes(app: Express, deps: RegisterVerificat
     const project = getProject(deps.db, id);
     if (!project) throw Object.assign(new Error('Project not found'), { status: 404 });
     if (value != null && typeof value !== 'string') throw new Error('projectPath must be a string');
-    return resolveDevelopmentProjectRoot(resolveProjectDir(deps.paths.PROJECTS_DIR, id, project.metadata),
+    const workspace = resolveProjectDir(deps.paths.PROJECTS_DIR, id, project.metadata);
+    if (value === '.') return { root: workspace, project: { path: '.' } };
+    return resolveDevelopmentProjectRoot(workspace,
       typeof value === 'string' ? value : project.metadata?.development?.activeProjectPath ?? null);
   };
   const fail = (res: Response, e: unknown) => deps.http.sendApiError(res,

@@ -1,9 +1,9 @@
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { CodeOntologyResponse } from '@open-design/contracts';
+import type { CodeOntologyResponse, CodeOntologyPlanResponse } from '@open-design/contracts';
 // Exercise the production artifact: its isolated worker entry is emitted by the daemon build.
 import { startServer, type StartServerResult } from '../dist/server.js';
 
@@ -66,6 +66,23 @@ describe('real code-only ontology API and CLI', () => {
     expect((await build({ projectPath: '../' })).status).toBe(400);
     const missing = await fetch(`${started.url}/api/projects/missing-project/ontology/build`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
     expect(missing.status).toBe(404);
+  });
+  it('joins real Java/Vue source and saved specifications, marks affected documents and offers Maven without executing', async () => {
+    const git = (...args: string[]) => execFileSync('git', ['-c','user.name=Test','-c','user.email=test@example.invalid',...args], { cwd: root });
+    await writeFile(path.join(root,'pom.xml'),'<project/>');
+    await writeFile(path.join(root,'signals.interface-spec.json'),JSON.stringify({ schemaVersion: 1, kind: 'interface-spec', source: { codebaseName: 'Traffic' }, endpoints: [{ interfaceId: 'IF-SIGNALS', method: 'GET', path: '/api/signals' }] }));
+    await writeFile(path.join(root,'signals.screen-spec.json'),JSON.stringify({ schemaVersion: 1, kind: 'screen-spec', name: 'Operator', screens: [{ id: 'SC-OPERATOR', screenName: 'Signal operator', evidenceRefs: [{ kind: 'code', ref: 'SignalDashboard.vue' }, { kind: 'manual', ref: 'IF-SIGNALS', document: { path: 'signals.interface-spec.json', itemId: 'IF-SIGNALS' } }] }] }));
+    git('init','--quiet');git('add','.');git('commit','--quiet','-m','baseline');
+    await writeFile(path.join(root,'SignalService.java'),'package traffic; class SignalService { public int find() { return 90; } }');
+    const body = { projectPath: '.', inputFiles: ['signals.interface-spec.json','signals.screen-spec.json'] };
+    const response = await fetch(`${started.url}/api/projects/${projectId}/ontology/plan`, { method:'POST', headers:{'content-type':'application/json'},body:JSON.stringify(body) });
+    expect(response.status).toBe(200);const result=await response.json() as CodeOntologyPlanResponse;
+    expect(result.documentReviews).toEqual(expect.arrayContaining([expect.objectContaining({ itemId:'IF-SIGNALS',state:'review-required' }),expect.objectContaining({ itemId:'SC-OPERATOR',state:'review-required' })]));
+    expect(result.plan.checks.some(check=>check.id==='java:maven-test')).toBe(true);
+    expect(result.plan.summary.passed).toBe(0);expect(result.modelCalls).toBe(0);expect(result.documentHashes).toHaveLength(2);
+    const inputs=path.join(root,'plan-inputs.json');await writeFile(inputs,JSON.stringify(body.inputFiles));
+    const stdout = await new Promise<string>((resolve,reject)=>execFile(process.execPath,[process.env.OD_DAEMON_CLI_PATH!,'docs','plan-code','--project',projectId,'--project-path','.','--inputs-file',inputs,'--daemon-url',started.url,'--json'],(error,text)=>error?reject(error):resolve(text)));
+    const cli=JSON.parse(stdout) as CodeOntologyPlanResponse;expect(cli.documentReviews).toEqual(result.documentReviews);expect(cli.plan.handoff).toContain('docs plan-code');
   });
   it('connects separately packaged Java and Vue modules when the imported root has no build marker or Git', async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), 'monofield-split-traffic-'));

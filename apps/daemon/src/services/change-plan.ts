@@ -2,12 +2,13 @@ import type { ChangeObligation, ChangePlanResponse, ChangePolicy, ChangeReview, 
   VerificationCheck, VerificationRun, VerificationSource } from '@open-design/contracts';
 import { matchesChangeSelector } from './change-policy.js';
 import { verificationScriptNeedsManualSelection } from './verification-discovery.js';
+import { RecordedDependencyGraph } from './ontology/recorded-graph.js';
 
 /** Recorded relationships, deterministic conditions and actual command receipts; no model or execution. */
 export function buildChangePlan(options: {
   graph: DocumentGraphResponse; checks: VerificationCheck[]; source: VerificationSource;
-  receipt: VerificationRun | null; changedFiles: string[]; policy?: ChangePolicy;
-  simulateNodeIds?: string[]; request?: string;
+  receipt: VerificationRun | null; receipts?:VerificationRun[]; changedFiles: string[]; policy?: ChangePolicy;
+  simulateNodeIds?: string[]; request?: string; graphIndex?: RecordedDependencyGraph;
 }): ChangePlanResponse {
   const started = performance.now();
   const { graph, source, receipt } = options;
@@ -22,21 +23,7 @@ export function buildChangePlan(options: {
   const changed = new Set(changedFiles);
   const seeds = mode === 'simulation' ? simulated : [...new Set([...graph.changedNodeIds,
     ...graph.nodes.filter(node => node.documentFile && changed.has(node.documentFile)).map(node => node.id)])];
-  const dependents = new Map<string, string[]>();
-  for (const edge of graph.edges) {
-    const list = dependents.get(edge.sourceId) ?? [];
-    list.push(edge.dependentId); dependents.set(edge.sourceId, list);
-  }
-  const paths = new Map(seeds.map(id => [id, [id]]));
-  const queue = [...seeds];
-  for (let index = 0; index < queue.length; index++) {
-    const id = queue[index]!;
-    for (const target of dependents.get(id) ?? []) {
-      if (paths.has(target)) continue;
-      paths.set(target, [...paths.get(id)!, target]); queue.push(target);
-    }
-    if (paths.size > 1000) throw new Error('Change planning is limited to 1000 affected nodes; select narrower documents');
-  }
+  const paths = (options.graphIndex ?? new RecordedDependencyGraph(graph)).pathsFrom(seeds, 1000);
   const warnings = [...graph.warnings];
   const represented = new Set(graph.nodes.flatMap(node => node.kind === 'code' ? [node.label] : node.documentFile ? [node.documentFile] : []));
   const unmatchedChangedFiles = changedFiles.filter(file => !represented.has(file));
@@ -68,8 +55,8 @@ export function buildChangePlan(options: {
     }
   }
   for (const rule of policy.rules) if (!graph.nodes.some(node => matchesChangeSelector(node, rule.when))) warnings.push(`Rule matches no recorded node: ${rule.id}`);
-  const receiptCurrent = mode === 'observed' && !!source.digest && receipt?.state === 'passed'
-    && receipt.stableSource && receipt.sourceAfter?.digest === source.digest;
+  const receipts=[...(receipt?[receipt]:[]),...(options.receipts??[])];
+  const current=(run:VerificationRun)=>mode==='observed'&&!!source.digest&&run.state==='passed'&&run.stableSource&&run.sourceAfter?.digest===source.digest;
   const obligations: ChangeObligation[] = [];
   const obligationsById = new Map<string, ChangeObligation>();
   function add(nodeId: string, ruleId: string, condition: string, requirement: string,
@@ -82,14 +69,15 @@ export function buildChangePlan(options: {
     }
     if (obligations.length >= 10000) throw new Error('Change plan exceeds 10000 obligations; narrow project rules');
     const check = checkId ? catalog.get(checkId) : undefined;
-    const step = receipt?.steps.find(step => step.check.id === checkId);
-    const sameCommand = !!check && !!step && JSON.stringify([check.command, check.args, check.script, check.source])
-      === JSON.stringify([step.check.command, step.check.args, step.check.script, step.check.source]);
-    const passed = receiptCurrent && sameCommand && step?.state === 'passed';
+    const evidence=receipts.flatMap(run=>run.steps.filter(step=>step.check.id===checkId).map(step=>({run,step})));
+    const sameCommand=(step:VerificationRun['steps'][number])=>!!check&&JSON.stringify([check.command,check.args,check.script,check.source,check.projectPath])===JSON.stringify([step.check.command,step.check.args,step.check.script,step.check.source,step.check.projectPath]);
+    const credited=evidence.find(({run,step})=>current(run)&&sameCommand(step)&&step.state==='passed');
+    const step=credited?.step??evidence[0]?.step;
+    const passed=!!credited;
     const state = gap ? 'coverage-gap' : review ? 'manual-review' : !check ? 'missing-check'
       : passed ? 'passed-current' : step?.state === 'passed' ? 'stale' : 'needs-run';
     const obligation: ChangeObligation = { id, ruleId, nodeId, path: paths.get(nodeId) ?? [nodeId], condition, triggers: [{ ruleId, condition }], requirement,
-      state, checkId, review, receiptId: passed ? receipt!.id : null };
+      state, checkId, review, receiptId: credited?.run.id??null };
     obligations.push(obligation); obligationsById.set(id, obligation);
   }
   for (const [id] of paths) {
@@ -99,7 +87,10 @@ export function buildChangePlan(options: {
     if (node.kind === 'api' || node.kind === 'code') {
       const kinds = node.kind === 'api' ? ['test', 'types'] : ['test'];
       for (const kind of kinds) {
-        const available = checks.filter(check => check.kind === kind);
+        const itemPaths = node.kind === 'code' ? [node.label] : [node.documentFile ?? '',
+          ...(paths.get(id) ?? []).map(pathId => nodes.get(pathId)).filter(value => value?.kind === 'code').map(value => value!.label)];
+        const applicable = checks.filter(check => !check.projectPath || itemPaths.some(file => file.startsWith(check.projectPath + '/')));
+        const available = applicable.filter(check => check.kind === kind);
         const preferred = available.filter(check => linkedChecks?.has(check.id));
         const selected = preferred.length ? preferred : available.filter(check => check.recommended).slice(0, 1);
         if (!selected.length) add(id, `builtin:${kind}`, condition, `A registered ${kind} check is required`);

@@ -16,3 +16,8 @@
 .body small { overflow-wrap: anywhere; }
 .warning { color: var(--amber); }
 .error { color: var(--red); }
+.plan { border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: grid; gap: 8px; }
+.plan h3 { margin: 0; font-size: 13px; }
+.plan ul, .plan ol { margin: 0; padding-left: 18px; max-height: 280px; overflow: auto; }
+.plan li { padding: 6px 0; font-size: 12px; overflow-wrap: anywhere; }
+.plan span { display: block; color: var(--amber); }

@@ -39,5 +39,5 @@ export async function loadProjectDocumentGraph(options: {
       if (!impact.repository) warnings.push(`Git change coverage unavailable: ${name}`);
     }
   }
-  return { graph: buildDocumentGraph({ documents, changedFiles: [...changedFiles], schemaWatch: options.schemaWatch, warnings }), changedFiles: [...changedFiles] };
+  return { graph: buildDocumentGraph({ documents, changedFiles: [...changedFiles], schemaWatch: options.schemaWatch, warnings }), changedFiles: [...changedFiles], sourceDocuments: documents };
 }

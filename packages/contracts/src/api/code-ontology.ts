@@ -5,6 +5,25 @@ export interface CodeOntologyRequest {
   businessFiles?: string[];
   request?: string;
 }
+export interface CodeOntologyPlanRequest extends CodeOntologyRequest {
+  inputFiles?: string[];
+  rulesFile?: string;
+}
+export interface CodeOntologyPlanResponse {
+  ontology: CodeOntologyResponse;
+  plan: import('./change-plan.js').ChangePlanResponse;
+  documentReviews: Array<{
+    documentFile: string;
+    itemId: string;
+    label: string;
+    state: 'review-required' | 'coverage-unknown' | 'no-recorded-impact';
+    /** Paths are observed/static candidates, not proof of runtime or business completeness. */
+    impactPath: string[];
+  }>;
+  documentHashes: Array<{ path: string; sha256: string }>;
+  elapsedMs: number;
+  modelCalls: 0;
+}
 export interface OntologyEvidence {
   path: string;
   line: number;
