@@ -647,6 +647,10 @@ import { registerDevelopmentRoutes } from './routes/development.js';
 import { registerVerificationRoutes } from './routes/verification.js';
 import { DevelopmentVerificationService } from './services/development-verification.js';
 import { registerDocumentImpactRoutes } from './routes/document-impact.js';
+import { registerCodeOntologyRoutes } from './routes/code-ontology.js';
+import { registerJavaToolsRoutes } from './routes/java-tools.js';
+import { JavaLanguageService } from './services/java/language-service.js';
+import {JavaDebugService}from './services/java/debug-service.js';
 import { registerSchemaWatchRoutes } from './routes/database-schema-watch.js';
 import { DatabaseSchemaWatchService } from './services/database-schema-watch.js';
 import { registerDocumentRenderRoutes } from './routes/document-render.js';
@@ -3732,6 +3736,8 @@ export async function startServer({
   installRouteRegistrationGuard(app);
   const developmentServers = new DevelopmentServerService(desktopDevelopmentProcessBroker);
   const verification = new DevelopmentVerificationService(RUNTIME_DATA_DIR);
+  const javaLanguage = new JavaLanguageService(RUNTIME_DATA_DIR);
+  const javaDebug=new JavaDebugService();
   const browserVerificationEvidence = new BrowserVerificationEvidenceStore();
   const interfaceSpecRuntimeSourceModes = new Map();
   // Clipper page captures are self-contained HTML with inlined images plus a
@@ -5349,7 +5355,10 @@ export async function startServer({
     paths: pathDeps,
     projectFiles: projectFileDeps,
     schemaWatch,
+    verification,
   });
+  registerCodeOntologyRoutes(app, { db, http: httpDeps, paths: pathDeps, projectFiles: projectFileDeps, verification, schemaWatch });
+  registerJavaToolsRoutes(app,{db,http:httpDeps,paths:pathDeps,projectFiles:projectFileDeps,javaLanguage,javaDebug,verification});
   registerPluginAssetRoutes(app, {
     db,
     pluginAssetCache,
@@ -10486,6 +10495,8 @@ export async function startServer({
       await terminalService.shutdownActive();
       await developmentServers.shutdown();
       await verification.shutdown();
+      javaLanguage.shutdown();
+      javaDebug.shutdown();
       await design.analytics.shutdown();
     };
     let server;

@@ -732,6 +732,7 @@ export function FileWorkspace({
   function openBrowserTab(
     initial?: Pick<BrowserWorkspaceTab, 'url' | 'title' | 'iconUrl'>,
     automationParentSessionId?: string,
+    activate = true,
   ) {
     setUploadError(null);
     const nextIndex = browserTabSequenceRef.current + 1;
@@ -752,18 +753,19 @@ export function FileWorkspace({
     }
     const nextTabs = [...browserTabs, nextTab];
     setBrowserTabs(nextTabs);
-    setActiveTab(nextTab.id);
-    commitTabsState(workspaceTabsState(persistedTabs, nextTab.id, nextTabs));
+    if (activate) setActiveTab(nextTab.id);
+    commitTabsState(workspaceTabsState(persistedTabs, activate ? nextTab.id : tabsStateRef.current.active, nextTabs));
   }
 
-  function openDevelopmentUrl(url: string) {
+  function openDevelopmentUrl(url: string, activate = true) {
     const existing = browserTabs.find((tab) => tab.url === url);
     if (existing) {
+      if (!activate) return;
       setActiveTab(existing.id);
       commitTabsState(workspaceTabsState(persistedTabs, existing.id, browserTabs));
       return;
     }
-    openBrowserTab({ url, title: t('development.localApp') });
+    openBrowserTab({ url, title: t('development.localApp') }, undefined, activate);
   }
 
   function closeBrowserTab(tabId: string) {

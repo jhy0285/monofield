@@ -30,7 +30,7 @@ type Props = {
   resolvedDir?: string | null;
   automaticVerificationAvailable?: boolean;
   onMetadataChange: (metadata: ProjectMetadata) => void;
-  onOpenUrl: (url: string) => void;
+  onOpenUrl: (url: string, activate?: boolean) => void;
   onOpenChanges: () => void;
   onActiveProjectStateChange?: (state: { projectPath: string | null; ready: boolean }) => void;
 };
@@ -623,7 +623,7 @@ export function DevelopmentWorkspaceControls({
         setRuntime(next);
         if (next.state === 'ready' && next.url && openBrowserWhenReady.current) {
           openBrowserWhenReady.current = false;
-          onOpenUrl(next.url);
+          onOpenUrl(next.url, false);
         } else if (next.state === 'failed') {
           openBrowserWhenReady.current = false;
           setError(next.error ?? t('development.startFailed'));
@@ -710,7 +710,7 @@ export function DevelopmentWorkspaceControls({
     });
   }
 
-  async function start() {
+  async function start(debugPort?:number) {
     if (!selected) return;
     if (selected.launchMode === 'manual') {
       setError(runCopy.manualServletContainerSetup);
@@ -755,6 +755,7 @@ export function DevelopmentWorkspaceControls({
           configId: selected.id,
           projectPath: activeProjectPath || undefined,
           overrides: {
+            ...(debugPort===undefined?{}:{debugPort}),
             ...(selected.framework === 'Spring Boot' ? { profile: effectiveProfile } : {}),
             ...(!usesServletBuildPlugin && applicationArgs.length > 0 ? { applicationArgs } : {}),
             ...(!usesServletBuildPlugin ? { port: network!.port, url: network!.url } : {}),
@@ -766,7 +767,7 @@ export function DevelopmentWorkspaceControls({
       setRuntime(next);
       if (next.state === 'ready' && next.url) {
         openBrowserWhenReady.current = false;
-        onOpenUrl(next.url);
+        onOpenUrl(next.url, false);
       }
       if (next.state === 'failed') {
         openBrowserWhenReady.current = false;
@@ -1078,6 +1079,10 @@ export function DevelopmentWorkspaceControls({
         ) : (
           <Button variant={canStop ? 'ghost' : 'primary'} className={styles.action} data-testid="development-run-action" onClick={() => void start()} disabled={busy != null || !selected || selectedRequiresManualSetup} title={manualSetupMessage}><Icon name="play" size={13} />{t('development.start')}</Button>
         )}
+        {state === 'ready' && runtime?.url ? <Button variant="ghost" className={styles.action}
+          data-testid="development-open-browser" onClick={() => onOpenUrl(runtime.url!)}>{t('chat.designToolbox.context.browser')}</Button> : null}
+        {!canStop&&selected?.framework==='Spring Boot'&&selected.args.includes('spring-boot:run')?<Button variant="ghost" className={styles.action}
+          data-testid="development-debug-run" disabled={busy!=null} onClick={()=>void start(5005)}>{t('java.debug.launch')}</Button>:null}
         <button type="button" className={styles.action} data-testid="development-open-changes" onClick={onOpenChanges}><Icon name="fork" size={13} />{t('gitChanges.title')}</button>
         <button
           type="button"

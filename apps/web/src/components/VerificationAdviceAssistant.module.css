@@ -1,0 +1,13 @@
+.panel { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 6px; min-width: 0; }
+.body { padding: 4px 0 8px; }
+.body[hidden] { display: none; }
+.body p, .body li { font-size: 12px; line-height: 1.6; }
+.body label { display: grid; gap: 6px; font-size: 12px; }
+.body textarea { min-height: 68px; max-height: 180px; resize: vertical; width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-panel); color: var(--text); padding: 8px; font: inherit; }
+.body textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hint { color: var(--text-muted); }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.result { margin-top: 10px; }
+.result ul { padding-inline-start: 20px; }
+.result h4 { font-size: 12px; margin: 12px 0 4px; }
+.error { color: var(--red); }

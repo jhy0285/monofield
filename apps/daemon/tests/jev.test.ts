@@ -83,6 +83,14 @@ describe('JEV protocol and backend boundaries', () => {
     expect(fetchImpl.mock.calls[0]).toEqual(['http://localhost:12345/v1/systemone', expect.objectContaining({ headers: { 'content-type': 'application/json' } })]);
     expect(result.backend).toBe('local');
   });
+  it('pins the checked local configuration even if the saved backend changes before transport', async () => {
+    const checked = { backend: 'local' as const, model: 'multilingual', localBaseUrl: 'http://127.0.0.1:18117' };
+    await writeJevConfig(dir, { ...checked, backend: 'typesafe', model: 'jev-latest' });
+    const fetchImpl = vi.fn(async () => Response.json(response()));
+    const result = await evaluateJev(dir, request, { config: checked, env: { TYPESAFE_API_KEY: 'fixture-only' }, fetchImpl });
+    expect(fetchImpl.mock.calls[0]).toEqual(['http://127.0.0.1:18117/v1/systemone', expect.objectContaining({ headers: { 'content-type': 'application/json' } })]);
+    expect(result.backend).toBe('local');
+  });
   it.each([[401, 'AUTH_REJECTED'], [403, 'AUTH_REJECTED'], [429, 'RATE_LIMITED'], [500, 'UNAVAILABLE'], [422, 'INVALID_REQUEST']])('categorizes HTTP %s without echoing provider secrets', async (status, code) => {
     await expect(evaluateJev(dir, request, { env: { TYPESAFE_API_KEY: 'secret' }, fetchImpl: async () => new Response('your secret is secret', { status: Number(status) }) })).rejects.toMatchObject({ code });
   });

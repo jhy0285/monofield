@@ -5,6 +5,8 @@ import type { RoutineRoutesService } from './routes/routine.js';
 import type { DatabaseSchemaWatchService } from './services/database-schema-watch.js';
 import type { MonoFieldPublicMetadataService } from './services/monofield-public-metadata.js';
 import type { DevelopmentVerificationService } from './services/development-verification.js';
+import type { JavaLanguageService } from './services/java/language-service.js';
+import type {JavaDebugService}from './services/java/debug-service.js';
 
 export interface HttpDeps {
   createSseResponse: (...args: any[]) => any;
@@ -101,6 +103,8 @@ export interface TelemetryDeps {
 }
 
 export interface ServerContext {
+  javaLanguage: JavaLanguageService;
+  javaDebug: JavaDebugService;
   verification: DevelopmentVerificationService;
   schemaWatch: DatabaseSchemaWatchService;
   db: any;

@@ -1,13 +1,16 @@
 import { execFile, spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, readFile, realpath, rename, stat, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import { createCommandInvocation } from '@open-design/platform';
 import type { VerificationCheck, VerificationRun, VerificationStatus, VerificationStep } from '@open-design/contracts';
 import { gitWorkspaceRootPath } from '../git-workspace.js';
+import { resolveDevelopmentProjectRoot } from '../development-projects.js';
 import { discoverVerificationChecks } from './verification-discovery.js';
 import { verificationSource } from './verification-source.js';
+import { suggestVerification } from './verification-advice.js';
+import { assertVerificationAdviceSnapshot, verificationAdviceSnapshot } from './verification-advice-snapshot.js';
 
 const LOG_LIMIT = 32 * 1024;
 const HISTORY_LIMIT = 10;
@@ -29,10 +32,15 @@ function appendOutput(step: VerificationStep, value: string): void {
   step.output = output.subarray(Math.max(0, output.length - LOG_LIMIT)).toString('utf8');
 }
 
-function invocation(check: VerificationCheck) {
+function invocation(check: VerificationCheck, cwd: string) {
   let command = check.command;
   if (process.platform === 'win32') {
-    const found = spawnSync('where.exe', [command], { windowsHide: true, encoding: 'utf8', timeout: 5_000 });
+    if (/^\.\//.test(command)) {
+      command = resolve(cwd, command);
+      if (!existsSync(command)) throw error(`${check.command} is unavailable in the selected module`);
+      return createCommandInvocation({ command, args: check.args });
+    }
+    const found = spawnSync('where.exe', [command], { cwd, windowsHide: true, encoding: 'utf8', timeout: 5_000 });
     command = String(found.stdout ?? '').split(/\r?\n/).find(Boolean) ?? command;
     if (command === check.command) throw error(`${check.command} is unavailable on PATH`);
   }
@@ -78,7 +86,11 @@ export class DevelopmentVerificationService {
     await writeFile(temp, JSON.stringify(rows), { mode: 0o600 }); await rename(temp, file);
   }
 
-  async start(projectId: string, projectPath: string, cwd: string, checkIds: unknown, timeout: unknown): Promise<VerificationRun> {
+  async suggest(cwd: string, projectPath: string, request: unknown, signal?: AbortSignal) {
+    return suggestVerification(this.dataDir, cwd, projectPath, request, signal ? { signal } : {});
+  }
+
+  async start(projectId: string, projectPath: string, cwd: string, checkIds: unknown, timeout: unknown, expectedAdviceSnapshotSha256?: unknown): Promise<VerificationRun> {
     if (this.closing) throw error('The daemon is shutting down', 503);
     if (!Array.isArray(checkIds) || !checkIds.length || checkIds.length > 8 || checkIds.some(id => typeof id !== 'string')) throw error('Select between 1 and 8 discovered checks');
     const timeoutMs = timeout === undefined ? 120_000 : Number(timeout);
@@ -95,8 +107,10 @@ export class DevelopmentVerificationService {
         if (!check) throw error(`Check ${id} is no longer available. Refresh the check list.`);
         return check;
       });
+      const sourceBefore = await verificationSource(cwd);
+      assertVerificationAdviceSnapshot(expectedAdviceSnapshotSha256, verificationAdviceSnapshot(projectPath, plan, sourceBefore));
       const run: VerificationRun = { schemaVersion: 1, id: randomUUID(), projectId, projectPath, state: 'running', startedAt: new Date().toISOString(), endedAt: null, timeoutMs,
-        sourceBefore: await verificationSource(cwd), sourceAfter: null, stableSource: false,
+        sourceBefore, sourceAfter: null, stableSource: false,
         steps: checks.map(check => ({ check, state: 'pending', startedAt: null, endedAt: null, exitCode: null, output: '', outputTruncated: false })), error: null };
       if (this.closing) throw error('The daemon is shutting down', 503);
       await this.save(run);
@@ -116,7 +130,14 @@ export class DevelopmentVerificationService {
   private async step(active: Active, cwd: string, step: VerificationStep): Promise<void> {
     step.state = 'running'; step.startedAt = new Date().toISOString();
     try {
-      const cmd = invocation(step.check);
+      if (step.check.projectPath) {
+        const workspace = await realpath(cwd);
+        const module = await resolveDevelopmentProjectRoot(cwd, step.check.projectPath);
+        const canonical = await realpath(module.root);
+        if (canonical !== resolve(workspace, step.check.projectPath)) throw error('Verification module changed to a symlink; refresh the catalog');
+        cwd = canonical;
+      }
+      const cmd = invocation(step.check, cwd);
       await new Promise<void>((resolveDone) => {
         const child = spawn(cmd.command, cmd.args, { cwd, shell: false, detached: process.platform !== 'win32', windowsHide: true,
           windowsVerbatimArguments: cmd.windowsVerbatimArguments, stdio: ['ignore', 'pipe', 'pipe'],

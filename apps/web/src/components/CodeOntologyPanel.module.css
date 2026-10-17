@@ -1,0 +1,38 @@
+.panel { border-bottom: 1px solid var(--border); background: var(--bg-panel); min-width: 0; }
+.header { display: flex; align-items: center; gap: 12px; padding: 8px 12px; }
+.body { padding: 4px 16px 16px; display: grid; gap: 10px; max-height: min(65vh, 740px); overflow: auto; }
+.body p { margin: 0; line-height: 1.5; font-size: 12px; }
+.body label { display: grid; gap: 5px; font-size: 12px; }
+.body textarea, .body select, .body input { width: 100%; border: 1px solid var(--border); border-radius: 7px; background: var(--bg); color: var(--text); padding: 8px; }
+.body .scope { display: flex; align-items: center; gap: 7px; }
+.scope input { width: auto; }
+.meta { color: var(--text-muted); font-size: 11px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.guide { justify-self: start; }
+.context { padding: 10px 12px; border: 1px solid var(--border); border-radius: 7px; display: grid; gap: 5px; font-size: 12px; }
+.contextPanel { border: 1px solid var(--border); border-radius: 8px; padding: 10px; display: grid; gap: 10px; }
+.contextPanel > button { justify-self: start; }
+.contextBody { display: grid; gap: 10px; }
+.evidenceFiles { margin: 0; padding-left: 18px; max-height: 280px; overflow: auto; }
+.evidenceFiles li { font-size: 12px; padding: 6px 0; overflow-wrap: anywhere; }
+.evidenceFiles pre { white-space: pre-wrap; font-size: 11px; }
+.rules { border: 1px solid var(--border); border-radius: 7px; padding: 10px; font-size: 12px; }
+.rules ul { max-height: 260px; overflow: auto; padding-left: 18px; }
+.rules li { display: grid; gap: 5px; padding: 8px 0; }
+.rules button { justify-self: start; }
+.report { display: grid; gap: 10px; }
+.relations { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; max-height: 360px; overflow: auto; }
+.relations li { border: 1px solid var(--border); border-left: 3px solid var(--text-muted); border-radius: 7px; padding: 8px; display: grid; gap: 4px; font-size: 12px; overflow-wrap: anywhere; }
+.relations [data-basis='candidate'] { border-left-color: var(--amber); }
+.relations span, .body small { display: block; color: var(--text-muted); font-size: 11px; }
+.body small { overflow-wrap: anywhere; }
+.warning { color: var(--amber); }
+.error { color: var(--red); }
+.plan { border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: grid; gap: 8px; }
+.plan h3 { margin: 0; font-size: 13px; }
+.plan ul, .plan ol { margin: 0; padding-left: 18px; max-height: 280px; overflow: auto; }
+.plan li { padding: 6px 0; font-size: 12px; overflow-wrap: anywhere; }
+.plan span { display: block; color: var(--amber); }
+.selection { border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: grid; gap: 8px; font-size: 12px; overflow-wrap: anywhere; }
+.selection code { color: var(--text-muted); }
+.plan button { justify-self: start; }
