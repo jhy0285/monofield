@@ -19,6 +19,12 @@ const suggest = () => fireEvent.click(screen.getByRole('button', { name: 'Use pr
 beforeEach(() => { localStorage.setItem('open-design:locale', 'en'); vi.stubGlobal('fetch', vi.fn(async () => Response.json(advice))); });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 describe('explicit verification suggestion flow', () => {
+  it('distinguishes a cached decision from new provider usage', async () => {
+    vi.mocked(fetch).mockResolvedValue(Response.json({ ...advice, cached: true, reason: 'model' }));
+    show(); open(); input(); fireEvent.click(screen.getByRole('button', { name: 'Ask configured model' }));
+    await waitFor(() => expect(screen.getByText('Previous decision reused; no new model evaluation or provider usage.')).toBeTruthy());
+    expect(screen.queryByText('Provider token usage unavailable')).toBeNull();
+  });
   it('does not contact a model on mount, opening or typing; applying only selects checks', async () => {
     const p = props(); show(p); open(); input(); expect(fetch).not.toHaveBeenCalled();
     suggest(); await waitFor(() => expect(screen.getByRole('button', { name: 'Add suggested checks' })).toBeTruthy());

@@ -89,6 +89,39 @@ can be discovered without executing them. This does not synthesize missing
 specifications, overwrite documents or automatically run checks. The
 [change planner](ontology-change-planning.md) explains verification obligations.
 
+### Inspect impact before editing
+
+After building, select a class, method, API or screen and choose **Preview impact
+before editing**. The selected item's source file becomes a hypothetical change
+seed. The plan follows its recorded consumers into API/screen specifications and
+lists required checks and manual reviews. No Git edit is required. Symbols are
+conservatively expanded to their **whole file**, not a precise runtime slice.
+Unrelated observed Git changes do not become simulation seeds. Previous passing
+checks are not credited in a hypothetical plan; no command or source edit runs.
+
+**Open source** opens the selected item's file in the existing workspace editor.
+**Open document** opens a document requiring review. Building a normal code and
+document change plan returns to observed Git changes. A stale report must be
+rebuilt before starting a simulation; an observed missing/out-of-scope source is
+rejected. Automatic refresh retains the chosen simulation files until a normal
+build/plan or module/input change clears them.
+
+The same plan endpoint accepts `simulateFiles`, an array of 1–32 source paths
+relative to the **imported workspace root**, even when analyzing a child module:
+
+```json
+{"projectPath":"backend","simulateFiles":["backend/src/SignalService.java"]}
+```
+
+```sh
+monofield docs plan-code --project PROJECT_ID --project-path . --simulate-file sources.json --prompt-file change.txt --json
+```
+
+`sources.json` contains source paths, not opaque graph IDs. `--simulate-file -`
+accepts stdin, subject to the existing single-stdin/32 KiB limit. The separate
+specification planner's `docs plan --simulate-file` continues to accept node IDs.
+The response identifies simulation files and file granularity in `simulation`.
+
 ## Focused evidence for an AI request
 
 **Prepare focused AI evidence** selects source anchors and up to two graph hops

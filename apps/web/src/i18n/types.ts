@@ -123,6 +123,14 @@ export interface Dict {
   "ontology.rules.conflicts": string;
   "ontology.rules.conflictCandidate": string;
   "ontology.rules.focus": string;
+  "ontology.simulate": string;
+  "ontology.simulationTitle": string;
+  "ontology.observedTitle": string;
+  "ontology.simulationScope": string;
+  "ontology.selectedSource": string;
+  "ontology.openSource": string;
+  "ontology.openDocument": string;
+  "verification.advice.cached": string;
   "ontology.contextPack.title": string;
   "ontology.contextPack.description": string;
   "ontology.contextPack.question": string;

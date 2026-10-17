@@ -71,6 +71,7 @@ export function VerificationAdviceAssistant({ projectId, projectPath, revisionKe
         {advice.priorityCheckId ? <p>{t('verification.advice.priority', { label: plan.checks.find(c => c.id === advice.priorityCheckId)?.label ?? advice.priorityCheckId })}</p> : null}
         <ul>{advice.suggestedCheckIds.map(id => <li key={id}><code>{plan.checks.find(c => c.id === id)?.label ?? id}</code></li>)}</ul>
         <p className={styles.hint}>{t('verification.advice.elapsed', { ms: advice.elapsedMs, count: advice.evaluationAttempts })}</p>
+        {advice.cached ? <p className={styles.hint}>{t('verification.advice.cached')}</p> : null}
         {advice.evaluationAttempts ? <p className={styles.hint}>{advice.usage
           ? t('jev.usage', { input: advice.usage.input_tokens, output: advice.usage.output_tokens })
           : t('verification.advice.unknownUsage')}</p> : null}

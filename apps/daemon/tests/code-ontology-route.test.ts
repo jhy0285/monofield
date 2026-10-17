@@ -90,6 +90,25 @@ describe('real code-only ontology API and CLI', () => {
     await writeFile(path.join(root,'signals.interface-spec.json'),JSON.stringify({ schemaVersion: 1, kind: 'interface-spec', source: { codebaseName: 'Traffic' }, endpoints: [{ interfaceId: 'IF-SIGNALS', method: 'GET', path: '/api/signals' }] }));
     await writeFile(path.join(root,'signals.screen-spec.json'),JSON.stringify({ schemaVersion: 1, kind: 'screen-spec', name: 'Operator', screens: [{ id: 'SC-OPERATOR', screenName: 'Signal operator', evidenceRefs: [{ kind: 'code', ref: 'SignalDashboard.vue' }, { kind: 'manual', ref: 'IF-SIGNALS', document: { path: 'signals.interface-spec.json', itemId: 'IF-SIGNALS' } }] }] }));
     git('init','--quiet');git('add','.');git('commit','--quiet','-m','baseline');
+    const beforeSimulation = await readFile(path.join(root,'SignalService.java'),'utf8');
+    const selected = { projectPath: '.', inputFiles: ['signals.interface-spec.json','signals.screen-spec.json'], simulateFiles: ['SignalService.java'] };
+    const preview = await fetch(`${started.url}/api/projects/${projectId}/ontology/plan`, { method:'POST', headers:{'content-type':'application/json'},body:JSON.stringify(selected) });
+    expect(preview.status).toBe(200); const simulation = await preview.json() as CodeOntologyPlanResponse;
+    expect(simulation.plan.mode).toBe('simulation'); expect(simulation.simulation).toEqual({sourceFiles:['SignalService.java'],granularity:'file'});
+    expect(simulation.plan.changedFiles).toEqual([]); expect(simulation.plan.summary.passed).toBe(0);
+    expect(simulation.documentReviews).toEqual(expect.arrayContaining([expect.objectContaining({itemId:'IF-SIGNALS',state:'review-required'}),expect.objectContaining({itemId:'SC-OPERATOR',state:'review-required'})]));
+    expect(await readFile(path.join(root,'SignalService.java'),'utf8')).toBe(beforeSimulation);
+    const simulatedCli = await new Promise<string>((resolve,reject)=>{
+      const child=execFile(process.execPath,[process.env.OD_DAEMON_CLI_PATH!,'docs','plan-code','--project',projectId,'--project-path','.','--simulate-file','-','--daemon-url',started.url,'--json'],(error,text)=>error?reject(error):resolve(text));
+      child.stdin?.end(JSON.stringify(['SignalService.java']));
+    });
+    const simulatedResult=JSON.parse(simulatedCli) as CodeOntologyPlanResponse;
+    expect(simulatedResult.plan.mode).toBe('simulation'); expect(simulatedResult.simulation).toEqual(simulation.simulation);
+    expect(simulatedResult.documentReviews).toEqual(simulation.documentReviews);
+    for(const simulateFiles of [[],['../SignalService.java'],['business.md'],['Missing.java']]){
+      const invalid=await fetch(`${started.url}/api/projects/${projectId}/ontology/plan`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...selected,simulateFiles})});
+      expect(invalid.status).toBe(400);
+    }
     await writeFile(path.join(root,'SignalService.java'),'package traffic; class SignalService { public int find() { return 90; } }');
     const body = { projectPath: '.', inputFiles: ['signals.interface-spec.json','signals.screen-spec.json'] };
     const response = await fetch(`${started.url}/api/projects/${projectId}/ontology/plan`, { method:'POST', headers:{'content-type':'application/json'},body:JSON.stringify(body) });
@@ -119,6 +138,10 @@ describe('real code-only ontology API and CLI', () => {
       const scopedResponse = await analyze('backend'); expect(scopedResponse.ok).toBe(true);
       const scoped = await scopedResponse.json() as CodeOntologyResponse;
       expect(scoped.coverage.parsedFiles).toBe(2); expect(scoped.nodes.some(node => node.kind === 'screen')).toBe(false);
+      const simulate = (simulateFiles: string[]) => fetch(`${started.url}/api/projects/${id}/ontology/plan`, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({projectPath:'backend',simulateFiles})});
+      const valid = await simulate(['backend/SignalService.java']); expect(valid.ok).toBe(true);
+      expect((await valid.json() as CodeOntologyPlanResponse).simulation?.sourceFiles).toEqual(['backend/SignalService.java']);
+      expect((await simulate(['frontend/SignalDashboard.vue'])).status).toBe(400);
     } finally { await rm(workspace, { recursive: true, force: true }); }
   });
 });

@@ -9,9 +9,10 @@ import { OntologyTutorial } from './OntologyTutorial';
 import { shouldShowOntologyTutorial } from '../state/ontology-tutorial';
 import { OntologyContextPanel } from './OntologyContextPanel';
 
-export function CodeOntologyPanel({ projectId, projectPath, ready = true, revisionKey, agentBusy = false, onRequestDraft }: {
+export function CodeOntologyPanel({ projectId, projectPath, ready = true, revisionKey, agentBusy = false, onRequestDraft, onOpenFile }: {
   projectId: string; projectPath?: string | null | undefined; ready?: boolean | undefined;
   revisionKey?: string | undefined; agentBusy?: boolean | undefined; onRequestDraft?: ((prompt: string) => void) | undefined;
+  onOpenFile?: ((path: string) => void) | undefined;
 }) {
   const t = useT();
   const [open, setOpen] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('');
@@ -29,9 +30,10 @@ export function CodeOntologyPanel({ projectId, projectPath, ready = true, revisi
   const reportRef = useRef(report); reportRef.current = report;
   const generation = useRef(0), abort = useRef<AbortController | null>(null);
   const lastOperation = useRef<'build' | 'plan'>('build');
+  const lastSimulationFiles = useRef<string[]>([]);
   const autoRevision = useRef<string | undefined>(revisionKey);
   useEffect(() => {
-    generation.current++; abort.current?.abort(); setBusy(false); setError(''); setReport(null); setChange(null); setSelected(''); setSearch(''); setDraft(false); setStale(false);
+    generation.current++; abort.current?.abort(); setBusy(false); setError(''); setReport(null); setChange(null); setSelected(''); setSearch(''); setDraft(false); setStale(false); lastSimulationFiles.current = [];
     return () => { generation.current++; abort.current?.abort(); };
   }, [projectId, projectPath, documents, request, ready, workspace]);
   useEffect(() => {
@@ -41,18 +43,19 @@ export function CodeOntologyPanel({ projectId, projectPath, ready = true, revisi
   }, [revisionKey]);
   useEffect(() => {
     if (!automatic || !open || tutorial || !ready || agentBusy || busy || contextBusy || autoRevision.current === revisionKey) return;
-    const timer = window.setTimeout(() => { autoRevision.current = revisionKey; void build(lastOperation.current); }, 1200);
+    const timer = window.setTimeout(() => { autoRevision.current = revisionKey; void build(lastOperation.current, lastSimulationFiles.current); }, 1200);
     return () => window.clearTimeout(timer);
   }, [automatic, open, tutorial, ready, agentBusy, busy, contextBusy, revisionKey]);
-  async function build(operation: 'build' | 'plan' = 'build') {
+  async function build(operation: 'build' | 'plan' = 'build', simulateFiles: string[] = []) {
     const current = ++generation.current;
     abort.current?.abort(); const controller = new AbortController(); abort.current = controller;
-    lastOperation.current = operation; autoRevision.current = revisionKey;
+    lastOperation.current = operation; lastSimulationFiles.current = simulateFiles; autoRevision.current = revisionKey;
     setBusy(true); setError(''); setDraft(false); setReport(null); setChange(null);
     try {
       const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/ontology/${operation}`, { method: 'POST',
         headers: { 'content-type': 'application/json' }, signal: controller.signal,
-        body: JSON.stringify({ ...(workspace ? { projectPath: '.' } : projectPath ? { projectPath } : {}), businessFiles: documents.split('\n').map(name => name.trim()).filter(Boolean), request }) });
+        body: JSON.stringify({ ...(workspace ? { projectPath: '.' } : projectPath ? { projectPath } : {}), businessFiles: documents.split('\n').map(name => name.trim()).filter(Boolean), request,
+          ...(operation === 'plan' && simulateFiles.length ? { simulateFiles } : {}) }) });
       const value = await response.json();
       if (!response.ok) throw new Error(value?.error?.message ?? t('ontology.failed'));
       if (current === generation.current) { setReport(operation === 'plan' ? (value as CodeOntologyPlanResponse).ontology : value as CodeOntologyResponse); setChange(operation === 'plan' ? value as CodeOntologyPlanResponse : null); setStale(false); }
@@ -62,6 +65,9 @@ export function CodeOntologyPanel({ projectId, projectPath, ready = true, revisi
   const labels = new Map(report?.nodes.map(node => [node.id, node.kind === 'request' ? `${node.evidence.path} · ${node.label}` : node.label]));
   const related = report?.edges.filter(edge => !selected || edge.from === selected || edge.to === selected) ?? [];
   const selectable = report?.nodes.filter(node => node.kind !== 'external' && node.label.toLowerCase().includes(search.toLowerCase())) ?? [];
+  const selectedNode = report?.nodes.find(node => node.id === selected);
+  const selectedFile = selectedNode ? (report?.projectPath && report.projectPath !== '.' ? report.projectPath + '/' : '') + selectedNode.evidence.path : '';
+  const canSimulate = !!selectedNode && report?.dependencyGraph.nodes.some(node => node.kind === 'code' && node.label === selectedNode.evidence.path);
   const documentCount = report?.businessContext?.documentCount ?? report?.coverage.businessDocuments ?? documents.split('\n').filter(name => name.trim()).length;
   const contextTitle = documentCount ? t('ontology.context.documentsTitle', { count: documentCount }) : t('ontology.context.codeOnlyTitle');
   const contextBody = documentCount ? t('ontology.context.documentsBody') : t('ontology.context.codeOnlyBody');
@@ -101,13 +107,27 @@ export function CodeOntologyPanel({ projectId, projectPath, ready = true, revisi
         </details>:null}
         {stale ? <p role="status" className={styles.warning}>{t('ontology.changed')}</p> : null}
         {report.coverage.truncated ? <p role="alert" className={styles.warning}>{t('ontology.partial')}</p> : null}
+        <label>{t('common.search')}<input type="search" value={search} onChange={event => { setSearch(event.target.value); setSelected(''); }} /></label>
+        <label>{t('ontology.inspect')}<select value={selected} onChange={event => setSelected(event.target.value)}>
+          <option value="">{t('ontology.all')}</option>{selectable.slice(0, 1000).map(node => <option value={node.id} key={node.id}>{node.kind} · {node.label}</option>)}
+        </select></label>
+        {selectedNode ? <div className={styles.selection} role="group" aria-label={t('ontology.selectedSource')}>
+          <strong>{selectedNode.label}</strong><code>{selectedFile}:{selectedNode.evidence.line}</code>
+          <div className={styles.actions}>
+            {onOpenFile ? <Button onClick={() => onOpenFile(selectedFile)}>{t('ontology.openSource')}</Button> : null}
+            {canSimulate ? <Button disabled={stale || busy || contextBusy || !ready || agentBusy} onClick={() => void build('plan', [selectedFile])}>{t('ontology.simulate')}</Button> : null}
+          </div>
+        </div> : null}
         {change ? <section className={styles.plan} aria-label={t('ontology.plan')}>
+          <strong>{t(change.simulation ? 'ontology.simulationTitle' : 'ontology.observedTitle')}</strong>
+          {change.simulation ? <p className={styles.warning}>{t('ontology.simulationScope', { files: change.simulation.sourceFiles.join(', ') })}</p> : null}
           <p role="status">{t('changePlan.summary', change.plan.summary)}</p>
           <p className={styles.meta}>{t('ontology.planScope')}</p>
           <h3>{t('ontology.documentReviews')}</h3>
           <ul>{change.documentReviews.slice(0, 100).map(item => <li key={`${item.documentFile}:${item.itemId}`}>
             <strong>{item.documentFile} · {item.itemId}</strong><span>{t(`ontology.review.${item.state}`)}</span>
             {item.impactPath.length ? <small>{item.impactPath.join(' → ')}</small> : null}
+            {onOpenFile ? <Button variant="ghost" onClick={() => onOpenFile(item.documentFile)}>{t('ontology.openDocument')}</Button> : null}
           </li>)}</ul>
           <details><summary>{t('changePlan.title')}</summary><ol>{change.plan.obligations.slice(0, 100).map(item => <li key={item.id}>
             {change.plan.graph.nodes.find(node => node.id === item.nodeId)?.label} · {t(`changePlan.state.${item.state}`)}
@@ -115,10 +135,6 @@ export function CodeOntologyPanel({ projectId, projectPath, ready = true, revisi
           </li>)}</ol></details>
           {change.plan.warnings.length ? <details><summary>{t('docs.graph.warnings')}</summary><ul>{change.plan.warnings.slice(0, 100).map(warning => <li key={warning}>{warning}</li>)}</ul></details> : null}
         </section> : null}
-        <label>{t('common.search')}<input type="search" value={search} onChange={event => { setSearch(event.target.value); setSelected(''); }} /></label>
-        <label>{t('ontology.inspect')}<select value={selected} onChange={event => setSelected(event.target.value)}>
-          <option value="">{t('ontology.all')}</option>{selectable.slice(0, 1000).map(node => <option value={node.id} key={node.id}>{node.kind} · {node.label}</option>)}
-        </select></label>
         {selectable.length > 1000 ? <p className={styles.meta}>1000 / {selectable.length}</p> : null}
         <ol className={styles.relations}>{related.slice(0, 150).map(edge => <li key={edge.id} data-basis={edge.basis}>
           <strong>{labels.get(edge.from)} → {labels.get(edge.to)}</strong>

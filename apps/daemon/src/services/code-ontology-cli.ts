@@ -13,13 +13,15 @@ export async function runCodeOntologyCli(flags: Record<string, unknown>, base: s
     }
     return Buffer.concat(chunks).toString('utf8');
   }
-  if (['documents-file', 'inputs-file', 'prompt-file', 'focus-file'].filter(name => flags[name] === '-').length > 1) throw new Error('Only one input may use stdin');
+  if (['documents-file', 'inputs-file', 'prompt-file', 'focus-file', 'simulate-file'].filter(name => flags[name] === '-').length > 1) throw new Error('Only one input may use stdin');
+  if (flags['simulate-file'] !== undefined && operation !== 'plan') throw new Error('Source simulation is available through docs plan-code');
   const body = {
     ...(typeof flags['project-path'] === 'string' ? { projectPath: flags['project-path'] } : {}),
     ...(typeof flags['documents-file'] === 'string' ? { businessFiles: JSON.parse(await input(flags['documents-file'])) } : {}),
     ...(typeof flags['prompt-file'] === 'string' ? { request: await input(flags['prompt-file']) } : {}),
     ...(typeof flags['inputs-file'] === 'string' ? { inputFiles: JSON.parse(await input(flags['inputs-file'])) } : {}),
     ...(typeof flags['rules-file'] === 'string' ? { rulesFile: flags['rules-file'] } : {}),
+    ...(typeof flags['simulate-file'] === 'string' ? { simulateFiles: JSON.parse(await input(flags['simulate-file'])) } : {}),
     ...(flags['max-bytes'] !== undefined ? { maxBytes: Number(flags['max-bytes']) } : {}),
     ...(flags['local-judge'] === true ? { localJudge: true } : {}),
     ...(typeof flags['focus-file'] === 'string' ? { focusNodeIds: JSON.parse(await input(flags['focus-file'])) } : {}),

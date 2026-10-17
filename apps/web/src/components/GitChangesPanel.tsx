@@ -434,6 +434,7 @@ export function GitChangesPanel({
           revisionKey={String(filesRefreshKey ?? '')}
           agentBusy={agentBusy}
           onRequestDraft={onRequestRepair}
+          onOpenFile={onOpenFile}
         />
         <DevelopmentVerificationPanel
           key={workspaceKey}

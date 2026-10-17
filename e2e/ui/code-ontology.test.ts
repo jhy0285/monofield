@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test, expect } from '@/playwright/suite';
 import { T } from '@/timeouts';
-import type { CodeOntologyResponse } from '@open-design/contracts';
+import type { CodeOntologyResponse, CodeOntologyPlanResponse } from '@open-design/contracts';
 
 test('[P1] builds a code-only traffic ontology from Java/Spring and Vue with optional documents', async ({ page, toolsDev }, testInfo) => {
   test.setTimeout(3 * T.xlong); await page.setViewportSize({ width: 1500, height: 1000 });
@@ -109,4 +109,48 @@ test('[P1] builds a code-only traffic ontology from Java/Spring and Vue with opt
     samples.push({ serverMs: result.elapsedMs, requestMs: Date.now() - started, cached: result.cacheHit, nodes: result.nodes.length, edges: result.edges.length });
   }
   await writeFile(testInfo.outputPath('measurements.json'), JSON.stringify({ scope: 'Real MonoField builder and traffic syntax fixture; no Spring/Vue runtime server or real traffic system execution', samples }, null, 2));
+});
+
+test('[P1] previews source impact before editing and opens the selected source in the workspace', async ({ page, toolsDev }, testInfo) => {
+  test.setTimeout(3 * T.xlong); await page.setViewportSize({ width: 1500, height: 1100 });
+  const root = join(toolsDev.root, 'scratch', 'traffic-impact-preview'); await mkdir(root, { recursive: true });
+  const service = 'package traffic; public class SignalService { public int find(){return 30;} }';
+  await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'traffic-preview', private: true }));
+  await writeFile(join(root, 'SignalService.java'), service);
+  await writeFile(join(root, 'SignalController.java'), 'package traffic; import org.springframework.web.bind.annotation.*; @RestController @RequestMapping("/api/signals") class SignalController { SignalService service; @GetMapping public int signals(){return service.find();} }');
+  await writeFile(join(root, 'SignalDashboard.vue'), '<script setup>import axios from "axios"; function load(){return axios.get("/api/signals");}</script><template><button @click="load">Signals</button></template>');
+  await writeFile(join(root, 'signals.interface-spec.json'), JSON.stringify({ schemaVersion: 1, kind: 'interface-spec', source: { codebaseName: 'Traffic' }, endpoints: [{ interfaceId: 'IF-SIGNALS', method: 'GET', path: '/api/signals' }] }));
+  await writeFile(join(root, 'signals.screen-spec.json'), JSON.stringify({ schemaVersion: 1, kind: 'screen-spec', name: 'Signals', screens: [{ id: 'SC-SIGNALS', screenName: 'Signal dashboard', evidenceRefs: [{ kind: 'code', ref: 'SignalDashboard.vue' }, { kind: 'manual', ref: 'IF-SIGNALS', document: { path: 'signals.interface-spec.json', itemId: 'IF-SIGNALS' } }] }] }));
+  const git = (...args: string[]) => execFileSync('git', ['-c','user.name=Test','-c','user.email=test@example.invalid',...args], {cwd:root});
+  git('init','--quiet'); git('add','.'); git('commit','--quiet','--no-verify','-m','Existing source and specifications');
+  const imported = await page.request.post('/api/import/folder', {data:{baseDir:root,name:'교통 시스템 · 수정 전 영향 분석'}}); expect(imported.ok()).toBeTruthy();
+  const {project} = await imported.json();
+  await page.request.patch(`/api/projects/${project.id}`, {data:{metadata:{...project.metadata,workMode:'development'}}});
+  const config={mode:'daemon',onboardingCompleted:true,privacyDecisionAt:1,telemetry:{metrics:false,content:false,artifactManifest:false},skillId:null,designSystemId:null};
+  await page.request.put('/api/app-config',{data:config});
+  await page.addInitScript(saved=>{localStorage.setItem('open-design:config',JSON.stringify(saved));localStorage.setItem('open-design:locale','ko');localStorage.setItem('open-design:locale-source','manual');localStorage.setItem('monofield:development-workspace-tutorial:v2','done');localStorage.setItem('monofield:ontology-tutorial-dismissed:v1','true');},config);
+  await page.goto(`/projects/${project.id}`); await page.getByTestId('development-open-changes').click();
+  const panel=page.getByRole('region',{name:'코드에서 온톨로지 구축'});
+  await panel.getByRole('button',{name:'코드에서 온톨로지 구축',exact:true}).click();
+  await panel.getByRole('button',{name:'코드로 자동 구축'}).click();
+  await expect(panel).toContainText('소스 3개 중 3개 구문 분석',{timeout:T.long});
+  await panel.getByLabel('대상과 연결 관계 확인').selectOption({label:'class · traffic.SignalService'});
+  await panel.getByRole('button',{name:'수정 전 영향 미리보기'}).scrollIntoViewIfNeeded();
+  await page.screenshot({path:testInfo.outputPath('01-source-impact-entry.png'),fullPage:true,animations:'disabled'});
+  const response=page.waitForResponse(r=>r.url().endsWith(`/api/projects/${project.id}/ontology/plan`)&&r.request().method()==='POST');
+  await panel.getByRole('button',{name:'수정 전 영향 미리보기'}).click();
+  const result=await(await response).json() as CodeOntologyPlanResponse;
+  expect(result.plan.mode).toBe('simulation'); expect(result.simulation?.sourceFiles).toEqual(['SignalService.java']);
+  expect(result.plan.summary.passed).toBe(0); expect(result.modelCalls).toBe(0);
+  expect(result.documentReviews).toEqual(expect.arrayContaining([expect.objectContaining({itemId:'IF-SIGNALS',state:'review-required'}),expect.objectContaining({itemId:'SC-SIGNALS',state:'review-required'})]));
+  expect(await readFile(join(root,'SignalService.java'),'utf8')).toBe(service); expect(String(git('status','--porcelain'))).toBe('');
+  await expect(panel.getByText('수정 전 영향 시뮬레이션',{exact:true})).toBeVisible();
+  await panel.getByText('signals.screen-spec.json · SC-SIGNALS',{exact:true}).scrollIntoViewIfNeeded();
+  await page.screenshot({path:testInfo.outputPath('02-source-impact-result.png'),fullPage:true,animations:'disabled'});
+  await writeFile(testInfo.outputPath('source-impact-plan.json'),JSON.stringify(result,null,2));
+  await panel.getByRole('button',{name:'조사·개발 요청 준비'}).click();
+  await expect(page.locator('.composer-input-wrap [contenteditable="true"]')).toContainText('Hypothetical edits at whole-file granularity');
+  await panel.getByRole('button',{name:'원문 열기',exact:true}).click();
+  await expect(page.getByTestId('text-editor-input')).toHaveValue(service,{timeout:T.long});
+  await page.screenshot({path:testInfo.outputPath('03-open-source-from-ontology.png'),fullPage:true,animations:'disabled'});
 });

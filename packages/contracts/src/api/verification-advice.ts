@@ -23,6 +23,8 @@ export interface VerificationAdvice {
   manualReview: VerificationManualReview[];
   elapsedMs: number;
   evaluationAttempts: 0 | 1;
+  /** Reused evaluation for the same source, catalog, question and backend; no new provider usage. */
+  cached?: boolean;
   /** Provider-reported usage only. Missing usage must not be represented as zero. */
   usage: { input_tokens: number; output_tokens: number } | null;
   probabilities: Record<string, number> | null;

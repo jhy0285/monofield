@@ -1,10 +1,13 @@
-import type { JevEvaluation, JevRequest, VerificationAdvice, VerificationCheck, VerificationSource } from '@open-design/contracts';
+import { createHash } from 'node:crypto';
+import type { JevConfig, JevEvaluation, JevRequest, VerificationAdvice, VerificationCheck, VerificationSource } from '@open-design/contracts';
 import { buildVerificationAdviceRequest, verificationManualReview } from '@open-design/contracts';
 import { evaluateJev, readJevConfig } from '../integrations/jev.js';
 import { discoverVerificationChecks, verificationScriptNeedsManualSelection } from './verification-discovery.js';
 import { verificationSource } from './verification-source.js';
 import { verificationAdviceSnapshot } from './verification-advice-snapshot.js';
 
+type CachedDecision = { evaluation: JevEvaluation; expiresAt: number };
+const decisionCache = new Map<string, CachedDecision>();
 type Options = {
   signal?: AbortSignal;
   /** Internal seams keep timeout and source races observable without a provider. */
@@ -12,7 +15,8 @@ type Options = {
   discover?: (cwd: string) => Promise<VerificationCheck[]>;
   source?: (cwd: string) => Promise<VerificationSource>;
   config?: typeof readJevConfig;
-  evaluate?: (dataDir: string, request: JevRequest, options: { signal: AbortSignal; timeoutMs: number }) => Promise<JevEvaluation>;
+  evaluate?: (dataDir: string, request: JevRequest, options: { signal: AbortSignal; timeoutMs: number; config?: JevConfig }) => Promise<JevEvaluation>;
+  cache?: Map<string, CachedDecision>;
 };
 const fail = (message: string, status = 400) => Object.assign(new Error(message), { status });
 const cancelled = () => fail('Suggestion cancelled', 499);
@@ -34,7 +38,7 @@ export async function suggestVerification(dataDir: string, cwd: string, projectP
   const advice: VerificationAdvice = { schemaVersion: 1, projectPath, availableCheckIds: checks.map(c => c.id),
     suggestedCheckIds: checks.filter(c => c.recommended).map(c => c.id), priorityCheckId: null,
     snapshotSha256, source: before, reason: 'rules', manualReview: verificationManualReview(request),
-    elapsedMs: 0, evaluationAttempts: 0, usage: null, probabilities: null, relevance: null };
+    elapsedMs: 0, evaluationAttempts: 0, cached: false, usage: null, probabilities: null, relevance: null };
   if (!snapshotSha256) advice.reason = 'source-unavailable';
   else if (!candidates.length) advice.reason = 'none';
   else if (value.mode === 'model' && request.length > 400) advice.reason = 'long-request';
@@ -45,7 +49,6 @@ export async function suggestVerification(dataDir: string, cwd: string, projectP
     const signal = options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let onAbort: (() => void) | undefined;
-    advice.evaluationAttempts = 1;
     try {
       const stop = new Promise<never>((_, reject) => {
         onAbort = () => reject(options.signal?.aborted ? cancelled() : fail('Decision deadline exceeded', 504));
@@ -55,11 +58,22 @@ export async function suggestVerification(dataDir: string, cwd: string, projectP
       const evaluation = await Promise.race([(async () => {
         const config = await (options.config ?? readJevConfig)(dataDir);
         if (signal.aborted) throw options.signal?.aborted ? cancelled() : fail('Decision deadline exceeded', 504);
-        return (options.evaluate ?? evaluateJev)(dataDir, buildVerificationAdviceRequest(request, candidates, config.model), { signal, timeoutMs });
+        const input = buildVerificationAdviceRequest(request, candidates, config.model);
+        const cache = options.cache ?? decisionCache;
+        const key = createHash('sha256').update(JSON.stringify([dataDir, snapshotSha256, config, input])).digest('hex');
+        const saved = cache.get(key);
+        if (saved && saved.expiresAt > Date.now()) { advice.cached = true; return saved.evaluation; }
+        cache.delete(key);
+        advice.evaluationAttempts = 1;
+        const evaluation = await (options.evaluate ?? evaluateJev)(dataDir, input, { config, signal, timeoutMs });
+        if (signal.aborted) throw options.signal?.aborted ? cancelled() : fail('Decision deadline exceeded', 504);
+        cache.set(key, { evaluation, expiresAt: Date.now() + 300_000 });
+        while (cache.size > 64) cache.delete(cache.keys().next().value!);
+        return evaluation;
       })(), stop]);
       checkCancelled();
       const result = evaluation.result;
-      advice.usage = result.usage;
+      advice.usage = advice.cached ? null : result.usage;
       const answer = result.answers.priority;
       if (answer?.type !== 'choice') throw fail('Invalid priority response');
       const ordered = Object.entries(answer.probabilities).sort((a, b) => b[1] - a[1]);

@@ -8,6 +8,8 @@ export interface CodeOntologyRequest {
 export interface CodeOntologyPlanRequest extends CodeOntologyRequest {
   inputFiles?: string[];
   rulesFile?: string;
+  /** Hypothetical edits to imported-workspace-relative source paths, without modifying them. */
+  simulateFiles?: string[];
 }
 export interface CodeOntologyPlanResponse {
   ontology: CodeOntologyResponse;
@@ -21,6 +23,8 @@ export interface CodeOntologyPlanResponse {
     impactPath: string[];
   }>;
   documentHashes: Array<{ path: string; sha256: string }>;
+  /** Symbol selections conservatively expand to their whole source file. */
+  simulation?: { sourceFiles: string[]; granularity: 'file' };
   elapsedMs: number;
   modelCalls: 0;
 }

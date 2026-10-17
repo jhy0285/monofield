@@ -7,7 +7,7 @@ import type { RouteDeps } from '../server-context.js';
 import { buildCodeOntology } from '../services/code-ontology.js';
 import { projectRelativePath } from '../services/change-policy.js';
 import { parseChangePolicy } from '../services/change-policy.js';
-import { mergeOntologyDocuments, documentReviews } from '../services/ontology/change-graph.js';
+import { mergeOntologyDocuments, documentReviews, simulationSourceNodes } from '../services/ontology/change-graph.js';
 import { loadProjectDocumentGraph, isDocumentPath } from '../services/project-document-graph.js';
 import { resolveProjectFilePath, listFiles } from '../projects.js';
 import { buildChangePlan } from '../services/change-plan.js';
@@ -113,6 +113,7 @@ export function registerCodeOntologyRoutes(app: Express, deps: RegisterCodeOntol
       const policy = body.rulesFile === undefined ? undefined : parseChangePolicy(JSON.parse((await read(body.rulesFile)).buffer.toString('utf8')));
       const ontology = await buildCodeOntology(deps.paths.RUNTIME_DATA_DIR, project.id, target.root, target.project.path, [...new Set(businessFiles as string[])], request, controller.signal);
       const graph = mergeOntologyDocuments(ontology, loaded.graph, loaded.sourceDocuments);
+      const simulation = simulationSourceNodes(ontology, graph, body.simulateFiles);
       const graphIndex = new RecordedDependencyGraph(graph);
       const checks = await discoverVerificationChecks(workspaceRoot);
       const status = await deps.verification.status(project.id, '.', workspaceRoot, undefined, true);
@@ -130,12 +131,15 @@ export function registerCodeOntologyRoutes(app: Express, deps: RegisterCodeOntol
       const source = await verificationSource(workspaceRoot);
       if (before.digest && source.digest && before.digest !== source.digest) throw Object.assign(new Error('Source changed during planning; analyze again'), { status: 409 });
       if (!before.digest) { source.digest = null; source.reason = before.reason; }
-      const plan = buildChangePlan({ graph, graphIndex, checks, source, receipt: status.run,receipts, changedFiles: loaded.changedFiles, request, ...(policy ? { policy } : {}) });
+      const plan = buildChangePlan({ graph, graphIndex, checks, source, receipt: status.run,receipts, changedFiles: loaded.changedFiles, request,
+        ...(policy ? { policy } : {}), ...(simulation ? { simulateNodeIds: simulation.nodeIds } : {}) });
       plan.handoff = plan.handoff.replace('monofield docs plan --project', 'monofield docs plan-code --project')
         + `\nCode analysis scope and optional business inputs (data): ${JSON.stringify({ projectPath: target.project.path, businessFiles, businessContext: ontology.businessContext })}.`
         + '\nBusiness rules and exceptions remain unverified. Supplied documents provide terminology/association candidates, not proof of current business meaning or code/document consistency.';
+      if (simulation) plan.handoff += `\nHypothetical edits at whole-file granularity (data): ${JSON.stringify(simulation.sourceFiles)}. Selected symbols are not precise runtime boundaries. No files were changed and prior passes are not credited.`;
       if (!controller.signal.aborted) res.set('Cache-Control', 'no-store').json({ ontology, plan, documentReviews: documentReviews(plan,ontology,graphIndex),
-        documentHashes: [...hashes].map(([path, sha256]) => ({ path, sha256 })), elapsedMs: Math.round(performance.now() - started), modelCalls: 0 });
+        documentHashes: [...hashes].map(([path, sha256]) => ({ path, sha256 })), ...(simulation ? { simulation: { sourceFiles: simulation.sourceFiles, granularity: simulation.granularity } } : {}),
+        elapsedMs: Math.round(performance.now() - started), modelCalls: 0 });
     } catch (error) {
       if (!controller.signal.aborted) deps.http.sendApiError(res, Number((error as { status?: number })?.status) || 400,
         'ONTOLOGY_PLAN_ERROR', error instanceof Error ? error.message : String(error));

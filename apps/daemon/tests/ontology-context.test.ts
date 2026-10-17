@@ -77,4 +77,12 @@ describe('bounded optional local evidence ordering',()=>{
   await rankContextCandidates('unused','uncertain','q',candidates,true,{config,evaluate:uncertain});
   const repeat=await rankContextCandidates('unused','uncertain','q',candidates,true,{config,evaluate:uncertain});expect(repeat.judge).toMatchObject({reason:'uncertain',cached:true,evaluationAttempts:0,usage:null});expect(uncertain).toHaveBeenCalledTimes(1);
  });
+ it('includes a stalled configuration read in the decision deadline',async()=>{
+  const evaluate=vi.fn();
+  const result=await Promise.race([
+   rankContextCandidates('unused','hung-config','q',candidates,true,{timeoutMs:15,config:()=>new Promise(()=>{}),evaluate}),
+   new Promise<null>(resolve=>setTimeout(()=>resolve(null),150)),
+  ]);
+  expect(result?.judge).toMatchObject({reason:'timeout',evaluationAttempts:0,usage:null});expect(evaluate).not.toHaveBeenCalled();
+ });
 });

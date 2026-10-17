@@ -15,12 +15,26 @@ const response = (choice = 'C1', top = 0.94, fit = 0.95): JevEvaluation => ({ ba
     fit_C1: { type: 'noul', noul: fit }, fit_C2: { type: 'noul', noul: 0.25 },
   } } });
 function setup() {
-  return { discover: vi.fn(async () => structuredClone(checks)), source: vi.fn(async () => structuredClone(source)),
+  return { cache: new Map(), discover: vi.fn(async () => structuredClone(checks)), source: vi.fn(async () => structuredClone(source)),
     config: vi.fn(async () => ({ backend: 'local' as const, model: 'fixture', localBaseUrl: 'http://127.0.0.1:8000' })),
     evaluate: vi.fn(async (_dir: string, _request: JevRequest, _options: { signal: AbortSignal; timeoutMs: number }) => response()) };
 }
 const brief = { request: 'Fix checkout totals', mode: 'model' };
 describe('verification suggestions are bounded advisory decisions', () => {
+  it('reuses a decision without charging its old usage again and invalidates source, catalog and model changes', async () => {
+    const deps = setup();
+    await suggestVerification('data', 'cwd', '.', brief, deps);
+    const repeated = await suggestVerification('data', 'cwd', '.', brief, deps);
+    expect(repeated).toMatchObject({ cached: true, evaluationAttempts: 0, usage: null, priorityCheckId: 'node:test' });
+    expect(deps.evaluate).toHaveBeenCalledTimes(1);
+    deps.source.mockResolvedValue({ ...source, digest: 'new-source' });
+    await suggestVerification('data', 'cwd', '.', brief, deps);
+    deps.discover.mockResolvedValue([{ ...checks[0]!, script: 'changed-test' }, checks[1]!]);
+    await suggestVerification('data', 'cwd', '.', brief, deps);
+    deps.config.mockResolvedValue({ backend: 'local', model: 'different-model', localBaseUrl: 'http://127.0.0.1:8000' });
+    await suggestVerification('data', 'cwd', '.', brief, deps);
+    expect(deps.evaluate).toHaveBeenCalledTimes(4);
+  });
   it('uses project defaults with zero evaluations and preserves a measurable snapshot', async () => {
     const deps = setup(), result = await suggestVerification('data', 'cwd', '.', { ...brief, mode: 'rules' }, deps);
     expect(result.suggestedCheckIds).toEqual(['node:test']); expect(result.evaluationAttempts).toBe(0);

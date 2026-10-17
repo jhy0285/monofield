@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CodeOntologyResponse, DocumentGraphResponse, InterfaceSpecDocument } from '@open-design/contracts';
-import { mergeOntologyDocuments, documentReviews } from '../src/services/ontology/change-graph.js';
+import { mergeOntologyDocuments, documentReviews, simulationSourceNodes } from '../src/services/ontology/change-graph.js';
 import { buildChangePlan } from '../src/services/change-plan.js';
 
 const ontology: CodeOntologyResponse = {
@@ -16,6 +16,22 @@ const spec = { file: 'api.json', doc: { kind: 'interface-spec', endpoints: [{ in
 const source = { scope: 'git-visible-worktree' as const, head: 'c'.repeat(40), digest: 'd'.repeat(64), fileCount: 3, reason: null };
 const checks = [{ id: 'backend::java:maven-test', projectPath: 'backend', label: 'Maven test', kind: 'test' as const, command: 'mvn', args: ['test'], source: 'backend/pom.xml', script: null, recommended: true }, { id: 'frontend::node:test', projectPath: 'frontend', label: 'Vue test', kind: 'test' as const, command: 'npm', args: ['test'], source: 'frontend/package.json', script: null, recommended: true }];
 describe('code relationship and specification change planning', () => {
+  it('simulates selected source files before editing and ignores unrelated Git changes and passing receipts', () => {
+    const graph = mergeOntologyDocuments(ontology, docs, [spec]);
+    const selected = simulationSourceNodes(ontology, graph, ['backend/Service.java']);
+    expect(selected).toEqual({ sourceFiles: ['backend/Service.java'], nodeIds: ['service'], granularity: 'file' });
+    const plan = buildChangePlan({ graph: { ...graph, changedNodeIds: ['unlinked'] }, checks, source, receipt: null,
+      changedFiles: ['unrelated.java'], simulateNodeIds: selected!.nodeIds });
+    expect(plan.mode).toBe('simulation'); expect(plan.summary.passed).toBe(0);
+    expect(plan.affectedNodeIds).toEqual(expect.arrayContaining(['service','controller','source-api','document-api','screen']));
+    expect(plan.affectedNodeIds).not.toContain('unlinked');
+    expect(simulationSourceNodes(ontology, graph, undefined)).toBeNull();
+    for (const invalid of [[], ['../secret'], ['screen.json'], ['backend/Missing.java'], 'backend/Service.java', Array(33).fill('backend/Service.java')])
+      expect(() => simulationSourceNodes(ontology, graph, invalid)).toThrow();
+    const module = { ...ontology, projectPath: 'backend', dependencyGraph: { ...ontology.dependencyGraph,
+      nodes: ontology.dependencyGraph.nodes.map(n => n.kind === 'code' ? { ...n, label: n.label.replace('backend/', '') } : n) } };
+    expect(simulationSourceNodes(module, graph, ['backend/Service.java'])?.nodeIds).toEqual(['service']);
+  });
   it('follows service → controller → API → API document → screen, without claiming a test pass', () => {
     const graph = mergeOntologyDocuments(ontology, docs, [spec]);
     const plan = buildChangePlan({ graph, checks, source, receipt: null, changedFiles: ['backend/Service.java'] });

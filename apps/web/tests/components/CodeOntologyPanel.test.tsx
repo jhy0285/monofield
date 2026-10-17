@@ -19,6 +19,29 @@ const props = { projectId: 'traffic', ready: true };
 const open = () => fireEvent.click(screen.getByRole('button', { name: 'Build ontology from code' }));
 const build = () => fireEvent.click(screen.getByRole('button', { name: 'Build from code' }));
 describe('explicit code-first ontology UI', () => {
+  it('opens a selected module source and previews whole-file impact without editing or executing', async () => {
+    const moduleReport = { ...report, projectPath: 'backend', dependencyGraph: { ...report.dependencyGraph,
+      nodes: [{ id: 'file', kind: 'code' as const, label: 'SignalController.java' }] } };
+    const result: CodeOntologyPlanResponse = { ontology: moduleReport, simulation: { sourceFiles: ['backend/SignalController.java'], granularity: 'file' },
+      plan: { schemaVersion: 1, mode: 'simulation', graph: moduleReport.dependencyGraph, ontology: { nodes: [], edges: [] },
+        source: { scope: 'git-visible-worktree', head: null, digest: null, fileCount: 0, reason: 'No Git' }, checks: [], changedFiles: [], unmatchedChangedFiles: [], affectedNodeIds: [], obligations: [], warnings: [],
+        summary: { affected: 2, obligations: 0, passed: 0, outstanding: 0, coverageGaps: 1 }, handoff: 'Hypothetical whole-file change.', handoffTruncated: false, elapsedMs: 20, modelCalls: 0 },
+      documentReviews: [{ documentFile: 'docs/api.json', itemId: 'IF-1', label: 'Signals', state: 'review-required', impactPath: ['backend/SignalController.java', 'GET /signals'] }], documentHashes: [], elapsedMs: 20, modelCalls: 0 };
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json(moduleReport)).mockResolvedValueOnce(Response.json(result));
+    const onOpenFile = vi.fn();
+    const view = render(<I18nProvider><CodeOntologyPanel {...props} projectPath="backend" revisionKey="one" onOpenFile={onOpenFile} /></I18nProvider>);
+    open(); build(); await waitFor(() => expect(screen.getByText('SignalController → GET /signals')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('Inspect an entity and its relationships'), { target: { value: 'controller' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Open source' })); expect(onOpenFile).toHaveBeenLastCalledWith('backend/SignalController.java');
+    fireEvent.click(screen.getByRole('button', { name: 'Preview impact before editing' }));
+    await waitFor(() => expect(screen.getByText('Hypothetical source change')).toBeTruthy());
+    expect(JSON.parse(String(vi.mocked(fetch).mock.calls[1]![1]?.body))).toMatchObject({ projectPath: 'backend', simulateFiles: ['backend/SignalController.java'] });
+    expect(screen.getByText(/Whole-file impact: backend/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Open document' })); expect(onOpenFile).toHaveBeenLastCalledWith('docs/api.json');
+    expect(fetch).toHaveBeenCalledTimes(2);
+    view.rerender(<I18nProvider><CodeOntologyPanel {...props} projectPath="backend" revisionKey="two" onOpenFile={onOpenFile} /></I18nProvider>);
+    expect(screen.getByRole('button', { name: 'Preview impact before editing' }).hasAttribute('disabled')).toBe(true);
+  });
   it('connects code impact to document review through an explicit plan action', async () => {
     const result: CodeOntologyPlanResponse = { ontology: report,
       plan: { schemaVersion: 1, mode: 'observed', graph: report.dependencyGraph, ontology: { nodes: [], edges: [] },

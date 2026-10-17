@@ -911,9 +911,9 @@ async function runArtifacts(args) {
 
 async function runDocs(args) {
   if (args[0] === 'build-ontology' || args[0] === 'plan-code' || args[0] === 'context-code') {
-    const flags = parseFlags(args.slice(1), { string: ['project', 'project-path', 'documents-file', 'inputs-file', 'rules-file', 'prompt-file', 'daemon-url', 'max-bytes', 'focus-file', 'evidence-mode'], boolean: ['json', 'help', 'local-judge'] });
+    const flags = parseFlags(args.slice(1), { string: ['project', 'project-path', 'documents-file', 'inputs-file', 'rules-file', 'prompt-file', 'daemon-url', 'max-bytes', 'focus-file', 'evidence-mode', 'simulate-file'], boolean: ['json', 'help', 'local-judge'] });
     if (flags.help || !flags.project) {
-      console.log(`Usage: monofield docs ${args[0]} --project ID [--project-path PATH] [--documents-file <JSON-path-array|->] [--inputs-file <JSON-path-array|->] [--rules-file <project-relative.json>] [--prompt-file <path|->] [--focus-file <JSON-node-ID-array|->] [--evidence-mode references|excerpts] [--max-bytes 4096] [--local-judge] [--json] [--daemon-url URL]`);
+      console.log(`Usage: monofield docs ${args[0]} --project ID [--project-path PATH] [--documents-file <JSON-path-array|->] [--inputs-file <JSON-path-array|->] [--rules-file <project-relative.json>] [--simulate-file <JSON-source-path-array|-> (plan-code)] [--prompt-file <path|->] [--focus-file <JSON-node-ID-array|->] [--evidence-mode references|excerpts] [--max-bytes 4096] [--local-judge] [--json] [--daemon-url URL]`);
       process.exit(flags.help ? 0 : 2);
     }
     const { runCodeOntologyCli } = await import('./services/code-ontology-cli.js');

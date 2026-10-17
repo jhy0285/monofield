@@ -33,3 +33,6 @@
 .plan ul, .plan ol { margin: 0; padding-left: 18px; max-height: 280px; overflow: auto; }
 .plan li { padding: 6px 0; font-size: 12px; overflow-wrap: anywhere; }
 .plan span { display: block; color: var(--amber); }
+.selection { border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: grid; gap: 8px; font-size: 12px; overflow-wrap: anywhere; }
+.selection code { color: var(--text-muted); }
+.plan button { justify-self: start; }

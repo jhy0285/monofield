@@ -6,6 +6,22 @@ import type {
 } from "@open-design/contracts";
 import type { GraphDocument } from "../document-graph.js";
 import { RecordedDependencyGraph } from './recorded-graph.js';
+import { projectRelativePath } from '../change-policy.js';
+
+/** Simulation seeds must be actual source files in this analysis, not arbitrary declared document links. */
+export function simulationSourceNodes(ontology: CodeOntologyResponse, graph: DocumentGraphResponse, value: unknown):
+  { sourceFiles: string[]; nodeIds: string[]; granularity: 'file' } | null {
+  if (value === undefined) return null;
+  if (!Array.isArray(value) || !value.length || value.length > 32 || value.some(file => typeof file !== 'string' || !projectRelativePath(file)))
+    throw new Error('Select 1–32 imported-workspace-relative source files for simulation');
+  const prefix = ontology.projectPath === '.' ? '' : ontology.projectPath + '/';
+  const analyzed = new Set(ontology.dependencyGraph.nodes.filter(node => node.kind === 'code').map(node => prefix + node.label));
+  const sources = new Map(graph.nodes.filter(node => node.kind === 'code').map(node => [node.label, node.id]));
+  const sourceFiles = [...new Set((value as string[]).map(file => file.replace(/\\/g, '/')))];
+  if (sourceFiles.some(file => !analyzed.has(file) || !sources.has(file)))
+    throw new Error('Simulation files must belong to the selected analyzed codebase; rebuild and select a current source file');
+  return { sourceFiles, nodeIds: sourceFiles.map(file => sources.get(file)!), granularity: 'file' };
+}
 
 /** Join exact source paths and unique literal API contracts. Ambiguities stay visible. */
 export function mergeOntologyDocuments(
