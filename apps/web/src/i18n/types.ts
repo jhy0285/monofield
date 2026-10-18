@@ -131,6 +131,15 @@ export interface Dict {
   "ontology.openSource": string;
   "ontology.openDocument": string;
   "verification.advice.cached": string;
+  "development.dock.prompt": string;
+  "development.dock.terminal": string;
+  "development.dock.title": string;
+  "development.dock.impact": string;
+  "development.dock.chat": string;
+  "development.dock.hideChat": string;
+  "development.dock.close": string;
+  "development.dock.expand": string;
+  "development.dock.shrink": string;
   "ontology.options": string;
   "ontology.analysisDetails": string;
   "ontology.relationships": string;

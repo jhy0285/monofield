@@ -9,13 +9,15 @@ import { OntologyTutorial } from './OntologyTutorial';
 import { shouldShowOntologyTutorial } from '../state/ontology-tutorial';
 import { OntologyContextPanel } from './OntologyContextPanel';
 
-export function CodeOntologyPanel({ projectId, projectPath, ready = true, revisionKey, agentBusy = false, onRequestDraft, onOpenFile }: {
+export function CodeOntologyPanel({ projectId, projectPath, ready = true, revisionKey, agentBusy = false, onRequestDraft, onOpenFile, initiallyOpen = false, sourceFile }: {
   projectId: string; projectPath?: string | null | undefined; ready?: boolean | undefined;
   revisionKey?: string | undefined; agentBusy?: boolean | undefined; onRequestDraft?: ((prompt: string) => void) | undefined;
   onOpenFile?: ((path: string) => void) | undefined;
+  initiallyOpen?: boolean;
+  sourceFile?: string | undefined;
 }) {
   const t = useT();
-  const [open, setOpen] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('');
+  const [open, setOpen] = useState(initiallyOpen), [busy, setBusy] = useState(false), [error, setError] = useState('');
   const [documents, setDocuments] = useState(''), [request, setRequest] = useState('');
   const [workspace, setWorkspace] = useState(false);
   const [report, setReport] = useState<CodeOntologyResponse | null>(null);
@@ -58,7 +60,15 @@ export function CodeOntologyPanel({ projectId, projectPath, ready = true, revisi
           ...(operation === 'plan' && simulateFiles.length ? { simulateFiles } : {}) }) });
       const value = await response.json();
       if (!response.ok) throw new Error(value?.error?.message ?? t('ontology.failed'));
-      if (current === generation.current) { setReport(operation === 'plan' ? (value as CodeOntologyPlanResponse).ontology : value as CodeOntologyResponse); setChange(operation === 'plan' ? value as CodeOntologyPlanResponse : null); setStale(false); }
+      if (current === generation.current) {
+        const nextReport = operation === 'plan' ? (value as CodeOntologyPlanResponse).ontology : value as CodeOntologyResponse;
+        setReport(nextReport); setChange(operation === 'plan' ? value as CodeOntologyPlanResponse : null); setStale(false);
+        if (!selected && sourceFile) {
+          const prefix = nextReport.projectPath && nextReport.projectPath !== '.' ? `${nextReport.projectPath}/` : '';
+          const source = nextReport.nodes.find(node => `${prefix}${node.evidence.path}` === sourceFile);
+          if (source) setSelected(source.id);
+        }
+      }
     } catch (failure) { if (current === generation.current && !controller.signal.aborted) setError(failure instanceof Error ? failure.message : String(failure)); }
     finally { if (current === generation.current) setBusy(false); }
   }

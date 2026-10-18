@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 
 import { Button } from '@open-design/components';
+import { createPortal } from 'react-dom';
 
 import type {
   DatabaseConnectionSummary,
@@ -32,6 +33,8 @@ type Props = {
   onMetadataChange: (metadata: ProjectMetadata) => void;
   onOpenUrl: (url: string, activate?: boolean) => void;
   onOpenChanges: () => void;
+  dockLogsOpen?: boolean;
+  logsHost?: HTMLElement | null;
   onActiveProjectStateChange?: (state: { projectPath: string | null; ready: boolean }) => void;
 };
 
@@ -234,6 +237,8 @@ export function DevelopmentWorkspaceControls({
   onMetadataChange,
   onOpenUrl,
   onOpenChanges,
+  dockLogsOpen,
+  logsHost,
   onActiveProjectStateChange,
 }: Props) {
   const { locale, t } = useI18n();
@@ -280,7 +285,8 @@ export function DevelopmentWorkspaceControls({
   const [runSettingsOpen, setRunSettingsOpen] = useState(false);
   const [runSettingsProjectKey, setRunSettingsProjectKey] = useState<string | null>(null);
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
-  const [logsOpen, setLogsOpen] = useState(false);
+  const [localLogsOpen, setLogsOpen] = useState(false);
+  const logsOpen = dockLogsOpen ?? localLogsOpen;
   const [documentVisible, setDocumentVisible] = useState(() => !document.hidden);
   const [draftProfile, setDraftProfile] = useState('');
   const [draftArguments, setDraftArguments] = useState('');
@@ -1009,6 +1015,21 @@ export function DevelopmentWorkspaceControls({
   const selectedUsesServletBuildPlugin = selected?.runSettingsMode === 'build-plugin'
     || selected?.framework === 'Spring Framework';
   const manualSetupMessage = selectedRequiresManualSetup ? runCopy.manualServletContainerSetup : undefined;
+  const logsPanel = (
+        <section className={styles.logPanel} data-testid="development-server-logs" aria-label={t('development.logs')}>
+          <header>
+            <span><i className={styles.projectStateDot} data-state={state} aria-hidden="true" />{activeProject?.label ?? (activeProjectPath || '.')}</span>
+            <small>{runtimeStateLabel(state)}{runtime?.pid ? ` · PID ${runtime.pid}` : ''}</small>
+          </header>
+          <pre
+            ref={logViewportRef}
+            onScroll={(event) => {
+              const viewport = event.currentTarget;
+              logFollowRef.current = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 40;
+            }}
+          >{runtime?.logs.length ? runtime.logs.join('\n') : t('development.logsEmpty')}</pre>
+        </section>
+  );
   return (
     <Fragment>
       <div className={styles.root} data-testid="development-workspace-controls">
@@ -1083,8 +1104,8 @@ export function DevelopmentWorkspaceControls({
           data-testid="development-open-browser" onClick={() => onOpenUrl(runtime.url!)}>{t('chat.designToolbox.context.browser')}</Button> : null}
         {!canStop&&selected?.framework==='Spring Boot'&&selected.args.includes('spring-boot:run')?<Button variant="ghost" className={styles.action}
           data-testid="development-debug-run" disabled={busy!=null} onClick={()=>void start(5005)}>{t('java.debug.launch')}</Button>:null}
-        <button type="button" className={styles.action} data-testid="development-open-changes" onClick={onOpenChanges}><Icon name="fork" size={13} />{t('gitChanges.title')}</button>
-        <button
+        {dockLogsOpen === undefined ? <button type="button" className={styles.action} data-testid="development-open-changes" onClick={onOpenChanges}><Icon name="fork" size={13} />{t('gitChanges.title')}</button> : null}
+        {dockLogsOpen === undefined ? <button
           type="button"
           className={styles.action}
           data-testid="development-server-logs-toggle"
@@ -1092,7 +1113,7 @@ export function DevelopmentWorkspaceControls({
           onClick={() => setLogsOpen((open) => !open)}
         >
           <Icon name="terminal" size={13} />{t('development.logs')}
-        </button>
+        </button> : null}
         <Button
           ref={environmentTriggerRef}
           variant="subtle"
@@ -1323,21 +1344,7 @@ export function DevelopmentWorkspaceControls({
           <code title={latestLaunchLog ?? launchCommand}>{latestLaunchLog ?? launchCommand}</code>
         </div>
       ) : null}
-      {logsOpen ? (
-        <section className={styles.logPanel} data-testid="development-server-logs" aria-label={t('development.logs')}>
-          <header>
-            <span><i className={styles.projectStateDot} data-state={state} aria-hidden="true" />{activeProject?.label ?? (activeProjectPath || '.')}</span>
-            <small>{runtimeStateLabel(state)}{runtime?.pid ? ` · PID ${runtime.pid}` : ''}</small>
-          </header>
-          <pre
-            ref={logViewportRef}
-            onScroll={(event) => {
-              const viewport = event.currentTarget;
-              logFollowRef.current = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 40;
-            }}
-          >{runtime?.logs.length ? runtime.logs.join('\n') : t('development.logsEmpty')}</pre>
-        </section>
-      ) : null}
+      {logsOpen ? (dockLogsOpen === undefined ? logsPanel : logsHost ? createPortal(logsPanel, logsHost) : null) : null}
       {displayedError ? (
         <div
           className={styles.error}

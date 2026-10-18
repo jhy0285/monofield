@@ -569,6 +569,18 @@ describe('FileWorkspace upload input', () => {
     expect(markup).not.toContain('data-testid="workspace-focus-toggle"');
   });
 
+  it('restores multiple development terminals in the dock while keeping them out of source tabs', async () => {
+    render(<FileWorkspace projectId="terminal-dock" projectKind="prototype" projectMetadata={{ kind: 'prototype', workMode: 'development' }}
+      files={[]} liveArtifacts={[]} onRefreshFiles={vi.fn()} isDeck={false}
+      tabsState={{ tabs: ['terminal:first', 'terminal:second'], active: 'terminal:second' }} onTabsStateChange={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId('terminal-viewer').textContent).toBe('second'));
+    const selector = screen.getByRole('combobox') as HTMLSelectElement;
+    expect(selector.value).toBe('terminal:second');
+    fireEvent.change(selector, { target: { value: 'terminal:first' } });
+    expect(screen.getByTestId('terminal-viewer').textContent).toBe('first');
+    expect(screen.getAllByRole('tab').some(tab => tab.textContent?.includes('second'))).toBe(false);
+  });
+
   it('renders the expand control on the LEFT of the tab bar while focused', () => {
     const markup = renderToStaticMarkup(
       <FileWorkspace

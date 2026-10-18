@@ -27,11 +27,11 @@ test('[P1] builds a code-only traffic ontology from Java/Spring and Vue with opt
     localStorage.setItem('monofield:development-workspace-tutorial:v2', 'done');
   }, config);
   await page.goto(`/projects/${project.id}`);
-  await expect(page.getByTestId('development-open-changes')).toBeVisible({ timeout: T.xlong });
-  await page.getByTestId('development-open-changes').click();
+  await expect(page.getByTestId('development-open-impact')).toBeVisible({ timeout: T.xlong });
+  await page.getByTestId('development-open-impact').click();
   const panel = page.getByRole('region', { name: '코드에서 온톨로지 구축' }); await expect(panel).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('01-code-only-entry.png'), fullPage: true });
-  await panel.getByRole('button', { name: '코드에서 온톨로지 구축' }).click();
+  await panel.getByRole('button', { name: '온톨로지 만들기 데모 보기' }).click();
   const demo = page.getByRole('dialog', { name: '코드에서 관계와 영향 찾기' });
   await expect(demo).toBeVisible();
   await demo.getByRole('button', { name: '일시 정지', exact: true }).click();
@@ -133,9 +133,8 @@ test('[P1] previews source impact before editing and opens the selected source i
   const config={mode:'daemon',onboardingCompleted:true,privacyDecisionAt:1,telemetry:{metrics:false,content:false,artifactManifest:false},skillId:null,designSystemId:null};
   await page.request.put('/api/app-config',{data:config});
   await page.addInitScript(saved=>{localStorage.setItem('open-design:config',JSON.stringify(saved));localStorage.setItem('open-design:locale','ko');localStorage.setItem('open-design:locale-source','manual');localStorage.setItem('monofield:development-workspace-tutorial:v2','done');localStorage.setItem('monofield:ontology-tutorial-dismissed:v1','true');},config);
-  await page.goto(`/projects/${project.id}`); await page.getByTestId('development-open-changes').click();
+  await page.goto(`/projects/${project.id}`); await page.getByTestId('development-open-impact').click();
   const panel=page.getByRole('region',{name:'코드에서 온톨로지 구축'});
-  await panel.getByRole('button',{name:'코드에서 온톨로지 구축',exact:true}).click();
   await expect(panel.locator('summary').filter({hasText:/^분석 옵션$/}).locator('..')).not.toHaveAttribute('open');
   await expect(panel.getByRole('checkbox',{name:'전체 코드베이스 분석 (프런트·백엔드 포함)'})).toBeHidden();
   await panel.getByRole('button',{name:'코드로 자동 구축'}).click();
