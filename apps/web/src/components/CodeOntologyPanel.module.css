@@ -1,15 +1,23 @@
-.panel { border-bottom: 1px solid var(--border); background: var(--bg-panel); min-width: 0; }
+.panel { border-bottom: 1px solid var(--border); background: var(--bg-panel); min-width: 0; container-type: inline-size; }
 .header { display: flex; align-items: center; gap: 12px; padding: 8px 12px; }
 .body { padding: 4px 16px 16px; display: grid; gap: 10px; max-height: min(65vh, 740px); overflow: auto; }
 .body p { margin: 0; line-height: 1.5; font-size: 12px; }
 .body label { display: grid; gap: 5px; font-size: 12px; }
 .body textarea, .body select, .body input { width: 100%; border: 1px solid var(--border); border-radius: 7px; background: var(--bg); color: var(--text); padding: 8px; }
 .body .scope { display: flex; align-items: center; gap: 7px; }
+.body label { min-width: 0; }
+.body summary { cursor: pointer; font-size: 12px; line-height: 1.6; }
+.body summary:focus-visible { outline: 2px solid var(--text-muted); outline-offset: 3px; border-radius: 3px; }
+.disclosure { border-top: 1px solid var(--border); padding-top: 8px; min-width: 0; }
+.disclosure[open] > summary { margin-bottom: 10px; }
+.options { display: grid; gap: 10px; }
+.options > button { justify-self: start; }
+.filters { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(0, 2fr); gap: 10px; }
 .scope input { width: auto; }
 .meta { color: var(--text-muted); font-size: 11px; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.guide { justify-self: start; }
-.context { padding: 10px 12px; border: 1px solid var(--border); border-radius: 7px; display: grid; gap: 5px; font-size: 12px; }
+.context { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; font-size: 11px; color: var(--text-muted); }
+.context strong { font-weight: 500; }
 .contextPanel { border: 1px solid var(--border); border-radius: 8px; padding: 10px; display: grid; gap: 10px; }
 .contextPanel > button { justify-self: start; }
 .contextBody { display: grid; gap: 10px; }
@@ -32,7 +40,17 @@
 .plan h3 { margin: 0; font-size: 13px; }
 .plan ul, .plan ol { margin: 0; padding-left: 18px; max-height: 280px; overflow: auto; }
 .plan li { padding: 6px 0; font-size: 12px; overflow-wrap: anywhere; }
-.plan span { display: block; color: var(--amber); }
+.plan span { color: var(--amber); }
+.plan .documents { list-style: none; padding: 0; }
+.documents > li { border-top: 1px solid var(--border); padding: 10px 0; }
+.documentRow { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; }
+.documentRow > div { flex: 1; min-width: 120px; }
+.documentRow > span { font-size: 11px; }
+.documents details { margin-top: 4px; }
+.documents summary { color: var(--text-muted); font-size: 11px; }
 .selection { border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: grid; gap: 8px; font-size: 12px; overflow-wrap: anywhere; }
 .selection code { color: var(--text-muted); }
 .plan button { justify-self: start; }
+@container (max-width: 420px) {
+  .filters { grid-template-columns: minmax(0, 1fr); }
+}

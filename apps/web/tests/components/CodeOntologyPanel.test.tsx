@@ -18,7 +18,18 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 const props = { projectId: 'traffic', ready: true };
 const open = () => fireEvent.click(screen.getByRole('button', { name: 'Build ontology from code' }));
 const build = () => fireEvent.click(screen.getByRole('button', { name: 'Build from code' }));
+const options = () => fireEvent.click(screen.getByText('Analysis options', { selector: 'summary' }));
 describe('explicit code-first ontology UI', () => {
+  it('starts with optional inputs and relationship evidence collapsed, without a background request', async () => {
+    render(<I18nProvider><CodeOntologyPanel {...props} /></I18nProvider>); open();
+    const settings = screen.getByText('Analysis options', { selector: 'summary' }).closest('details')!;
+    expect(settings.open).toBe(false); expect(fetch).not.toHaveBeenCalled();
+    build(); await waitFor(() => expect(screen.getByText('Relationship evidence (1)')).toBeTruthy());
+    expect(screen.getByText('Relationship evidence (1)').closest('details')!.open).toBe(false);
+    expect(screen.getByText('Analysis details').closest('details')!.open).toBe(false);
+    options(); expect(settings.open).toBe(true); expect(fetch).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Build code and document change plan' })).toBeTruthy();
+  });
   it('opens a selected module source and previews whole-file impact without editing or executing', async () => {
     const moduleReport = { ...report, projectPath: 'backend', dependencyGraph: { ...report.dependencyGraph,
       nodes: [{ id: 'file', kind: 'code' as const, label: 'SignalController.java' }] } };
@@ -36,6 +47,8 @@ describe('explicit code-first ontology UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Preview impact before editing' }));
     await waitFor(() => expect(screen.getByText('Hypothetical source change')).toBeTruthy());
     expect(JSON.parse(String(vi.mocked(fetch).mock.calls[1]![1]?.body))).toMatchObject({ projectPath: 'backend', simulateFiles: ['backend/SignalController.java'] });
+    expect(screen.getByText('Whole-file preview · no edits or checks executed')).toBeTruthy();
+    fireEvent.click(screen.getByText('Change impact and verification plan', { selector: 'summary' }));
     expect(screen.getByText(/Whole-file impact: backend/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Open document' })); expect(onOpenFile).toHaveBeenLastCalledWith('docs/api.json');
     expect(fetch).toHaveBeenCalledTimes(2);
@@ -50,6 +63,7 @@ describe('explicit code-first ontology UI', () => {
       documentReviews: [{ documentFile: 'docs/api.json', itemId: 'IF-1', label: 'Signal cycle', state: 'review-required', impactPath: ['Service.java','GET /signals','Signal cycle'] }], documentHashes: [], elapsedMs: 110, modelCalls: 0 };
     vi.mocked(fetch).mockResolvedValue(Response.json(result)); const draft = vi.fn();
     render(<I18nProvider><CodeOntologyPanel {...props} onRequestDraft={draft} /></I18nProvider>); open();
+    options();
     expect(fetch).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Build code and document change plan' }));
     await waitFor(() => expect(screen.getByText('docs/api.json · IF-1')).toBeTruthy());
@@ -62,6 +76,7 @@ describe('explicit code-first ontology UI', () => {
     await waitFor(() => expect(screen.getByText('SignalController → GET /signals')).toBeTruthy());
     expect(screen.getByText('No business documents · code-based draft')).toBeTruthy();
     expect(screen.getByText(/0 documents · 0 concepts · 0 association candidates/)).toBeTruthy();
+    options();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Refresh after saved changes while this panel is open' }));
     view.rerender(<I18nProvider><CodeOntologyPanel {...props} revisionKey="two" /></I18nProvider>);
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2), { timeout: 2500 });
@@ -71,6 +86,7 @@ describe('explicit code-first ontology UI', () => {
   });
   it('opts into a whole imported codebase without changing the active command module', async () => {
     render(<I18nProvider><CodeOntologyPanel {...props} projectPath="backend" /></I18nProvider>); open();
+    options();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Include the full imported codebase (frontend/backend)' }));
     expect(fetch).not.toHaveBeenCalled(); build();
     await waitFor(() => expect(screen.getByText('SignalController → GET /signals')).toBeTruthy());
@@ -78,6 +94,7 @@ describe('explicit code-first ontology UI', () => {
   });
   it('builds without specifications or documents and makes no requests on mount/open/type', async () => {
     render(<I18nProvider><CodeOntologyPanel {...props} /></I18nProvider>); open();
+    options();
     fireEvent.change(screen.getByLabelText('Change or business topic to investigate (optional)'), { target: { value: 'Signal workflow' } });
     expect(fetch).not.toHaveBeenCalled(); build();
     await waitFor(() => expect(screen.getByText('SignalController → GET /signals')).toBeTruthy());
@@ -88,6 +105,7 @@ describe('explicit code-first ontology UI', () => {
     vi.mocked(fetch).mockResolvedValue(Response.json({ ...report, cacheHit: true, edges: [{ ...report.edges[0], basis: 'candidate' }],
       coverage: { ...report.coverage, businessDocuments: 1, unsupportedFiles: 1 }, issues: [{ path: 'unknown.py', reason: 'unsupported-language', message: 'Not supported' }] }));
     render(<I18nProvider><CodeOntologyPanel {...props} projectPath="backend" /></I18nProvider>); open();
+    options();
     fireEvent.change(screen.getByLabelText('Optional business documents (module-relative Markdown/TXT paths, one per line)'), { target: { value: 'business.md' } }); build();
     await waitFor(() => expect(screen.getByText('Candidate · review needed', { exact: false })).toBeTruthy());
     expect(screen.getByText('Unsupported language', { exact: false })).toBeTruthy(); expect(screen.getByText('Unchanged-source graph reused', { exact: false })).toBeTruthy();
@@ -107,6 +125,7 @@ describe('explicit code-first ontology UI', () => {
     const draft = vi.fn(); render(<I18nProvider><CodeOntologyPanel {...props} onRequestDraft={draft} /></I18nProvider>); open(); build();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Prepare investigation request' })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: 'Prepare investigation request' })); expect(draft).toHaveBeenCalledWith(report.handoff); expect(fetch).toHaveBeenCalledTimes(1);
+    options();
     fireEvent.change(screen.getByLabelText('Change or business topic to investigate (optional)'), { target: { value: 'Another topic' } });
     expect(screen.queryByText('SignalController → GET /signals')).toBeNull();
   });

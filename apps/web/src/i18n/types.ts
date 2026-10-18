@@ -131,6 +131,12 @@ export interface Dict {
   "ontology.openSource": string;
   "ontology.openDocument": string;
   "verification.advice.cached": string;
+  "ontology.options": string;
+  "ontology.analysisDetails": string;
+  "ontology.relationships": string;
+  "ontology.impactPath": string;
+  "ontology.simulationHint": string;
+  "ontology.workflow": string;
   "ontology.contextPack.title": string;
   "ontology.contextPack.description": string;
   "ontology.contextPack.question": string;
