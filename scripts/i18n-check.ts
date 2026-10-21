@@ -109,7 +109,13 @@ async function rootReadmeFiles(): Promise<string[]> {
   for (const entry of rootEntries) {
     if (entry.isFile() && entry.name === "README.md") names.add(entry.name);
   }
-  const translationEntries = await readdir(path.join(repoRoot, translationsDir), { withFileTypes: true });
+  // A canonical-only repository has no translation directory. Still check all
+  // README links below; permission and other I/O errors must remain failures.
+  const translationEntries = await readdir(path.join(repoRoot, translationsDir), { withFileTypes: true })
+    .catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return [];
+      throw error;
+    });
   for (const entry of translationEntries) {
     if (entry.isFile() && /^README\.[A-Za-z0-9-]+\.md$/.test(entry.name)) names.add(entry.name);
   }
