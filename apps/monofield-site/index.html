@@ -103,6 +103,27 @@
               "availability": "https://schema.org/InStock",
               "url": "https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-setup.exe"
             }
+          },
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://monofield.vercel.app/#preview-software",
+            "name": "MonoField Preview",
+            "url": "https://monofield.vercel.app/#preview",
+            "description": "A development preview with an editor-focused workspace, Java tools, code ontology and optional local Laya decisions.",
+            "applicationCategory": "DeveloperApplication",
+            "operatingSystem": "Windows",
+            "softwareVersion": "0.11.7-preview.1",
+            "isAccessibleForFree": true,
+            "downloadUrl": "https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.1/MonoField-release-preview-win-setup.exe",
+            "releaseNotes": "https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.1",
+            "screenshot": "https://monofield.vercel.app/monofield-preview-workspace.png",
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD",
+              "availability": "https://schema.org/InStock",
+              "url": "https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.1/MonoField-release-preview-win-setup.exe"
+            }
           }
         ]
       }
@@ -212,10 +233,9 @@
           <div class="hero-actions">
             <a
               class="button button-primary"
-              href="https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-setup.exe"
-              data-download="installer"
-              ><span data-ko="Windows용 다운로드" data-en="Download for Windows"
-                >Windows용 다운로드</span
+              href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.1/MonoField-release-preview-win-setup.exe"
+              ><span data-ko="Windows Preview 다운로드" data-en="Download Windows Preview"
+                >Windows Preview 다운로드</span
               ><svg
                 class="icon"
                 viewBox="0 0 24 24"
@@ -243,6 +263,11 @@
                 <path d="M5 12h14M13 6l6 6-6 6" /></svg
             ></a>
           </div>
+          <a class="hero-preview-link" href="#preview">
+            <span class="release-pill">NEW</span>
+            <span data-ko="0.11.7-preview.1 · 새 개발 프리뷰 살펴보기" data-en="0.11.7-preview.1 · Explore the development preview">0.11.7-preview.1 · 새 개발 프리뷰 살펴보기</span>
+            <span aria-hidden="true">↗</span>
+          </a>
           <p class="hero-meta">
             <span data-ko="무료 데스크톱 앱" data-en="Free desktop app"
               >무료 데스크톱 앱</span
@@ -865,6 +890,35 @@
               무료로 설치하고, 익숙한 AI를 연결하세요.
             </p>
           </div>
+          <article class="preview-release" id="preview" aria-labelledby="preview-title">
+            <div class="preview-release-copy">
+              <p class="eyebrow"><span class="release-pill">PREVIEW</span><span>0.11.7-preview.1</span></p>
+              <h3 id="preview-title" data-ko="개발 작업에 더 집중하세요." data-en="Stay closer to your code.">개발 작업에 더 집중하세요.</h3>
+              <p data-ko="편집기를 중심으로 코드 수정, 터미널, 변경사항과 검증 근거를 함께 확인하세요." data-en="Keep the editor in focus, with terminals, changes and verification evidence close at hand.">편집기를 중심으로 코드 수정, 터미널, 변경사항과 검증 근거를 함께 확인하세요.</p>
+              <ul class="preview-features">
+                <li data-ko="Java 코드 탐색·디버깅" data-en="Java code navigation and debugging">Java 코드 탐색·디버깅</li>
+                <li data-ko="코드 온톨로지·변경 영향·문서 계획" data-en="Code ontology, impact analysis and document planning">코드 온톨로지·변경 영향·문서 계획</li>
+                <li data-ko="선택형 JEV·로컬 Laya 판단 보조" data-en="Optional JEV and local Laya decision support">선택형 JEV·로컬 Laya 판단 보조</li>
+              </ul>
+              <div class="preview-actions">
+                <a class="button button-primary" href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.1/MonoField-release-preview-win-setup.exe"><span data-ko="Preview 설치본 · 239 MB" data-en="Preview installer · 239 MB">Preview 설치본 · 239 MB</span><span aria-hidden="true">↓</span></a>
+                <a class="inline-link" href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.1/MonoField-release-preview-win-portable.zip"><span data-ko="포터블 ZIP · 276 MB" data-en="Portable ZIP · 276 MB">포터블 ZIP · 276 MB</span></a>
+              </div>
+              <p class="preview-release-links">
+                <a class="inline-link" href="https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.1"><span data-ko="프리뷰 릴리스 안내" data-en="Preview release notes">프리뷰 릴리스 안내</span></a>
+                <span aria-hidden="true">·</span>
+                <a class="inline-link" href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.1/SHA256SUMS.txt"><span data-ko="체크섬" data-en="Checksums">체크섬</span></a>
+              </p>
+            </div>
+            <figure class="preview-release-image">
+              <button class="screenshot-button" type="button" data-image-view="/monofield-preview-workspace.png" data-ko-label="프리뷰 개발 화면 확대" data-en-label="Enlarge the preview development workspace" aria-label="프리뷰 개발 화면 확대">
+                <img src="/monofield-preview-workspace.png" width="1500" height="1000" loading="lazy" alt="편집기 아래에서 실제 Git 변경사항과 AI 요청을 함께 확인하는 MonoField 개발 화면" data-ko-alt="편집기 아래에서 실제 Git 변경사항과 AI 요청을 함께 확인하는 MonoField 개발 화면" data-en-alt="Actual MonoField development workspace with the editor, Git changes and AI composer" />
+              </button>
+              <figcaption data-ko="기능 개발 중 촬영한 실제 앱 화면" data-en="Actual app capture from feature development">기능 개발 중 촬영한 실제 앱 화면</figcaption>
+            </figure>
+            <p class="preview-release-limit" data-ko="Windows x64 · 안정 버전과 별도로 설치됩니다. 일부 UI 검증이 남아 있는 사전 릴리스이며 REA는 포함되지 않았습니다. Laya 모델·서버는 별도 설치가 필요하고, Java 도구에는 JDK 21과 적절한 Maven 환경이 필요합니다." data-en="Windows x64 · Installs separately from stable. This prerelease has outstanding UI validation and does not include REA. Laya requires a separate model and server installation; Java tools need JDK 21 and a suitable Maven environment.">Windows x64 · 안정 버전과 별도로 설치됩니다. 일부 UI 검증이 남아 있는 사전 릴리스이며 REA는 포함되지 않았습니다. Laya 모델·서버는 별도 설치가 필요하고, Java 도구에는 JDK 21과 적절한 Maven 환경이 필요합니다.</p>
+          </article>
+          <p class="stable-release-heading" data-ko="안정 버전 다운로드" data-en="Stable release downloads">안정 버전 다운로드</p>
           <div class="download-options">
             <article class="download-card">
               <div class="download-card-top">
@@ -1036,10 +1090,9 @@
             </p>
             <p class="preview-note">
               <span
-                data-ko="위 화면은 MonoField 0.11.6 작업 공간입니다. 다운로드는 현재 공개된 안정 버전에 연결됩니다."
-                data-en="The images show the MonoField 0.11.6 workspace. Downloads point to the currently published stable release."
-                >위 화면은 MonoField 0.11.6 작업 공간입니다. 다운로드는 현재
-                공개된 안정 버전에 연결됩니다.</span
+                data-ko="제품 소개 화면은 MonoField 0.11.6이며, 프리뷰 영역은 개발 중 실제 앱 캡처입니다. 위 두 다운로드 카드는 현재 공개된 안정 버전에 연결됩니다."
+                data-en="Product screenshots show MonoField 0.11.6; the preview section uses an actual development capture. The two download cards above link to the current stable release."
+                >제품 소개 화면은 MonoField 0.11.6이며, 프리뷰 영역은 개발 중 실제 앱 캡처입니다. 위 두 다운로드 카드는 현재 공개된 안정 버전에 연결됩니다.</span
               >
             </p>
           </div>
