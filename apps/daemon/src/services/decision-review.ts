@@ -10,7 +10,7 @@ export function validateDecisionReview(value: unknown): DecisionReviewInput {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new JevError('INVALID_REQUEST', 'Provide a review task, objective and observations.');
   const input = value as Record<string, unknown>;
   if (Object.keys(input).some(key => !['task', 'objective', 'evidence'].includes(key))
-    || !['implementation', 'design', 'transfer', 'classification'].includes(String(input.task))
+    || typeof input.task !== 'string' || !['implementation', 'design', 'transfer', 'classification'].includes(input.task)
     || typeof input.objective !== 'string' || !input.objective.trim() || input.objective.length > 200
     || typeof input.evidence !== 'string' || input.evidence.length > 600) {
     throw new JevError('INVALID_REQUEST', 'Use a supported task, objective up to 200 characters and evidence excerpt up to 600 characters.');

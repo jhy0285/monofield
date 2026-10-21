@@ -10,7 +10,7 @@ const evaluation = (choice = 'contradicted', probabilities = { supported: .01, c
 });
 describe('opt-in semantic review boundaries, using protocol fixtures', () => {
   it('rejects unbounded or unsupported review input', () => {
-    for (const value of [null, [], { ...input, objective: '' }, { ...input, evidence: 'x'.repeat(601) }, { ...input, objective: 'x'.repeat(201) }, { ...input, task: 'approve-deployment' }, { ...input, execute: true }]) {
+    for (const value of [null, [], { ...input, objective: '' }, { ...input, evidence: 'x'.repeat(601) }, { ...input, objective: 'x'.repeat(201) }, { ...input, task: 'approve-deployment' }, { ...input, task: ['design'] }, { ...input, task: { name: 'design' } }, { ...input, execute: true }]) {
       expect(() => validateDecisionReview(value)).toThrow();
     }
   });
