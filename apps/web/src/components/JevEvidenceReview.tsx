@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Button, Select, Textarea } from '@open-design/components';
 import type { DecisionReviewInput, DecisionReviewResult } from '@open-design/contracts';
 import { useT } from '../i18n';
 
@@ -30,15 +31,15 @@ export function JevEvidenceReview({ disabled, configurationKey }: { disabled: bo
     <summary>{t('jev.reviewTitle')}</summary>
     <p className="hint">{t('jev.reviewHelp')}</p>
     <fieldset disabled={disabled || busy}>
-      <label>{t('jev.reviewTask')}<select value={task} onChange={event => { setTask(event.target.value as typeof task); clear(); }}>
+      <label>{t('jev.reviewTask')}<Select value={task} onChange={event => { setTask(event.target.value as typeof task); clear(); }}>
         <option value="implementation">{t('jev.reviewImplementation')}</option>
         <option value="design">{t('jev.reviewDesign')}</option>
         <option value="transfer">{t('jev.reviewTransfer')}</option>
         <option value="classification">{t('jev.reviewClassification')}</option>
-      </select></label>
-      <label>{t('jev.reviewObjective')}<textarea data-testid="jev-review-objective" rows={2} maxLength={200} value={objective} onChange={event => { setObjective(event.target.value); clear(); }} /></label>
-      <label>{t('jev.reviewEvidence')}<textarea data-testid="jev-review-evidence" rows={3} maxLength={600} value={evidence} onChange={event => { setEvidence(event.target.value); clear(); }} /></label>
-      <button type="button" className="btn" data-testid="jev-review-submit" disabled={!objective.trim() || !evidence.trim()} onClick={() => void review()}>{busy ? t('jev.running') : t('jev.reviewSubmit')}</button>
+      </Select></label>
+      <label>{t('jev.reviewObjective')}<Textarea data-testid="jev-review-objective" rows={2} maxLength={200} value={objective} onChange={event => { setObjective(event.target.value); clear(); }} /></label>
+      <label>{t('jev.reviewEvidence')}<Textarea data-testid="jev-review-evidence" rows={3} maxLength={600} value={evidence} onChange={event => { setEvidence(event.target.value); clear(); }} /></label>
+      <Button type="button" data-testid="jev-review-submit" disabled={!objective.trim() || !evidence.trim()} onClick={() => void review()}>{busy ? t('jev.running') : t('jev.reviewSubmit')}</Button>
     </fieldset>
     {result ? <div data-testid="jev-review-result" role="status">
       <p>{result.status === 'suggestion' ? (result.suggestion === 'supported' ? t('jev.reviewSupported') : t('jev.reviewContradicted')) : t('jev.reviewUncertain')}</p>
