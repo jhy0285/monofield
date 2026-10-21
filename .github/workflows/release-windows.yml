@@ -9,9 +9,17 @@ on:
         default: main
         type: string
       release_version:
-        description: Stable MonoField version (must match the checked-out workspace)
+        description: MonoField version (must match the checked-out workspace)
         required: true
         type: string
+      release_channel:
+        description: Stable delivery or an isolated public preview
+        required: true
+        default: stable
+        type: choice
+        options:
+          - stable
+          - preview
       signed:
         description: Sign the Windows executable and installer
         required: true
@@ -54,6 +62,8 @@ jobs:
     outputs:
       release_commit: ${{ steps.release.outputs.release_commit }}
       release_version: ${{ steps.release.outputs.release_version }}
+      release_namespace: ${{ steps.release.outputs.release_namespace }}
+      asset_prefix: ${{ steps.release.outputs.asset_prefix }}
 
     steps:
       - name: Checkout requested release source
@@ -72,12 +82,17 @@ jobs:
           PUBLISH_RELEASE: ${{ inputs.publish }}
           RELEASE_REPOSITORY: ${{ github.repository }}
           RELEASE_VERSION: ${{ inputs.release_version }}
+          RELEASE_CHANNEL: ${{ inputs.release_channel }}
           SIGN_RELEASE: ${{ inputs.signed }}
         run: |
           $ErrorActionPreference = "Stop"
           $version = $env:RELEASE_VERSION.Trim()
-          if ($version -notmatch '^\d+\.\d+\.\d+$') {
-            throw "release_version must be a stable x.y.z version; got '$version'"
+          if ($env:RELEASE_CHANNEL -eq "stable" -and $version -match '^\d+\.\d+\.\d+$') {
+            $namespace = "default"
+          } elseif ($env:RELEASE_CHANNEL -eq "preview" -and $version -match '^\d+\.\d+\.\d+-preview\.[1-9]\d*$') {
+            $namespace = "release-preview-win"
+          } else {
+            throw "release_version must match its channel: stable x.y.z or preview x.y.z-preview.N; got '$version'"
           }
           if ($env:PUBLISH_RELEASE -eq "true" -and $env:SIGN_RELEASE -ne "true" -and $env:ALLOW_UNSIGNED_RELEASE -ne "true") {
             throw "public GitHub releases must use signed=true or allow_unsigned=true"
@@ -106,6 +121,8 @@ jobs:
           }
           "release_commit=$commit" >> $env:GITHUB_OUTPUT
           "release_version=$version" >> $env:GITHUB_OUTPUT
+          "release_namespace=$namespace" >> $env:GITHUB_OUTPUT
+          "asset_prefix=MonoField-$namespace" >> $env:GITHUB_OUTPUT
 
       - name: Test packaging and updater release contracts
         shell: pwsh
@@ -166,7 +183,8 @@ jobs:
         env:
           OD_WIN_SIGN_CERT_SHA1: ${{ secrets.OD_WIN_SIGN_CERT_SHA1 }}
           RELEASE_BRANCH: ${{ inputs.ref }}
-          RELEASE_CHANNEL: stable
+          RELEASE_CHANNEL: ${{ inputs.release_channel }}
+          RELEASE_NAMESPACE: ${{ steps.release.outputs.release_namespace }}
           RELEASE_COMMIT: ${{ steps.release.outputs.release_commit }}
           SIGN_MODE: ${{ inputs.signed && 'on' || 'off' }}
         run: |
@@ -174,7 +192,7 @@ jobs:
           $workRoot = Join-Path $env:RUNNER_TEMP "monofield-release-work"
           & .\tools\release\scripts\build-platform.ps1 `
             -ReleaseTarget win_x64 `
-            -ReleaseNamespace default `
+            -ReleaseNamespace $env:RELEASE_NAMESPACE `
             -ReleaseVersion "${{ steps.release.outputs.release_version }}" `
             -SmokeMode full `
             -BuildTarget all `
@@ -192,6 +210,9 @@ jobs:
         env:
           RELEASE_COMMIT: ${{ steps.release.outputs.release_commit }}
           RELEASE_VERSION: ${{ steps.release.outputs.release_version }}
+          RELEASE_CHANNEL: ${{ inputs.release_channel }}
+          RELEASE_NAMESPACE: ${{ steps.release.outputs.release_namespace }}
+          ASSET_PREFIX: ${{ steps.release.outputs.asset_prefix }}
           SIGNED_RELEASE: ${{ inputs.signed }}
           UNSIGNED_RELEASE_APPROVED: ${{ inputs.allow_unsigned }}
         run: |
@@ -205,9 +226,9 @@ jobs:
           $buildJsonPath = Join-Path $workRoot "build.json"
           $build = Get-Content -LiteralPath $buildJsonPath -Raw -Encoding utf8 | ConvertFrom-Json
           $artifacts = @(
-            [ordered]@{ role = "installer"; source = [string]$build.installerPath; name = "MonoField-default-setup.exe" },
-            [ordered]@{ role = "payload"; source = [string]$build.payloadPath; name = "MonoField-default-payload.7z" },
-            [ordered]@{ role = "portable"; source = [string]$build.portableZipPath; name = "MonoField-default-portable.zip" },
+            [ordered]@{ role = "installer"; source = [string]$build.installerPath; name = "${env:ASSET_PREFIX}-setup.exe" },
+            [ordered]@{ role = "payload"; source = [string]$build.payloadPath; name = "${env:ASSET_PREFIX}-payload.7z" },
+            [ordered]@{ role = "portable"; source = [string]$build.portableZipPath; name = "${env:ASSET_PREFIX}-portable.zip" },
             [ordered]@{ role = "feed"; source = [string]$build.latestYmlPath; name = "latest.yml" }
           )
 
@@ -235,7 +256,7 @@ jobs:
           )
 
           if ($env:SIGNED_RELEASE -eq "true") {
-            $installer = Join-Path $assetsRoot "MonoField-default-setup.exe"
+            $installer = Join-Path $assetsRoot "${env:ASSET_PREFIX}-setup.exe"
             $signature = Get-AuthenticodeSignature -LiteralPath $installer
             if ($signature.Status -ne "Valid") {
               throw "signed installer Authenticode status is $($signature.Status): $($signature.StatusMessage)"
@@ -252,11 +273,13 @@ jobs:
             artifacts = $manifestArtifacts
             releaseCommit = $env:RELEASE_COMMIT
             releaseVersion = $env:RELEASE_VERSION
+            releaseChannel = $env:RELEASE_CHANNEL
+            releaseNamespace = $env:RELEASE_NAMESPACE
             schemaVersion = 1
             signed = $env:SIGNED_RELEASE -eq "true"
             unsignedApproved = $env:UNSIGNED_RELEASE_APPROVED -eq "true"
             tag = "v$env:RELEASE_VERSION"
-            updaterMetadataUrl = "https://api.github.com/repos/${{ github.repository }}/releases/latest"
+            updaterMetadataUrl = $(if ($env:RELEASE_CHANNEL -eq "stable") { "https://api.github.com/repos/${{ github.repository }}/releases/latest" } else { $null })
           }
           $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $evidenceRoot "release-manifest.json") -Encoding utf8
 
@@ -312,16 +335,19 @@ jobs:
           EVIDENCE_ROOT: ${{ runner.temp }}/monofield-release-evidence
           RELEASE_COMMIT: ${{ needs.build.outputs.release_commit }}
           RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
+          RELEASE_CHANNEL: ${{ inputs.release_channel }}
+          RELEASE_NAMESPACE: ${{ needs.build.outputs.release_namespace }}
+          ASSET_PREFIX: ${{ needs.build.outputs.asset_prefix }}
         run: |
           set -euo pipefail
           manifest="$EVIDENCE_ROOT/release-manifest.json"
           assets="$EVIDENCE_ROOT/assets"
-          jq -e --arg version "$RELEASE_VERSION" --arg commit "$RELEASE_COMMIT" --argjson allow_unsigned "$ALLOW_UNSIGNED_RELEASE" \
-            '.schemaVersion == 1 and .releaseVersion == $version and .releaseCommit == $commit and (.signed == true or ($allow_unsigned and .signed == false and .unsignedApproved == true)) and .tag == ("v" + $version)' \
+          jq -e --arg version "$RELEASE_VERSION" --arg commit "$RELEASE_COMMIT" --arg channel "$RELEASE_CHANNEL" --arg namespace "$RELEASE_NAMESPACE" --argjson allow_unsigned "$ALLOW_UNSIGNED_RELEASE" \
+            '.schemaVersion == 1 and .releaseVersion == $version and .releaseCommit == $commit and .releaseChannel == $channel and .releaseNamespace == $namespace and (.signed == true or ($allow_unsigned and .signed == false and .unsignedApproved == true)) and .tag == ("v" + $version)' \
             "$manifest" >/dev/null
-          test -f "$assets/MonoField-default-setup.exe"
-          test -f "$assets/MonoField-default-payload.7z"
-          test -f "$assets/MonoField-default-portable.zip"
+          test -f "$assets/$ASSET_PREFIX-setup.exe"
+          test -f "$assets/$ASSET_PREFIX-payload.7z"
+          test -f "$assets/$ASSET_PREFIX-portable.zip"
           test -f "$assets/latest.yml"
           test -f "$assets/SHA256SUMS.txt"
           test "$(find "$assets" -maxdepth 1 -type f | wc -l)" -eq 5
@@ -335,12 +361,22 @@ jobs:
           RELEASE_COMMIT: ${{ needs.build.outputs.release_commit }}
           RELEASE_REPOSITORY: ${{ github.repository }}
           RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
+          RELEASE_CHANNEL: ${{ inputs.release_channel }}
           SIGNED_RELEASE: ${{ inputs.signed }}
         run: |
           set -euo pipefail
           tag="v$RELEASE_VERSION"
           notes="$RUNNER_TEMP/monofield-release-notes.md"
           printf '# MonoField %s\n\n' "$RELEASE_VERSION" > "$notes"
+          if [ "$RELEASE_CHANNEL" = "preview" ]; then
+            cat >> "$notes" <<'EOF'
+          This is a preview of the development workspace, Java and ontology tools,
+          optional local Laya advice, and task evidence review. Full UI and integration
+          validation has outstanding failures. REA is not included in this snapshot.
+          The preview installs separately from stable MonoField.
+
+          EOF
+          fi
           if [ "$SIGNED_RELEASE" != "true" ]; then
             cat >> "$notes" <<'EOF'
           Windows binaries in this release are unsigned. Verify downloads against
@@ -355,9 +391,13 @@ jobs:
           - Smaller Codex prompt overhead and fixes to agent connection contracts.
 
           Downloads include the Windows installer, portable ZIP, launcher payload,
-          updater feed, and SHA-256 checksums. Existing stable installs use the
-          GitHub latest-release feed to discover this version.
+          updater metadata, and SHA-256 checksums.
           EOF
+          if [ "$RELEASE_CHANNEL" = "stable" ]; then
+            printf '\nExisting stable installs use the GitHub latest-release feed to discover this version.\n' >> "$notes"
+          else
+            printf '\nPreview updates are manual; download a newer preview from GitHub Releases.\n' >> "$notes"
+          fi
           if tag_commit="$(gh api "repos/$RELEASE_REPOSITORY/commits/$tag" --jq '.sha' 2>/dev/null)"; then
             if [[ ! "$tag_commit" =~ ^[0-9a-f]{40}$ ]]; then
               echo "release tag lookup did not return a commit SHA" >&2
@@ -389,7 +429,11 @@ jobs:
           fi
 
           gh release upload "$tag" "$ASSETS_ROOT"/* --repo "$RELEASE_REPOSITORY" --clobber
-          gh release edit "$tag" --repo "$RELEASE_REPOSITORY" --notes-file "$notes" --draft=false --latest
+          if [ "$RELEASE_CHANNEL" = "preview" ]; then
+            gh release edit "$tag" --repo "$RELEASE_REPOSITORY" --notes-file "$notes" --draft=false --prerelease --latest=false
+          else
+            gh release edit "$tag" --repo "$RELEASE_REPOSITORY" --notes-file "$notes" --draft=false --latest
+          fi
 
   verify_public_update:
     name: Verify published Windows update
@@ -414,8 +458,10 @@ jobs:
           PREVIOUS_VERSION: ${{ inputs.previous_version }}
           PUBLISH_RELEASE: ${{ inputs.publish }}
           RELEASE_VERSION: ${{ inputs.release_version }}
+          RELEASE_CHANNEL: ${{ inputs.release_channel }}
         run: |
           $ErrorActionPreference = "Stop"
+          if ($env:RELEASE_CHANNEL -ne "stable") { throw "verify_public_update requires release_channel=stable" }
           if ($env:PUBLISH_RELEASE -eq "true") { throw "verify_public_update requires publish=false" }
           foreach ($version in @($env:PREVIOUS_VERSION, $env:RELEASE_VERSION)) {
             if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "verification versions must be stable x.y.z" }

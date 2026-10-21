@@ -41,3 +41,21 @@ builds a substitute old installer or publishes a fixture release.
 After publishing, verify the actual downloads and hashes, the updater's selected
 version, and the download site's version. Update the site's static application
 metadata and screenshot captions only when the new installer is available.
+
+## Public previews
+
+For an interim build, set the five version files checked by the workflow to a
+counted preview version such as `0.11.7-preview.1`, then use the exact pushed commit:
+
+```bash
+gh workflow run release-windows.yml --repo jhy0285/monofield --ref <release-branch> \
+  -f ref=<exact-commit> -f release_version=0.11.7-preview.1 \
+  -f release_channel=preview -f signed=false -f allow_unsigned=true -f publish=true
+```
+
+The same native build, installation, runtime, update-fixture and checksum checks
+apply. Preview uses the `release-preview-win` namespace and the MonoField Preview
+installation identity. Its GitHub Release is marked as a prerelease and does not
+replace the stable latest-release feed or the site's stable download links.
+Preview updates are manual through GitHub Releases. `verify_public_update` is
+reserved for stable releases.
