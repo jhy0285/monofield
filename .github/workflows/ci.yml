@@ -495,7 +495,9 @@ jobs:
         if: ${{ needs.scopes.outputs.daemon_tests_required == 'true' }}
         env:
           OD_WATCHER_TEST_DEBUG: "1"
-        run: pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts tests/project-watchers.test.ts
+        run: |
+          pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts tests/project-watchers.test.ts
+          pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts tests/decision-review.test.ts tests/jev.test.ts tests/jev-route-cli.test.ts
 
   windows_tools_pack_payload_tests:
     name: Windows tools-pack payload tests
