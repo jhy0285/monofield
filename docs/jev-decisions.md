@@ -47,6 +47,12 @@ monofield jev triage --prompt-file request.txt --json
 
 The local URL must be loopback, without URL credentials, query or fragment. MonoField never forwards a TypeSafe key to the local server and does not configure an external proxy for loopback requests. Laya has no `/v1/models` endpoint in the tested version; discovery falls back to the actual `/health` list of resident models. A stopped server produces a connection error and can be retried after restarting it.
 
+Calls that first check a backend pin that validated configuration through the
+transport. A concurrent settings change cannot reroute a checked local evidence
+request to the hosted backend. The optional evidence-ordering deadline includes
+configuration loading as well as inference. These two-second advisory deadlines
+are separate from the general decision endpoint's 45-second limit below.
+
 ## Custom decisions and limits
 
 `monofield jev decide --request-file request.json --json` forwards a typed request through the same production HTTP routes as the UI. `--request-file -` and `--prompt-file -` accept standard input. `--daemon-url` selects an existing MonoField daemon.

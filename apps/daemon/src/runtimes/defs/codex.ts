@@ -171,6 +171,12 @@ export const codexAgentDef = {
       const dirs = (extraAllowedDirs || []).filter(
         (d) => typeof d === 'string' && d.length > 0,
       );
+      if (resumeSessionId && !needsDangerFullAccess && dirs.length > 0) {
+        // exec resume has no --add-dir option. Carry the same explicitly
+        // granted roots through its supported sandbox config instead, so a
+        // module switch does not silently revoke sibling-module access.
+        args.push('-c', `sandbox_workspace_write.writable_roots=${JSON.stringify(dirs)}`);
+      }
       if (
         process.platform === 'win32' &&
         !needsDangerFullAccess &&

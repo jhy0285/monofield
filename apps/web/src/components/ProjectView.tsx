@@ -1,3 +1,4 @@
+import layoutStyles from './ProjectView.module.css';
 import {
   useCallback,
   useEffect,
@@ -1109,7 +1110,8 @@ export function ProjectView({
   const projectFilesRef = useRef<ProjectFile[]>([]);
   const [liveArtifacts, setLiveArtifacts] = useState<LiveArtifactSummary[]>([]);
   const [liveArtifactEvents, setLiveArtifactEvents] = useState<LiveArtifactEventItem[]>([]);
-  const [workspaceFocused, setWorkspaceFocused] = useState(false);
+  const developmentWorkspace = project.metadata?.workMode === 'development';
+  const [workspaceFocused, setWorkspaceFocused] = useState(developmentWorkspace);
   const [commentInspectorActive, setCommentInspectorActive] = useState(false);
   const commentInspectorPortalId = useId();
   const leftInspectorActive = commentInspectorActive;
@@ -1634,8 +1636,8 @@ export function ProjectView({
   }, [routeConversationId, conversations, activeConversationId]);
 
   useEffect(() => {
-    setWorkspaceFocused(false);
-  }, [project.id]);
+    setWorkspaceFocused(developmentWorkspace);
+  }, [project.id, developmentWorkspace]);
 
   // Load messages whenever the active conversation changes. This happens
   // on project mount (after conversations load) and on user-triggered
@@ -7721,12 +7723,13 @@ export function ProjectView({
         ref={splitRef}
         className={[
           projectSplitClassName(workspaceFocused),
+          developmentWorkspace && workspaceFocused ? layoutStyles.developmentFocus : '',
           leftInspectorActive && !workspaceFocused ? 'split-manual-edit' : '',
           resizingChatPanel && !workspaceFocused ? 'is-resizing-chat' : '',
         ].filter(Boolean).join(' ')}
         style={projectSplitStyle(workspaceFocused, splitLeftPanelWidth, workspacePanelTrack)}
       >
-        <div className="split-chat-slot" hidden={workspaceFocused}>
+        <div className="split-chat-slot" hidden={workspaceFocused && !developmentWorkspace}>
           {commentInspectorActive ? (
             <div
               id={commentInspectorPortalId}
@@ -7738,6 +7741,9 @@ export function ProjectView({
               // The conversation id is part of the key so switching conversations
               // resets internal scroll/draft state inside ChatPane and ChatComposer.
               key={`${project.id}:${activeConversationId ?? 'conversation-unavailable'}:${chatSeed?.id ?? 'ready'}`}
+              compact={developmentWorkspace && workspaceFocused}
+              inlineComposer={developmentWorkspace}
+              onExpand={() => setWorkspaceFocused(false)}
               messages={messages}
               streaming={currentConversationControlStreaming}
               liveToolInput={liveToolInput}
@@ -7761,7 +7767,7 @@ export function ProjectView({
               onAttachComment={attachPreviewComment}
               onDetachComment={detachPreviewComment}
               onDeleteComment={(commentId) => void removePreviewComment(commentId)}
-              onSend={handleSend}
+              onSend={(...args) => { if (developmentWorkspace) setWorkspaceFocused(false); void handleSend(...args); }}
               onRetry={handleRetry}
               onResumeRun={handleResumeRun}
               onStop={handleStop}
@@ -7933,7 +7939,7 @@ export function ProjectView({
           liveArtifacts={liveArtifacts}
           filesRefreshKey={filesRefresh}
           onRefreshFiles={() => {
-            return refreshWorkspaceItemsVisible().then(() => undefined);
+            return refreshWorkspaceItemsVisible().then(() => { setFilesRefresh(value => value + 1); });
           }}
           isDeck={isDeck}
           streaming={currentConversationActionDisabled}

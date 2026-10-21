@@ -1,0 +1,11 @@
+.dock { flex: 0 0 auto; min-width: 0; border-top: 1px solid var(--border); background: var(--bg-panel); }
+.toolbar { display: flex; justify-content: space-between; align-items: center; min-height: 36px; padding: 0 12px; gap: 8px; }
+.tabs { display: flex; min-width: 0; overflow-x: auto; gap: 16px; }
+.tabs > button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--text-muted); padding: 9px 1px 7px; font-size: 12px; white-space: nowrap; cursor: pointer; }
+.tabs > button[aria-selected='true'] { border-bottom-color: var(--text); color: var(--text); }
+.tabs > button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.actions { display: flex; gap: 4px; }
+.content { height: clamp(240px, 34vh, 420px); min-height: 0; overflow: auto; border-top: 1px solid var(--border); }
+.content[hidden] { display: none; }
+.expanded { height: min(58vh, 660px); }
+.content > section { min-height: 100%; }

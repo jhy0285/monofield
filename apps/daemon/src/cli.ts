@@ -341,6 +341,10 @@ const PLUGIN_LIST_BOOLEAN_FLAGS = new Set([
 ]);
 
 const SUBCOMMAND_MAP = {
+  java: async (args:string[]) => {
+    const {runJavaToolsCli}=await import('./services/java/cli.js');
+    return runJavaToolsCli(args,{baseUrl:cliDaemonBaseUrl,parseFlags});
+  },
   verify: async (args: string[]) => {
     const { runVerificationCli } = await import('./services/verification-cli.js');
     return runVerificationCli(args, { baseUrl: cliDaemonBaseUrl, parseFlags, positionalArgs: collectCliPositionals });
@@ -906,6 +910,26 @@ async function runArtifacts(args) {
 }
 
 async function runDocs(args) {
+  if (args[0] === 'build-ontology' || args[0] === 'plan-code' || args[0] === 'context-code') {
+    const flags = parseFlags(args.slice(1), { string: ['project', 'project-path', 'documents-file', 'inputs-file', 'rules-file', 'prompt-file', 'daemon-url', 'max-bytes', 'focus-file', 'evidence-mode', 'simulate-file'], boolean: ['json', 'help', 'local-judge'] });
+    if (flags.help || !flags.project) {
+      console.log(`Usage: monofield docs ${args[0]} --project ID [--project-path PATH] [--documents-file <JSON-path-array|->] [--inputs-file <JSON-path-array|->] [--rules-file <project-relative.json>] [--simulate-file <JSON-source-path-array|-> (plan-code)] [--prompt-file <path|->] [--focus-file <JSON-node-ID-array|->] [--evidence-mode references|excerpts] [--max-bytes 4096] [--local-judge] [--json] [--daemon-url URL]`);
+      process.exit(flags.help ? 0 : 2);
+    }
+    const { runCodeOntologyCli } = await import('./services/code-ontology-cli.js');
+    await runCodeOntologyCli(flags, await cliDaemonBaseUrl(flags), args[0] === 'context-code' ? 'context' : args[0] === 'plan-code' ? 'plan' : 'build');
+    return;
+  }
+  if (args[0] === 'plan') {
+    const flags = parseFlags(args.slice(1), { string: ['project', 'inputs-file', 'rules-file', 'simulate-file', 'prompt-file', 'daemon-url'], boolean: ['json', 'help'] });
+    if (flags.help || !flags.project) {
+      console.log('Usage: monofield docs plan --project ID [--inputs-file <JSON-array-file|->] [--rules-file <project-relative.json>] [--simulate-file <JSON-node-ID-array>] [--prompt-file <path|->] [--json] [--daemon-url URL]');
+      process.exit(flags.help ? 0 : 2);
+    }
+    const { runChangePlanCli } = await import('./services/change-plan-cli.js');
+    await runChangePlanCli(flags, await cliDaemonBaseUrl(flags));
+    return;
+  }
   if (args[0] === 'graph') {
     const flags = parseFlags(args.slice(1), { string: ['project', 'inputs-file', 'daemon-url'], boolean: ['json', 'help'] });
     if (flags.help || !flags.project) {

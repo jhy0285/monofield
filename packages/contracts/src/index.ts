@@ -1,3 +1,4 @@
+export * from './api/decision-review.js';
 export * from './common.js';
 export * from './errors.js';
 export * from './tasks.js';
@@ -71,5 +72,8 @@ export * from './docs/evidence.js';
 export * from './docs/interface-spec-proposal.js';
 export * from './api/document-impact.js';
 export * from './api/document-graph.js';
+export * from './api/change-plan.js';
+export * from './api/code-ontology.js';
+export * from './api/java-tools.js';
 
-export * from './api/decision-review.js';
+export * from './api/verification-advice.js';

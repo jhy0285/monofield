@@ -1616,7 +1616,7 @@ const EXT_MIME = {
 
 export function mimeFor(name) {
   const ext = path.extname(name).toLowerCase();
-  return EXT_MIME[ext] || 'application/octet-stream';
+  return EXT_MIME[ext] || (SOURCE_EXTENSIONS.has(ext) ? 'text/plain; charset=utf-8' : 'application/octet-stream');
 }
 
 // Parses an HTTP Range header (RFC 7233) for a single byte range.
@@ -1710,6 +1710,13 @@ function globMatch(name, glob) {
 }
 
 // Coarse kind buckets the frontend uses to pick a viewer.
+// These extensions identify source/config text, not language-service support.
+const SOURCE_EXTENSIONS = new Set([
+  '.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.json', '.css', '.scss', '.sass', '.less', '.py',
+  '.java', '.kt', '.kts', '.groovy', '.gradle', '.vue', '.svelte', '.xml', '.properties',
+  '.sql', '.yaml', '.yml', '.toml', '.ini', '.conf', '.go', '.rs', '.cs', '.c', '.h', '.cpp',
+  '.hpp', '.rb', '.php', '.swift', '.scala', '.dart', '.sh', '.bash', '.ps1', '.bat', '.cmd',
+]);
 export function kindFor(name) {
   // Editable sketches use a compound extension so they slot into the
   // "sketch" bucket while still being valid JSON on disk.
@@ -1724,7 +1731,7 @@ export function kindFor(name) {
   if (['.mp4', '.mov', '.webm'].includes(ext)) return 'video';
   if (['.mp3', '.wav', '.m4a'].includes(ext)) return 'audio';
   if (['.md', '.txt'].includes(ext)) return 'text';
-  if (['.js', '.mjs', '.cjs', '.ts', '.tsx', '.json', '.css', '.py'].includes(ext)) {
+  if (SOURCE_EXTENSIONS.has(ext)) {
     return 'code';
   }
   if (ext === '.pdf') return 'pdf';

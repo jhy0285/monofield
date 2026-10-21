@@ -4,6 +4,10 @@ The general JEV triage preset classifies a request, estimates change risk and as
 whether clarification may be needed. Hosted JEV requires a TypeSafe key; Laya is
 a separately installed compatible local model. Neither approves actions.
 
+The recovered workspace also has explicit model-assisted verification candidate
+selection and local-only ontology evidence ordering. Both keep deterministic
+rules and evidence anchors; they do not approve actions or establish correctness.
+
 The new **Integrations → JEV / local decisions → Review task evidence** disclosure
 compares a short objective with concrete observations. It does not run on ordinary
 chat messages or daemon startup. Choose implementation, design, external behavior

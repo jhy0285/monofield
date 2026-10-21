@@ -496,8 +496,47 @@ jobs:
         env:
           OD_WATCHER_TEST_DEBUG: "1"
         run: |
-          pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts tests/project-watchers.test.ts
+          pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts tests/project-watchers.test.ts tests/development-verification.test.ts tests/verification-advice.test.ts tests/verification-advice-provider.test.ts tests/verification-routes-cli.test.ts tests/services/change-plan.test.ts tests/services/document-graph.test.ts tests/change-plan-route.test.ts tests/document-impact-route.test.ts tests/services/code-ontology.test.ts tests/code-ontology-route.test.ts
           pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts tests/decision-review.test.ts tests/jev.test.ts tests/jev-route-cli.test.ts
+
+      - name: Verification and ontology contracts and web checks
+        if: ${{ needs.scopes.outputs.daemon_tests_required == 'true' }}
+        run: |
+          pnpm --filter @open-design/contracts typecheck
+          pnpm --filter @open-design/daemon typecheck
+          pnpm --filter @open-design/web typecheck
+          pnpm --filter @open-design/web exec vitest run tests/components/VerificationAdviceAssistant.test.tsx tests/components/DevelopmentVerificationPanel.test.tsx tests/components/ChangePlanPanel.test.tsx tests/components/CodeOntologyPanel.test.tsx
+
+
+      - name: Setup Playwright for verification browser flow
+        if: ${{ needs.scopes.outputs.daemon_tests_required == 'true' }}
+        uses: ./.github/actions/setup-playwright
+        with:
+          package-json-path: e2e/package.json
+          install-command: pnpm -C e2e exec playwright install --with-deps chromium
+
+      - name: Verification browser flow
+        if: ${{ needs.scopes.outputs.daemon_tests_required == 'true' }}
+        env:
+          OD_PLAYWRIGHT_WORKERS: "1"
+        run: pnpm -C e2e exec playwright test -c playwright.config.ts ui/development-verification.test.ts ui/change-plan.test.ts ui/code-ontology.test.ts --workers=1 --retries=0
+
+      - name: Upload verification browser evidence
+        if: ${{ always() && needs.scopes.outputs.daemon_tests_required == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-browser-${{ github.run_id }}
+          path: e2e/ui/reports/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Check repository policies after verification evidence
+        if: ${{ always() && needs.scopes.outputs.daemon_tests_required == 'true' }}
+        run: pnpm guard
+
+      - name: Check translation structure after verification evidence
+        if: ${{ always() && needs.scopes.outputs.daemon_tests_required == 'true' }}
+        run: pnpm i18n:check
 
   windows_tools_pack_payload_tests:
     name: Windows tools-pack payload tests

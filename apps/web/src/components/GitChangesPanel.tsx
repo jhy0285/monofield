@@ -16,6 +16,7 @@ import { Icon } from './Icon';
 import styles from './GitChangesPanel.module.css';
 
 const DevelopmentVerificationPanel = lazy(() => import('./DevelopmentVerificationPanel').then(module => ({ default: module.DevelopmentVerificationPanel })));
+const CodeOntologyPanel = lazy(() => import('./CodeOntologyPanel').then(module => ({ default: module.CodeOntologyPanel })));
 
 type Props = {
   projectId: string;
@@ -25,6 +26,8 @@ type Props = {
   onRequestRepair?: (prompt: string) => void;
   filesRefreshKey?: number;
   agentBusy?: boolean;
+  showOntology?: boolean;
+  active?: boolean;
 };
 
 type GitWorkspaceUiSnapshot = {
@@ -89,6 +92,8 @@ export function GitChangesPanel({
   onRequestRepair,
   filesRefreshKey,
   agentBusy = false,
+  showOntology = true,
+  active = true,
 }: Props) {
   const t = useT();
   const [status, setStatus] = useState<GitWorkspaceStatusResponse | null>(null);
@@ -261,13 +266,13 @@ export function GitChangesPanel({
     setRestoredWorkspaceKey(workspaceKey);
   }, [workspaceKey]);
   useEffect(() => {
-    if (!projectSelectionReady || !workspaceRestored) return;
-    void loadStatus();
-  }, [loadStatus, projectSelectionReady, workspaceRestored]);
+    if (!active || !projectSelectionReady || !workspaceRestored) return;
+    void loadStatus(true);
+  }, [active, filesRefreshKey, loadStatus, projectSelectionReady, workspaceRestored]);
   useEffect(() => {
-    if (!projectSelectionReady || !workspaceRestored) return;
+    if (!active || !projectSelectionReady || !workspaceRestored) return;
     void loadBranches();
-  }, [loadBranches, projectSelectionReady, workspaceRestored]);
+  }, [active, loadBranches, projectSelectionReady, workspaceRestored]);
   useEffect(() => {
     if (projectSelectionReady) return;
     statusAbortRef.current?.abort();
@@ -296,7 +301,7 @@ export function GitChangesPanel({
   }, [files, selectedPath]);
 
   useEffect(() => {
-    if (!projectSelectionReady || !workspaceRestored) return;
+    if (!active || !projectSelectionReady || !workspaceRestored) return;
     if (!selectedPath || !files.some((file) => file.path === selectedPath)) {
       diffAbortRef.current?.abort();
       setDiff(null);
@@ -330,7 +335,7 @@ export function GitChangesPanel({
         if (!controller.signal.aborted && requestId === diffRequestRef.current) setDiffLoading(false);
       });
     return () => controller.abort();
-  }, [activeComparisonBranch, files, projectId, projectPath, projectSelectionReady, scope, selectedPath, status?.generatedAt, t, workspaceRestored]);
+  }, [active, activeComparisonBranch, files, projectId, projectPath, projectSelectionReady, scope, selectedPath, status?.generatedAt, t, workspaceRestored]);
 
   const selected = files.find((file) => file.path === selectedPath) ?? null;
   const branch = status?.branch ?? status?.head ?? '—';
@@ -425,6 +430,16 @@ export function GitChangesPanel({
   return (
     <section className={styles.root} data-testid="git-changes-panel">
       <Suspense fallback={null}>
+        {showOntology ? <CodeOntologyPanel
+          key={`ontology:${workspaceKey}`}
+          projectId={projectId}
+          projectPath={projectPath}
+          ready={projectSelectionReady && workspaceRestored}
+          revisionKey={String(filesRefreshKey ?? '')}
+          agentBusy={agentBusy}
+          onRequestDraft={onRequestRepair}
+          onOpenFile={onOpenFile}
+        /> : null}
         <DevelopmentVerificationPanel
           key={workspaceKey}
           projectId={projectId}

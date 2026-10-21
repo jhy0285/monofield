@@ -57,6 +57,17 @@ afterEach(() => {
 });
 
 describe('GitChangesPanel', () => {
+  it('refreshes a mounted diff when the editor saves a new source revision', async () => {
+    let edited = false;
+    vi.mocked(fetch).mockImplementation(async input => Response.json(String(input).includes('/git/diff') ? DIFF
+      : String(input).includes('/git/branches') ? BRANCHES : { ...STATUS, files: edited && String(input).includes('refresh=1') ? STATUS.files : [] }));
+    const view = render(<I18nProvider initial="en"><GitChangesPanel projectId="saved-source" filesRefreshKey={0} onOpenFile={vi.fn()} /></I18nProvider>);
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    expect(screen.queryByText('port: 9081')).toBeNull();
+    edited = true;
+    view.rerender(<I18nProvider initial="en"><GitChangesPanel projectId="saved-source" filesRefreshKey={1} onOpenFile={vi.fn()} /></I18nProvider>);
+    await screen.findByText('port: 9081');
+  });
   it.each([
     ['backend', 'backend/src/main/resources/application.yml'],
     ['.', 'src/main/resources/application.yml'],

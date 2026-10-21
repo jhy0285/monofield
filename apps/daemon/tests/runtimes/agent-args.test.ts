@@ -7,6 +7,16 @@ import { writeAntigravityModelSelection } from '../../src/runtimes/defs/antigrav
 import { agentCapabilities } from '../../src/runtimes/capabilities.js';
 import type { TestAgentDef } from './helpers/test-helpers.js';
 
+test('codex resume preserves the explicitly selected writable workspace when changing modules', () => {
+  const args = codex.buildArgs('', [], ['/tmp/traffic-workspace'], {}, {
+    cwd: '/tmp/traffic-workspace/frontend', resumeSessionId: '11111111-1111-4111-8111-111111111111',
+  });
+  assert.ok(args.includes('sandbox_workspace_write.writable_roots=["/tmp/traffic-workspace"]'));
+  assert.equal(args.includes('--add-dir'), false);
+  const noExtra = codex.buildArgs('', [], [], {}, { cwd: '/tmp/frontend', resumeSessionId: '11111111-1111-4111-8111-111111111111' });
+  assert.equal(noExtra.some(arg => arg.startsWith('sandbox_workspace_write.writable_roots=')), false);
+});
+
 // ---- Cursor Agent --trust capability (issue #4461) -------------------------
 // `--trust` is only honored in `-p`/headless mode and only exists on newer
 // cursor-agent builds. Older installs reject it with "unknown option
