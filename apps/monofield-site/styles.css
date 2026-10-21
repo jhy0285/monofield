@@ -671,6 +671,113 @@ figcaption {
   max-width: 760px;
   margin: 39px auto 22px;
 }
+.hero-preview-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  max-width: 100%;
+  margin-top: 19px;
+  font-size: 12px;
+  color: var(--accent);
+}
+.release-pill {
+  display: inline-block;
+  flex-shrink: 0;
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  padding: 3px 6px;
+  font: 10px var(--mono);
+  letter-spacing: 0.04em;
+}
+.preview-release {
+  display: grid;
+  grid-template-columns: 1fr 1.15fr;
+  align-items: center;
+  gap: 28px;
+  margin-top: 36px;
+  padding: 30px;
+  border-radius: 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  text-align: left;
+}
+.preview-release-copy,
+.preview-release-image {
+  min-width: 0;
+}
+.preview-release h3 {
+  font-size: clamp(25px, 3vw, 34px);
+  line-height: 1.25;
+  margin: 17px 0 13px;
+}
+.preview-release-copy > p:not(.eyebrow) {
+  font-size: 14px;
+  color: var(--muted);
+}
+.preview-features {
+  padding-left: 18px;
+  margin: 18px 0 23px;
+  font-size: 14px;
+}
+.preview-features li + li {
+  margin-top: 5px;
+}
+.preview-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 13px;
+}
+.preview-actions .button {
+  font-size: 13px;
+  padding: 13px 17px;
+}
+.preview-actions .inline-link,
+.preview-release-links {
+  font-size: 12px;
+}
+.preview-release-copy > .preview-release-links {
+  margin-top: 16px;
+}
+.preview-release-image button {
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  overflow: hidden;
+}
+.preview-release-image figcaption {
+  margin-top: 9px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.preview-release-limit {
+  grid-column: 1 / -1;
+  padding-top: 17px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.8;
+}
+.stable-release-heading {
+  margin-top: 35px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--accent);
+}
+.stable-release-heading + .download-options {
+  margin-top: 17px;
+}
+@media (max-width: 760px) {
+  .preview-release {
+    grid-template-columns: 1fr;
+    padding: 23px 19px;
+    gap: 23px;
+  }
+  .hero-preview-link {
+    font-size: 10px;
+    gap: 6px;
+  }
+}
 .download-card {
   border: 1px solid #c6d2bd;
   background: #f9fcf5;
