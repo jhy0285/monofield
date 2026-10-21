@@ -1,6 +1,20 @@
 import type { Dict } from '../types';
 
 export const ko: Dict = {
+  "jev.reviewTitle": "작업 결과 검토 · 실험적",
+  "jev.reviewHelp": "입력한 요구사항과 근거 문장만 비교합니다. 자동 호출·테스트 실행·이미지 판독·배포 승인은 하지 않습니다.",
+  "jev.reviewTask": "검토 작업",
+  "jev.reviewImplementation": "요구사항 / 구현 근거",
+  "jev.reviewDesign": "디자인 명세 / 관찰 결과",
+  "jev.reviewTransfer": "외부 시스템 동작 / 도입 계획",
+  "jev.reviewClassification": "원문 / 제안된 분류",
+  "jev.reviewObjective": "요구사항·판단 기준 · 200자 이내",
+  "jev.reviewEvidence": "관찰한 근거 · 600자 이내",
+  "jev.reviewSubmit": "입력한 근거 검토",
+  "jev.reviewSupported": "참고 의견: 입력한 요구사항과 근거가 부합하는 것으로 보입니다.",
+  "jev.reviewContradicted": "참고 의견: 입력한 요구사항과 근거가 충돌하는 것으로 보입니다.",
+  "jev.reviewUncertain": "확정할 수 없습니다. 근거와 모델 연결 상태를 확인하세요.",
+  "jev.reviewCached": "같은 내용의 결과를 재사용했습니다. 모델을 새로 호출하지 않았습니다.",
   "docs.impact.change": "변경 항목",
   "docs.evidence": "근거",
   "docs.impact.title": "명세서 변경 검토",

@@ -62,4 +62,17 @@ describe('decision HTTP and CLI surfaces (local protocol fixture)', () => {
     expect(result.requestedModel).toBe('fixture-only'); expect(result.result.answers).toEqual({ yes: { type: 'noul', noul: 0.5 } });
     expect((await api('decide', 'POST', { model: 'fixture-only', state: 'test', questions: {} })).status).toBe(400);
   });
+  it('uses the same evidence-review contract in HTTP and CLI without treating fixture outputs as model quality', async () => {
+    const file = path.join(root, 'review.json');
+    await writeFile(file, JSON.stringify({ task: 'design', objective: 'Keep the action visible.', evidence: 'The action is clipped at 375px.' }));
+    const result = JSON.parse((await cli(['review', '--request-file', file])).stdout);
+    expect(result).toMatchObject({ task: 'design', advisory: true, evaluationAttempts: 1 });
+    expect(received.at(-1)?.body).toMatchObject({ model: 'fixture-only', questions: { alignment: { type: 'choice' } } });
+    const count = received.length;
+    expect(await (await api('review', 'POST', { task: 'implementation', objective: 'Preserve data.', evidence: '' })).json()).toMatchObject({ status: 'needs-evidence', evaluationAttempts: 0 });
+    expect(received).toHaveLength(count);
+    expect((await api('review', 'POST', { task: 'approve', objective: 'Deploy.', evidence: 'pass' })).status).toBe(400);
+    expect((await api('review', 'POST', {}, { origin: 'https://untrusted.example' })).status).toBe(403);
+  });
+
 });

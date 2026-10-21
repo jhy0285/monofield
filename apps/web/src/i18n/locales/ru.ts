@@ -1,6 +1,20 @@
 import type { Dict } from '../types';
 
 export const ru: Dict = {
+  "jev.reviewTitle": "Review task evidence · experimental",
+  "jev.reviewHelp": "Compare supplied statements only. No automatic calls, test execution, image inspection or deployment approval.",
+  "jev.reviewTask": "Review task",
+  "jev.reviewImplementation": "Requirement / implementation",
+  "jev.reviewDesign": "Design brief / observations",
+  "jev.reviewTransfer": "External behavior / adaptation",
+  "jev.reviewClassification": "Text / proposed label",
+  "jev.reviewObjective": "Requirement or criterion · up to 200 characters",
+  "jev.reviewEvidence": "Observed evidence · up to 600 characters",
+  "jev.reviewSubmit": "Review supplied evidence",
+  "jev.reviewSupported": "Suggestion: the supplied statements appear consistent.",
+  "jev.reviewContradicted": "Suggestion: the supplied statements appear to conflict.",
+  "jev.reviewUncertain": "No conclusive suggestion. Check evidence and model availability.",
+  "jev.reviewCached": "Reused the same-content result; no new model request.",
   "docs.impact.change": "Изменённый элемент",
   "docs.evidence": "Основания",
   "docs.impact.title": "Проверка изменений документа",

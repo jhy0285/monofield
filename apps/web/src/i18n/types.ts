@@ -30,6 +30,20 @@ export const LOCALE_LABEL: Record<Locale, string> = {
 // flat (not deeply nested) so missing-key TS errors point straight at the
 // offending string instead of a generic object mismatch.
 export interface Dict {
+  "jev.reviewTitle": string;
+  "jev.reviewHelp": string;
+  "jev.reviewTask": string;
+  "jev.reviewImplementation": string;
+  "jev.reviewDesign": string;
+  "jev.reviewTransfer": string;
+  "jev.reviewClassification": string;
+  "jev.reviewObjective": string;
+  "jev.reviewEvidence": string;
+  "jev.reviewSubmit": string;
+  "jev.reviewSupported": string;
+  "jev.reviewContradicted": string;
+  "jev.reviewUncertain": string;
+  "jev.reviewCached": string;
   'verification.title': string;
   'verification.description': string;
   'verification.verified': string;

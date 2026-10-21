@@ -146,7 +146,7 @@ export async function jevModels(dataDir: string): Promise<JevModelsResponse> {
   }
 }
 export async function evaluateJev(dataDir: string, value: unknown, options: Parameters<typeof jevProviderRequest>[3] = {}): Promise<JevEvaluation> {
-  const request = validateJevRequest(value), config = await readJevConfig(dataDir), start = performance.now();
+  const request = validateJevRequest(value), config = options.config ? validateJevConfig(options.config) : await readJevConfig(dataDir), start = performance.now();
   const result = validateJevResponse(await jevProviderRequest(dataDir, '/v1/systemone', request, { ...options, config }), request);
   return { backend: config.backend, requestedModel: request.model, elapsedMs: Math.round(performance.now() - start), result };
 }

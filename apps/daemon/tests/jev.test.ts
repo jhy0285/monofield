@@ -97,3 +97,15 @@ describe('JEV protocol and backend boundaries', () => {
     expect(validateJevRequest(q)).toEqual(q);
   });
 });
+
+it('keeps the checked local backend even if the persisted backend changes before evaluation', async () => {
+  const local = { backend: 'local' as const, localBaseUrl: 'http://127.0.0.1:8000', model: 'test-model' };
+  await writeJevConfig(dir, { ...local, backend: 'typesafe' });
+  const fetchImpl = vi.fn(async () => Response.json(response()));
+  const result = await evaluateJev(dir, request, { config: local, fetchImpl, env: {} });
+  expect(fetchImpl.mock.calls).toHaveLength(1);
+  const calls = fetchImpl.mock.calls as unknown as Array<[string, RequestInit]>;
+  expect(calls[0]?.[0]).toBe('http://127.0.0.1:8000/v1/systemone');
+  expect(new Headers(calls[0]?.[1].headers).get('authorization')).toBeNull();
+  expect(result.backend).toBe('local');
+});
