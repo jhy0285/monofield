@@ -27,6 +27,15 @@ function sectionBetween(content: string, start: string, end: string): string {
 }
 
 describe("packaged smoke workflow", () => {
+  it("[P2] schedules Linux validation and captures on standard GitHub runners", async () => {
+    for (const name of ["ci.yml", "visual-baseline.yml"]) {
+      const workflow = await readFile(join(workflowsRoot, name), "utf8");
+      expect(workflow).not.toContain("blacksmith-");
+      expect(workflow).toContain("runs-on: ubuntu-24.04");
+      expect(workflow).not.toContain('OD_PLAYWRIGHT_WORKERS: "4"');
+    }
+  });
+
   it("[P2] follows the current MonoField workflow inventory", async () => {
     const workflowNames = (await readdir(workflowsRoot))
       .filter((name) => name.endsWith(".yml"))

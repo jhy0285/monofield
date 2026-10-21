@@ -199,7 +199,7 @@ jobs:
     name: Validate Nix flake
     needs: [scopes]
     if: ${{ needs.scopes.outputs.run_nix_validation == 'true' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
       contents: read
@@ -407,7 +407,7 @@ jobs:
     name: Preflight
     needs: [scopes]
     if: ${{ needs.scopes.outputs.run_preflight == 'true' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
 
     steps:
@@ -518,7 +518,7 @@ jobs:
     name: Web workspace tests
     needs: [scopes]
     if: ${{ needs.scopes.outputs.run_web_workspace_tests == 'true' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
 
     steps:
@@ -538,7 +538,7 @@ jobs:
     name: E2E Vitest
     needs: [scopes]
     if: ${{ needs.scopes.outputs.run_e2e_vitest == 'true' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
 
     steps:
@@ -567,7 +567,7 @@ jobs:
     name: Playwright critical (${{ matrix.group }})
     needs: [scopes]
     if: ${{ needs.scopes.outputs.run_playwright_critical == 'true' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -602,7 +602,7 @@ jobs:
 
       - name: Playwright critical
         env:
-          OD_PLAYWRIGHT_WORKERS: "4"
+          OD_PLAYWRIGHT_WORKERS: "2"
           OD_PLAYWRIGHT_FULLY_PARALLEL: "1"
         run: pnpm -C e2e exec playwright test -c playwright.config.ts ${{ matrix.files }} --grep '@critical'
 
@@ -610,7 +610,7 @@ jobs:
     name: UI P0 smoke
     needs: [scopes]
     if: ${{ needs.scopes.outputs.run_ui_p0 == 'true' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
 
     steps:
@@ -637,7 +637,7 @@ jobs:
 
       - name: Run UI shell smoke
         env:
-          OD_PLAYWRIGHT_WORKERS: "4"
+          OD_PLAYWRIGHT_WORKERS: "2"
         run: pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group smoke
 
       - name: Upload Playwright debug artifact
@@ -657,7 +657,7 @@ jobs:
     name: UI P0 (${{ matrix.name }})
     needs: [scopes]
     if: ${{ needs.scopes.outputs.run_ui_p0 == 'true' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -688,7 +688,7 @@ jobs:
 
       - name: Run UI P0 domain
         env:
-          OD_PLAYWRIGHT_WORKERS: "4"
+          OD_PLAYWRIGHT_WORKERS: "2"
         run: pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group ${{ matrix.shard }}
 
       - name: Upload Playwright debug artifact
@@ -708,7 +708,7 @@ jobs:
     name: Playwright visual (${{ matrix.name }})
     needs: [scopes]
     if: ${{ needs.scopes.outputs.run_playwright_visual == 'true' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -739,7 +739,7 @@ jobs:
         continue-on-error: true
         env:
           OD_VISUAL_OUTPUT_DIR: ui/reports/visual-screenshots
-          OD_PLAYWRIGHT_WORKERS: "4"
+          OD_PLAYWRIGHT_WORKERS: "2"
           OD_PLAYWRIGHT_FULLY_PARALLEL: "1"
         run: |
           pnpm -C e2e exec tsx scripts/playwright.ts clean
@@ -792,7 +792,7 @@ jobs:
     name: Docker image build
     needs: [scopes]
     if: ${{ needs.scopes.outputs.run_docker_build == 'true' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read

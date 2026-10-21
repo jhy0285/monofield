@@ -30,6 +30,6 @@ describe('explicit task evidence review', () => {
     fireEvent.click(screen.getByTestId('jev-review-submit'));
     await waitFor(() => expect(signal).toBeDefined());
     view.rerender(<JevEvidenceReview disabled={false} configurationKey="hosted" />);
-    expect(signal?.aborted).toBe(true); expect(screen.queryByTestId('jev-review-result')).toBeNull();
+    expect((signal as AbortSignal | undefined)?.aborted).toBe(true); expect(screen.queryByTestId('jev-review-result')).toBeNull();
   });
 });
