@@ -86,6 +86,26 @@ class ScannerFieldPathsTest(unittest.TestCase):
         self.assertEqual(endpoint["sourceFile"], "main.go")
         self.assertGreater(endpoint["sourceLine"], 0)
 
+    def test_spring_fixture_resolves_bare_mappings_to_the_class_path(self) -> None:
+        document = _scan_fixture("scan_spring.py", "spring")
+        self.assert_unique_field_paths(document)
+
+        routes = {(endpoint["method"], endpoint["path"]) for endpoint in document["endpoints"]}
+        # A bare @PostMapping / @GetMapping targets the class @RequestMapping
+        # path itself; Spring never serves it as a trailing-slash twin.
+        self.assertIn(("POST", "/api/v1/orders"), routes)
+        self.assertIn(("GET", "/api/v1/orders"), routes)
+        self.assertIn(("GET", "/api/v1/orders/{orderId}"), routes)
+        self.assertIn(("POST", "/api/v1/members/join"), routes)
+        self.assertFalse(any(path != "/" and path.endswith("/") for _, path in routes))
+
+        create = next(
+            endpoint for endpoint in document["endpoints"]
+            if endpoint["method"] == "POST" and endpoint["path"] == "/api/v1/orders"
+        )
+        request_paths = {field["path"] for field in create["requestFields"]}
+        self.assertTrue({"memberId", "items", "items.productId", "deliveryAddress"} <= request_paths)
+
 
 if __name__ == "__main__":
     unittest.main()

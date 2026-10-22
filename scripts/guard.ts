@@ -27,6 +27,8 @@ const allowedE2eScripts = new Set([
   "e2e/scripts/release-smoke.ts",
   // Explicit provider benchmark; ordinary e2e tests continue to use mocks.
   "e2e/scripts/token-benchmark.ts",
+  // Reproducible Spring interface-spec demo (docs/demo/spring-interface-spec-demo.md).
+  "e2e/scripts/spring-spec-demo.ts",
   "e2e/scripts/all-in-one.ts",
   "e2e/scripts/visual-report.ts",
 ]);

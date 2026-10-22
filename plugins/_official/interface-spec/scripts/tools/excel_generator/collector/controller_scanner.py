@@ -48,6 +48,19 @@ def _controller_display_path(path: Path, repo_root: Path, codebase_path: Path) -
     return str(path)
 
 
+def _join_mapping_path(class_base: str, method_path: str) -> str:
+    """Join a class @RequestMapping and a method mapping the way Spring resolves
+    them: an empty method mapping targets the class path itself (never a
+    trailing-slash twin), and duplicate separators collapse to one."""
+    segments = [
+        segment
+        for part in (class_base, method_path)
+        for segment in part.split("/")
+        if segment
+    ]
+    return "/" + "/".join(segments)
+
+
 def _normalize_type(type_raw: str) -> str:
     t = type_raw.strip()
     t = re.sub(r"\s+", " ", t)
@@ -651,9 +664,7 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
                 if not method:
                     continue
 
-                full_path = (class_base.rstrip("/") + "/" + mpath.lstrip("/")).replace("//", "/")
-                if not full_path.startswith("/"):
-                    full_path = "/" + full_path
+                full_path = _join_mapping_path(class_base, mpath)
 
                 p_start = sig.find("(")
                 p_end = sig.rfind(")")
