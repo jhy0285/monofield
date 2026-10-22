@@ -1,19 +1,21 @@
-# Open Design
+# MonoField
 
-Open Design is a local-first design workspace where projects contain generated design files and agent conversations. This glossary records domain language only, not implementation details.
+MonoField is a local workbench where projects connect a working folder, agent conversations, and generated deliverables such as interface specs, screen specs, documents, and designs. This glossary records domain language only, not implementation details.
+
+MonoField is derived from the Apache-2.0 Open Design project. Terms marked *(upstream)* describe capabilities that came from Open Design and are kept for compatibility.
 
 ## Language
 
 **Project**:
-A top-level design workspace that contains conversations and design files.
+A top-level workspace that contains conversations and generated files, optionally bound to a user-selected working folder.
 _Avoid_: repo, folder, session
 
 **Normal Artifact**:
-A project design output represented by an artifact entry file and its artifact manifest.
+A project output represented by an artifact entry file and its artifact manifest.
 _Avoid_: live artifact, generic file upload
 
 **Live Artifact**:
-A refreshable project design output stored as a live-artifact record with source data and preview state.
+A refreshable project output stored as a live-artifact record with source data and preview state.
 _Avoid_: normal artifact, static artifact
 
 **Artifact Entry File**:
@@ -25,7 +27,7 @@ The sidecar metadata that identifies a project file as a normal artifact and rec
 _Avoid_: live-artifact document, project metadata
 
 **Active Project**:
-The project the user most recently interacted with in the Open Design UI and that MCP tools may use when no project is specified.
+The project the user most recently interacted with in the MonoField UI and that MCP tools may use when no project is specified.
 _Avoid_: latest project, default project
 
 **Home Composer Media Surface**:
@@ -52,21 +54,21 @@ _Avoid_: generic subject field, hidden prompt text
 The default voice option shown when the Home Audio composer cannot load configured ElevenLabs voices. It keeps ElevenLabs speech runnable by selecting the same default voice id the daemon uses when no explicit voice is supplied.
 _Avoid_: required credential setup, empty voice selector
 
-**AMR Cloud**:
-The user-facing cloud runtime option for Open Design's official model router, shown in onboarding and login-oriented product surfaces.
+**AMR Cloud** *(upstream)*:
+The user-facing cloud runtime option for the upstream Open Design model router, shown in onboarding and login-oriented product surfaces only when the AMR runtime is enabled.
 _Avoid_: Vela, local CLI label
 
-**AMR CLI**:
+**AMR CLI** *(upstream)*:
 The local command-line runtime adapter used to run AMR from an installed or packaged native CLI.
 _Avoid_: AMR Cloud, cloud account
 
 **AMR CLI Distribution Contract**:
-The separately owned release contract that provides the native AMR CLI builds Open Design can package.
-_Avoid_: Open Design release channel, package build step, source checkout
+The separately owned release contract that provides the native AMR CLI builds MonoField can package.
+_Avoid_: MonoField release channel, package build step, source checkout
 
 **AMR CLI Distribution Slice**:
 The set of native AMR CLI platforms currently available through the distribution contract; platforms outside the slice do not bundle the AMR CLI.
-_Avoid_: Open Design supported platforms, release channel, future platform promise
+_Avoid_: MonoField supported platforms, release channel, future platform promise
 
 **AMR Account Status**:
 Whether the user has authenticated the account needed to use AMR Cloud.
@@ -91,7 +93,7 @@ _Avoid_: continue, finish setup, passive close
 - The **Chip Rail** is the visible Home entry point for choosing a **Home Composer Media Surface**.
 - **Essential Audio Generation** uses an **Audio Source Field** plus model options before creating an audio **Project**.
 - **AMR Cloud** is the user-facing product choice; **AMR CLI** is the local execution adapter behind that capability.
-- The **AMR CLI Distribution Contract** is owned separately from Open Design; Open Design release packaging consumes it instead of defining the native CLI release itself.
+- The **AMR CLI Distribution Contract** is owned separately from MonoField; MonoField release packaging consumes it instead of defining the native CLI release itself.
 - The first **AMR CLI Distribution Slice** is mac arm64 only.
 - **AMR Account Status** describes account readiness for **AMR Cloud**, not the environment profile or CLI installation state.
 - An **AMR Environment Profile** is independent from release channel identity; a beta, preview, prerelease, or stable package can target different AMR service environments when explicitly configured.
