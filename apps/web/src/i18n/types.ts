@@ -551,6 +551,7 @@ export interface Dict {
   'settings.onboardingAmrCloudOfficialBadge': string;
   'settings.onboardingLocalTitle': string;
   'settings.onboardingLocalBody': string;
+  'settings.onboardingAgentRequirement': string;
   'settings.onboardingLocalAction': string;
   'settings.onboardingCliScanHint': string;
   'settings.onboardingByokTitle': string;
@@ -1391,6 +1392,8 @@ export interface Dict {
   'homeHero.footer.availableCount': string;
   'homeHero.footer.noMatches': string;
   'homeHero.moreShortcuts': string;
+  'homeHero.moreTemplates': string;
+  'homeHero.fewerTemplates': string;
   'homeHero.railAria': string;
   'homeHero.subTypeAria': string;
   'homeHero.confirmReplaceTitle': string;

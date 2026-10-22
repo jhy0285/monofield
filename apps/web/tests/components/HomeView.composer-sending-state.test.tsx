@@ -22,6 +22,16 @@ import { I18nProvider } from '../../src/i18n';
 import { writeHomeGuideStage } from '../../src/components/home-hero/firstRunGuide';
 import { setHomeHeroPrompt } from '../helpers/home-hero-lexical';
 
+// The Home rail shows the SI deliverable cards first and keeps design/media
+// templates behind "More templates"; open it only when the chip is hidden.
+async function findRailChip(id: string): Promise<HTMLElement> {
+  const existing = screen.queryByTestId(`home-hero-rail-${id}`);
+  if (existing) return existing;
+  const toggle = await screen.findByTestId('home-hero-rail-more-templates');
+  if (toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle);
+  return screen.findByTestId(`home-hero-rail-${id}`);
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
   cleanup();
@@ -178,7 +188,7 @@ describe('home composer sending state', () => {
 
     // Seeding through a fallback prompt-example card is what arms the
     // examplePromptContext marker.
-    fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
+    fireEvent.click(await findRailChip('prototype'));
     const exampleCards = await screen.findAllByTestId('home-hero-prompt-example');
     fireEvent.click(exampleCards[0]!);
 

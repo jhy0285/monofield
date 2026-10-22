@@ -96,9 +96,12 @@ test('[P0] @critical entry chrome exposes the primary home creation surface and 
   await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
   const createTabs = page.getByTestId('home-hero-type-tabs');
   await expect(createTabs).toBeVisible();
+  await expect(page.getByTestId('home-hero-rail-interface-spec')).toBeVisible();
+  await expect(page.getByTestId('home-hero-rail-screen-spec')).toBeVisible();
+  await expect(page.getByTestId('home-hero-rail-deck')).toBeVisible();
+  await page.getByTestId('home-hero-rail-more-templates').click();
   await expect(page.getByTestId('home-hero-rail-prototype')).toBeVisible();
   await expect(page.getByTestId('home-hero-rail-live-artifact')).toBeVisible();
-  await expect(page.getByTestId('home-hero-rail-deck')).toBeVisible();
   await expect(page.getByTestId('home-hero-rail-image')).toBeVisible();
   await expect(page.getByTestId('home-hero-rail-video')).toBeVisible();
   await expect(page.getByTestId('home-hero-rail-hyperframes')).toBeVisible();
@@ -177,7 +180,7 @@ test('[P1] entry top navigation matches the current home tab structure', async (
   await expect(page.locator('.entry-nav-rail__footer').getByTestId('entry-nav-integrations')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-type-tabs')).toBeVisible();
   await expect(page.getByTestId('home-hero-active-type-chip')).toHaveCount(0);
-  await expect(page.getByTestId('home-hero-rail-prototype')).toHaveAttribute('aria-selected', 'false');
+  await expect(page.getByTestId('home-hero-rail-interface-spec')).toHaveAttribute('aria-selected', 'false');
   await expect(page.getByTestId('home-hero-footer-options')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-plugin-presets')).toHaveCount(0);
   await expect(page.getByTestId('plugins-home-pill-category-all')).toHaveAttribute('aria-selected', 'true');

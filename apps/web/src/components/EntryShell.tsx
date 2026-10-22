@@ -2285,6 +2285,13 @@ function OnboardingView({
                   : t('settings.onboardingLocalBody')
                 }
               />
+              <p
+                className="onboarding-view__agent-requirement"
+                data-testid="onboarding-agent-requirement"
+                role="note"
+              >
+                {t('settings.onboardingAgentRequirement')}
+              </p>
               <div className="onboarding-cloud__alts">
                 <button
                   type="button"

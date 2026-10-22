@@ -2478,6 +2478,19 @@
   font-size: 11px;
 }
 
+/* Runtime requirement note on the onboarding Connect step: the full
+   development/spec loop needs a local Codex or Claude Code CLI. */
+.onboarding-view__agent-requirement {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
 .onboarding-view__empty-slice {
   border: 1px dashed var(--border);
   border-radius: var(--radius);

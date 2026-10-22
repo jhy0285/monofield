@@ -38,7 +38,11 @@ import { useAnalytics } from '../analytics/provider';
 import { trackHomeChatComposerClick } from '../analytics/events';
 import {
   chipsForGroup,
+  extendedCreateChips,
+  FIRST_RUN_GUIDE_CHIP_ID,
+  isExtendedCreateChip,
   orderedCreateChips,
+  primaryCreateChips,
   type ChipGroup,
   type HomeHeroChip,
 } from './home-hero/chips';
@@ -349,6 +353,17 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   // First-run guidance trail (see home-hero/firstRunGuide.ts): which rail
   // chip is pulsing, and whether the first example-prompt card is pulsing.
   const [guidePulseChipId, setGuidePulseChipId] = useState<string | null>(null);
+  // Whether the Home rail shows the extended design/media templates. Opens on
+  // its own when an extended chip becomes active or pulses so the highlighted
+  // card is never hidden behind the toggle.
+  const [moreTemplatesOpen, setMoreTemplatesOpen] = useState(
+    () => isExtendedCreateChip(activeChipId),
+  );
+  useEffect(() => {
+    if (isExtendedCreateChip(activeChipId) || isExtendedCreateChip(guidePulseChipId)) {
+      setMoreTemplatesOpen(true);
+    }
+  }, [activeChipId, guidePulseChipId]);
   const [guidePulseFirstPreset, setGuidePulseFirstPreset] = useState(false);
   // Selected second-level sub-category slug (Prototype / Slide deck rail).
   // Local-only: it filters the example-prompt cards below the rail. It never
@@ -662,12 +677,13 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     );
   }, [activeExamplePlugins, activeChipId, selectedSubcategory, pluginOptions]);
 
-  // First-run guide, beat 1: pulse the Prototype chip for brand-new users.
-  // The settle delay lets the hero finish its entrance before the sheen.
+  // First-run guide, beat 1: pulse the Interface spec chip for brand-new
+  // users — the first step of the SI deliverable loop the Home rail leads
+  // with. The settle delay lets the hero finish its entrance before the sheen.
   useEffect(() => {
     if (firstRunGuide !== true) return;
     if (readHomeGuideStage() !== 'chip') return;
-    const arm = window.setTimeout(() => setGuidePulseChipId('prototype'), 900);
+    const arm = window.setTimeout(() => setGuidePulseChipId(FIRST_RUN_GUIDE_CHIP_ID), 900);
     const disarm = window.setTimeout(() => setGuidePulseChipId(null), 3600);
     return () => {
       window.clearTimeout(arm);
@@ -1734,6 +1750,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             variant="tabs"
             pulseChipId={guidePulseChipId}
             onHoverChip={setPreviewTemplateId}
+            extendedOpen={moreTemplatesOpen}
+            onExtendedOpenChange={setMoreTemplatesOpen}
           >
             <ShortcutsMenu
               activeChipId={activeChipId}
@@ -2799,6 +2817,10 @@ interface RailGroupProps {
   // Hover-preview hook: the create rail reports which chip the pointer is over
   // (or null on leave) so the footer Template picker can preview it.
   onHoverChip?: (chipId: string | null) => void;
+  // Create card rail only: whether the extended (design/media) scenarios are
+  // shown, and the toggle callback. Omitting the callback renders every chip.
+  extendedOpen?: boolean;
+  onExtendedOpenChange?: (open: boolean) => void;
   children?: ReactNode;
 }
 
@@ -2812,17 +2834,24 @@ function RailGroup({
   variant = 'rail',
   pulseChipId = null,
   onHoverChip,
+  extendedOpen = false,
+  onExtendedOpenChange,
   children,
 }: RailGroupProps) {
   const t = useT();
-  // The inline create rail leads with the slide deck and runs through the core
-  // build scenarios in a fixed order (see `orderedCreateChips`); every other
-  // group renders in catalog order.
-  const chips = useMemo(
-    () => (group === 'create' ? orderedCreateChips() : chipsForGroup(group)),
-    [group],
-  );
   const isTabs = variant === 'tabs';
+  // The create card rail leads with the SI deliverable scenarios and keeps the
+  // design/media scenarios behind a "More templates" toggle (see
+  // `primaryCreateChips`). The open state is owned by HomeHero so it survives
+  // the rail unmounting while a chip is active.
+  const collapsible = group === 'create' && isTabs && onExtendedOpenChange !== undefined;
+  const chips = useMemo(() => {
+    if (group !== 'create') return chipsForGroup(group);
+    if (!collapsible) return orderedCreateChips();
+    return extendedOpen
+      ? [...primaryCreateChips(), ...extendedCreateChips()]
+      : primaryCreateChips();
+  }, [group, collapsible, extendedOpen]);
 
   // Edge auto-scroll so the overflowing scenario rail stays reachable without a
   // trackpad (see EdgeAutoScroll). Only the tabs variant scrolls; for the
@@ -2916,6 +2945,26 @@ function RailGroup({
           aria-label={t('homeHero.railAria')}
         >
           {cards}
+          {collapsible ? (
+            <button
+              type="button"
+              className="home-hero__type-tab home-hero__type-tab--more-templates"
+              data-testid="home-hero-rail-more-templates"
+              aria-expanded={extendedOpen}
+              onClick={() => onExtendedOpenChange?.(!extendedOpen)}
+            >
+              <Icon
+                name={extendedOpen ? 'chevron-left' : 'chevron-right'}
+                size={14}
+                className="home-hero__type-tab-icon"
+              />
+              <span className="home-hero__type-tab-label">
+                {extendedOpen
+                  ? t('homeHero.fewerTemplates')
+                  : t('homeHero.moreTemplates', { count: extendedCreateChips().length })}
+              </span>
+            </button>
+          ) : null}
           {children}
         </div>
         <EdgeScrollZones {...edgeScroll} />
@@ -3534,6 +3583,18 @@ function fallbackPluginPresetPrompt(
 
 const HOME_PROMPT_EXAMPLES: Record<Locale, Record<string, string[]>> = {
   "en": {
+    "interface-spec": [
+      "Scan the controllers in the selected Spring project and export an interface spec workbook",
+      "Find the APIs changed by recent Git commits and compare the proposed interface spec updates",
+      "Document request and response fields, types, and required flags with code evidence",
+      "Write a handover interface definition covering only the external integration APIs",
+    ],
+    "screen-spec": [
+      "Capture the login, list, and detail screens and build a screen spec PPTX with callouts",
+      "Document the handling rules for each button and input on the running screen",
+      "Mark the events and linked APIs on each screen that is being handed over",
+      "List the search conditions and result grid columns as screen spec checkpoints",
+    ],
     prototype: [
       "Design a high-converting website for an AI CRM with a clear hero, feature story, proof points, and trial CTA",
       "Create a desktop dashboard for a team knowledge base with search, recent updates, permissions, and collaboration entry points",
@@ -3970,6 +4031,18 @@ const HOME_PROMPT_EXAMPLES: Record<Locale, Record<string, string[]>> = {
     ],
   },
   "ko": {
+    "interface-spec": [
+      "선택한 Spring 프로젝트의 Controller를 스캔해서 인터페이스 명세서 Excel을 만들어 줘",
+      "최근 Git 변경으로 바뀐 API만 찾아서 인터페이스 명세서 갱신안을 비교해 줘",
+      "요청·응답 필드와 타입, 필수 여부를 코드 근거와 함께 인터페이스 명세서로 정리해 줘",
+      "인수인계용으로 외부 연계 API만 골라 인터페이스 정의서를 작성해 줘",
+    ],
+    "screen-spec": [
+      "로그인·목록·상세 화면을 캡처해서 콜아웃과 설명이 있는 화면명세서 PPTX를 만들어 줘",
+      "실행 중인 화면을 기준으로 버튼·입력 항목별 처리 규칙을 화면명세서로 정리해 줘",
+      "인수인계 대상 화면의 이벤트와 연계 API를 화면명세서에 표시해 줘",
+      "검색 조건과 결과 그리드의 컬럼 정의를 화면명세서 체크포인트로 정리해 줘",
+    ],
     prototype: [
       "명확한 히어로, 기능 스토리, 신뢰 지표, 체험판 CTA를 갖춘 AI CRM용 고전환 website를 디자인해 줘",
       "검색, 최근 업데이트, 권한 관리, 협업 진입점을 담은 팀 지식 베이스용 데스크톱 대시보드를 만들어 줘",

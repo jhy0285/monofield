@@ -438,7 +438,12 @@ test('[P2] home hero rail shows the current creation chips and More shortcuts', 
 
   await expect(page.getByTestId('entry-star-badge')).toContainText('51.6K');
   await expect(page.getByTestId('home-hero-type-tabs')).toBeVisible();
-  for (const id of ['prototype', 'live-artifact', 'deck', 'image', 'video', 'hyperframes', 'audio']) {
+  for (const id of ['interface-spec', 'screen-spec', 'document', 'deck']) {
+    await expect(page.getByTestId(`home-hero-rail-${id}`)).toBeVisible();
+  }
+  await expect(page.getByTestId('home-hero-rail-prototype')).toHaveCount(0);
+  await openMoreTemplates(page);
+  for (const id of ['prototype', 'live-artifact', 'image', 'video', 'hyperframes', 'audio']) {
     await expect(page.getByTestId(`home-hero-rail-${id}`)).toBeVisible();
   }
   await expect(page.getByTestId('home-hero-shortcuts-trigger')).toBeVisible();
@@ -507,6 +512,8 @@ test('[P1] home hero example presets update the composer input for prototype and
   const input = page.getByTestId('home-hero-input');
   await expect(input).toHaveText('');
 
+  await openMoreTemplates(page);
+
   await page.getByTestId('home-hero-rail-prototype').click();
   await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
   await page
@@ -517,6 +524,7 @@ test('[P1] home hero example presets update the composer input for prototype and
   );
 
   await clearActiveChip(page);
+  await openMoreTemplates(page);
   await page.getByTestId('home-hero-rail-live-artifact').click();
   await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
   await page
@@ -545,6 +553,7 @@ test('[P1] home hero prompt example cards fill the composer for fallback modes',
   await gotoEntryHome(page);
 
   const input = page.getByTestId('home-hero-input');
+  await openMoreTemplates(page);
   await page.getByTestId('home-hero-rail-audio').click();
   await expect(page.getByTestId('home-hero-prompt-examples')).toBeVisible();
   await expect(page.getByTestId('home-hero-plugin-presets')).toHaveCount(0);
@@ -560,6 +569,8 @@ test('[P1] home hero prompt example cards fill the composer for fallback modes',
 test('[P2] clearing the active hero chip restores the rail and clears preset chrome', async ({ page }) => {
   await gotoEntryHome(page);
 
+  await openMoreTemplates(page);
+
   await page.getByTestId('home-hero-rail-prototype').click();
   await expect(page.getByTestId('home-hero-active-type-chip')).toBeVisible();
   await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
@@ -572,6 +583,7 @@ test('[P2] clearing the active hero chip restores the rail and clears preset chr
   await expect(page.getByTestId('home-hero-footer-option-ratio')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-footer-option-duration')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-type-tabs')).toBeVisible();
+  await openMoreTemplates(page);
   await expect(page.getByTestId('home-hero-rail-live-artifact')).toBeVisible();
 });
 
@@ -579,6 +591,8 @@ test('[P1] after clearing one mode, selecting another example updates the compos
   await gotoEntryHome(page);
 
   const input = page.getByTestId('home-hero-input');
+
+  await openMoreTemplates(page);
 
   await page.getByTestId('home-hero-rail-prototype').click();
   await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
@@ -590,6 +604,8 @@ test('[P1] after clearing one mode, selecting another example updates the compos
   );
 
   await clearActiveChip(page);
+
+  await openMoreTemplates(page);
 
   await page.getByTestId('home-hero-rail-live-artifact').click();
   await expect(page.getByTestId('home-hero-active-type-chip')).toBeVisible();
@@ -606,6 +622,8 @@ test('[P1] selecting another example updates the composer input', async ({ page 
 
   const input = page.getByTestId('home-hero-input');
 
+  await openMoreTemplates(page);
+
   await page.getByTestId('home-hero-rail-live-artifact').click();
   await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
   await page
@@ -620,6 +638,7 @@ test('[P1] selecting another example updates the composer input', async ({ page 
 });
 
 async function expectChipSelection(page: Page, chipId: string, _label: string) {
+  if (!(await page.getByTestId(`home-hero-rail-${chipId}`).count())) await openMoreTemplates(page);
   const chip = page.getByTestId(`home-hero-rail-${chipId}`);
   await expect(chip).toBeEnabled();
   await chip.click();
@@ -630,4 +649,11 @@ async function clearActiveChip(page: Page) {
   await page.getByTestId('home-hero-active-type-chip').click();
   await expect(page.getByTestId('home-hero-active-type-chip')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-type-tabs')).toBeVisible();
+}
+
+// The Home rail leads with the SI deliverable cards; design/media templates
+// sit behind "More templates". Open it (once) before reaching for them.
+async function openMoreTemplates(page: Page) {
+  const toggle = page.getByTestId('home-hero-rail-more-templates');
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
 }

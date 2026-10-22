@@ -208,6 +208,19 @@
   flex: 0 0 34px;
   padding: 7px;
 }
+/* "More templates" toggle at the end of the create card rail. Owned by the
+   Home SI-first rail (see `primaryCreateChips` in home-hero/chips.ts). It
+   matches the card height so the rail does not jump when it expands. */
+.home-hero__type-tab--more-templates {
+  flex: 0 0 auto;
+  align-self: stretch;
+  gap: 6px;
+  padding: 0 14px;
+  border-style: dashed;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-muted);
+}
 
 /* Second-level sub-type rail — lighter/smaller than the primary type tabs
    so it reads as a child row, mirroring Manus's website sub-category pills. */
