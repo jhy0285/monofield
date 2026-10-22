@@ -30,3 +30,9 @@ Published REA 6.4.0 does not advertise the SQLite operation used by the fork's s
 The UI harness initially inherited npm's executable path through `npx`, preventing tools-dev startup. Running with the pinned Corepack pnpm launcher resolved it. The new MCP row opens collapsed; the acceptance test expands the real row before checking its command. Neither issue required a product workaround.
 
 This remains a preview. The earlier full UI acceptance reports include unresolved coverage/failures; focused green checks and packaging validation do not assert that every development workflow is production-ready.
+
+## Full CI and Windows follow-up
+
+The full web unit job in [CI 39714465415](https://github.com/jhy0285/monofield/actions/runs/39714465415) reported **3,730 passed, 95 failed, 13 skipped** tests across 359 passing and 30 failing files. Failures include existing brand/prompt expectations, AMR/configuration interactions, localization and theme contracts. `git diff` confirms the complete `apps/web` tree is unchanged from the previous `0.11.7-preview.1` source (`6a9591be`). This publication does not claim to repair that backlog or pass the full CI suite.
+
+The first [Windows release attempt](https://github.com/jhy0285/monofield/actions/runs/39714474718) stopped before packaging/publication: two PowerShell-launching tests exceeded the existing 20-second limit under four concurrent packaging workers. [PR #7](https://github.com/jhy0285/monofield/pull/7) limits Windows packaging tests to one worker while retaining all assertions and the same timeout. The Linux suite still passed 221 tests with nine skips. The fixed release source is `cec7c1e348702d0a285d3b4b5fe938a9fd900e61`; its [Windows build and smoke run](https://github.com/jhy0285/monofield/actions/runs/39715633397) is the publication gate.
