@@ -24,8 +24,8 @@
     document.documentElement.lang = language;
     document.title =
       language === "ko"
-        ? "MonoField (모노필드) | 로컬 AI 워크벤치"
-        : "MonoField (모노필드) | Local-first AI workbench";
+        ? "MonoField (모노필드) | Codex·Claude Code SI 산출물 작업대"
+        : "MonoField (모노필드) | SI deliverables workbench for Codex and Claude Code";
     translatable.forEach((element) => {
       element.textContent =
         element.getAttribute(`data-${language}`) || element.textContent;

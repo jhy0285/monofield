@@ -35,10 +35,10 @@ test('home page exposes one consistent canonical search identity', () => {
   const homeHead = head(home);
   const title = homeHead.match(/<title>([^<]+)<\/title>/)?.[1] ?? '';
   const description = attribute(homeHead, /<meta\s+name="description"[^>]*>/i, 'content');
-  assert.equal(title, 'MonoField (모노필드) | Local-first AI workbench');
+  assert.equal(title, 'MonoField (모노필드) | Codex·Claude Code SI 산출물 작업대');
   assert.equal((homeHead.match(/<title>/gi) ?? []).length, 1);
   assert.equal((homeHead.match(/<meta\s+name="description"/gi) ?? []).length, 1);
-  assert.match(description, /^MonoField\(모노필드\) is a local-first AI workbench/);
+  assert.match(description, /^MonoField\(모노필드\)는 Codex·Claude Code로 SI 산출물까지 끝내는 작업대/);
   assert.equal(
     attribute(homeHead, /<link\s+rel="canonical"[^>]*>/i, 'href'),
     `${siteUrl}/`,

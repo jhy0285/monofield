@@ -7,8 +7,8 @@
 <h1 align="center">MonoField</h1>
 
 <p align="center">
-  <strong>code / design / documents</strong><br />
-  One workspace, every kind of work
+  <strong>Codex·Claude Code로 SI 산출물까지 끝내는 작업대</strong><br />
+  The workbench that takes Codex and Claude Code all the way to SI deliverables
 </p>
 
 <p align="center">
@@ -32,16 +32,45 @@
   </a>
 </p>
 
-MonoField is a local-first desktop workbench for people who need to move from a
-request to a result without losing the project context along the way. The
-working folder, Git changes, run configuration, live browser, governed database
-access, references, and deliverables stay attached to one project.
+MonoField is a local Windows workbench for **Korean SI and public-sector
+developers and the people who hand systems over**. It runs the Codex or Claude
+Code CLI you already use against a real project folder, turns that code into
+interface spec workbooks (XLSX) and screen specs (PPTX), and — when the code
+changes — shows the spec update as a reviewable diff instead of a rewrite.
 
 ```text
-connect                         work                         prove
-folder · files · browser     →  ask · edit · run          →  diff · build · UI check
-database · rules · brand        compose · review · export    code · XLSX · PPTX · PDF
+open folder        →  generate spec          →  change code             →  review spec diff
+Spring / Java / …     interface XLSX · screen    Codex or Claude Code       changed fields only,
+                      PPTX from code evidence    edits + build/test         approve → export
 ```
+
+**한국어** — MonoField는 한국 SI·공공 프로젝트 개발자와 인수인계 담당자를 위한
+로컬 작업대입니다. 이미 쓰는 Codex 또는 Claude Code CLI로 프로젝트 폴더를 다루고,
+코드 근거로 인터페이스 명세서(Excel)와 화면명세서(PPTX)를 만들며, 코드가 바뀌면
+명세서 갱신분을 diff로 검토한 뒤 반영합니다.
+
+### Who it is for / 누구를 위한 도구인가
+
+- **SI·공공·금융 개발자** — 코드 변경과 함께 인터페이스 명세서·화면명세서를
+  계속 맞춰야 하는 사람.
+- **인수인계 담당자** — 기존 시스템을 근거 기반으로 조사하고 문서로 넘겨야 하는
+  사람 ([REA 인수인계 흐름](docs/rea-laya-handover.md)).
+- **PM·기획자·주니어 개발자** — 터미널 대신 GUI에서 같은 근거와 산출물을 보고 싶은
+  사람.
+
+### What you need / 필요한 것
+
+- Windows 10/11.
+- **Codex CLI 또는 Claude Code CLI** (로컬 설치). MonoField는 에이전트를
+  대체하지 않고 그 위에서 동작합니다. API 키(BYOK)만으로는 대화와 문서 생성만
+  가능하고 파일 수정·터미널·Git·브라우저 검증은 쓸 수 없습니다.
+
+If you only write code and are comfortable in a terminal or IDE, Codex or Claude
+Code alone may be all you need. MonoField earns its place when the job also ends
+in structured deliverables that must stay in sync with the code.
+
+The three-minute walkthrough of the full loop is in
+[docs/demo/spring-interface-spec-demo.md](docs/demo/spring-interface-spec-demo.md).
 
 **Current development release: [0.11.7-preview.2](https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.2)** — includes the Java/ontology workspace, optional **REA MCP integration**, a bundled legacy-system handover skill, and **Laya local typed-decision integration**. [Download the Windows preview](https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.2/MonoField-release-preview-win-setup.exe). It installs alongside stable. REA is downloaded on first enabled use; Node/npm, Chromium, Laya model weights and its server are separate prerequisites.
 
@@ -228,4 +257,4 @@ MonoField가 실제 작업에 도움이 됐거나 방향이 마음에 들었다�
 
 ---
 
-<p align="center"><strong>One workspace, every kind of work</strong></p>
+<p align="center"><strong>Codex·Claude Code로 SI 산출물까지</strong></p>
