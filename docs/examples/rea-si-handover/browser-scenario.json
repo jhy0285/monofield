@@ -1,0 +1,135 @@
+{
+  "browser": {
+    "mode": "launch",
+    "executable_path": "/usr/bin/chromium"
+  },
+  "start_url": {
+    "url": "http://127.0.0.1:4318"
+  },
+  "actions": [
+    {
+      "step_id": "orders-loaded",
+      "action": "wait_for",
+      "locator": {
+        "kind": "css",
+        "selector": "#orders[data-state=\"ready\"]"
+      },
+      "state": "visible",
+      "timeout_ms": 10000
+    },
+    {
+      "step_id": "paid-settlement-click",
+      "action": "click",
+      "locator": {
+        "kind": "css",
+        "selector": "#settle-1001"
+      },
+      "timeout_ms": 10000
+    },
+    {
+      "step_id": "paid-settlement-result",
+      "action": "wait_for",
+      "locator": {
+        "kind": "css",
+        "selector": "#result[data-status=\"201\"]"
+      },
+      "state": "visible",
+      "timeout_ms": 10000
+    },
+    {
+      "step_id": "duplicate-settlement-click",
+      "action": "click",
+      "locator": {
+        "kind": "css",
+        "selector": "#settle-1001"
+      },
+      "timeout_ms": 10000
+    },
+    {
+      "step_id": "duplicate-settlement-result",
+      "action": "wait_for",
+      "locator": {
+        "kind": "css",
+        "selector": "#result[data-status=\"409\"]"
+      },
+      "state": "visible",
+      "timeout_ms": 10000
+    },
+    {
+      "step_id": "pending-rejected-click",
+      "action": "click",
+      "locator": {
+        "kind": "css",
+        "selector": "#settle-1002"
+      },
+      "timeout_ms": 10000
+    },
+    {
+      "step_id": "pending-rejected-result",
+      "action": "wait_for",
+      "locator": {
+        "kind": "css",
+        "selector": "#result[data-status=\"409\"]"
+      },
+      "state": "visible",
+      "timeout_ms": 10000
+    },
+    {
+      "step_id": "cancelled-rejected-click",
+      "action": "click",
+      "locator": {
+        "kind": "css",
+        "selector": "#settle-1003"
+      },
+      "timeout_ms": 10000
+    },
+    {
+      "step_id": "cancelled-rejected-result",
+      "action": "wait_for",
+      "locator": {
+        "kind": "css",
+        "selector": "#result[data-status=\"409\"]"
+      },
+      "state": "visible",
+      "timeout_ms": 10000
+    },
+    {
+      "step_id": "settlements-click",
+      "action": "click",
+      "locator": {
+        "kind": "css",
+        "selector": "#show-settlements"
+      }
+    },
+    {
+      "step_id": "settlements-loaded",
+      "action": "wait_for",
+      "locator": {
+        "kind": "css",
+        "selector": "#settlements[data-state=\"ready\"]"
+      },
+      "state": "visible",
+      "timeout_ms": 10000
+    }
+  ],
+  "capture": {
+    "after_each_step": [
+      "dom"
+    ],
+    "at_end": [
+      "dom",
+      "accessibility",
+      "screenshot",
+      "url"
+    ],
+    "events": [
+      "network",
+      "page-errors"
+    ],
+    "network": {
+      "request_body": true,
+      "response_body": true,
+      "header_values": false
+    }
+  }
+}

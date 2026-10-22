@@ -854,6 +854,19 @@ function joinPermissionGlob(dir: string, suffix: '*' | '**'): string {
 // ───────────────────────────────────────────────────────────────────────
 
 export const MCP_TEMPLATES: McpTemplate[] = [
+  {
+    id: 'rea',
+    label: 'REA (Reverse Engineer Anything)',
+    description:
+      'Investigate shipped JavaScript applications, SQLite snapshots and browser behavior with source-linked Evidence. Use the bundled legacy-system-handover skill to turn findings into MonoField interface and screen specifications. Requires a separately installed supported Node.js runtime and npm; npx downloads pinned rea-agents 6.7.0 on first use. Browser capture requires an installed Chromium browser. Native analysis engines are separate prerequisites.',
+    transport: 'stdio',
+    category: 'utilities',
+    homepage: 'https://github.com/jhy0285/rea-yj',
+    example:
+      'Use REA to investigate the selected legacy application, preserve Evidence IDs and unknowns, and prepare reviewed interface and screen specifications for handover.',
+    command: 'npx',
+    args: ['-y', 'rea-agents@6.7.0', '--mcp'],
+  },
   // ── image-generation ────────────────────────────────────────────────
   {
     id: 'higgsfield-openclaw',

@@ -1,0 +1,36 @@
+{
+  "browser": {
+    "mode": "launch",
+    "executable_path": "/usr/bin/chromium"
+  },
+  "environment": {
+    "viewport": {
+      "width": 1280,
+      "height": 1000,
+      "device_scale_factor": 1
+    }
+  },
+  "start_url": {
+    "url": "http://127.0.0.1:4318"
+  },
+  "actions": [
+    {
+      "step_id": "overview-ready",
+      "action": "wait_for",
+      "locator": {
+        "kind": "css",
+        "selector": "#orders[data-state=\"ready\"]"
+      },
+      "state": "visible",
+      "timeout_ms": 10000
+    }
+  ],
+  "capture": {
+    "at_end": [
+      "dom",
+      "accessibility",
+      "screenshot",
+      "url"
+    ]
+  }
+}

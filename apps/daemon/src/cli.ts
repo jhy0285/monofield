@@ -341,6 +341,10 @@ const PLUGIN_LIST_BOOLEAN_FLAGS = new Set([
 ]);
 
 const SUBCOMMAND_MAP = {
+  rea: async (args: string[]) => {
+    const { runReaCli } = await import('./services/rea-cli.js');
+    return runReaCli(args, { baseUrl: cliDaemonBaseUrl, parseFlags, positionalArgs: collectCliPositionals });
+  },
   java: async (args:string[]) => {
     const {runJavaToolsCli}=await import('./services/java/cli.js');
     return runJavaToolsCli(args,{baseUrl:cliDaemonBaseUrl,parseFlags});
