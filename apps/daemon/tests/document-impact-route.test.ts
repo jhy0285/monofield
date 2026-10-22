@@ -108,6 +108,10 @@ describe('document impact API and CLI', () => {
     expect(response.status).toBe(200);
     const result = await response.json() as DocumentProposalResponse;
     expect(result).toMatchObject({ format: 'changes', changesApplied: 1 });
+    expect(result.compatibility).toMatchObject({ level: 'breaking', counts: { breaking: 1, warning: 0, info: 0 } });
+    expect(result.compatibility.changes[0]).toMatchObject({
+      code: 'field-type-changed', location: 'response', interfaceId: 'IF-001', after: 'String',
+    });
     expect(result.document?.endpoints[0]?.responseFields[0]).toMatchObject({
       dataType: 'String', evidence: 'Approved requirement', reviewStatus: 'edited',
     });
@@ -119,6 +123,7 @@ describe('document impact API and CLI', () => {
     ]);
     const summary = JSON.parse(stdout) as DocumentProposalResponse;
     expect(summary).toMatchObject({ format: 'changes', changesApplied: 1, contentSha256: report.contentSha256 });
+    expect(summary.compatibility).toEqual(result.compatibility);
     expect(summary.document).toBeUndefined();
     expect(await readFile(path.join(root, 'orders.json'), 'utf8')).toBe(original);
     const conflict = await fetch(`${started.url}/api/projects/${projectId}/documents/proposal`, {
