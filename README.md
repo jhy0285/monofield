@@ -13,8 +13,8 @@
 
 <p align="center">
   <a href="https://monofield.vercel.app">Website</a> ·
-  <a href="https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-setup.exe">Download for Windows</a> ·
-  <a href="https://github.com/jhy0285/monofield/releases/latest">Latest release</a> ·
+  <a href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.2/MonoField-release-preview-win-setup.exe">Windows preview · REA + Laya</a> ·
+  <a href="https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.2">0.11.7-preview.2 release</a> ·
   <a href="docs/open-source-compliance.md">Open-source notices</a>
 </p>
 
@@ -124,13 +124,17 @@ tooling boundary.
 
 ## Install
 
-- [Windows installer](https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-setup.exe)
-- [Portable package](https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-portable.zip)
-- [Release notes and checksums](https://github.com/jhy0285/monofield/releases/latest)
+- [Windows REA/Laya preview installer](https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.2/MonoField-release-preview-win-setup.exe)
+- [Preview portable package](https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.2/MonoField-release-preview-win-portable.zip)
+- [Preview release notes and checksums](https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.2)
+- [Stable Windows installer](https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-setup.exe)
+- [Stable portable package](https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-portable.zip)
+- [Stable release notes and checksums](https://github.com/jhy0285/monofield/releases/latest)
 - Microsoft Store — shown on the [MonoField website](https://monofield.vercel.app)
   after the public listing is certified
 
-The installer link downloads the EXE directly from the latest GitHub Release.
+Preview downloads are pinned to the REA/Laya `0.11.7-preview.2` release;
+stable links follow the latest stable GitHub Release.
 The current public Desktop build targets Windows 10/11. Direct-download builds
 are unsigned, so Windows can show an unrecognized-publisher warning; verify the
 download with the release's `SHA256SUMS.txt`. See
