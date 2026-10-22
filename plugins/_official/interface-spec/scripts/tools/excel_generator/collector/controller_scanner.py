@@ -16,6 +16,30 @@ MAPPING_ANNOS = (
     "@RequestMapping",
 )
 PACKAGE_RE = re.compile(r"^\s*package\s+([^;]+);", re.M)
+# A method-level @RequestMapping without `method` serves every HTTP method.
+ANY_METHOD = "GET/POST"
+ANY_METHOD_NOTE = "@RequestMapping에 method가 없어 모든 HTTP 메서드를 허용"
+# Spring binds these handler arguments itself; they never carry client input.
+FRAMEWORK_PARAM_TYPES = {
+    "HttpServletRequest", "HttpServletResponse", "ServletRequest", "ServletResponse", "HttpSession",
+    "WebRequest", "NativeWebRequest", "MultipartHttpServletRequest", "Model", "ModelMap", "ModelAndView",
+    "BindingResult", "Errors", "SessionStatus", "RedirectAttributes", "Principal", "Authentication",
+    "Locale", "TimeZone", "ZoneId", "InputStream", "OutputStream", "Reader", "Writer", "HttpMethod",
+    "UriComponentsBuilder", "HttpEntity", "RequestEntity", "Pageable", "Sort",
+}
+SIMPLE_PARAM_TYPES = {
+    "String", "Integer", "int", "Long", "long", "Short", "short", "Byte", "byte", "Double", "double",
+    "Float", "float", "Boolean", "boolean", "Character", "char", "BigDecimal", "BigInteger",
+    "LocalDate", "LocalDateTime", "LocalTime", "Date", "UUID",
+}
+# Argument annotations that bind something other than a form/query object.
+NON_FORM_PARAM_ANNOS = (
+    "@RequestHeader", "@CookieValue", "@SessionAttribute", "@RequestAttribute",
+    "@AuthenticationPrincipal", "@RequestPart", "@MatrixVariable", "@Value",
+)
+QUERY_DTO_SUFFIXES = (
+    "Dto", "DTO", "Form", "VO", "Vo", "Condition", "Criteria", "Cond", "Param", "Params", "Search", "Command",
+)
 CONST_RE = re.compile(r"public\s+static\s+final\s+String\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+?);")
 CLASS_RE = re.compile(r"\bclass\s+([A-Za-z_][A-Za-z0-9_]*)\b")
 SERVICE_FIELD_RE = re.compile(
@@ -37,6 +61,8 @@ class ApiSeed:
     response_type: str | None
     auth_required: bool
     request_fields: list[FieldSpec]
+    summary: str = ""
+    note: str = ""
 
 
 def _controller_display_path(path: Path, repo_root: Path, codebase_path: Path) -> str:
@@ -59,6 +85,44 @@ def _join_mapping_path(class_base: str, method_path: str) -> str:
         if segment
     ]
     return "/" + "/".join(segments)
+
+
+def _javadoc_summary(block: list[str]) -> str:
+    """First descriptive line of a Javadoc/block comment, without tags or the closing period."""
+    for raw in block:
+        text = raw.strip().lstrip("/").lstrip("*").strip()
+        if text.endswith("*/"):
+            text = text[:-2].strip()
+        if not text or text.startswith("@"):
+            continue
+        return text.rstrip(".").strip()
+    return ""
+
+
+def _project_class_names(java_root: Path) -> set[str]:
+    names: set[str] = set()
+    for path in java_root.rglob("*.java"):
+        m = CLASS_RE.search(path.read_text(encoding="utf-8", errors="ignore"))
+        if m:
+            names.add(m.group(1))
+    return names
+
+
+def _form_object_type(param: str, p_type: str, project_classes: set[str]) -> bool:
+    """Whether Spring binds this handler argument from request parameters as a form object.
+
+    `@ModelAttribute` always does; an un-annotated argument does when it is a
+    non-simple type (Spring's implicit @ModelAttribute) that belongs to the
+    project or follows a DTO/VO naming convention.
+    """
+    base = re.sub(r"<.*", "", p_type).replace("[]", "").strip()
+    if base in FRAMEWORK_PARAM_TYPES or base in SIMPLE_PARAM_TYPES:
+        return False
+    if "@ModelAttribute" in param:
+        return True
+    if any(anno in param for anno in NON_FORM_PARAM_ANNOS):
+        return False
+    return base in project_classes or base.endswith(QUERY_DTO_SUFFIXES)
 
 
 def _normalize_type(type_raw: str) -> str:
@@ -166,9 +230,8 @@ def _extract_mapping(anno: str, consts: dict[str, str]) -> tuple[str | None, str
         inside = anno[anno.find("(") + 1 : anno.rfind(")")].strip()
 
     if anno.startswith("@RequestMapping"):
-        mm = re.search(r"method\s*=\s*RequestMethod\.([A-Z]+)", inside)
-        if mm:
-            method = mm.group(1)
+        methods = re.findall(r"RequestMethod\.([A-Z]+)", inside)
+        method = "/".join(dict.fromkeys(methods)) if methods else ANY_METHOD
         mv = re.search(r"(?:value|path)\s*=\s*([^,]+)", inside)
         if mv:
             path = _resolve_constant_expr(mv.group(1), consts)
@@ -607,6 +670,7 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
 
     consts = _load_constants(java_root)
     service_method_returns = _load_service_method_returns(java_root)
+    project_classes = _project_class_names(java_root)
     out: list[ApiSeed] = []
 
     for path in java_root.rglob("*Controller.java"):
@@ -632,9 +696,19 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
 
         idx = 0
         pending: list[str] = []
+        doc_block: list[str] = []
         while idx < len(lines):
             s = lines[idx].strip()
             if not s:
+                idx += 1
+                continue
+
+            if s.startswith("/*"):
+                block = [lines[idx]]
+                while "*/" not in lines[idx] and idx + 1 < len(lines):
+                    idx += 1
+                    block.append(lines[idx])
+                doc_block = block
                 idx += 1
                 continue
 
@@ -661,6 +735,8 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
                         if method:
                             break
                 pending = []
+                summary = _javadoc_summary(doc_block)
+                doc_block = []
                 if not method:
                     continue
 
@@ -672,7 +748,7 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
                 params = _split_params(params_text)
 
                 request_body_type = None
-                query_dto_type = None
+                form_types: list[str] = []
                 request_fields: list[FieldSpec] = []
 
                 for p in params:
@@ -709,9 +785,27 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
                                 note="request param",
                             )
                         )
-                    else:
-                        if p_type.endswith(("Dto", "Form", "SearchDto", "FormDto")) and query_dto_type is None:
-                            query_dto_type = p_type
+                    elif _form_object_type(p_clean, p_type, project_classes):
+                        form_type = re.sub(r"<.*", "", p_type).strip()
+                        if form_type not in form_types:
+                            form_types.append(form_type)
+                    elif re.sub(r"<.*", "", p_type).strip() in SIMPLE_PARAM_TYPES and not any(
+                        anno in p_clean for anno in NON_FORM_PARAM_ANNOS
+                    ):
+                        # Spring binds an un-annotated simple argument as an optional request parameter.
+                        nm = re.search(r"([A-Za-z_][A-Za-z0-9_]*)\s*$", re.sub(r"@\w+(\([^)]*\))?", "", p_clean).strip())
+                        name = nm.group(1) if nm else "queryParam"
+                        request_fields.append(
+                            FieldSpec(
+                                section="REQUEST",
+                                name_en=name,
+                                name_ko=koreanize_identifier(name),
+                                data_type=_short_type(p_type),
+                                required="N",
+                                note="request param",
+                            )
+                        )
+                query_dto_type = ", ".join(form_types) or None
 
                 method_name = _extract_method_name(sig)
                 response_type = _extract_response_type(sig)
@@ -740,12 +834,16 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
                         response_type=response_type,
                         auth_required=auth_required,
                         request_fields=request_fields,
+                        summary=summary,
+                        note=ANY_METHOD_NOTE if method == ANY_METHOD else "",
                     )
                 )
                 continue
 
             if pending and not s.startswith("@"):
                 pending = []
+            if not s.startswith("//"):
+                doc_block = []
             idx += 1
 
     return out
@@ -769,6 +867,8 @@ def to_api_endpoints(seeds: list[ApiSeed]) -> list[ApiEndpoint]:
                 query_dto_type=s.query_dto_type,
                 response_type=s.response_type,
                 auth_required=s.auth_required,
+                interface_name=s.summary or None,
+                note=s.note,
                 request_fields=list(s.request_fields),
                 response_fields=[],
             )

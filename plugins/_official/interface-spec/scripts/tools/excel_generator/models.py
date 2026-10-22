@@ -35,6 +35,7 @@ class ApiEndpoint:
     auth_required: bool = False
     interface_id: Optional[str] = None
     interface_name: Optional[str] = None
+    note: str = ""
     request_fields: list[FieldSpec] = field(default_factory=list)
     response_fields: list[FieldSpec] = field(default_factory=list)
 

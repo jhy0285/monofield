@@ -106,6 +106,64 @@ class ScannerFieldPathsTest(unittest.TestCase):
         request_paths = {field["path"] for field in create["requestFields"]}
         self.assertTrue({"memberId", "items", "items.productId", "deliveryAddress"} <= request_paths)
 
+    def test_egov_fixture_keeps_method_less_do_mappings(self) -> None:
+        document = _scan_fixture("scan_spring.py", "spring-egov")
+        self.assert_unique_field_paths(document)
+        endpoints = {(endpoint["method"], endpoint["path"]): endpoint for endpoint in document["endpoints"]}
+        # @RequestMapping without `method` serves every HTTP method; it must not be dropped.
+        self.assertEqual(set(endpoints), {
+            ("GET/POST", "/board/selectBoardList.do"),
+            ("POST", "/board/insertBoard.do"),
+            ("GET/POST", "/board/selectBoard.do"),
+        })
+        self.assertIn("method", endpoints[("GET/POST", "/board/selectBoardList.do")]["note"])
+        self.assertEqual(endpoints[("POST", "/board/insertBoard.do")]["note"], "")
+
+    def test_egov_fixture_binds_model_attribute_and_vo_parameters(self) -> None:
+        document = _scan_fixture("scan_spring.py", "spring-egov")
+        endpoints = {(endpoint["method"], endpoint["path"]): endpoint for endpoint in document["endpoints"]}
+
+        search = endpoints[("GET/POST", "/board/selectBoardList.do")]
+        self.assertEqual({field["path"] for field in search["requestFields"]}, {"searchCondition", "searchKeyword", "useYn"})
+        self.assertEqual(search["queryDtoType"], "BoardDefaultVO")
+
+        insert = endpoints[("POST", "/board/insertBoard.do")]
+        insert_paths = [field["path"] for field in insert["requestFields"]]
+        self.assertEqual(sorted(insert_paths), sorted(["searchCondition", "searchKeyword", "useYn", "nttId", "nttSj", "nttCn", "ntcrNm"]))
+        self.assertEqual(insert["queryDtoType"], "BoardDefaultVO, BoardVO")
+        # Framework parameters (ModelMap, BindingResult, SessionStatus, HttpServletRequest) are not request fields.
+        self.assertFalse({"model", "bindingResult", "status", "request"} & set(insert_paths))
+
+    def test_egov_fixture_uses_korean_javadoc_for_names(self) -> None:
+        document = _scan_fixture("scan_spring.py", "spring-egov")
+        endpoints = {(endpoint["method"], endpoint["path"]): endpoint for endpoint in document["endpoints"]}
+        self.assertEqual(endpoints[("GET/POST", "/board/selectBoardList.do")]["interfaceName"], "게시글 목록을 조회한다")
+        self.assertEqual(endpoints[("POST", "/board/insertBoard.do")]["interfaceName"], "게시글을 등록한다")
+
+        detail = endpoints[("GET/POST", "/board/selectBoard.do")]
+        names = {field["path"]: field["nameKo"] for field in detail["responseFields"]}
+        self.assertEqual(names["nttId"], "게시글 아이디")
+        self.assertEqual(names["nttSj"], "게시글 제목")
+        self.assertEqual(names["nttCn"], "게시글 내용")
+        self.assertEqual(names["ntcrNm"], "작성자명")
+        self.assertEqual(names["useYn"], "사용여부")
+
+    def test_name_dictionary_still_wins_over_javadoc(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dictionary = Path(temp_dir) / "terms.csv"
+            dictionary.write_text("nttSj,게시물 제목\n", encoding="utf-8")
+            output_path = Path(temp_dir) / "interface-spec.json"
+            subprocess.run(
+                [sys.executable, str(SCRIPTS_DIR / "scan_spring.py"), "--codebase-path", str(FIXTURES_DIR / "spring-egov"),
+                 "--name-dict", str(dictionary), "--out", str(output_path)],
+                check=True, capture_output=True, text=True,
+            )
+            document = json.loads(output_path.read_text(encoding="utf-8"))
+        detail = next(endpoint for endpoint in document["endpoints"] if endpoint["path"] == "/board/selectBoard.do")
+        names = {field["path"]: field["nameKo"] for field in detail["responseFields"]}
+        self.assertEqual(names["nttSj"], "게시물 제목")
+        self.assertEqual(names["nttId"], "게시글 아이디")
+
 
 if __name__ == "__main__":
     unittest.main()

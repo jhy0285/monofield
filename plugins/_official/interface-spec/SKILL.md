@@ -485,6 +485,14 @@ Supported collectors:
 | Django / DRF | `scripts/scan_django.py` |
 | Go (Gin, Echo, Chi) | `scripts/scan_go.py` |
 
+The Spring scanner also covers eGovFrame-style Spring MVC: `.do` mappings,
+method-level `@RequestMapping` without `method` (recorded as `GET/POST` with a
+note, because Spring accepts every method), `@ModelAttribute` and un-annotated
+project `*VO` form objects (every bound form object is expanded), and Korean
+Javadoc/line comments as interface and field names when no dictionary entry
+exists. Review `authRequired` against the security configuration; the scanner
+only infers it from the path.
+
 Each scanner emits `requestExample` and `responseExample` with
 `exampleSource: "static-analysis"`. These examples combine traced request and
 response DTO fields with matching values from the approved redacted table

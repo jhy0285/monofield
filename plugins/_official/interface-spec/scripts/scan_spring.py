@@ -187,8 +187,16 @@ def main() -> int:
             fields, _conflicts = expand_dto_to_spec_fields(classes, ep.request_body_type, "REQUEST", name_dict)
             ep.request_fields.extend(fields)
         if ep.query_dto_type:
-            fields, _conflicts = expand_dto_to_spec_fields(classes, ep.query_dto_type, "REQUEST", name_dict)
-            ep.request_fields.extend(fields)
+            # A handler can bind several form objects (e.g. eGov `searchVO` plus the
+            # entity VO); expand each and keep the first occurrence of a field path.
+            seen = {f.path or f.name_en for f in ep.request_fields}
+            for form_type in (part.strip() for part in ep.query_dto_type.split(",")):
+                fields, _conflicts = expand_dto_to_spec_fields(classes, form_type, "REQUEST", name_dict)
+                for f in fields:
+                    key = f.path or f.name_en
+                    if key not in seen:
+                        seen.add(key)
+                        ep.request_fields.append(f)
         if ep.response_type:
             fields, _conflicts = expand_type_to_spec_fields(classes, ep.response_type, "RESPONSE", name_dict)
             ep.response_fields.extend(fields)
@@ -224,7 +232,7 @@ def main() -> int:
                 "businessCode": "",
                 "channel": "",
                 "owner": "",
-                "note": "",
+                "note": ep.note or "",
                 "moduleName": ep.package_name or "",
                 "serviceName": ep.service_name or "",
                 "handlerName": ep.method_name or "",

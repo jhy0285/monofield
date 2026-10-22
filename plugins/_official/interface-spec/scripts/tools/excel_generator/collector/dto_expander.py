@@ -14,6 +14,7 @@ FIELD_RE = re.compile(
 )
 CLASS_RE = re.compile(r"\bclass\s+([A-Za-z_][A-Za-z0-9_]*)\b(?:\s+extends\s+([A-Za-z_][A-Za-z0-9_\.]*) )?")
 PACKAGE_RE = re.compile(r"^\s*package\s+([^;]+);", re.M)
+_HANGUL = re.compile(r"[가-힣]")
 
 _CONTAINER_TYPES = {"List", "Set", "Map", "Optional", "Collection", "Iterable", "ArrayList", "HashMap"}
 _LEAF_TYPES = {
@@ -40,6 +41,37 @@ class JavaField:
     name: str
     type_raw: str
     annotations: list[str]
+    # Javadoc, block or line comment written for the field (first descriptive line).
+    comment: str = ""
+
+
+def _comment_text(raw: str) -> str:
+    text = raw.strip().lstrip("/").lstrip("*").strip()
+    if text.endswith("*/"):
+        text = text[:-2].strip()
+    return "" if text.startswith("@") else text
+
+
+def comment_label(comment: str) -> str:
+    """Korean field label from a source comment: `/** 작성자명 (실명) */` → `작성자명`.
+
+    Only Korean comments qualify, so English remarks never replace a name.
+    """
+    text = re.split(r"\s*[(\[]", comment.strip(), maxsplit=1)[0].strip().rstrip(".").strip()
+    return text if _HANGUL.search(text) and len(text) <= 40 else ""
+
+
+def resolve_field_name(
+    f: JavaField,
+    name_dict: dict[str, str],
+    template_ko: str | None,
+) -> tuple[str, bool]:
+    """Dictionary and reused template names win; then the field's Korean comment; then rules."""
+    if f.name not in name_dict and not template_ko:
+        label = comment_label(f.comment)
+        if label:
+            return label, True
+    return resolve_name(f.name, name_dict, template_ko, prefer_korean=True)
 
 
 @dataclass
@@ -101,10 +133,21 @@ def parse_java_classes(codebase_path: Path) -> dict[str, JavaClass]:
 
         anns: list[str] = []
         fields: list[JavaField] = []
+        comment = ""
+        in_block = False
         for line in text.splitlines():
             s = line.strip()
-            if not s or s.startswith("//"):
+            if in_block or s.startswith("/*"):
+                if not comment:
+                    comment = _comment_text(s)
+                in_block = "*/" not in s
                 continue
+            if not s:
+                continue
+            if s.startswith("//"):
+                comment = _comment_text(s) or comment
+                continue
+            trailing = re.search(r"//(.*)$", s)
             s_no_comment = re.sub(r"//.*$", "", s).strip()
             if not s_no_comment:
                 continue
@@ -115,11 +158,14 @@ def parse_java_classes(codebase_path: Path) -> dict[str, JavaClass]:
             if fm:
                 type_raw = fm.group(1).strip()
                 name = fm.group(2)
-                fields.append(JavaField(name=name, type_raw=type_raw, annotations=anns[:]))
+                field_comment = trailing.group(1).strip() if trailing else comment
+                fields.append(JavaField(name=name, type_raw=type_raw, annotations=anns[:], comment=field_comment))
                 anns = []
+                comment = ""
                 continue
             if not s.startswith("@"):
                 anns = []
+                comment = ""
 
         classes[cls_name] = JavaClass(
             name=cls_name,
@@ -176,7 +222,7 @@ def java_fields_to_spec_fields(
         if template_name_reuse:
             template_ko = template_name_reuse.get(f"{section}:{f.name}")
 
-        ko, resolved = resolve_name(f.name, name_dict, template_ko, prefer_korean=True)
+        ko, resolved = resolve_field_name(f, name_dict, template_ko)
         if not resolved:
             conflicts.append(f"naming unresolved: {section}:{f.name}")
 
@@ -246,7 +292,7 @@ def expand_dto_to_spec_fields(
                 # Try full path first, then terminal token fallback.
                 template_ko = template_name_reuse.get(f"{section}:{path}") or template_name_reuse.get(f"{section}:{f.name}")
 
-            ko, resolved = resolve_name(f.name, name_dict, template_ko, prefer_korean=True)
+            ko, resolved = resolve_field_name(f, name_dict, template_ko)
             if not resolved:
                 conflicts.append(f"naming unresolved: {section}:{path}")
 
