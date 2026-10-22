@@ -1,6 +1,9 @@
 name: release-windows
 
 on:
+  push:
+    branches: [main]
+    paths: ['docs/releases/*.md']
   workflow_dispatch:
     inputs:
       ref:
@@ -56,7 +59,7 @@ concurrency:
 jobs:
   build:
     name: Build and verify Windows release
-    if: ${{ !inputs.verify_public_update }}
+    if: ${{ github.event_name == 'workflow_dispatch' && !inputs.verify_public_update }}
     runs-on: windows-2025
     timeout-minutes: 120
     outputs:
@@ -370,10 +373,12 @@ jobs:
           printf '# MonoField %s\n\n' "$RELEASE_VERSION" > "$notes"
           if [ "$RELEASE_CHANNEL" = "preview" ]; then
             cat >> "$notes" <<'EOF'
-          This is a preview of the development workspace, Java and ontology tools,
-          optional local Laya advice, and task evidence review. Full UI and integration
-          validation has outstanding failures. REA is not included in this snapshot.
-          The preview installs separately from stable MonoField.
+          This preview includes REA MCP integration and a legacy-system handover
+          skill, local Laya decision support, Java and ontology tools, and task
+          evidence review. REA runtime installation and Laya model/server setup
+          are separate prerequisites. Full UI validation has outstanding failures.
+          The preview installs separately from stable MonoField. See the README
+          for setup and supported local-agent adapters, including Codex registration.
 
           EOF
           fi
@@ -531,3 +536,46 @@ jobs:
             ${{ runner.temp }}\monofield-public-update\report
           if-no-files-found: warn
           retention-days: 30
+
+  sync_release_notes:
+    name: Sync published release notes
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'jhy0285/monofield' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout reviewed main source
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Update text for existing public releases
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BEFORE_SHA: ${{ github.event.before }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          [[ "$BEFORE_SHA" =~ ^[0-9a-f]{40}$ ]] && [[ ! "$BEFORE_SHA" =~ ^0+$ ]]
+          paths="$RUNNER_TEMP/release-note-paths"
+          git diff --name-only -z "$BEFORE_SHA" "$GITHUB_SHA" -- 'docs/releases/*.md' > "$paths"
+          while IFS= read -r -d '' file; do
+            [ -f "$file" ] || continue
+            version="${file#docs/releases/}"
+            version="${version%.md}"
+            if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-preview\.[1-9][0-9]*)?$ ]]; then
+              echo "invalid release note version: $file" >&2
+              exit 1
+            fi
+            tag="v$version"
+            release="$RUNNER_TEMP/release-note-target.json"
+            gh api "repos/$RELEASE_REPOSITORY/releases/tags/$tag" > "$release"
+            jq -e --arg tag "$tag" '.tag_name == $tag and .draft == false' "$release" >/dev/null
+            commit="$(gh api "repos/$RELEASE_REPOSITORY/commits/$tag" --jq '.sha')"
+            [[ "$commit" =~ ^[0-9a-f]{40}$ ]]
+            git merge-base --is-ancestor "$commit" "$GITHUB_SHA"
+            gh release edit "$tag" --repo "$RELEASE_REPOSITORY" --notes-file "$file"
+          done < "$paths"

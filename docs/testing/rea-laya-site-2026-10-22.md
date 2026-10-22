@@ -11,3 +11,7 @@ The existing `monofield.vercel.app` site now presents the REA MCP preset and han
 - [Desktop capture](evidence/rea-laya-site-2026-10-22/desktop-ko.png) · [Mobile capture](evidence/rea-laya-site-2026-10-22/mobile-ko.png).
 
 Publication follows the verified public Windows release so the new download is available when the production site changes. Final production deployment and asset checks are recorded after publication.
+
+## Production verification
+
+[PR #6](https://github.com/jhy0285/monofield/pull/6) was merged into main as `8cfb67917b51a1e8c70faf8aee8c245d58e95a29` after the verified installer was public. The existing Vercel Git integration deployed `https://monofield.vercel.app/`. Independent HTTP downloads of the homepage, CSS, JavaScript, REA sample PNG and sitemap all returned 200 and matched repository bytes exactly. See [the saved production verification](evidence/rea-laya-site-2026-10-22/production-verification.json). The public installer also matched its published SHA-256 checksum.
