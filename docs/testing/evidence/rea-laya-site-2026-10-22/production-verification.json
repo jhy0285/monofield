@@ -1,0 +1,32 @@
+[
+  {
+    "asset": "index.html",
+    "status": 200,
+    "matches": true,
+    "sha256": "fe4506047e022280400be3cf9cbc7deb818d3f600f856d76df564183343bf229"
+  },
+  {
+    "asset": "styles.css",
+    "status": 200,
+    "matches": true,
+    "sha256": "b13a16622609acc78aefcbb2f5c21fbae2f44e7f1c6816ccf428a39b9cf2dc3a"
+  },
+  {
+    "asset": "script.js",
+    "status": 200,
+    "matches": true,
+    "sha256": "7436eb3f44217057a5842bac8dfbbd282205862b2887e1cdf5c6c51acbf127de"
+  },
+  {
+    "asset": "rea-handover-sample.png",
+    "status": 200,
+    "matches": true,
+    "sha256": "307ecd926f4ad82596254ddfdc4806e8274e15e7705d1fb93f687dca19f0886c"
+  },
+  {
+    "asset": "sitemap.xml",
+    "status": 200,
+    "matches": true,
+    "sha256": "ce77d91f6b1ae76dc39001631757bbc93334be6d50d52abc469d6306db2b7fa9"
+  }
+]

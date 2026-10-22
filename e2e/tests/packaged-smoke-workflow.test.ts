@@ -27,6 +27,21 @@ function sectionBetween(content: string, start: string, end: string): string {
 }
 
 describe("packaged smoke workflow", () => {
+  it("[P2] updates reviewed release text without rebuilding, replacing assets or publishing a draft", async () => {
+    const workflow = await readFile(releaseWorkflowPath, "utf8");
+    const notes = workflow.slice(workflow.indexOf("  sync_release_notes:\n"));
+    expect(workflow).toContain("paths: ['docs/releases/*.md']");
+    expect(workflow).toContain("github.event_name == 'workflow_dispatch' && !inputs.verify_public_update");
+    expect(notes).toContain("github.event_name == 'push'");
+    expect(notes).toContain("github.ref == 'refs/heads/main'");
+    expect(notes).toContain("github.repository == 'jhy0285/monofield'");
+    expect(notes).toContain("ref: ${{ github.sha }}");
+    expect(notes).toContain(".tag_name == $tag and .draft == false");
+    expect(notes).toContain('git merge-base --is-ancestor "$commit" "$GITHUB_SHA"');
+    expect(notes).toContain('--notes-file "$file"');
+    expect(notes).not.toMatch(/gh release (create|upload)|--draft=false|--latest|--prerelease/);
+    expect(workflow).not.toContain("REA is not included in this snapshot.");
+  });
   it("[P2] schedules Linux validation and captures on standard GitHub runners", async () => {
     for (const name of ["ci.yml", "visual-baseline.yml"]) {
       const workflow = await readFile(join(workflowsRoot, name), "utf8");
