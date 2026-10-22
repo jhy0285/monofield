@@ -1,0 +1,9 @@
+{
+  "version": "0.11.7-preview.2",
+  "installer": "MonoField-release-preview-win-setup.exe",
+  "bytes": 239450263,
+  "sha256": "ac5188662316b402442f8fb300392c9945c2b0129503071721ad95196b21f244",
+  "matchesPublishedChecksums": true,
+  "workflowRun": 39715633397,
+  "sourceCommit": "cec7c1e348702d0a285d3b4b5fe938a9fd900e61"
+}
