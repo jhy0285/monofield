@@ -45,7 +45,7 @@ MonoField의 대표 흐름을 한 번에 보여 주는 시연입니다. 대상�
 | 1:10–1:40 | 생성된 `*.interface-spec.json`을 열고 XLSX로 출력합니다. 표지, 인터페이스 목록, API별 시트 5개를 넘겨 봅니다. | "결정론적 렌더러가 SI 양식 Excel을 만듭니다. AI는 엑셀을 직접 고치지 않습니다." |
 | 1:40–2:10 | 채팅으로 "주문 등록에 배송 요청 사항(deliveryMemo)을 추가하고 주문 취소 API를 만들어 줘"를 보냅니다. **변경** 탭에서 diff와 빌드 결과를 확인합니다. | "코드 수정은 에이전트가 하고, 결과는 diff와 빌드로 확인합니다." |
 | 2:10–2:50 | 명세서 편집기에서 **Git 변경 분석** → **AI 갱신 요청 작성** → 전송 → **AI 제안 검토**를 누릅니다. `IF-ORD-001`에 `deliveryMemo`, 새 `IF-ORD-004 주문 취소`만 제안된 것을 보여 줍니다. | "바뀐 인터페이스만 변경분으로 제안합니다. 원본이 그 사이 바뀌면 적용을 거부합니다." |
-| 2:50–3:00 | **검토한 제안 적용** → 저장 → v1.1 XLSX 출력. | "코드가 바뀔 때마다 명세서도 검토된 상태로 따라갑니다." |
+| 2:50–3:00 | **검토한 제안 적용** → 저장 → v1.1 XLSX 출력, **OpenAPI 내보내기**. 제안 검토 화면 위쪽의 **호출자 호환성**이 "추가 변경"인 것도 짚습니다. | "코드가 바뀔 때마다 명세서도 검토된 상태로 따라가고, 같은 내용을 게이트웨이·Mock 서버용 OpenAPI로도 넘깁니다." |
 
 > 녹화 팁: 1:40–2:10 구간의 모델 응답 시간은 환경마다 다릅니다. 녹화본에서는
 > 대기 구간을 잘라 3분에 맞춥니다.
@@ -68,8 +68,14 @@ monofield docs impact --project <project-id> --input docs/orders.interface-spec.
 monofield docs proposal --project <project-id> \
   --input docs/orders.interface-spec.json \
   --proposal docs/orders.interface-spec.proposed.json \
-  --expected-sha <contentSha256> --json
+  --expected-sha <contentSha256> --json   # compatibility: breaking / warning / info
+
+# 5. 검토된 명세서를 OpenAPI 3.1로 내보내기 (편집기의 "OpenAPI 내보내기"와 같은 경로)
+monofield docs export-openapi --project <project-id> --input docs/orders.interface-spec.json --json
 ```
+
+이미 팀이 관리하는 OpenAPI/Swagger JSON(springdoc `/v3/api-docs` 등)이 있으면
+`scan_openapi.py --spec <openapi.json>`으로 명세서를 바로 시작할 수 있습니다.
 
 세부 규칙은 [근거 기반 명세서와 변경 검토](../document-change-review.md)를
 참고하세요.
@@ -86,6 +92,8 @@ monofield docs proposal --project <project-id> \
 - 변경분 제안이 daemon과 같은 `applyInterfaceSpecProposal`로 검증·병합되는지.
 - 다른 원본 해시로 만든 제안은 거부되는지.
 - v1.1 XLSX에 새 필드와 새 인터페이스가 반영되는지.
+- OpenAPI 3.1로 내보낸 뒤 `scan_openapi.py`로 다시 수집해도 인터페이스 ID와
+  필드 경로가 그대로인지(왕복 일치).
 
 2026-10-22 실행 결과(Linux, Node 24.22.1, Python 3.13):
 
@@ -97,6 +105,8 @@ monofield docs proposal --project <project-id> \
   OrderController.java, OrderService.java, OrderCancelRequest.java, OrderCreateRequest.java
 ▸ 4. 명세서 갱신 diff 검토
   2 changes (3927 chars vs 10454 chars full doc) → legacy-order/docs/orders-interface-spec-v1.1.xlsx
+▸ 5. OpenAPI 3.1 내보내기
+  5 paths → legacy-order/docs/orders.openapi.json; re-collected 6 interfaces with identical field paths
 
 검토 대상 변경:
   IF-ORD-001 POST /api/v1/orders — added request fields: deliveryMemo

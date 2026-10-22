@@ -66,7 +66,11 @@ export function DocumentRenderActions({
         anchor.remove();
         setMessage({
           tone: 'success',
-          text: ko ? `${payload.outputFile} 내보내기를 시작했습니다.` : `Started exporting ${payload.outputFile}.`,
+          text: payload.warnings?.length
+            ? (ko
+              ? `${payload.outputFile} 내보내기를 시작했습니다. OpenAPI로 옮기지 못한 항목 ${payload.warnings.length}건: ${payload.warnings.join(' ')}`
+              : `Started exporting ${payload.outputFile}. ${payload.warnings.length} item(s) could not be represented in OpenAPI: ${payload.warnings.join(' ')}`)
+            : (ko ? `${payload.outputFile} 내보내기를 시작했습니다.` : `Started exporting ${payload.outputFile}.`),
         });
       }
     } catch (error) {
@@ -103,6 +107,22 @@ export function DocumentRenderActions({
           ? (ko ? `${exportLabel} 생성 중…` : `Building ${exportLabel}…`)
           : `${exportLabel} ${ko ? '내보내기' : 'Export'}`}
       </button>
+      {kind === 'interface-spec' ? (
+        <button
+          className="viewer-action"
+          data-testid="document-export-openapi"
+          disabled={busy !== null || fatalCount > 0}
+          onClick={() => void run('export-openapi')}
+          title={fatalCount > 0
+            ? (ko ? `치명 오류 ${fatalCount}건을 먼저 해결하세요.` : `Resolve ${fatalCount} fatal issue(s) first.`)
+            : (ko ? 'API 게이트웨이·Mock 서버·클라이언트 생성기에서 쓸 OpenAPI 3.1 JSON' : 'OpenAPI 3.1 JSON for gateways, mock servers and client generators')}
+          type="button"
+        >
+          {busy === 'export-openapi'
+            ? (ko ? 'OpenAPI 생성 중…' : 'Building OpenAPI…')
+            : (ko ? 'OpenAPI 내보내기' : 'Export OpenAPI')}
+        </button>
+      ) : null}
       {message ? <span className={message.tone === 'error' ? styles.error : styles.success} role="status">{message.text}</span> : null}
     </div>
   );

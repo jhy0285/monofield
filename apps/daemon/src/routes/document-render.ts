@@ -2,6 +2,7 @@ import nodePath from 'node:path';
 
 import type { Express, Response } from 'express';
 import {
+  interfaceSpecToOpenApi,
   parseInterfaceSpecDocument,
   parseScreenSpecDocument,
   type ScreenSpecDocument,
@@ -128,7 +129,7 @@ export function registerDocumentRenderRoutes(
         ? normalizedProjectPath(body.inputFile)
         : null;
       const action: StructuredDocumentRenderAction | null =
-        body.action === 'preview' || body.action === 'export' ? body.action : null;
+        body.action === 'preview' || body.action === 'export' || body.action === 'export-openapi' ? body.action : null;
       if (!inputFile || !action) {
         sendDocumentError(res, 400, {
           ok: false,
@@ -177,7 +178,7 @@ export function registerDocumentRenderRoutes(
             return;
           }
           const fatal = parsed.issues.filter((issue) => issue.severity === 'fatal');
-          if (action === 'export' && fatal.length > 0) {
+          if (action !== 'preview' && fatal.length > 0) {
             sendDocumentError(res, 422, {
               ok: false,
               code: 'DOCUMENT_VALIDATION_FAILED',
@@ -187,6 +188,24 @@ export function registerDocumentRenderRoutes(
             return;
           }
           const stem = outputStem(parsed.doc.cover.docName || parsed.doc.source.codebaseName, 'interface-spec');
+          if (action === 'export-openapi') {
+            const exported = interfaceSpecToOpenApi(parsed.doc);
+            const outputFile = `${stem}_openapi.json`;
+            await writeOutput(deps, project, outputFile, `${JSON.stringify(exported.document, null, 2)}\n`);
+            const response: StructuredDocumentRenderResponse = {
+              ok: true,
+              kind: 'interface-spec',
+              action,
+              inputFile,
+              outputFile,
+              outputUrl: projectRawUrl(project.id, outputFile),
+              itemCount: parsed.doc.endpoints.length,
+              issues: parsed.issues,
+              warnings: exported.warnings,
+            };
+            res.json(response);
+            return;
+          }
           const outputFile = action === 'preview'
             ? `${stem}_interface_spec_preview.html`
             : `${stem}_interface_spec.xlsx`;
@@ -225,6 +244,14 @@ export function registerDocumentRenderRoutes(
           const parsed = parseScreenSpecDocument(json);
           if (!parsed.ok) {
             sendDocumentError(res, 422, { ok: false, code: 'INVALID_DOCUMENT', message: parsed.error });
+            return;
+          }
+          if (action === 'export-openapi') {
+            sendDocumentError(res, 400, {
+              ok: false,
+              code: 'INVALID_DOCUMENT',
+              message: 'OpenAPI export is available for interface specs only.',
+            });
             return;
           }
           const fatal = parsed.issues.filter((issue) => issue.severity === 'fatal');

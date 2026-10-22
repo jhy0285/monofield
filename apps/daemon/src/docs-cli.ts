@@ -2,6 +2,7 @@ import { readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import nodePath from 'node:path';
 import {
   createInterfaceSpecDocumentFromManualDraft,
+  interfaceSpecToOpenApi,
   parseInterfaceSpecDocument,
   parseScreenSpecDocument,
 } from '@open-design/contracts';
@@ -19,6 +20,8 @@ const USAGE = `Usage:
   monofield docs create-manual-interface-spec --input <manual-draft.json> [--out <interface-spec.json>]
   monofield docs render-interface-spec  --input <interface-spec.json> [--out <workbook.xlsx>] [--style <style.json>]
   monofield docs preview-interface-spec --input <interface-spec.json> [--out <preview.html>]
+  monofield docs export-openapi         --input <interface-spec.json> [--out <openapi.json>]
+  monofield docs export-openapi         --project <id> --input <project-relative.json> [--json] [--daemon-url <url>]
   monofield docs render-screen-spec     --input <screen-spec.json>    [--out <deck.pptx>]
   monofield docs preview-screen-spec    --input <screen-spec.json>    [--out <preview.html>]
 
@@ -116,6 +119,7 @@ export async function runDocsCli(args: string[]): Promise<DocsCliResult> {
     command !== 'create-manual-interface-spec' &&
     command !== 'render-interface-spec' &&
     command !== 'preview-interface-spec' &&
+    command !== 'export-openapi' &&
     command !== 'render-screen-spec' &&
     command !== 'preview-screen-spec'
   ) {
@@ -260,6 +264,22 @@ export async function runDocsCli(args: string[]): Promise<DocsCliResult> {
   if (!parsed.ok) {
     console.error(parsed.error);
     return { exitCode: 1 };
+  }
+
+  if (command === 'export-openapi') {
+    const fatalIssues = parsed.issues.filter((issue) => issue.severity === 'fatal');
+    for (const issue of fatalIssues) console.error(`fatal: ${issue.message}`);
+    if (fatalIssues.length > 0) return { exitCode: 1 };
+    const exported = interfaceSpecToOpenApi(parsed.doc);
+    const target = outPath ?? nodePath.join(inputDir, `${parsed.doc.source.codebaseName}_openapi.json`);
+    await writeFile(target, `${JSON.stringify(exported.document, null, 2)}\n`, 'utf8');
+    console.log(JSON.stringify({
+      output: nodePath.resolve(target),
+      endpointCount: parsed.doc.endpoints.length,
+      pathCount: Object.keys(exported.document.paths as Record<string, unknown>).length,
+      warnings: exported.warnings,
+    }, null, 2));
+    return { exitCode: 0 };
   }
 
   if (command === 'preview-interface-spec') {

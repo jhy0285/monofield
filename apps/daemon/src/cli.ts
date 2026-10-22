@@ -966,7 +966,31 @@ async function runDocs(args) {
     if (!response.ok) return structuredHttpFailure(response);
     const result = await response.json();
     if (flags.json) process.stdout.write(JSON.stringify(result, null, 2) + '\n');
-    else console.log(`Valid ${result.format} proposal; ${result.changesApplied ?? 'full document'} changes. Original unchanged.`);
+    else {
+      const compat = result.compatibility;
+      const verdict = compat
+        ? ` Caller compatibility: ${compat.level} (${compat.counts.breaking} breaking, ${compat.counts.warning} to review, ${compat.counts.info} additive).`
+        : '';
+      console.log(`Valid ${result.format} proposal; ${result.changesApplied ?? 'full document'} changes.${verdict} Original unchanged.`);
+    }
+    return;
+  }
+  if (args[0] === 'export-openapi' && args.includes('--project')) {
+    // Project mode uses the same render route as the editor's "Export OpenAPI" button.
+    const flags = parseFlags(args.slice(1), { string: ['project', 'input', 'daemon-url'], boolean: ['json', 'help'] });
+    if (flags.help || !flags.project || !flags.input) {
+      console.log('Usage: monofield docs export-openapi --project <id> --input <project-relative.json> [--json] [--daemon-url <url>]');
+      process.exit(flags.help ? 0 : 2);
+    }
+    const base = await cliDaemonBaseUrl(flags);
+    const response = await fetch(`${base}/api/projects/${encodeURIComponent(flags.project)}/documents/render`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ inputFile: flags.input, action: 'export-openapi' }),
+    });
+    if (!response.ok) return structuredHttpFailure(response);
+    const result = await response.json();
+    if (flags.json) process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    else console.log(`Wrote ${result.outputFile} (${result.itemCount} interfaces; ${result.warnings?.length ?? 0} warnings).`);
     return;
   }
   if (args[0] === 'impact') {

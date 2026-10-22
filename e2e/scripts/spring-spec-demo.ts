@@ -198,6 +198,26 @@ log(
   `${applied.changesApplied} changes (${proposalText.length} chars vs ${JSON.stringify(merged).length} chars full doc) → ${path.relative(output, nextXlsx)}`,
 );
 
+// 5. Hand the reviewed spec to API tooling as OpenAPI 3.1 and prove it round-trips:
+// exporting and re-collecting must give back the same interfaces and field paths.
+const openApiPath = path.join(workspace, 'docs/orders.openapi.json');
+const exportRun = await run(process.execPath, [cli, 'docs', 'export-openapi', '--input', specPath, '--out', openApiPath]);
+const exportSummary = JSON.parse(exportRun.stdout) as { pathCount: number; warnings: string[] };
+const roundTripPath = path.join(output, 'openapi-roundtrip.json');
+await run(python, [path.join(pluginRoot, 'scripts/scan_openapi.py'), '--spec', openApiPath, '--out', roundTripPath]);
+const roundTrip = JSON.parse(await readFile(roundTripPath, 'utf8')) as InterfaceSpecDocument;
+const fieldShape = (endpoint: Endpoint) =>
+  JSON.stringify([...endpoint.requestFields, ...endpoint.responseFields].map((field) => field.path ?? field.nameEn).sort());
+const reimported = new Map(roundTrip.endpoints.map((endpoint) => [keyOf(endpoint), endpoint]));
+const roundTripMismatches = merged.endpoints.filter((endpoint) => {
+  const back = reimported.get(keyOf(endpoint));
+  return !back || back.interfaceId !== endpoint.interfaceId || fieldShape(back) !== fieldShape(endpoint);
+}).map(keyOf);
+if (roundTripMismatches.length || reimported.size !== merged.endpoints.length) {
+  throw new Error(`OpenAPI round trip changed: ${roundTripMismatches.join(', ') || 'endpoint count'}`);
+}
+log('5. OpenAPI 3.1 내보내기', `${exportSummary.pathCount} paths → ${path.relative(output, openApiPath)}; re-collected ${reimported.size} interfaces with identical field paths`);
+
 const report = {
   status: 'ok',
   output,
@@ -207,6 +227,7 @@ const report = {
   proposal: { path: proposalPath, changesApplied: applied.changesApplied, characters: proposalText.length, staleRevisionRejected: true },
   reviewed: diff,
   workbooks: [baseXlsx, nextXlsx],
+  openapi: { path: openApiPath, paths: exportSummary.pathCount, warnings: exportSummary.warnings, roundTrip: 'identical' },
   steps,
 };
 await writeFile(path.join(output, 'report.json'), JSON.stringify(report, null, 2) + '\n');
