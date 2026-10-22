@@ -2945,29 +2945,27 @@ function RailGroup({
           aria-label={t('homeHero.railAria')}
         >
           {cards}
-          {collapsible ? (
-            <button
-              type="button"
-              className="home-hero__type-tab home-hero__type-tab--more-templates"
-              data-testid="home-hero-rail-more-templates"
-              aria-expanded={extendedOpen}
-              onClick={() => onExtendedOpenChange?.(!extendedOpen)}
-            >
-              <Icon
-                name={extendedOpen ? 'chevron-left' : 'chevron-right'}
-                size={14}
-                className="home-hero__type-tab-icon"
-              />
-              <span className="home-hero__type-tab-label">
-                {extendedOpen
-                  ? t('homeHero.fewerTemplates')
-                  : t('homeHero.moreTemplates', { count: extendedCreateChips().length })}
-              </span>
-            </button>
-          ) : null}
           {children}
         </div>
         <EdgeScrollZones {...edgeScroll} />
+        {/* Outside the scrolling tablist so it stays visible at every width
+            instead of hiding behind the rail's horizontal scroll. */}
+        {collapsible ? (
+          <button
+            type="button"
+            className="home-hero__more-templates"
+            data-testid="home-hero-rail-more-templates"
+            aria-expanded={extendedOpen}
+            onClick={() => onExtendedOpenChange?.(!extendedOpen)}
+          >
+            <span>
+              {extendedOpen
+                ? t('homeHero.fewerTemplates')
+                : t('homeHero.moreTemplates', { count: extendedCreateChips().length })}
+            </span>
+            <Icon name="chevron-down" size={13} className="home-hero__more-templates-icon" aria-hidden />
+          </button>
+        ) : null}
       </div>
     );
   }
