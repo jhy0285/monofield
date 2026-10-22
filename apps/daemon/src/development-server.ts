@@ -200,6 +200,9 @@ export function applyDevelopmentRunOverrides(
   }
 
   let args = [...config.args];
+  const debugPort=overrides.debugPort;
+  if(debugPort!==undefined&&(!Number.isInteger(debugPort)||debugPort<1||debugPort>65535))throw Object.assign(new Error('debugPort must be an integer between 1 and 65535'),{status:400});
+  if(debugPort!==undefined&&(config.framework!=='Spring Boot'||!args.includes('spring-boot:run')))throw Object.assign(new Error('Automatic debug launch currently supports Spring Boot with Maven'),{status:400});
   const portChanged = port !== config.port;
   const urlChanged = url !== config.url;
   if (config.framework === 'Spring Boot') {
@@ -213,6 +216,10 @@ export function applyDevelopmentRunOverrides(
         ...applicationArgs,
       ];
       if (springArguments.length > 0) args.push(`-Dspring-boot.run.arguments=${encodeSpringApplicationArguments(springArguments)}`);
+      if(debugPort!==undefined){
+        if(args.some(value=>value.startsWith('-Dspring-boot.run.jvmArguments=')))throw new Error('Existing JVM arguments require manual debug configuration');
+        args.push(`-Dspring-boot.run.jvmArguments=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=127.0.0.1:${debugPort}`);
+      }
     } else if (isGradle) {
       args = args.filter((value) => !value.startsWith('--args='));
       const springArgs = [
@@ -255,11 +262,12 @@ export function applyDevelopmentRunOverrides(
   const { profile: _detectedProfile, ...configWithoutProfile } = config;
   return {
     ...configWithoutProfile,
-    id: configId([config.id, requestedProfile, ...applicationArgs, String(port), url]),
+    id: configId([config.id, requestedProfile, ...applicationArgs, String(port), url, String(debugPort??'')]),
     args,
     port,
     url,
     ...(requestedProfile ? { profile: requestedProfile } : {}),
+    ...(debugPort===undefined?{}:{debugPort}),
   };
 }
 
@@ -1472,6 +1480,7 @@ export class DevelopmentServerService {
     }
     // Each runnable module owns an independent record. Reconfiguring this
     // module stops only its previous process; sibling services keep running.
+    if(config.debugPort&&current?.config?.debugPort!==config.debugPort&&await localPortInUse(config.debugPort))throw Object.assign(new Error(`Debugger port ${config.debugPort} is already in use. The existing application was left running.`),{status:409});
     if (current?.pid) await this.stop(projectId, selectedProjectPath);
     if (await localPortInUse(config.port)) {
       throw Object.assign(

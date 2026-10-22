@@ -85,6 +85,20 @@ describe('document render route', () => {
     expect(response.body).toMatchObject({ ok: false, code: 'INVALID_DOCUMENT' });
   });
 
+  it('resolves canonical project-relative images for a nested document before legacy relative images', async () => {
+    files.set('spec/assets/login.png', Buffer.from('canonical-image'));
+    files.set('spec/spec/assets/login.png', Buffer.from('wrong-relative-image'));
+    files.set('spec/app.screen-spec.json', Buffer.from(JSON.stringify({
+      schemaVersion: 1, kind: 'screen-spec', name: 'Nested specification',
+      screens: [{ id: 'SCR-001', screenName: 'Login', imageRef: 'spec/assets/login.png' }],
+    })));
+    const response = await post({ inputFile: 'spec/app.screen-spec.json', action: 'preview' });
+    expect(response.status).toBe(200);
+    const html = files.get(response.body.outputFile)?.toString('utf8') ?? '';
+    expect(html).toContain(Buffer.from('canonical-image').toString('base64'));
+    expect(html).not.toContain(Buffer.from('wrong-relative-image').toString('base64'));
+  });
+
   it('blocks export while a document has fatal validation issues', async () => {
     files.set('empty.interface-spec.json', Buffer.from(JSON.stringify({
       schemaVersion: 1,

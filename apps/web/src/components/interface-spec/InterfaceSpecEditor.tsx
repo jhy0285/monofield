@@ -207,7 +207,7 @@ export function InterfaceSpecEditor({ projectId, file, onFileSaved, onOpenFile, 
         {warningIssues.length > 0 ? <IssueList title={copy.warnings(warningIssues.length)} tone="warning" issues={warningIssues.map((issue) => issue.message)} /> : null}
 
         <DocumentImpactPanel projectId={projectId} inputFile={file.name} doc={doc} loadedContentSha256={loadedHash.current} dirty={dirty} onRequestUpdate={onRequestDocumentUpdate} onApplyProposal={(proposal) => mutate(() => proposal)} />
-        <DocumentDependencyPanel projectId={projectId} dirty={dirty} />
+        <DocumentDependencyPanel projectId={projectId} dirty={dirty} onRequestDraft={onRequestDocumentUpdate} />
 
         <section className={styles.documentPanel}>
           <div className={styles.sectionHeading}><div><h3>{copy.documentInfo}</h3><p>{copy.source}: {doc.source.mode === 'manual' ? copy.manualSource : [doc.source.language, doc.source.framework, doc.source.codebaseName].filter(Boolean).join(' · ')}</p></div></div>

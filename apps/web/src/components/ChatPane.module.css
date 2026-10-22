@@ -1,0 +1,9 @@
+.compact { min-height: 0; }
+.compactToolbar { display: flex; align-items: center; gap: 10px; padding: 4px 16px 0; font-size: 11px; color: var(--text-muted); }
+.compactToolbar button { border: 0; padding: 2px 0; background: transparent; color: var(--text); cursor: pointer; font-size: 12px; }
+.compact :global(.composer) { margin: 0 auto; padding: 4px 16px 8px; width: 100%; max-width: 960px; }
+.compact :global(.composer-input-editor), .compact :global(.composer-input-editor [contenteditable='true']) { min-height: 32px; max-height: 72px; }
+.compact :global(.composer.composer-active-file-mode .composer-input-editor),
+.compact :global(.composer.composer-active-file-mode .composer-input-editor [contenteditable='true']) { min-height: 32px; max-height: 72px; }
+.compact :global(.composer-active-file) { display: none; }
+.compact :global(.composer-hint:not([role='alert'])) { display: none; }

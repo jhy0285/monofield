@@ -21,6 +21,20 @@ async function git(cwd: string, args: string[]): Promise<string> {
   return result.stdout;
 }
 
+/** Current worktree changes also cover screen-only projects without API documents. */
+export async function workingProjectChanges(projectRoot: string): Promise<{ repository: boolean; changedFiles: string[] }> {
+  const repository = await git(projectRoot, ['rev-parse', '--is-inside-work-tree']).then(value => value.trim() === 'true').catch(() => false);
+  if (!repository) return { repository: false, changedFiles: [] };
+  const head = await git(projectRoot, ['rev-parse', '--verify', 'HEAD']).then(value => value.trim()).catch(() => null);
+  const tracked = await git(projectRoot, ['diff', '--no-ext-diff', '--name-status', '-z', '--find-renames', '--relative', ...(head ? [head] : []), '--', '.']);
+  const staged = head ? '' : await git(projectRoot, ['diff', '--cached', '--name-status', '-z', '--relative', '--', '.']);
+  const untracked = await git(projectRoot, ['ls-files', '--others', '--exclude-standard', '-z', '--', '.']);
+  return { repository: true, changedFiles: [...new Set([
+    ...parseGitNameStatus(tracked).flatMap(file => file.oldPath ? [file.path, file.oldPath] : [file.path]),
+    ...parseGitNameStatus(staged).map(file => file.path), ...untracked.split('\0').filter(Boolean),
+  ])].sort() };
+}
+
 export function matchDocumentImpact(
   doc: InterfaceSpecDocument,
   changedFiles: string[],

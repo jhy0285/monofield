@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { RecordedDependencyGraph } from './ontology/recorded-graph.js';
 import type { DocumentEvidence, DocumentGraphNode, DocumentGraphEdge, DocumentGraphResponse, DatabaseSchemaWatchState, InterfaceSpecDocument, ScreenSpecDocument } from '@open-design/contracts';
 
 export type GraphDocument = { file: string; doc: InterfaceSpecDocument | ScreenSpecDocument };
@@ -76,22 +77,17 @@ export function buildDocumentGraph(options: {
       && watch.changes.some((change) => change.schema === target.schema && change.table === target.table
         && (!change.column || !target.column || change.column === target.column))) changed.add(node.id);
   }
-  const dependents = new Map<string, string[]>();
-  for (const edge of edges) dependents.set(edge.sourceId, [...(dependents.get(edge.sourceId) ?? []), edge.dependentId]);
+  const index = new RecordedDependencyGraph({ nodes: [...nodes.values()], edges });
   const impacts: DocumentGraphResponse['impacts'] = [];
+  let pathEntries = 0;
   // A single shortest recorded chain for each source/dependent pair prevents
   // combinatorial path enumeration and terminates even with cyclic documents.
   for (const sourceId of changed) {
-    const visited = new Set([sourceId]), queue: string[][] = [[sourceId]];
-    for (let index = 0; index < queue.length; index++) {
-      const chain = queue[index]!;
-      for (const dependentId of dependents.get(chain.at(-1)!) ?? []) {
-        if (visited.has(dependentId)) continue;
-        visited.add(dependentId);
-        const next = [...chain, dependentId];
-        impacts.push({ nodeId: dependentId, sourceId, path: next }); queue.push(next);
-        if (impacts.length > 50000) throw new Error('Dependency impact exceeds the analysis limit');
-      }
+    for (const [nodeId, path] of index.pathsFrom([sourceId], 20000, 100000 - pathEntries)) {
+      pathEntries += path.length;
+      if (nodeId === sourceId) continue;
+      impacts.push({ nodeId, sourceId, path });
+      if (impacts.length > 50000) throw new Error('Dependency impact exceeds the analysis limit');
     }
   }
   const linked = new Set(edges.map((edge) => edge.dependentId));

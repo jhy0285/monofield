@@ -8,8 +8,8 @@ export async function runJevCli(args: string[], helpers: {
   const strings = new Set(['daemon-url', 'prompt-file', 'request-file', 'backend', 'local-url', 'model']);
   const flags = helpers.parseFlags(args, { string: strings, boolean: new Set(['json', 'help']) });
   const [command = 'status', ...words] = helpers.positionalArgs(args, strings);
-  if (flags.help || !['status', 'models', 'configure', 'decide', 'triage', 'set-key', 'clear-key'].includes(command)) {
-    console.log('Usage: monofield jev <status|models|configure|decide|triage|set-key|clear-key> [--backend typesafe|local --local-url URL --model NAME] [--request-file <JSON|->] [--prompt-file <path|->] [--json] [--daemon-url URL]');
+  if (flags.help || !['status', 'models', 'configure', 'decide', 'triage', 'review', 'set-key', 'clear-key'].includes(command)) {
+    console.log('Usage: monofield jev <status|models|configure|decide|triage|review|set-key|clear-key> [--backend typesafe|local --local-url URL --model NAME] [--request-file <JSON|->] [--prompt-file <path|->] [--json] [--daemon-url URL]');
     if (!flags.help) throw new Error('Unknown decision command.'); return;
   }
   const readInput = async (file: string) => {
@@ -33,6 +33,11 @@ export async function runJevCli(args: string[], helpers: {
     const current = await status.json() as { config: Record<string, unknown> };
     endpoint = 'config'; method = 'PUT'; body = { ...current.config,
       ...(flags.backend ? { backend: flags.backend } : {}), ...(flags['local-url'] ? { localBaseUrl: flags['local-url'] } : {}), ...(flags.model ? { model: flags.model } : {}) };
+  }
+  if (command === 'review') {
+    const file = flags['request-file'] ?? flags['prompt-file'];
+    if (typeof file !== 'string') throw new Error('review requires --request-file or --prompt-file with a JSON evidence review.');
+    method = 'POST'; body = JSON.parse(await readInput(file));
   }
   if (command === 'decide') {
     if (typeof flags['request-file'] !== 'string') throw new Error('decide requires --request-file with a typed JSON request.');

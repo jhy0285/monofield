@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -35,6 +35,38 @@ describe('development verification with real commands and source', () => {
     expect(plan[0]).toMatchObject({ command: 'npm', args: ['run', 'test'], script: 'node --test test.cjs' });
     await expect(service.start('p', '.', root, ['node:inject'], undefined)).rejects.toThrow('no longer available');
     await expect(service.start('p', '.', root, [], undefined)).rejects.toThrow('Select');
+  });
+  it('discovers Java Maven tests and compilation without reading commands from the pom', async () => {
+    await writeFile(join(root, 'pom.xml'), '<project><build><plugins>project data</plugins></build></project>');
+    const checks = await discoverVerificationChecks(root);
+    expect(checks.find(check => check.id === 'java:maven-test')).toMatchObject({ command: 'mvn', args: ['-B', '-ntp', 'test'], kind: 'test', source: 'pom.xml', recommended: true });
+    expect(checks.find(check => check.id === 'java:maven-compile')).toMatchObject({ command: 'mvn', args: ['-B', '-ntp', 'test-compile'], kind: 'types' });
+    expect(checks.find(check => check.id === 'java:maven-package')).toMatchObject({ kind: 'build', recommended: false });
+  });
+  it('runs discovered split-workspace checks in their own module and preserves the root source receipt', async () => {
+    await rm(join(root, 'package.json'));
+    await mkdir(join(root, 'frontend'));
+    await writeFile(join(root, 'frontend/package.json'), JSON.stringify({ scripts: { test: 'node --test local.cjs' } }));
+    await writeFile(join(root, 'frontend/local.cjs'), "require('node:test')('module cwd',()=>require('node:assert/strict').match(process.cwd(),/[\\\\/]frontend$/));");
+    const checks = await discoverVerificationChecks(root);
+    expect(checks).toHaveLength(1); expect(checks[0]).toMatchObject({ id: 'frontend::node:test', projectPath: 'frontend' });
+    const started = await service.start('p', '.', root, ['frontend::node:test'], undefined);
+    const receipt = await settle(started.id);
+    expect(receipt.verified).toBe(true); expect(receipt.run?.steps[0]?.output).toContain('module cwd');
+    expect(receipt.run?.projectPath).toBe('.');
+  });
+  it('rejects stale applied advice before any command or receipt is created, then runs fresh advice', async () => {
+    await packageWith('node -e "require(\'node:fs\').writeFileSync(\'ignored.txt\', \'ran\')"');
+    const advice = await service.suggest(root, '.', { request: 'Check this change', mode: 'rules' });
+    expect(advice.snapshotSha256).toMatch(/^[a-f0-9]{64}$/);
+    await writeFile(join(root, 'sum.cjs'), '// changed after advice');
+    await expect(service.start('p', '.', root, ['node:test'], undefined, advice.snapshotSha256)).rejects.toMatchObject({ status: 409 });
+    expect((await readdir(root))).not.toContain('ignored.txt');
+    expect((await service.status('p', '.', root)).run).toBeNull();
+    const fresh = await service.suggest(root, '.', { request: 'Check current change', mode: 'rules' });
+    const started = await service.start('p', '.', root, ['node:test'], undefined, fresh.snapshotSha256);
+    expect((await settle(started.id)).verified).toBe(true);
+    expect(await readFile(join(root, 'ignored.txt'), 'utf8')).toBe('ran');
   });
   it('records a real failing assertion, prepares bounded repair data, then verifies the corrected source', async () => {
     const failed = await service.start('p', '.', root, ['node:test'], undefined);

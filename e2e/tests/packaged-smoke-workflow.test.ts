@@ -27,6 +27,15 @@ function sectionBetween(content: string, start: string, end: string): string {
 }
 
 describe("packaged smoke workflow", () => {
+  it("[P2] schedules Linux validation and captures on standard GitHub runners", async () => {
+    for (const name of ["ci.yml", "visual-baseline.yml"]) {
+      const workflow = await readFile(join(workflowsRoot, name), "utf8");
+      expect(workflow).not.toContain("blacksmith-");
+      expect(workflow).toContain("runs-on: ubuntu-24.04");
+      expect(workflow).not.toContain('OD_PLAYWRIGHT_WORKERS: "4"');
+    }
+  });
+
   it("[P2] follows the current MonoField workflow inventory", async () => {
     const workflowNames = (await readdir(workflowsRoot))
       .filter((name) => name.endsWith(".yml"))
@@ -108,7 +117,8 @@ describe("packaged smoke workflow", () => {
       readFile(releaseSmokePath, "utf8"),
     ]);
 
-    expect(workflow).toContain("-ReleaseNamespace default");
+    expect(workflow).toContain('$namespace = "default"');
+    expect(workflow).toContain("-ReleaseNamespace $env:RELEASE_NAMESPACE");
     expect(workflow).toContain("-SmokeMode full");
     expect(workflow).toContain("-BuildTarget all");
     expect(workflow).toContain("build-index.json");
@@ -173,10 +183,12 @@ describe("packaged smoke workflow", () => {
       readFile(readmePath, "utf8"),
     ]);
 
+    expect(workflow).toContain('"asset_prefix=MonoField-$namespace"');
+    expect(workflow).toContain('$namespace = "default"');
     for (const asset of [
-      "MonoField-default-setup.exe",
-      "MonoField-default-payload.7z",
-      "MonoField-default-portable.zip",
+      "${env:ASSET_PREFIX}-setup.exe",
+      "${env:ASSET_PREFIX}-payload.7z",
+      "${env:ASSET_PREFIX}-portable.zip",
       "latest.yml",
       "SHA256SUMS.txt",
     ]) {
@@ -198,6 +210,18 @@ describe("packaged smoke workflow", () => {
     expect(site).toContain("/releases/latest/download/MonoField-default-setup.exe");
     expect(readme).toContain("/releases/latest/download/MonoField-default-setup.exe");
     expect(readme).toContain("/releases/latest/download/MonoField-default-portable.zip");
+  });
+
+  it("[P2] isolates public previews from stable installation and updater discovery", async () => {
+    const workflow = await readFile(releaseWorkflowPath, "utf8");
+    const validation = sectionBetween(workflow, "      - name: Validate release request", "      - name: Test packaging");
+    const publishing = sectionBetween(workflow, "          gh release upload", "  verify_public_update:");
+    expect(validation).toContain('$env:RELEASE_CHANNEL -eq "preview"');
+    expect(validation).toContain("-preview\\.[1-9]\\d*$");
+    expect(validation).toContain('$namespace = "release-preview-win"');
+    expect(workflow).toContain(".releaseChannel == $channel and .releaseNamespace == $namespace");
+    expect(publishing).toMatch(/if \[ "\$RELEASE_CHANNEL" = "preview" \]; then\s+gh release edit[^\n]+--prerelease --latest=false\s+else\s+gh release edit[^\n]+--latest\s+fi/);
+    expect(workflow).toContain('verify_public_update requires release_channel=stable');
   });
 
   it("[P2] keeps runtime examples while excluding development-only resource baggage", async () => {

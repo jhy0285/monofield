@@ -30,6 +30,15 @@ afterEach(async () => {
 });
 
 describe('development run configuration detection', () => {
+  it('launches Maven Spring debugging on loopback and rejects incompatible launchers',()=>{
+    const config={id:'spring-debug',label:'Spring Boot · Maven',kind:'java' as const,framework:'Spring Boot',cwd:'.',command:'mvn',args:['spring-boot:run'],source:'pom.xml',port:8080,url:'http://127.0.0.1:8080',dependenciesReady:true};
+    const debug=applyDevelopmentRunOverrides(config,{debugPort:5005});
+    expect(debug.debugPort).toBe(5005);
+    expect(debug.args).toContain('-Dspring-boot.run.jvmArguments=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=127.0.0.1:5005');
+    expect(()=>applyDevelopmentRunOverrides(config,{debugPort:0})).toThrow('debugPort');
+    expect(()=>applyDevelopmentRunOverrides({...config,args:['bootRun']},{debugPort:5005})).toThrow('Spring Boot with Maven');
+    expect(()=>applyDevelopmentRunOverrides({...config,args:[...config.args,'-Dspring-boot.run.jvmArguments=-Xmx1g']},{debugPort:5005})).toThrow('Existing JVM arguments');
+  });
   it('reserves every environment variable owned by the run-port broker', () => {
     expect(validatedDevelopmentEnvironment({ FEATURE_ORDERS: 'true' })).toEqual({ FEATURE_ORDERS: 'true' });
     for (const key of ['PORT', 'BROWSER', 'SERVER_PORT', 'ASPNETCORE_URLS', 'GRADIO_SERVER_PORT', 'STREAMLIT_SERVER_PORT']) {
