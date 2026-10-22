@@ -34,9 +34,9 @@ Download links are initialized to the existing Windows installer, portable ZIP, 
 
 Workspace screenshots are actual app captures of the 0.11.6 UI. The download version, sizes, and URLs are obtained independently from the public release API. The static SoftwareApplication metadata records the published 0.11.6 version; update it when publishing another stable release.
 
-The hero and preview section also link to the published `0.11.7-preview.1` release by exact tag and asset name. These links do not use the stable release updater attributes, so a stable API response or a language change preserves the selected preview. The preview section has its own application metadata, installer, portable ZIP, checksums, release notes and development capture. The existing two stable download cards continue to follow the latest stable API. Update pinned preview URLs and sizes together when publishing another preview.
+The hero and preview section also link to the published `0.11.7-preview.2` release by exact tag and asset name. These links do not use the stable release updater attributes, so a stable API response or a language change preserves the selected preview. The preview section has its own application metadata, installer, portable ZIP, checksums, release notes and development capture. The existing two stable download cards continue to follow the latest stable API. Update pinned preview URLs and sizes together when publishing another preview.
 
-`monofield-preview-workspace.png` is the actual editor-and-diff capture from the committed development-workspace evidence dated 2026-10-18. Its caption identifies it as a development capture. Preview copy discloses outstanding UI validation, REA exclusion, and the separate Laya and Java prerequisites.
+`monofield-preview-workspace.png` is the actual editor-and-diff capture from the committed development-workspace evidence dated 2026-10-18. Its caption identifies it as a development capture. Preview copy discloses the REA MCP integration, separate runtime/model prerequisites, and preview status. The handover section shows an actual REA capture of the explicitly labeled synthetic sample and links to the run report.
 
 Microsoft Store is hidden until a valid listing ID is configured in `index.html`. Do not invent a listing or display an unverified Store download button.
 
