@@ -7,6 +7,7 @@ The existing `monofield.vercel.app` site now presents the REA MCP preset and han
 - Pinned preview links remain independent of the existing stable download API. Installer, portable ZIP, checksums, release notes and preview application metadata use the same exact tag. Old artifact-size labels were removed pending the new build; no estimated size is advertised.
 - Separate Node/npm/browser and Laya model/server prerequisites remain visible. Stable installation remains distinct from preview.
 - Seven site SEO tests passed. Real Chromium checked Korean/English at desktop 1440×1050 and mobile 390×844, loaded the sample image, found the correct preview installer URL and detected no horizontal overflow.
+- The original synthetic handover bundle and its checksum are committed with the run report, including raw REA Evidence, Excel/PPTX and reproduction code.
 - [Desktop capture](evidence/rea-laya-site-2026-10-22/desktop-ko.png) · [Mobile capture](evidence/rea-laya-site-2026-10-22/mobile-ko.png).
 
 Publication follows the verified public Windows release so the new download is available when the production site changes. Final production deployment and asset checks are recorded after publication.

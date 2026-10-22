@@ -4,7 +4,7 @@ REA로 합성 주문·정산 앱의 JavaScript 배포물·Chromium 화면·SQLit
 
 ![REA가 실제 조사한 합성 주문·정산 샘플](evidence/rea-handover-2026-10-22/sample.png)
 
-[전체 원본 근거·Excel·PPTX·재현 코드 ZIP](https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.2/rea-si-handover-20261022.zip) · [저장소의 재현 예제](../examples/rea-si-handover/README.md) · [새 REA MCP 설정과 Laya 가이드](../rea-laya-handover.md)
+[전체 원본 근거·Excel·PPTX·재현 코드 ZIP](evidence/rea-handover-2026-10-22/rea-si-handover-20261022.zip) · [저장소의 재현 예제](../examples/rea-si-handover/README.md) · [새 REA MCP 설정과 Laya 가이드](../rea-laya-handover.md)
 
 ## 실제 확인한 업무 흐름
 
