@@ -484,6 +484,14 @@ Supported collectors:
 | Express / JavaScript | `scripts/scan_express.py` |
 | Django / DRF | `scripts/scan_django.py` |
 | Go (Gin, Echo, Chi) | `scripts/scan_go.py` |
+| OpenAPI 3.x / Swagger 2.0 contract (springdoc, springfox, any stack) | `scripts/scan_openapi.py --spec <openapi.json>` or `--codebase-path <dir>` |
+
+Prefer `scan_openapi.py` when the selected folder already contains the
+team-maintained OpenAPI/Swagger JSON (for example an exported springdoc
+`/v3/api-docs`): it keeps operation summaries, `x-interface-id`, parameter
+descriptions, enum values, size limits and security exactly as declared. Response
+fields stay `TBD` for presence when the contract has no `required` list. Run the
+source scanner as well when the contract may lag behind the code, and compare.
 
 The Spring scanner also covers eGovFrame-style Spring MVC: `.do` mappings,
 method-level `@RequestMapping` without `method` (recorded as `GET/POST` with a
