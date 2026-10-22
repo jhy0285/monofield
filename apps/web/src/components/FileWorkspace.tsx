@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -105,6 +107,8 @@ import {
   shouldOpenCreationWorkspaceTutorial,
 } from './DevelopmentWorkspaceTutorial';
 import { GitChangesPanel } from './GitChangesPanel';
+import focusStyles from './FileWorkspace.module.css';
+import { DevelopmentToolsDock, type DevelopmentTool } from './workspace/DevelopmentToolsDock';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
 import { MissingBrandFontsBanner } from './MissingBrandFontsBanner';
 import { PasteTextDialog } from './PasteTextDialog';
@@ -120,6 +124,8 @@ import {
 } from './sketch-model';
 import { AnimatePresence } from 'motion/react';
 import type { ChatMessage } from '../types';
+
+const DockOntologyPanel = lazy(() => import('./CodeOntologyPanel').then(module => ({ default: module.CodeOntologyPanel })));
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
@@ -546,6 +552,13 @@ export function FileWorkspace({
     fileManagerViewedProjectRef.current = projectId;
     trackPageView(analytics.track, { page_name: 'file_manager' });
   }, [projectId, analytics.track]);
+  const isDevelopment = projectMetadata?.workMode === 'development';
+  const [developmentTool, setDevelopmentTool] = useState<DevelopmentTool | null>(null);
+  const [dockTerminal, setDockTerminal] = useState<`terminal:${string}` | null>(null);
+  const [logsHost, setLogsHost] = useState<HTMLDivElement | null>(null);
+  const terminalStarting = useRef(false);
+  const dockProjectRef = useRef(projectId); dockProjectRef.current = projectId;
+  useEffect(() => { setDevelopmentTool(null); setDockTerminal(null); }, [projectId]);
   const defaultRootTab = designSystemProject ? DESIGN_SYSTEM_TAB : DESIGN_FILES_TAB;
   // Persisted tabs come from the parent. Active tab can transiently point
   // at a pending sketch — pending sketches are not in tabsState.tabs.
@@ -687,8 +700,13 @@ export function FileWorkspace({
   // (or on project switch). Fall back to the Design Files browser so a
   // fresh project lands in a useful place.
   useEffect(() => {
-    setActiveTab(tabsState.active ?? defaultRootTab);
-  }, [tabsState.active, defaultRootTab]);
+    const restored = tabsState.active;
+    if (isDevelopment && restored && (restored === GIT_CHANGES_TAB || isTerminalTabId(restored))) {
+      setDevelopmentTool(restored === GIT_CHANGES_TAB ? 'changes' : 'terminal');
+      if (isTerminalTabId(restored)) setDockTerminal(restored);
+      setActiveTab(tabsState.tabs.filter(name => name !== GIT_CHANGES_TAB && !isTerminalTabId(name)).at(-1) ?? defaultRootTab);
+    } else setActiveTab(restored ?? defaultRootTab);
+  }, [tabsState.active, defaultRootTab, isDevelopment]);
 
   useEffect(() => {
     setBrowserTabs([]);
@@ -724,6 +742,7 @@ export function FileWorkspace({
   }
 
   function setPersistedActive(name: string | null) {
+    if (isDevelopment && name && (name === GIT_CHANGES_TAB || isTerminalTabId(name))) { openFile(name); return; }
     const nextActive = name ?? defaultRootTab;
     setActiveTab(nextActive);
     commitTabsState(workspaceTabsState(persistedTabs, name));
@@ -732,6 +751,7 @@ export function FileWorkspace({
   function openBrowserTab(
     initial?: Pick<BrowserWorkspaceTab, 'url' | 'title' | 'iconUrl'>,
     automationParentSessionId?: string,
+    activate = true,
   ) {
     setUploadError(null);
     const nextIndex = browserTabSequenceRef.current + 1;
@@ -752,18 +772,19 @@ export function FileWorkspace({
     }
     const nextTabs = [...browserTabs, nextTab];
     setBrowserTabs(nextTabs);
-    setActiveTab(nextTab.id);
-    commitTabsState(workspaceTabsState(persistedTabs, nextTab.id, nextTabs));
+    if (activate) setActiveTab(nextTab.id);
+    commitTabsState(workspaceTabsState(persistedTabs, activate ? nextTab.id : tabsStateRef.current.active, nextTabs));
   }
 
-  function openDevelopmentUrl(url: string) {
+  function openDevelopmentUrl(url: string, activate = true) {
     const existing = browserTabs.find((tab) => tab.url === url);
     if (existing) {
+      if (!activate) return;
       setActiveTab(existing.id);
       commitTabsState(workspaceTabsState(persistedTabs, existing.id, browserTabs));
       return;
     }
-    openBrowserTab({ url, title: t('development.localApp') });
+    openBrowserTab({ url, title: t('development.localApp') }, undefined, activate);
   }
 
   function closeBrowserTab(tabId: string) {
@@ -1006,6 +1027,14 @@ export function FileWorkspace({
     // resolves a new terminal/side-chat id), so the closure could be stale and
     // clobber tabs added in the meantime.
     const currentTabs = tabsStateRef.current.tabs;
+    if (isDevelopment && name === GIT_CHANGES_TAB) { setDevelopmentTool('changes'); return; }
+    if (isDevelopment && isTerminalTabId(name)) {
+      setDockTerminal(name); setDevelopmentTool('terminal');
+      const current = tabsStateRef.current.active;
+      const editor = current && current !== GIT_CHANGES_TAB && !isTerminalTabId(current) ? current : activeTab;
+      commitTabsState(workspaceTabsState(currentTabs.includes(name) ? currentTabs : [...currentTabs, name], editor));
+      return;
+    }
     const isNewTab = !currentTabs.includes(name);
     const nextBrowserTabs = isNewTab
       ? reanchorBrowserTabsToCurrentOrder(orderedWorkspaceTabs, browserTabs)
@@ -1955,19 +1984,19 @@ export function FileWorkspace({
       data-testid="file-workspace"
     >
       <div className="ws-tabs-shell">
-        {onFocusModeChange && focusMode ? (
+        {onFocusModeChange && (focusMode || isDevelopment) ? (
           <button
             type="button"
             className="icon-only ws-focus-expand od-tooltip"
             data-testid="workspace-focus-toggle"
             aria-pressed={focusMode}
-            title={t('workspace.showChat')}
-            data-tooltip={t('workspace.showChat')}
+            title={t(focusMode ? 'workspace.showChat' : 'development.dock.hideChat')}
+            data-tooltip={t(focusMode ? 'workspace.showChat' : 'development.dock.hideChat')}
             data-tooltip-placement="bottom"
-            aria-label={t('workspace.showChat')}
-            onClick={() => onFocusModeChange(false)}
+            aria-label={t(focusMode ? 'workspace.showChat' : 'development.dock.hideChat')}
+            onClick={() => onFocusModeChange(!focusMode)}
           >
-            <Icon name="chevron-right" size={15} />
+            <Icon name="comment" size={15} />
           </button>
         ) : null}
         <div
@@ -2043,7 +2072,7 @@ export function FileWorkspace({
               <span className="ws-tab-label">{t('questions.tabLabel')}</span>
             </button>
           ) : null}
-          {orderedWorkspaceTabs.map((entry) => {
+          {orderedWorkspaceTabs.filter(entry => !isDevelopment || entry.kind !== 'file' || (entry.name !== GIT_CHANGES_TAB && !isTerminalTabId(entry.name))).map((entry) => {
             if (entry.kind === 'browser') {
               const browserTab = entry.browserTab;
               const browserUrl = browserTab.url?.trim() ?? '';
@@ -2209,7 +2238,9 @@ export function FileWorkspace({
             automaticVerificationAvailable={chatConfig?.mode !== 'api'}
             onMetadataChange={onProjectMetadataChange}
             onOpenUrl={openDevelopmentUrl}
-            onOpenChanges={() => openFile(GIT_CHANGES_TAB)}
+            dockLogsOpen={developmentTool === 'logs'}
+            logsHost={logsHost}
+            onOpenChanges={() => setDevelopmentTool('changes')}
             onActiveProjectStateChange={handleActiveDevelopmentProjectStateChange}
           />
         </div>
@@ -2557,6 +2588,37 @@ export function FileWorkspace({
           </div>
         )}
       </div>
+      {isDevelopment ? <DevelopmentToolsDock key={`tools:${projectId}`} active={developmentTool}
+        onSelect={tool => {
+          if (tool !== 'terminal') { setDevelopmentTool(tool); return; }
+          const existing = dockTerminal ?? persistedTabs.find(isTerminalTabId);
+          if (existing) { openFile(existing); return; }
+          if (terminalStarting.current) return;
+          terminalStarting.current = true;
+          const requestedProject = projectId;
+          void createTerminal(projectId, activeDevelopmentProjectSelection.projectPath ? { projectPath: activeDevelopmentProjectSelection.projectPath } : undefined)
+            .then(terminal => {
+              if (dockProjectRef.current !== requestedProject) { if (terminal) void killTerminal(requestedProject, terminal.id); return; }
+              if (terminal) openFile(`terminal:${terminal.id}`);
+              else setLauncherToast(t('workspace.terminalStartFailed'));
+            }).catch(() => { if (dockProjectRef.current === requestedProject) setLauncherToast(t('workspace.terminalStartFailed')); })
+            .finally(() => { terminalStarting.current = false; });
+        }} renderPanel={(tool, visible) => tool === 'logs' ? <div ref={setLogsHost} />
+          : tool === 'changes' ? <GitChangesPanel projectId={projectId} projectPath={activeDevelopmentProjectSelection.projectPath}
+            projectSelectionReady={activeDevelopmentProjectSelection.ready} onOpenFile={openFile} onRequestRepair={onRequestVerificationRepair}
+            filesRefreshKey={filesRefreshKey} agentBusy={streaming || !visible} active={visible} showOntology={false} />
+          : tool === 'impact' ? <Suspense fallback={null}><DockOntologyPanel projectId={projectId}
+            projectPath={activeDevelopmentProjectSelection.projectPath} ready={activeDevelopmentProjectSelection.ready}
+            revisionKey={String(filesRefreshKey)} agentBusy={streaming || !visible} initiallyOpen sourceFile={activeFile?.name}
+            onOpenFile={openFile} onRequestDraft={onRequestVerificationRepair} /></Suspense>
+          : dockTerminal ? <div className={focusStyles.terminal}>
+            {persistedTabs.filter(isTerminalTabId).length > 1 ? <select aria-label={t('development.dock.terminal')} value={dockTerminal} onChange={event => openFile(event.target.value)}>
+              {persistedTabs.filter(isTerminalTabId).map((name, index) => <option key={name} value={name}>{t('development.dock.terminal')} {index + 1}</option>)}
+            </select> : null}
+            <TerminalViewer key={`${projectId}:${dockTerminal}`} projectId={projectId}
+            projectPath={projectMetadata?.development?.activeProjectPath} terminalId={terminalIdFromTabId(dockTerminal)}
+            onClose={() => { closeTab(dockTerminal); setDockTerminal(null); setDevelopmentTool(null); }} onSessionIdChange={handleTerminalSessionChange} /></div> : null}
+      /> : null}
       <input
         ref={fileInputRef}
         type="file"

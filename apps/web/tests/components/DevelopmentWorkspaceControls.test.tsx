@@ -391,6 +391,9 @@ describe('DevelopmentWorkspaceControls', () => {
     expect(progress.textContent).toContain('Vite · pnpm run dev');
     expect(progress.textContent).toContain('pnpm run dev');
     await waitFor(() => expect(onOpenUrl).toHaveBeenCalledTimes(1), { timeout: 2_000 });
+    expect(onOpenUrl).toHaveBeenCalledWith(config.url, false);
+    fireEvent.click(screen.getByTestId('development-open-browser'));
+    expect(onOpenUrl).toHaveBeenLastCalledWith(config.url);
 
     fireEvent.click(action);
     await waitFor(() => expect(action.textContent).toContain('실행'));

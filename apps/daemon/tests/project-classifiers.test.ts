@@ -66,6 +66,19 @@ describe('kindFor', () => {
     }
   });
 
+  it('opens Java, Vue and their source/configuration files in the editable code viewer', () => {
+    for (const name of ['backend/SignalService.java', 'frontend/App.vue', 'backend/pom.xml',
+      'application.properties', 'build.gradle', 'build.gradle.kts', 'Example.KT',
+      'schema.sql', 'config.yaml', 'settings.toml', 'main.go', 'lib.rs', 'index.jsx',
+      'component.svelte', 'Program.cs', 'main.cpp', 'main.h', 'start.sh']) {
+      expect(kindFor(name), name).toBe('code');
+      expect(mimeFor(name), name).not.toBe('application/octet-stream');
+    }
+    for (const name of ['traffic.jar', 'Main.class', 'data.mv.db', 'archive.zip', 'app.exe']) {
+      expect(kindFor(name), name).toBe('binary');
+    }
+  });
+
   it('classifies office document extensions to their respective buckets', () => {
     expect(kindFor('report.pdf')).toBe('pdf');
     expect(kindFor('memo.docx')).toBe('document');

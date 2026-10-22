@@ -43,6 +43,10 @@ folder · files · browser     →  ask · edit · run          →  diff · bui
 database · rules · brand        compose · review · export    code · XLSX · PPTX · PDF
 ```
 
+**Current development release: [0.11.7-preview.2](https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.2)** — includes the Java/ontology workspace, optional **REA MCP integration**, a bundled legacy-system handover skill, and **Laya local typed-decision integration**. [Download the Windows preview](https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.2/MonoField-release-preview-win-setup.exe). It installs alongside stable. REA is downloaded on first enabled use; Node/npm, Chromium, Laya model weights and its server are separate prerequisites.
+
+**한국어** — REA로 기존 시스템의 화면·API·SQLite 근거를 조사하고 MonoField의 인터페이스 Excel·화면명세 PPTX로 정리할 수 있습니다. Laya는 선택적으로 근거 검토와 검증 후보 선택을 보조합니다. [설정·SI 인수인계 흐름](docs/rea-laya-handover.md) · [실제 합성 샘플 실행 결과](docs/testing/rea-handover-2026-10-22.md).
+
 > **한국어 소개** — MonoField는 작업 폴더, Git 변경사항, 실행 화면, 승인된
 > 데이터베이스, 참고 자료와 산출물을 하나의 프로젝트에 연결합니다. 코드 수정부터
 > 인터페이스·화면 명세서, 프로토타입, 슬라이드와 export까지 같은 근거를 사용하고,
@@ -87,6 +91,12 @@ structured deliverable.
   local server for typed classification, scoring, and uncertainty. The local
   Laya option runs without a TypeSafe key; it is a separate model. See the
   [decision model guide](docs/jev-decisions.md).
+- **REA can investigate a legacy application.** Enable the pinned REA preset in
+  Settings → MCP, then use the bundled `legacy-system-handover` skill with a
+  supported local agent. Preserve static, browser and SQLite Evidence; review
+  the findings and export structured interface/screen documents. The same
+  configuration is available through `monofield rea configure --json`.
+  See the [REA + Laya handover guide](docs/rea-laya-handover.md).
 - **Check the code you are reviewing.** Run discovered project checks from the
   Changes view, keep real exit codes and logs with a source fingerprint, and
   prepare a repair request in your existing agent's composer. Changed source

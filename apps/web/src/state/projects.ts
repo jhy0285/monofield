@@ -468,11 +468,25 @@ export function terminalStreamUrl(projectId: string, terminalId: string): string
   return `/api/projects/${encodeURIComponent(projectId)}/terminals/${encodeURIComponent(terminalId)}/stream`;
 }
 
-export async function sendTerminalStdin(
+const terminalInputWrites = new Map<string, Promise<boolean>>();
+
+/** Preserve PTY byte order across HTTP requests and terminal tab remounts. */
+export function sendTerminalStdin(
   projectId: string,
   terminalId: string,
   data: string,
 ): Promise<boolean> {
+  const key = JSON.stringify([projectId, terminalId]);
+  const previous = terminalInputWrites.get(key) ?? Promise.resolve(true);
+  const write = previous.then(ok => ok ? postTerminalStdin(projectId, terminalId, data) : false);
+  terminalInputWrites.set(key, write);
+  void write.finally(() => {
+    if (terminalInputWrites.get(key) === write) terminalInputWrites.delete(key);
+  });
+  return write;
+}
+
+async function postTerminalStdin(projectId: string, terminalId: string, data: string): Promise<boolean> {
   try {
     const resp = await fetch(
       `/api/projects/${encodeURIComponent(projectId)}/terminals/${encodeURIComponent(terminalId)}/stdin`,

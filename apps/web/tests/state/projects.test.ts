@@ -13,7 +13,46 @@ import {
   pluginRecordHasQuery,
   pickLocalFolderPath,
   publishGeneratedPluginToGitHub,
+  sendTerminalStdin,
 } from '../../src/state/projects';
+
+describe('terminal input ordering', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('waits for each PTY write acknowledgement before sending the next chunk', async () => {
+    let release!: (response: Response) => void;
+    const first = new Promise<Response>(resolve => { release = resolve; });
+    const fetchMock = vi.fn<typeof fetch>().mockReturnValueOnce(first)
+      .mockResolvedValue(new Response('{}'));
+    vi.stubGlobal('fetch', fetchMock);
+    const writes = ['m', 'v', 'n test\r'].map(data => sendTerminalStdin('ordering-project', 'ordering-terminal', data));
+    await Promise.resolve();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    release(new Response('{}'));
+    await expect(Promise.all(writes)).resolves.toEqual([true, true, true]);
+    expect(fetchMock.mock.calls.map(([, init]) => JSON.parse(String(init?.body)).data)).toEqual(['m', 'v', 'n test\r']);
+  });
+
+  it('does not replay or append queued input after an uncertain failed write', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockRejectedValue(new Error('connection lost')));
+    const a = sendTerminalStdin('failed-project', 'failed-terminal', 'destructive prefix');
+    const b = sendTerminalStdin('failed-project', 'failed-terminal', '\r');
+    await expect(Promise.all([a, b])).resolves.toEqual([false, false]);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps different terminal sessions independent', async () => {
+    let release!: (response: Response) => void;
+    const blocked = new Promise<Response>(resolve => { release = resolve; });
+    const fetchMock = vi.fn<typeof fetch>().mockReturnValueOnce(blocked).mockResolvedValue(new Response('{}'));
+    vi.stubGlobal('fetch', fetchMock);
+    const a = sendTerminalStdin('parallel-project', 'a', 'slow');
+    await Promise.resolve();
+    await expect(sendTerminalStdin('parallel-project', 'b', 'fast')).resolves.toBe(true);
+    release(new Response('{}'));
+    await expect(a).resolves.toBe(true);
+  });
+});
 
 describe('applyPlugin', () => {
   afterEach(() => {

@@ -18,6 +18,7 @@ import { useAnalytics } from '../analytics/provider';
 import { getResolvedDeviceId } from '../analytics/client';
 import { trackChatPanelClick, trackMessageQueueClick, trackRunFailedToastSurfaceView } from '../analytics/events';
 import { amrHandoffDeviceId, attributedAmrUrl, recordAmrEntry } from '../analytics/amr-attribution';
+import compactStyles from './ChatPane.module.css';
 import { useT } from '../i18n';
 import {
   FEATURED_DESIGN_TOOLBOX_ACTION_IDS,
@@ -436,6 +437,9 @@ function chatArtifactKindLabel(kind: ProjectFile['kind'], t: TranslateFn): strin
 }
 
 interface Props {
+  compact?: boolean;
+  inlineComposer?: boolean;
+  onExpand?: () => void;
   messages: ChatMessage[];
   streaming: boolean;
   loading?: boolean;
@@ -808,6 +812,9 @@ export function ChatPane({
   onChangeByokSpeechVoice,
   composerLeadingAccessory,
   composerFooterAccessory,
+  compact = false,
+  inlineComposer = false,
+  onExpand,
   currentDesignSystemId,
   onActiveDesignSystemChange,
   onShowToast,
@@ -1450,7 +1457,7 @@ export function ChatPane({
       // breaking auto-follow for subsequent chunks.
       el.scrollTop = el.scrollHeight;
     }
-  }, [displayMessages, error, streaming]);
+  }, [displayMessages, error, streaming, compact]);
 
   // Saved chat-log scroll state, preserved across tab switches. The
   // chat-log <div> is conditionally rendered so it unmounts when the
@@ -1563,7 +1570,7 @@ export function ChatPane({
       }
       setChatLogScrolling(false);
     };
-  }, [tab]);
+  }, [tab, compact]);
 
   useEffect(() => {
     if (tab !== 'chat') return;
@@ -1675,7 +1682,7 @@ export function ChatPane({
       mutationObserver?.disconnect();
       resizeObserver?.disconnect();
     };
-  }, [tab]);
+  }, [tab, compact]);
 
   // Close the conversation history dropdown on outside click / Escape.
   useEffect(() => {
@@ -1820,7 +1827,7 @@ export function ChatPane({
       window.removeEventListener('resize', scheduleUpdate);
       window.visualViewport?.removeEventListener('resize', scheduleUpdate);
     };
-  }, [tab]);
+  }, [tab, compact]);
 
   useLayoutEffect(() => {
     if (tab !== 'chat' || !composerPortalTarget || !composerPortalRect) return;
@@ -1854,7 +1861,7 @@ export function ChatPane({
   const composerNode = (
     <ChatComposer
       ref={composerRef}
-      designSystemPicker={designSystemPicker}
+      designSystemPicker={compact ? undefined : designSystemPicker}
       projectId={projectId}
       conversationId={activeConversationId}
       projectFiles={projectFiles}
@@ -1865,8 +1872,8 @@ export function ChatPane({
       streaming={streaming}
       sendDisabled={sendDisabled}
       initialDraft={initialDraft}
-      composerPlaceholder={composerPlaceholder}
-      placeholderScenarios={composerPlaceholderScenarios}
+      composerPlaceholder={compact ? t('development.dock.prompt') : composerPlaceholder}
+      placeholderScenarios={compact ? [] : composerPlaceholderScenarios}
       draftStorageKey={composerDraftStorageKey}
       onEnsureProject={onEnsureProject}
       commentAttachments={commentsToAttachments(attachedComments)}
@@ -1930,7 +1937,7 @@ export function ChatPane({
     />
   );
   const shouldPortalComposer =
-    tab === 'chat'
+    !inlineComposer && !compact && tab === 'chat'
     && composerPortalTarget !== null
     && composerPortalRect !== null
     && composerPortalRect.width > 0;
@@ -1939,8 +1946,13 @@ export function ChatPane({
     : undefined;
 
   return (
-    <div className="pane">
-      <div className="chat-project-header">
+    <div className={`pane ${compact ? compactStyles.compact : ''}`}>
+      {compact ? <div className={compactStyles.compactToolbar}>
+        <button type="button" onClick={onExpand} data-testid="development-expand-chat">{t('development.dock.chat')}</button>
+        {streaming ? <span role="status">{t('ontology.working')}</span> : null}
+        {error ? <span role="alert">{error}</span> : null}
+      </div> : null}
+      {!compact ? <div className="chat-project-header">
         {onBack ? (
           <button
             type="button"
@@ -2071,10 +2083,10 @@ export function ChatPane({
             </div>
           ) : null}
         </div>
-      </div>
+      </div> : null}
       {tab === 'chat' ? (
         <>
-          <div className="chat-log-wrap">
+          {!compact ? <div className="chat-log-wrap">
             <div
               className={[
                 'chat-log',
@@ -2457,7 +2469,7 @@ export function ChatPane({
               <Icon name="arrow-up" size={12} style={{ transform: 'rotate(180deg)' }} />
               <span>{t('chat.jumpToLatest')}</span>
             </button>
-          </div>
+          </div> : null}
           <QueuedSendStrip
             containerRef={queuedSendStripRef}
             items={queuedItems}

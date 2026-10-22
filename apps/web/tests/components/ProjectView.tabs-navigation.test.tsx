@@ -101,12 +101,14 @@ vi.mock('../../src/components/AvatarMenu', () => ({
 }));
 
 vi.mock('../../src/components/FileWorkspace', () => ({
-  FileWorkspace: ({ tabsState, onTabsStateChange, designSystemProject }: {
+  FileWorkspace: ({ tabsState, onTabsStateChange, designSystemProject, onFocusModeChange }: {
     tabsState: { tabs: string[]; active: string | null };
     onTabsStateChange: (state: { tabs: string[]; active: string | null }) => void;
     designSystemProject?: DesignSystemSummary | null;
+    onFocusModeChange?: (value: boolean) => void;
   }) => (
     <div data-testid="file-workspace">
+      <button data-testid="collapse-chat" onClick={() => onFocusModeChange?.(true)}>Collapse chat</button>
       <output data-testid="workspace-active-tab">{tabsState.active ?? ''}</output>
       <output data-testid="workspace-design-system-id">{designSystemProject?.id ?? ''}</output>
       <button
@@ -125,7 +127,7 @@ vi.mock('../../src/components/Loading', () => ({
 }));
 
 vi.mock('../../src/components/ChatPane', () => ({
-  ChatPane: () => <div data-testid="chat-pane" />,
+  ChatPane: ({ compact, onExpand }: { compact?: boolean; onExpand?: () => void }) => <div data-testid="chat-pane" data-compact={String(!!compact)}><button data-testid="expand-chat" onClick={onExpand}>Expand chat</button></div>,
 }));
 
 const mockedListConversations = vi.mocked(listConversations);
@@ -205,6 +207,16 @@ describe('ProjectView tab URL hydration', () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+  });
+
+  it('starts development with a compact composer and allows opening and collapsing AI without leaving the workspace', async () => {
+    renderProjectView({ project: { ...project, metadata: { kind: 'prototype', workMode: 'development' } } });
+    await waitFor(() => expect(screen.getByTestId('chat-pane').getAttribute('data-compact')).toBe('true'));
+    fireEvent.click(screen.getByTestId('expand-chat'));
+    expect(screen.getByTestId('chat-pane').getAttribute('data-compact')).toBe('false');
+    fireEvent.click(screen.getByTestId('collapse-chat'));
+    expect(screen.getByTestId('chat-pane').getAttribute('data-compact')).toBe('true');
+    expect(screen.getByTestId('file-workspace')).toBeTruthy();
   });
 
   it('syncs a persisted active tab to the URL before the file list has hydrated', async () => {

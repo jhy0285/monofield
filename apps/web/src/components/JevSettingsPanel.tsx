@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { JevConfig, JevEvaluation, JevModelsResponse, JevStatus } from '@open-design/contracts';
+import { JevEvidenceReview } from './JevEvidenceReview';
 import { useT } from '../i18n';
 
 async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
@@ -67,6 +68,7 @@ export function JevSettingsPanel() {
         <p className="hint">{t('jev.advisory')}</p>
         <details><summary>{t('jev.raw')}</summary><pre>{JSON.stringify(result.result, null, 2)}</pre></details>
       </div> : null}
+      <JevEvidenceReview disabled={busy || dirty || !status?.ready} configurationKey={JSON.stringify(status?.config) ?? ''} />
     </> : null}
     {error ? <p role="alert" data-testid="jev-error">{error}</p> : null}
     {notice ? <p role="status">{notice}</p> : null}

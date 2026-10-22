@@ -1,0 +1,321 @@
+{
+  "_meta": {
+    "provenance": {
+      "untrusted_content": true,
+      "source": "analysis_target"
+    }
+  },
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"evidence_id\":\"ev_a0d66fdaaa20e64381d54ee08e39b83b3c33c4dbd83532aa276e64d6eed781e7\",\"subject\":{\"name\":\"legacy-before.sqlite\",\"digest\":{\"sha256\":\"7c1d35d39f0a450d40eabfc2fcab9be4a1e1fd15e0de5b7434d787b505622489\"},\"local_path\":\"/workspace/rea-si-handover-confirmed/evidence/legacy-before.sqlite\",\"format\":\"file\",\"architecture\":null},\"provider\":{\"id\":\"sqlite\",\"name\":\"REA SQLite database inspector\",\"version\":\"SQLite 3.53.3\"},\"analysis_profile\":null,\"predicate_type\":\"rea.analysis\",\"operation\":\"inspect_sqlite_database\",\"parameters\":{\"path\":\"/workspace/rea-si-handover-confirmed/evidence/legacy-before.sqlite\",\"schema_scope\":\"database\"},\"raw_result\":null,\"normalized_result\":{\"artifact\":{\"path\":\"/workspace/rea-si-handover-confirmed/evidence/legacy-before.sqlite\",\"sha256\":\"7c1d35d39f0a450d40eabfc2fcab9be4a1e1fd15e0de5b7434d787b505622489\",\"bytes\":28672},\"wal\":null,\"engine\":{\"name\":\"SQLite\",\"version\":\"3.53.3\"},\"database_encoding\":\"UTF-8\",\"schema\":{\"scope\":\"database\",\"completeness\":\"complete\",\"tables\":[{\"name\":\"customers\",\"sql\":\"CREATE TABLE customers(id INTEGER PRIMARY KEY,name TEXT NOT NULL)\",\"root_page\":2,\"kind\":\"table\",\"without_rowid\":false,\"strict\":false,\"column_count\":2,\"columns_completeness\":\"complete\",\"columns\":[{\"cid\":0,\"name\":\"id\",\"declared_type\":\"INTEGER\",\"not_null\":false,\"default_sql\":null,\"primary_key_position\":1,\"hidden\":0},{\"cid\":1,\"name\":\"name\",\"declared_type\":\"TEXT\",\"not_null\":true,\"default_sql\":null,\"primary_key_position\":0,\"hidden\":0}]},{\"name\":\"orders\",\"sql\":\"CREATE TABLE orders(id INTEGER PRIMARY KEY,customer_id INTEGER NOT NULL REFERENCES customers(id),status TEXT NOT NULL CHECK(status IN ('PAID','PENDING','CANCELLED')),gross_amount INTEGER NOT NULL CHECK(gross_amount>0),commission_bps INTEGER NOT NULL CHECK(commission_bps BETWEEN 0 AND 10000),settled_at TEXT)\",\"root_page\":3,\"kind\":\"table\",\"without_rowid\":false,\"strict\":false,\"column_count\":6,\"columns_completeness\":\"complete\",\"columns\":[{\"cid\":0,\"name\":\"id\",\"declared_type\":\"INTEGER\",\"not_null\":false,\"default_sql\":null,\"primary_key_position\":1,\"hidden\":0},{\"cid\":1,\"name\":\"customer_id\",\"declared_type\":\"INTEGER\",\"not_null\":true,\"default_sql\":null,\"primary_key_position\":0,\"hidden\":0},{\"cid\":2,\"name\":\"status\",\"declared_type\":\"TEXT\",\"not_null\":true,\"default_sql\":null,\"primary_key_position\":0,\"hidden\":0},{\"cid\":3,\"name\":\"gross_amount\",\"declared_type\":\"INTEGER\",\"not_null\":true,\"default_sql\":null,\"primary_key_position\":0,\"hidden\":0},{\"cid\":4,\"name\":\"commission_bps\",\"declared_type\":\"INTEGER\",\"not_null\":true,\"default_sql\":null,\"primary_key_position\":0,\"hidden\":0},{\"cid\":5,\"name\":\"settled_at\",\"declared_type\":\"TEXT\",\"not_null\":false,\"default_sql\":null,\"primary_key_position\":0,\"hidden\":0}]},{\"name\":\"settlements\",\"sql\":\"CREATE TABLE settlements(id INTEGER PRIMARY KEY,order_id INTEGER NOT NULL UNIQUE REFERENCES orders(id),gross_amount INTEGER NOT NULL,fee_amount INTEGER NOT NULL,net_amount INTEGER NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)\",\"root_page\":4,\"kind\":\"table\",\"without_rowid\":false,\"strict\":false,\"column_count\":6,\"columns_completeness\":\"complete\",\"columns\":[{\"cid\":0,\"name\":\"id\",\"declared_type\":\"INTEGER\",\"not_null\":false,\"default_sql\":null,\"primary_key_position\":1,\"hidden\":0},{\"cid\":1,\"name\":\"order_id\",\"declared_type\":\"INTEGER\",\"not_null\":true,\"default_sql\":null,\"primary_key_position\":0,\"hidden\":0},{\"cid\":2,\"name\":\"gross_amount\",\"declared_type\":\"INTEGER\",\"not_null\":true,\"default_sql\":null,\"primary_key_position\":0,\"hidden\":0},{\"cid\":3,\"name\":\"fee_amount\",\"declared_type\":\"INTEGER\",\"not_null\":true,\"default_sql\":null,\"primary_key_position\":0,\"hidden\":0},{\"cid\":4,\"name\":\"net_amount\",\"declared_type\":\"INTEGER\",\"not_null\":true,\"default_sql\":null,\"primary_key_position\":0,\"hidden\":0},{\"cid\":5,\"name\":\"created_at\",\"declared_type\":\"TEXT\",\"not_null\":true,\"default_sql\":\"CURRENT_TIMESTAMP\",\"primary_key_position\":0,\"hidden\":0}]},{\"name\":\"audit_log\",\"sql\":\"CREATE TABLE audit_log(id INTEGER PRIMARY KEY,event TEXT NOT NULL,order_id INTEGER NOT NULL REFERENCES orders(id),detail TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)\",\"root_page\":6,\"kind\":\"table\",\"without_rowid\":false,\"strict\":false,\"column_count\":5,\"columns_completeness\":\"complete\",\"columns\":[{\"cid\":0,\"name\":\"id\",\"declared_type\":\"INTEGER\",\"not_null\":false,\"default_sql\":null,\"primary_key_position\":1,\"hidden\":0},{\"cid\":1,\"name\":\"event\",\"declared_type\":\"TEXT\",\"not_null\":true,\"default_sql\":null,\"primary_key_position\":0,\"hidden\":0},{\"cid\":2,\"name\":\"order_id\",\"declared_type\":\"INTEGER\",\"not_null\":true,\"default_sql\":null,\"primary_key_position\":0,\"hidden\":0},{\"cid\":3,\"name\":\"detail\",\"declared_type\":\"TEXT\",\"not_null\":true,\"default_sql\":null,\"primary_key_position\":0,\"hidden\":0},{\"cid\":4,\"name\":\"created_at\",\"declared_type\":\"TEXT\",\"not_null\":true,\"default_sql\":\"CURRENT_TIMESTAMP\",\"primary_key_position\":0,\"hidden\":0}]}],\"indexes\":[{\"name\":\"sqlite_autoindex_settlements_1\",\"table\":\"settlements\",\"sql\":null,\"root_page\":5},{\"name\":\"idx_orders_status\",\"table\":\"orders\",\"sql\":\"CREATE INDEX idx_orders_status ON orders(status)\",\"root_page\":7}],\"views\":[],\"triggers\":[]},\"rows\":null,\"limitations\":[\"Inspects an offline stable file set. Filesystem identity checks detect observed acquisition changes; they do not establish an atomic snapshot of an actively changing database. Supply an application-created backup or quiescent database/WAL pair.\",\"The source database and WAL are never opened by SQLite or modified. A private copy may acquire its own WAL-index sidecar and is removed after inspection.\",\"SQLite reports current schema and selected committed rows from its valid database/WAL state. Deleted records, uncommitted or invalid WAL tails, encrypted databases, forensic recovery, and full integrity verification are outside this profile.\",\"Stored CREATE statements preserve index/view/trigger definitions. Views, triggers, and virtual/shadow table rows are not executed; virtual-table column expansion is unsupported.\",\"Selected rows have unspecified order and are a bounded sample. Text display may replace invalid sequences; bytes_hex and encoding preserve SQLite's text byte representation, not original on-disk page offsets.\",\"Resource boundaries: at most two concurrent inspections per provider; combined input 256 MiB per inspection, complete worker JSON 16 MiB, native SQLite value/record and SQL statement lengths 16 MiB, owned-worker JavaScript heap 256 MiB and supervised deadline 30 seconds. These are distinct from total resident memory; an overall native SQLite heap cap is not claimed. Failures return no partial success.\"]},\"confidence\":\"observed\",\"authority\":\"shipped-artifact\",\"environment\":null,\"limitations\":[\"Inspects an offline stable file set. Filesystem identity checks detect observed acquisition changes; they do not establish an atomic snapshot of an actively changing database. Supply an application-created backup or quiescent database/WAL pair.\",\"The source database and WAL are never opened by SQLite or modified. A private copy may acquire its own WAL-index sidecar and is removed after inspection.\",\"SQLite reports current schema and selected committed rows from its valid database/WAL state. Deleted records, uncommitted or invalid WAL tails, encrypted databases, forensic recovery, and full integrity verification are outside this profile.\",\"Stored CREATE statements preserve index/view/trigger definitions. Views, triggers, and virtual/shadow table rows are not executed; virtual-table column expansion is unsupported.\",\"Selected rows have unspecified order and are a bounded sample. Text display may replace invalid sequences; bytes_hex and encoding preserve SQLite's text byte representation, not original on-disk page offsets.\",\"Resource boundaries: at most two concurrent inspections per provider; combined input 256 MiB per inspection, complete worker JSON 16 MiB, native SQLite value/record and SQL statement lengths 16 MiB, owned-worker JavaScript heap 256 MiB and supervised deadline 30 seconds. These are distinct from total resident memory; an overall native SQLite heap cap is not claimed. Failures return no partial success.\"],\"relationship_coverage\":null,\"locations\":[{\"kind\":\"artifact-path\",\"path\":\"/workspace/rea-si-handover-confirmed/evidence/legacy-before.sqlite\"}],\"evidence_links\":[]}"
+    }
+  ],
+  "structuredContent": {
+    "evidence_id": "ev_a0d66fdaaa20e64381d54ee08e39b83b3c33c4dbd83532aa276e64d6eed781e7",
+    "subject": {
+      "name": "legacy-before.sqlite",
+      "digest": {
+        "sha256": "7c1d35d39f0a450d40eabfc2fcab9be4a1e1fd15e0de5b7434d787b505622489"
+      },
+      "local_path": "/workspace/rea-si-handover-confirmed/evidence/legacy-before.sqlite",
+      "format": "file",
+      "architecture": null
+    },
+    "provider": {
+      "id": "sqlite",
+      "name": "REA SQLite database inspector",
+      "version": "SQLite 3.53.3"
+    },
+    "analysis_profile": null,
+    "predicate_type": "rea.analysis",
+    "operation": "inspect_sqlite_database",
+    "parameters": {
+      "path": "/workspace/rea-si-handover-confirmed/evidence/legacy-before.sqlite",
+      "schema_scope": "database"
+    },
+    "raw_result": null,
+    "normalized_result": {
+      "artifact": {
+        "path": "/workspace/rea-si-handover-confirmed/evidence/legacy-before.sqlite",
+        "sha256": "7c1d35d39f0a450d40eabfc2fcab9be4a1e1fd15e0de5b7434d787b505622489",
+        "bytes": 28672
+      },
+      "wal": null,
+      "engine": {
+        "name": "SQLite",
+        "version": "3.53.3"
+      },
+      "database_encoding": "UTF-8",
+      "schema": {
+        "scope": "database",
+        "completeness": "complete",
+        "tables": [
+          {
+            "name": "customers",
+            "sql": "CREATE TABLE customers(id INTEGER PRIMARY KEY,name TEXT NOT NULL)",
+            "root_page": 2,
+            "kind": "table",
+            "without_rowid": false,
+            "strict": false,
+            "column_count": 2,
+            "columns_completeness": "complete",
+            "columns": [
+              {
+                "cid": 0,
+                "name": "id",
+                "declared_type": "INTEGER",
+                "not_null": false,
+                "default_sql": null,
+                "primary_key_position": 1,
+                "hidden": 0
+              },
+              {
+                "cid": 1,
+                "name": "name",
+                "declared_type": "TEXT",
+                "not_null": true,
+                "default_sql": null,
+                "primary_key_position": 0,
+                "hidden": 0
+              }
+            ]
+          },
+          {
+            "name": "orders",
+            "sql": "CREATE TABLE orders(id INTEGER PRIMARY KEY,customer_id INTEGER NOT NULL REFERENCES customers(id),status TEXT NOT NULL CHECK(status IN ('PAID','PENDING','CANCELLED')),gross_amount INTEGER NOT NULL CHECK(gross_amount>0),commission_bps INTEGER NOT NULL CHECK(commission_bps BETWEEN 0 AND 10000),settled_at TEXT)",
+            "root_page": 3,
+            "kind": "table",
+            "without_rowid": false,
+            "strict": false,
+            "column_count": 6,
+            "columns_completeness": "complete",
+            "columns": [
+              {
+                "cid": 0,
+                "name": "id",
+                "declared_type": "INTEGER",
+                "not_null": false,
+                "default_sql": null,
+                "primary_key_position": 1,
+                "hidden": 0
+              },
+              {
+                "cid": 1,
+                "name": "customer_id",
+                "declared_type": "INTEGER",
+                "not_null": true,
+                "default_sql": null,
+                "primary_key_position": 0,
+                "hidden": 0
+              },
+              {
+                "cid": 2,
+                "name": "status",
+                "declared_type": "TEXT",
+                "not_null": true,
+                "default_sql": null,
+                "primary_key_position": 0,
+                "hidden": 0
+              },
+              {
+                "cid": 3,
+                "name": "gross_amount",
+                "declared_type": "INTEGER",
+                "not_null": true,
+                "default_sql": null,
+                "primary_key_position": 0,
+                "hidden": 0
+              },
+              {
+                "cid": 4,
+                "name": "commission_bps",
+                "declared_type": "INTEGER",
+                "not_null": true,
+                "default_sql": null,
+                "primary_key_position": 0,
+                "hidden": 0
+              },
+              {
+                "cid": 5,
+                "name": "settled_at",
+                "declared_type": "TEXT",
+                "not_null": false,
+                "default_sql": null,
+                "primary_key_position": 0,
+                "hidden": 0
+              }
+            ]
+          },
+          {
+            "name": "settlements",
+            "sql": "CREATE TABLE settlements(id INTEGER PRIMARY KEY,order_id INTEGER NOT NULL UNIQUE REFERENCES orders(id),gross_amount INTEGER NOT NULL,fee_amount INTEGER NOT NULL,net_amount INTEGER NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+            "root_page": 4,
+            "kind": "table",
+            "without_rowid": false,
+            "strict": false,
+            "column_count": 6,
+            "columns_completeness": "complete",
+            "columns": [
+              {
+                "cid": 0,
+                "name": "id",
+                "declared_type": "INTEGER",
+                "not_null": false,
+                "default_sql": null,
+                "primary_key_position": 1,
+                "hidden": 0
+              },
+              {
+                "cid": 1,
+                "name": "order_id",
+                "declared_type": "INTEGER",
+                "not_null": true,
+                "default_sql": null,
+                "primary_key_position": 0,
+                "hidden": 0
+              },
+              {
+                "cid": 2,
+                "name": "gross_amount",
+                "declared_type": "INTEGER",
+                "not_null": true,
+                "default_sql": null,
+                "primary_key_position": 0,
+                "hidden": 0
+              },
+              {
+                "cid": 3,
+                "name": "fee_amount",
+                "declared_type": "INTEGER",
+                "not_null": true,
+                "default_sql": null,
+                "primary_key_position": 0,
+                "hidden": 0
+              },
+              {
+                "cid": 4,
+                "name": "net_amount",
+                "declared_type": "INTEGER",
+                "not_null": true,
+                "default_sql": null,
+                "primary_key_position": 0,
+                "hidden": 0
+              },
+              {
+                "cid": 5,
+                "name": "created_at",
+                "declared_type": "TEXT",
+                "not_null": true,
+                "default_sql": "CURRENT_TIMESTAMP",
+                "primary_key_position": 0,
+                "hidden": 0
+              }
+            ]
+          },
+          {
+            "name": "audit_log",
+            "sql": "CREATE TABLE audit_log(id INTEGER PRIMARY KEY,event TEXT NOT NULL,order_id INTEGER NOT NULL REFERENCES orders(id),detail TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+            "root_page": 6,
+            "kind": "table",
+            "without_rowid": false,
+            "strict": false,
+            "column_count": 5,
+            "columns_completeness": "complete",
+            "columns": [
+              {
+                "cid": 0,
+                "name": "id",
+                "declared_type": "INTEGER",
+                "not_null": false,
+                "default_sql": null,
+                "primary_key_position": 1,
+                "hidden": 0
+              },
+              {
+                "cid": 1,
+                "name": "event",
+                "declared_type": "TEXT",
+                "not_null": true,
+                "default_sql": null,
+                "primary_key_position": 0,
+                "hidden": 0
+              },
+              {
+                "cid": 2,
+                "name": "order_id",
+                "declared_type": "INTEGER",
+                "not_null": true,
+                "default_sql": null,
+                "primary_key_position": 0,
+                "hidden": 0
+              },
+              {
+                "cid": 3,
+                "name": "detail",
+                "declared_type": "TEXT",
+                "not_null": true,
+                "default_sql": null,
+                "primary_key_position": 0,
+                "hidden": 0
+              },
+              {
+                "cid": 4,
+                "name": "created_at",
+                "declared_type": "TEXT",
+                "not_null": true,
+                "default_sql": "CURRENT_TIMESTAMP",
+                "primary_key_position": 0,
+                "hidden": 0
+              }
+            ]
+          }
+        ],
+        "indexes": [
+          {
+            "name": "sqlite_autoindex_settlements_1",
+            "table": "settlements",
+            "sql": null,
+            "root_page": 5
+          },
+          {
+            "name": "idx_orders_status",
+            "table": "orders",
+            "sql": "CREATE INDEX idx_orders_status ON orders(status)",
+            "root_page": 7
+          }
+        ],
+        "views": [],
+        "triggers": []
+      },
+      "rows": null,
+      "limitations": [
+        "Inspects an offline stable file set. Filesystem identity checks detect observed acquisition changes; they do not establish an atomic snapshot of an actively changing database. Supply an application-created backup or quiescent database/WAL pair.",
+        "The source database and WAL are never opened by SQLite or modified. A private copy may acquire its own WAL-index sidecar and is removed after inspection.",
+        "SQLite reports current schema and selected committed rows from its valid database/WAL state. Deleted records, uncommitted or invalid WAL tails, encrypted databases, forensic recovery, and full integrity verification are outside this profile.",
+        "Stored CREATE statements preserve index/view/trigger definitions. Views, triggers, and virtual/shadow table rows are not executed; virtual-table column expansion is unsupported.",
+        "Selected rows have unspecified order and are a bounded sample. Text display may replace invalid sequences; bytes_hex and encoding preserve SQLite's text byte representation, not original on-disk page offsets.",
+        "Resource boundaries: at most two concurrent inspections per provider; combined input 256 MiB per inspection, complete worker JSON 16 MiB, native SQLite value/record and SQL statement lengths 16 MiB, owned-worker JavaScript heap 256 MiB and supervised deadline 30 seconds. These are distinct from total resident memory; an overall native SQLite heap cap is not claimed. Failures return no partial success."
+      ]
+    },
+    "confidence": "observed",
+    "authority": "shipped-artifact",
+    "environment": null,
+    "limitations": [
+      "Inspects an offline stable file set. Filesystem identity checks detect observed acquisition changes; they do not establish an atomic snapshot of an actively changing database. Supply an application-created backup or quiescent database/WAL pair.",
+      "The source database and WAL are never opened by SQLite or modified. A private copy may acquire its own WAL-index sidecar and is removed after inspection.",
+      "SQLite reports current schema and selected committed rows from its valid database/WAL state. Deleted records, uncommitted or invalid WAL tails, encrypted databases, forensic recovery, and full integrity verification are outside this profile.",
+      "Stored CREATE statements preserve index/view/trigger definitions. Views, triggers, and virtual/shadow table rows are not executed; virtual-table column expansion is unsupported.",
+      "Selected rows have unspecified order and are a bounded sample. Text display may replace invalid sequences; bytes_hex and encoding preserve SQLite's text byte representation, not original on-disk page offsets.",
+      "Resource boundaries: at most two concurrent inspections per provider; combined input 256 MiB per inspection, complete worker JSON 16 MiB, native SQLite value/record and SQL statement lengths 16 MiB, owned-worker JavaScript heap 256 MiB and supervised deadline 30 seconds. These are distinct from total resident memory; an overall native SQLite heap cap is not claimed. Failures return no partial success."
+    ],
+    "relationship_coverage": null,
+    "locations": [
+      {
+        "kind": "artifact-path",
+        "path": "/workspace/rea-si-handover-confirmed/evidence/legacy-before.sqlite"
+      }
+    ],
+    "evidence_links": []
+  }
+}

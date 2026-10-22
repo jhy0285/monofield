@@ -40,6 +40,8 @@ export interface DevelopmentRunConfig {
   url: string;
   packageManager?: 'pnpm' | 'npm' | 'yarn' | 'bun';
   dependenciesReady?: boolean;
+  /** Explicit local JDWP mode for supported JVM launchers. */
+  debugPort?: number;
 }
 
 export interface DevelopmentWorkspaceProject {
@@ -100,6 +102,8 @@ export interface DevelopmentServerStartRequest {
      * persist this object in project metadata because it may contain secrets.
      */
     environment?: Record<string, string>;
+    /** Start the supported application JVM with a loopback-only debugger socket. */
+    debugPort?: number;
   };
 }
 

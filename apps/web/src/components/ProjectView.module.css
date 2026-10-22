@@ -1,0 +1,4 @@
+.developmentFocus.developmentFocus { display: flex; flex-direction: column; }
+.developmentFocus > :global(.workspace) { flex: 1 1 auto; min-height: 0; }
+.developmentFocus > :global(.split-chat-slot) { order: 2; flex: 0 0 auto; max-height: 28vh; overflow: visible; z-index: 5; border-top: 1px solid var(--border); }
+.developmentFocus > :global(.split-chat-slot > .pane) { overflow: visible; }

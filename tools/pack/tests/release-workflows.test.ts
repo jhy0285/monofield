@@ -47,7 +47,8 @@ describe("Windows release workflow", () => {
     expect(build).toContain("choco install nsis --version=3.11 --yes --no-progress");
     expect(build).toContain('throw "NSIS compiler version check failed"');
     expect(build).toContain("tools\\release\\scripts\\build-platform.ps1");
-    expect(build).toContain("-ReleaseNamespace default");
+    expect(build).toContain('$namespace = "default"');
+    expect(build).toContain("-ReleaseNamespace $env:RELEASE_NAMESPACE");
     expect(build).toContain("-BuildTarget all");
     expect(build).toContain("-SmokeMode full");
     expect(build).toContain("Get-AuthenticodeSignature");
@@ -121,8 +122,9 @@ describe("Windows release workflow", () => {
     expect(workflow).toContain("secrets.OD_WIN_SIGN_CERT_SHA1");
     expect(workflow).toContain("Import-PfxCertificate");
     expect(workflow).toContain("MonoField-default-setup.exe");
-    expect(workflow).toContain("MonoField-default-payload.7z");
-    expect(workflow).toContain("MonoField-default-portable.zip");
+    expect(workflow).toContain('"asset_prefix=MonoField-$namespace"');
+    expect(workflow).toContain("${env:ASSET_PREFIX}-payload.7z");
+    expect(workflow).toContain("${env:ASSET_PREFIX}-portable.zip");
     expect(workflow).toContain('name = "latest.yml"');
     expect(workflow).toContain('Join-Path $assetsRoot "SHA256SUMS.txt"');
 

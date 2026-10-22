@@ -1,0 +1,20 @@
+[
+  {
+    "label": "desktop",
+    "width": 1440,
+    "passed": true,
+    "overflow": false,
+    "headline": "문서가 부족한 시스템, 근거부터 인수인계하세요.",
+    "download": "https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.2/MonoField-release-preview-win-setup.exe",
+    "english": "Hand over an undocumented system with evidence."
+  },
+  {
+    "label": "mobile",
+    "width": 390,
+    "passed": true,
+    "overflow": false,
+    "headline": "문서가 부족한 시스템, 근거부터 인수인계하세요.",
+    "download": "https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.2/MonoField-release-preview-win-setup.exe",
+    "english": "Hand over an undocumented system with evidence."
+  }
+]

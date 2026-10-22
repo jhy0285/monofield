@@ -269,7 +269,14 @@ export function TerminalViewer({ terminalId, projectId, projectPath, onClose, on
         if (!stdinBuffer) return;
         const data = stdinBuffer;
         stdinBuffer = '';
-        void sendTerminalStdin(projectId, sessionId, data);
+        void sendTerminalStdin(projectId, sessionId, data).then(ok => {
+          if (!ok && !disposed) {
+            // A lost acknowledgement may mean a partial command reached the
+            // shell. Never retry it or append more input to that command.
+            xterm.options.disableStdin = true;
+            setPhase('unavailable');
+          }
+        });
       };
       dataSub = xterm.onData((data: string) => {
         stdinBuffer += data;
