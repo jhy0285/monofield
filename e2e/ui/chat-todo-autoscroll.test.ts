@@ -1,6 +1,6 @@
 import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
-import { routeAgents } from '@/playwright/mock-factory';
+import { APP_CONFIG_URL, routeAgents } from '@/playwright/mock-factory';
 
 // Verifies that the chat-log stays pinned to the bottom when the PinnedTodoSlot
 // grows (scenario A) and that a deliberate scroll-up is not overridden by a
@@ -35,7 +35,7 @@ async function seedAppConfig(page: Page) {
     );
   }, STORAGE_KEY);
 
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() !== 'GET') {
       await route.continue();
       return;

@@ -10,7 +10,7 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
-import { routeAgents } from '@/playwright/mock-factory';
+import { APP_CONFIG_URL, routeAgents } from '@/playwright/mock-factory';
 
 const STORAGE_KEY = 'open-design:config';
 
@@ -49,7 +49,7 @@ test.beforeEach(async ({ page }) => {
     );
   }, STORAGE_KEY);
 
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     await route.fulfill({
       json: {
         config: {

@@ -58,9 +58,15 @@ export async function applyStorageConfig(page: Page): Promise<void> {
   );
 }
 
-/** Intercept GET /api/app-config with the standard fixture. */
+// Playwright string globs match the full URL, query string included, so a
+// '**' glob for /api/app-config never sees the web app's
+// `GET /api/app-config?compact=1` (see `fetchDaemonConfig`) and the real daemon
+// answers instead. Register every app-config route with this matcher.
+export const APP_CONFIG_URL = /\/api\/app-config(\?.*)?$/;
+
+/** Intercept GET /api/app-config (with or without a query) with the standard fixture. */
 export async function routeAppConfig(page: Page): Promise<void> {
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() !== 'GET') {
       await route.continue();
       return;

@@ -1,4 +1,5 @@
 import { expect, test } from '@/playwright/suite';
+import { APP_CONFIG_URL } from '@/playwright/mock-factory';
 import { ensureRailOpen } from '@/playwright/rail';
 import type { Page } from '@playwright/test';
 import { T } from '@/timeouts';
@@ -28,7 +29,7 @@ test.beforeEach(async ({ page }) => {
     );
   }, STORAGE_KEY);
 
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() !== 'GET') {
       await route.continue();
       return;

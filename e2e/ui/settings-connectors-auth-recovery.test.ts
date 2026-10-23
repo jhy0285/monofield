@@ -1,7 +1,7 @@
 import { expect, test } from '@/playwright/suite';
 import type { Locator, Page } from '@playwright/test';
 import { openSettingsDialog } from '../lib/playwright/amr.js';
-import { routeAgents } from '../lib/playwright/mock-factory.js';
+import { APP_CONFIG_URL, routeAgents } from '../lib/playwright/mock-factory.js';
 import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
@@ -185,7 +185,7 @@ async function openConnectorsSettings(
     },
   ]);
 
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() === 'GET') {
       await route.fulfill({ json: { config: baseConfig() } });
       return;

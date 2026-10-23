@@ -1,7 +1,7 @@
 import { expect, test } from '@/playwright/suite';
 import type { Locator, Page } from '@playwright/test';
 import { openSettingsDialog } from '../lib/playwright/amr.js';
-import { routeAgents } from '../lib/playwright/mock-factory.js';
+import { APP_CONFIG_URL, routeAgents } from '../lib/playwright/mock-factory.js';
 import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
@@ -582,7 +582,7 @@ test('[P1] Settings autosave failure surfaces an error instead of reporting save
   await page.route('**/api/health', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
   });
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() === 'GET') {
       await route.fulfill({ json: { config } });
       return;
@@ -641,7 +641,7 @@ test('[P1] Settings autosave recovers after a later successful daemon sync', asy
   await page.route('**/api/health', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
   });
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() === 'GET') {
       await route.fulfill({ json: { config } });
       return;

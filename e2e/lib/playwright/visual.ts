@@ -2,7 +2,7 @@ import { expect } from '@playwright/test';
 import type { Locator, Page, Route } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import { fulfillAgentsRoute } from './mock-factory.js';
+import { APP_CONFIG_URL, fulfillAgentsRoute } from './mock-factory.js';
 
 const STORAGE_KEY = 'open-design:config';
 const GITHUB_STARS_STORAGE_KEY = 'open-design:gh-stars';
@@ -251,7 +251,7 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
     window.localStorage.setItem(visualStabilityKey, '1');
   }, [STORAGE_KEY, config, GITHUB_STARS_STORAGE_KEY, VISUAL_GITHUB_STARS, VISUAL_STABILITY_STORAGE_KEY] as const);
 
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     await fulfillGet(route, { config });
   });
 

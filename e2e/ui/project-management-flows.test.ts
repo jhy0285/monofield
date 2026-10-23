@@ -1,7 +1,7 @@
 import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen } from '@/playwright/rail';
 import type { Locator, Page, Request, Route } from '@playwright/test';
-import { routeAgents } from '../lib/playwright/mock-factory.js';
+import { APP_CONFIG_URL, routeAgents } from '../lib/playwright/mock-factory.js';
 
 // The `/projects` view in `EntryShell` renders a `CenteredLoader` until
 // `projectsLoading || skillsLoading || designSystemsLoading` all clear
@@ -135,7 +135,7 @@ test.beforeEach(async ({ page }) => {
     );
   }, STORAGE_KEY);
 
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() === 'PUT') {
       const next = route.request().postDataJSON() as Record<string, unknown>;
       appConfig = {
@@ -568,7 +568,7 @@ test('[P0] @critical project detail composer BYOK model switch persists from the
     },
     { key: STORAGE_KEY, value: config },
   );
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() === 'PUT') {
       const body = route.request().postDataJSON() as Record<string, unknown>;
       await route.fulfill({
@@ -638,7 +638,7 @@ test('[P0] @critical project detail composer keeps Local CLI and BYOK model choi
     },
     { key: STORAGE_KEY, value: config },
   );
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() === 'PUT') {
       const body = route.request().postDataJSON() as Record<string, unknown>;
       await route.fulfill({

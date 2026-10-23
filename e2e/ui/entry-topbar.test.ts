@@ -1,6 +1,6 @@
 import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen } from '@/playwright/rail';
-import { routeAgents } from '@/playwright/mock-factory';
+import { APP_CONFIG_URL, routeAgents } from '@/playwright/mock-factory';
 import type { Page } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
@@ -73,7 +73,7 @@ test.beforeEach(async ({ page }) => {
     },
   ]);
 
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() !== 'GET') {
       await route.continue();
       return;

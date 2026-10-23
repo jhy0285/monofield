@@ -1,6 +1,6 @@
 import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen } from '@/playwright/rail';
-import { routeAgents } from '@/playwright/mock-factory';
+import { APP_CONFIG_URL, routeAgents } from '@/playwright/mock-factory';
 import type { Locator, Page, Request, Response } from '@playwright/test';
 import { automatedUiScenarios } from '@/playwright/resources';
 import type { UiScenario } from '@/playwright/resources';
@@ -32,7 +32,7 @@ test.beforeEach(async ({ page }) => {
     );
   }, STORAGE_KEY);
 
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() !== 'GET') {
       await route.continue();
       return;

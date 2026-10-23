@@ -1,6 +1,6 @@
 import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
-import { routeAgents } from '@/playwright/mock-factory';
+import { APP_CONFIG_URL, routeAgents } from '@/playwright/mock-factory';
 
 test.describe.configure({ timeout: 30_000 });
 
@@ -320,7 +320,7 @@ test.beforeEach(async ({ page }) => {
     },
   ]);
 
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() !== 'GET') {
       await route.continue();
       return;

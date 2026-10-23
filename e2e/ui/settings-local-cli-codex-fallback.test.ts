@@ -1,7 +1,7 @@
 import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
 import { openSettingsDialog } from '../lib/playwright/amr.js';
-import { routeAgents } from '../lib/playwright/mock-factory.js';
+import { APP_CONFIG_URL, routeAgents } from '../lib/playwright/mock-factory.js';
 
 const STORAGE_KEY = 'open-design:config';
 const LOCALE_KEY = 'open-design:locale';
@@ -114,7 +114,7 @@ async function openLocalCliSettings(
     });
   });
 
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() === 'GET') {
       await route.fulfill({
         status: 200,

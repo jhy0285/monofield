@@ -1,7 +1,7 @@
 import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen } from '@/playwright/rail';
 import type { Page, Request } from '@playwright/test';
-import { applyStandardMocks, fulfillAgentsRoute, STORAGE_KEY } from '@/playwright/mock-factory';
+import { APP_CONFIG_URL, applyStandardMocks, fulfillAgentsRoute, STORAGE_KEY } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 const LOCAL_CLI_LABEL = /Local CLI|本机 CLI|本地 CLI/i;
 const STARTER_PLUGIN = makeStarterPlugin({
@@ -224,7 +224,7 @@ test('[P0] @critical recent projects strip opens a project card and view all rou
 test('[P1] design systems page is reachable from entry nav and supports search, preview, and default selection', async ({ page }) => {
   const persistedConfigs: Array<{ designSystemId?: string | null }> = [];
   await routeDesignSystems(page);
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() === 'PUT') {
       const body = route.request().postDataJSON() as { designSystemId?: string | null };
       persistedConfigs.push(body);
@@ -381,7 +381,7 @@ test('[P0] @critical entry execution pill opens the Local CLI and BYOK switcher 
       },
     ]);
   });
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() !== 'GET') {
       await route.continue();
       return;
@@ -1207,7 +1207,7 @@ test('[P0] @critical home working directory creates the project with linked dirs
   await page.route('**/api/dialog/open-folder', async (route) => {
     await route.fulfill({ json: { path: workingDir } });
   });
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() === 'PUT') {
       await route.fulfill({
         json: {
@@ -1254,7 +1254,7 @@ test('[P0] @critical clearing the home working directory removes linked dirs fro
   await page.route('**/api/dialog/open-folder', async (route) => {
     await route.fulfill({ json: { path: workingDir } });
   });
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() === 'PUT') {
       await route.fulfill({
         json: {
