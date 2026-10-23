@@ -103,11 +103,11 @@ monofield docs export-openapi --project <project-id> --input docs/orders.interfa
 ```text
 ▸ 1. 프로젝트 폴더 열기
 ▸ 2. 명세서 생성
-  5 interfaces → legacy-order/docs/orders-interface-spec-v1.0.xlsx (23804 bytes)
+  5 interfaces → legacy-order/docs/orders-interface-spec-v1.0.xlsx (25121 bytes)
 ▸ 3. 코드 변경
   OrderController.java, OrderService.java, OrderCancelRequest.java, OrderCreateRequest.java
 ▸ 4. 명세서 갱신 diff 검토
-  2 changes (3927 chars vs 10454 chars full doc) → legacy-order/docs/orders-interface-spec-v1.1.xlsx
+  2 changes (4234 chars vs 11653 chars full doc) → legacy-order/docs/orders-interface-spec-v1.1.xlsx
 ▸ 5. OpenAPI 3.1 내보내기
   5 paths → legacy-order/docs/orders.openapi.json; re-collected 6 interfaces with identical field paths
 
