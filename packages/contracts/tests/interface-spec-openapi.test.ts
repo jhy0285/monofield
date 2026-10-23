@@ -104,14 +104,47 @@ describe('interface spec → OpenAPI 3.1', () => {
     expect(warnings).toEqual([expect.stringContaining('"PUBLISH" is not an HTTP method')]);
   });
 
-  it('warns when authentication is required but no scheme is decided', () => {
+  it('never exports an auth-required operation without a known scheme as public', () => {
     const undecided = InterfaceSpecDocumentSchema.parse({
       ...doc, auth: undefined,
-      endpoints: [{ method: 'GET', path: '/secure', authRequired: true }],
+      endpoints: [
+        { method: 'POST', path: '/board/insertBoard.do', authRequired: true },
+        { method: 'GET', path: '/manual', authRequired: true, auth: { type: 'undecided' } },
+        { method: 'GET', path: '/signed', authRequired: true, auth: { type: 'custom' } },
+        { method: 'GET', path: '/public', authRequired: false },
+      ],
     });
     const result = interfaceSpecToOpenApi(undecided);
-    expect(result.warnings).toEqual([expect.stringContaining('scheme is undecided')]);
-    expect((result.document.paths as any)['/secure'].get.security).toEqual([]);
+    const ops = result.document.paths as Record<string, Record<string, any>>;
+    for (const operation of [ops['/board/insertBoard.do']!.post, ops['/manual']!.get, ops['/signed']!.get]) {
+      // `security: []` would declare the operation public; leave it out and flag the gap instead.
+      expect(operation).not.toHaveProperty('security');
+      expect(operation['x-auth-undecided']).toBe(true);
+    }
+    expect(ops['/public']!.get.security).toEqual([]);
+    expect(ops['/public']!.get).not.toHaveProperty('x-auth-undecided');
+    expect(result.warnings).toEqual([
+      expect.stringContaining('POST /board/insertBoard.do: authentication is required but the scheme is undecided'),
+      expect.stringContaining('GET /manual: authentication is required but the scheme is undecided'),
+      expect.stringContaining('GET /signed: authentication is required but the scheme is undecided'),
+    ]);
     expect(result.document.components).toBeUndefined();
+  });
+
+  it('keeps an undecided endpoint out of the document-level scheme', () => {
+    const mixed = InterfaceSpecDocumentSchema.parse({
+      ...doc,
+      endpoints: [
+        { method: 'GET', path: '/api/products/{productId}/cost', authRequired: true },
+        { method: 'GET', path: '/api/products/{productId}/stock', authRequired: true, auth: { type: 'undecided' } },
+      ],
+    });
+    const { document: exported } = interfaceSpecToOpenApi(mixed);
+    const ops = exported.paths as Record<string, Record<string, any>>;
+    expect(ops['/api/products/{productId}/cost']!.get.security).toEqual([{ bearerAuth: [] }]);
+    expect(ops['/api/products/{productId}/cost']!.get).not.toHaveProperty('x-auth-undecided');
+    expect(ops['/api/products/{productId}/stock']!.get).not.toHaveProperty('security');
+    expect(ops['/api/products/{productId}/stock']!.get['x-auth-undecided']).toBe(true);
+    expect(exported).not.toHaveProperty('security');
   });
 });

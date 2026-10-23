@@ -11,6 +11,7 @@ Handles:
   - local `$ref` resolution, `allOf` merging, arrays, nested objects as dot paths
   - required flags, min/max length, Korean `description`/`summary` as names
   - operation or global `security` → authRequired, security schemes → auth
+  - `x-auth-undecided: true` (MonoField export) → authRequired, auth "undecided"
 
 Usage mirrors scan_spring.py:
   python scan_openapi.py (--spec <openapi.json> | --codebase-path <dir>)
@@ -294,7 +295,10 @@ class Converter:
                 request_fields, body_type = self.request(path_item, op)
                 response_fields, response_type = self.response(op)
                 security = op.get("security", None)
-                auth_required = bool(security) if security is not None else global_security
+                # The MonoField export marks an auth-required operation without a known
+                # scheme this way, because `security: []` would declare it public.
+                auth_undecided = op.get("x-auth-undecided") is True
+                auth_required = auth_undecided or (bool(security) if security is not None else global_security)
                 summary = (op.get("summary") or "").strip()
                 tags = op.get("tags") or []
                 out.append({
@@ -311,6 +315,7 @@ class Converter:
                     "handlerName": str(op.get("operationId", "") or ""),
                     "sourceFile": "",
                     "authRequired": auth_required,
+                    **({"auth": {"type": "undecided"}} if auth_undecided else {}),
                     "requestBodyType": body_type,
                     "queryDtoType": "",
                     "responseType": response_type,

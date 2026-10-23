@@ -492,6 +492,10 @@ team-maintained OpenAPI/Swagger JSON (for example an exported springdoc
 descriptions, enum values, size limits and security exactly as declared. Response
 fields stay `TBD` for presence when the contract has no `required` list. Run the
 source scanner as well when the contract may lag behind the code, and compare.
+`monofield docs export-openapi` writes an auth-required endpoint without a known
+scheme as `x-auth-undecided: true` with no `security` (never `security: []`,
+which means public); `scan_openapi.py` reads it back as `authRequired: true`
+with `auth: {"type": "undecided"}`.
 
 The Spring scanner also covers eGovFrame-style Spring MVC: `.do` mappings,
 method-level `@RequestMapping` without `method` (recorded as `GET/POST` with a

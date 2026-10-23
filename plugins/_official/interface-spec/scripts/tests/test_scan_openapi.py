@@ -93,6 +93,39 @@ class OpenApiCollectorTest(unittest.TestCase):
         self.assertFalse(member["authRequired"])
         self.assertEqual(_fields(member, "requestFields")["memberId"]["dataType"], "Long")
 
+    def test_undecided_auth_extension_reads_back_as_required(self) -> None:
+        # Shape written by `monofield docs export-openapi` for an auth-required
+        # endpoint whose scheme is undecided: no `security`, plus the extension.
+        contract = {
+            "openapi": "3.1.0",
+            "info": {"title": "상품 API", "version": "1.0"},
+            "security": [{"bearerAuth": []}],
+            "components": {"securitySchemes": {"bearerAuth": {"type": "http", "scheme": "bearer"}}},
+            "paths": {
+                "/api/products/{productId}/cost": {"get": {"operationId": "cost", "security": [{"bearerAuth": []}]}},
+                "/api/products/{productId}/stock": {"get": {"operationId": "stock", "x-auth-undecided": True}},
+                "/board/insertBoard.do": {"post": {"operationId": "insertBoard", "x-auth-undecided": True, "security": []}},
+                "/health": {"get": {"operationId": "health", "security": []}},
+                "/docs": {"get": {"operationId": "docs"}},
+            },
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            spec = Path(temp_dir) / "openapi.json"
+            spec.write_text(json.dumps(contract), encoding="utf-8")
+            document = _scan("--spec", str(spec))
+        self.assertEqual(document["auth"]["type"], "bearer")
+        routes = _by_route(document)
+        for route in (("GET", "/api/products/{productId}/stock"), ("POST", "/board/insertBoard.do")):
+            self.assertTrue(routes[route]["authRequired"], route)
+            # Endpoint-level, so it does not inherit the document's bearer scheme.
+            self.assertEqual(routes[route]["auth"], {"type": "undecided"}, route)
+        cost = routes[("GET", "/api/products/{productId}/cost")]
+        self.assertTrue(cost["authRequired"])
+        self.assertNotIn("auth", cost)
+        self.assertFalse(routes[("GET", "/health")]["authRequired"])
+        self.assertNotIn("auth", routes[("GET", "/health")])
+        self.assertTrue(routes[("GET", "/docs")]["authRequired"])  # global security still applies
+
     def test_dictionary_overrides_descriptions_and_inventory_lists_modules(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             dictionary = Path(temp_dir) / "terms.csv"

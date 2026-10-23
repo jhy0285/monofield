@@ -92,8 +92,11 @@ monofield docs export-openapi --project <project-id> --input docs/orders.interfa
 - 변경분 제안이 daemon과 같은 `applyInterfaceSpecProposal`로 검증·병합되는지.
 - 다른 원본 해시로 만든 제안은 거부되는지.
 - v1.1 XLSX에 새 필드와 새 인터페이스가 반영되는지.
-- OpenAPI 3.1로 내보낸 뒤 `scan_openapi.py`로 다시 수집해도 인터페이스 ID와
-  필드 경로가 그대로인지(왕복 일치).
+- OpenAPI 3.1로 내보낸 뒤 `scan_openapi.py`로 다시 수집해도 인터페이스 ID,
+  필드 경로, 인증 필요 여부가 그대로인지(왕복 일치). 인증이 필요하지만 방식이
+  정해지지 않은 엔드포인트는 공개(`security: []`)로 내보내지 않고
+  `x-auth-undecided: true`로 표시하며, 다시 수집하면 "인증 여부 확인
+  필요"(`auth.type: "undecided"`)로 돌아옵니다.
 
 2026-10-22 실행 결과(Linux, Node 24.22.1, Python 3.13):
 
