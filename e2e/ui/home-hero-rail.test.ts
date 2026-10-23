@@ -1,11 +1,14 @@
 import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
+import { gotoEntryHome } from '@/playwright/entry';
 import { routeAgents } from '@/playwright/mock-factory';
+import { T } from '@/timeouts';
 
-test.describe.configure({ timeout: 30_000 });
+// The shared Home setup can spend most of T.long waiting for the first App
+// compile on a fresh per-worker dev server, so leave room for the case body.
+test.describe.configure({ timeout: T.xlong });
 
 const STORAGE_KEY = 'open-design:config';
-const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
 
 const HOME_CONFIG = {
   mode: 'daemon',
@@ -114,6 +117,32 @@ const HOME_PLUGINS = [
           query:
             'Create refreshable, auditable Open Design artifacts backed by connector or local data.',
         },
+      },
+    },
+  },
+  {
+    id: 'od-interface-spec',
+    title: 'Interface spec',
+    version: '0.1.0',
+    trust: 'bundled',
+    sourceKind: 'bundled',
+    source: '/tmp/interface-spec',
+    fsPath: '/tmp/interface-spec',
+    capabilitiesGranted: ['prompt:inject'],
+    installedAt: 0,
+    updatedAt: 0,
+    manifest: {
+      name: 'od-interface-spec',
+      title: 'Interface spec',
+      version: '0.1.0',
+      description: 'Collect API endpoints into an interface spec workbook.',
+      od: {
+        kind: 'scenario',
+        taskKind: 'new-generation',
+        useCase: {
+          query: 'Document the interface spec.',
+        },
+        inputs: [],
       },
     },
   },
@@ -229,6 +258,11 @@ const APPLY_RESPONSES: Record<string, unknown> = {
   },
 };
 
+// Picking a preset seeds the composer with the rendered query only when the
+// query is input-templated; otherwise the plugin's curated description wins
+// (see `examplePresetSeedPrompt`). The Notion fixture's query has no inputs.
+const NOTION_PRESET_SEED = 'Create a live Notion dashboard artifact.';
+
 const PROMPT_TEMPLATES = [
   {
     id: 'image-product',
@@ -262,10 +296,6 @@ const PROMPT_TEMPLATES = [
   },
 ];
 
-async function waitForLoadingToClear(page: Page) {
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: 15_000 });
-}
-
 async function seedBrowserConfig(page: Page, config: Record<string, unknown>) {
   await page.addInitScript(
     ({ key, value }) => {
@@ -275,30 +305,12 @@ async function seedBrowserConfig(page: Page, config: Record<string, unknown>) {
   );
 }
 
-async function gotoEntryHome(page: Page) {
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible().catch(() => false)) {
-    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
-  }
-  await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
-}
-
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(({ key, value }) => {
     window.localStorage.clear();
     window.sessionStorage.clear();
     window.localStorage.setItem(key, JSON.stringify(value));
   }, { key: STORAGE_KEY, value: HOME_CONFIG });
-
-  await page.route('**/api/github/open-design', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ stargazers_count: 51600 }),
-    });
-  });
 
   await routeAgents(page, [
     {
@@ -397,7 +409,9 @@ test('[P1] home left rail expands and collapses from the shell controls', async 
   await expand.click();
   await expect(shell).toHaveClass(/entry--rail-open/);
   await expect(rail).not.toHaveAttribute('aria-hidden', 'true');
-  await expect(page.getByTestId('entry-nav-home')).toBeVisible();
+  // Home has no dedicated rail item any more: the logo is the Home
+  // destination and Home itself is the pinned workspace tab.
+  await expect(page.getByTestId('entry-nav-logo')).toBeVisible();
   await expect(page.getByTestId('entry-nav-projects')).toBeVisible();
 
   await page.getByTestId('entry-nav-collapse').click();
@@ -436,13 +450,15 @@ test('[P1] home composer plus menu exposes attachment, connector, plugin, and MC
 test('[P2] home hero rail shows the current creation chips and More shortcuts', async ({ page }) => {
   await gotoEntryHome(page);
 
-  await expect(page.getByTestId('entry-star-badge')).toContainText('51.6K');
   await expect(page.getByTestId('home-hero-type-tabs')).toBeVisible();
   for (const id of ['interface-spec', 'screen-spec', 'document', 'deck']) {
     await expect(page.getByTestId(`home-hero-rail-${id}`)).toBeVisible();
   }
+  const moreTemplates = page.getByTestId('home-hero-rail-more-templates');
+  await expect(moreTemplates).toHaveAttribute('aria-expanded', 'false');
   await expect(page.getByTestId('home-hero-rail-prototype')).toHaveCount(0);
   await openMoreTemplates(page);
+  await expect(moreTemplates).toHaveAttribute('aria-expanded', 'true');
   for (const id of ['prototype', 'live-artifact', 'image', 'video', 'hyperframes', 'audio']) {
     await expect(page.getByTestId(`home-hero-rail-${id}`)).toBeVisible();
   }
@@ -456,54 +472,42 @@ test('[P2] home hero rail shows the current creation chips and More shortcuts', 
   }
 });
 
-test('[P1] home hero rail switches non-media modes without surfacing media-only footer options', async ({ page }) => {
+// Per-mode footer settings (design system / ratio / resolution / duration /
+// audio kind) were removed from the composer: the agent now asks for them in
+// its first-turn question form, and the design-system picker is a persistent
+// row under the composer for every mode. These cases keep the mode switching
+// and pin that no inline settings panel comes back.
+test('[P1] home hero rail switches non-media modes without inline footer settings', async ({ page }) => {
   await gotoEntryHome(page);
 
   await expect(page.getByTestId('home-hero-type-tabs')).toBeVisible();
-  await expect(page.getByTestId('home-hero-footer-option-duration')).toHaveCount(0);
-  await expect(page.getByTestId('home-hero-footer-option-audioType')).toHaveCount(0);
+  await expect(page.getByTestId('home-hero-footer-options')).toHaveCount(0);
 
-  await expectChipSelection(page, 'prototype', 'Prototype');
-  await expect(page.getByTestId('home-hero-footer-option-designSystem')).toBeVisible();
-  await expect(page.getByTestId('home-hero-footer-option-duration')).toHaveCount(0);
-  await expect(page.getByTestId('home-hero-footer-option-audioType')).toHaveCount(0);
-  await clearActiveChip(page);
-
-  await expectChipSelection(page, 'live-artifact', 'Live artifact');
-  await expect(page.getByTestId('home-hero-footer-option-duration')).toHaveCount(0);
-  await expect(page.getByTestId('home-hero-footer-option-audioType')).toHaveCount(0);
-  await clearActiveChip(page);
-
-  await expectChipSelection(page, 'deck', 'Slide deck');
-  await expect(page.getByTestId('home-hero-footer-option-designSystem')).toBeVisible();
-  await expect(page.getByTestId('home-hero-footer-option-duration')).toHaveCount(0);
-  await expect(page.getByTestId('home-hero-footer-option-audioType')).toHaveCount(0);
-  await clearActiveChip(page);
+  for (const [chipId, label] of [
+    ['interface-spec', 'Interface spec'],
+    ['deck', 'Slide deck'],
+    ['prototype', 'Prototype'],
+    ['live-artifact', 'Live artifact'],
+  ] as const) {
+    await expectChipSelection(page, chipId, label);
+    await expect(page.getByTestId('home-hero-footer-options')).toHaveCount(0);
+    await clearActiveChip(page);
+  }
 });
 
-test('[P1] home hero rail exposes media footer options for image, video, hyperframes, and audio', async ({ page }) => {
+test('[P1] home hero rail switches media modes without inline footer settings', async ({ page }) => {
   await gotoEntryHome(page);
 
-  await expectChipSelection(page, 'image', 'Image');
-  await expect(page.getByTestId('home-hero-footer-option-ratio')).toBeVisible();
-  await expect(page.getByTestId('home-hero-footer-option-resolution')).toBeVisible();
-  await expect(page.getByTestId('home-hero-footer-option-duration')).toHaveCount(0);
-  await clearActiveChip(page);
-
-  await expectChipSelection(page, 'video', 'Video');
-  await expect(page.getByTestId('home-hero-footer-option-ratio')).toBeVisible();
-  await expect(page.getByTestId('home-hero-footer-option-resolution')).toBeVisible();
-  await expect(page.getByTestId('home-hero-footer-option-duration')).toBeVisible();
-  await clearActiveChip(page);
-
-  await expectChipSelection(page, 'hyperframes', 'HyperFrames');
-  await expect(page.getByTestId('home-hero-footer-option-ratio')).toBeVisible();
-  await expect(page.getByTestId('home-hero-footer-option-duration')).toBeVisible();
-  await clearActiveChip(page);
-
-  await expectChipSelection(page, 'audio', 'Audio');
-  await expect(page.getByTestId('home-hero-footer-option-audioType')).toBeVisible();
-  await expect(page.getByTestId('home-hero-footer-option-duration')).toBeVisible();
+  for (const [chipId, label] of [
+    ['image', 'Image'],
+    ['video', 'Video'],
+    ['hyperframes', 'HyperFrames'],
+    ['audio', 'Audio'],
+  ] as const) {
+    await expectChipSelection(page, chipId, label);
+    await expect(page.getByTestId('home-hero-footer-options')).toHaveCount(0);
+    await clearActiveChip(page);
+  }
 });
 
 test('[P1] home hero example presets update the composer input for prototype and live artifact', async ({ page }) => {
@@ -530,7 +534,7 @@ test('[P1] home hero example presets update the composer input for prototype and
   await page
     .locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="image-template-notion-team-dashboard-live-artifact"]')
     .click();
-  await expect(input).toHaveText('Create a refreshable Notion dashboard live artifact.');
+  await expect(input).toHaveText(NOTION_PRESET_SEED);
 });
 
 test('[P1] home hero deck example preset updates the composer input', async ({ page }) => {
@@ -571,17 +575,14 @@ test('[P2] clearing the active hero chip restores the rail and clears preset chr
 
   await openMoreTemplates(page);
 
-  await page.getByTestId('home-hero-rail-prototype').click();
-  await expect(page.getByTestId('home-hero-active-type-chip')).toBeVisible();
+  await expectChipSelection(page, 'prototype', 'Prototype');
   await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
-  await expect(page.getByTestId('home-hero-footer-option-designSystem')).toBeVisible();
+  await expect(page.getByTestId('home-hero-template-section')).toHaveCount(0);
 
   await clearActiveChip(page);
 
   await expect(page.getByTestId('home-hero-plugin-presets')).toHaveCount(0);
-  await expect(page.getByTestId('home-hero-footer-option-designSystem')).toHaveCount(0);
-  await expect(page.getByTestId('home-hero-footer-option-ratio')).toHaveCount(0);
-  await expect(page.getByTestId('home-hero-footer-option-duration')).toHaveCount(0);
+  await expect(page.getByTestId('home-hero-template-trigger')).toContainText('None');
   await expect(page.getByTestId('home-hero-type-tabs')).toBeVisible();
   await openMoreTemplates(page);
   await expect(page.getByTestId('home-hero-rail-live-artifact')).toBeVisible();
@@ -607,14 +608,15 @@ test('[P1] after clearing one mode, selecting another example updates the compos
 
   await openMoreTemplates(page);
 
-  await page.getByTestId('home-hero-rail-live-artifact').click();
-  await expect(page.getByTestId('home-hero-active-type-chip')).toBeVisible();
+  await expectChipSelection(page, 'live-artifact', 'Live artifact');
   await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
-  await expect(page.getByTestId('home-hero-footer-option-designSystem')).toHaveCount(0);
+  await expect(
+    page.locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="example-web-prototype"]'),
+  ).toHaveCount(0);
   await page
     .locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="image-template-notion-team-dashboard-live-artifact"]')
     .click();
-  await expect(input).toHaveText('Create a refreshable Notion dashboard live artifact.');
+  await expect(input).toHaveText(NOTION_PRESET_SEED);
 });
 
 test('[P1] selecting another example updates the composer input', async ({ page }) => {
@@ -629,25 +631,29 @@ test('[P1] selecting another example updates the composer input', async ({ page 
   await page
     .locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="image-template-notion-team-dashboard-live-artifact"]')
     .click();
-  await expect(input).toHaveText('Create a refreshable Notion dashboard live artifact.');
+  await expect(input).toHaveText(NOTION_PRESET_SEED);
 
   await page
     .locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="example-live-artifact"]')
     .click();
-  await expect(input).toHaveText('Create refreshable, auditable Open Design artifacts backed by connector or local data.');
+  await expect(input).toHaveText('Create refreshable, auditable Open Design artifacts.');
 });
 
-async function expectChipSelection(page: Page, chipId: string, _label: string) {
+// The dismissible active-type chip was replaced by the composer-footer
+// Template picker: picking a rail card selects that template (the rail hides
+// while one is active) and the picker's reset button returns to "None".
+async function expectChipSelection(page: Page, chipId: string, label: string) {
   if (!(await page.getByTestId(`home-hero-rail-${chipId}`).count())) await openMoreTemplates(page);
   const chip = page.getByTestId(`home-hero-rail-${chipId}`);
   await expect(chip).toBeEnabled();
   await chip.click();
-  await expect(page.getByTestId('home-hero-active-type-chip')).toBeVisible();
+  await expect(page.getByTestId('home-hero-template-trigger')).toContainText(label);
+  await expect(page.getByTestId('home-hero-template-reset')).toBeVisible();
 }
 
 async function clearActiveChip(page: Page) {
-  await page.getByTestId('home-hero-active-type-chip').click();
-  await expect(page.getByTestId('home-hero-active-type-chip')).toHaveCount(0);
+  await page.getByTestId('home-hero-template-reset').click();
+  await expect(page.getByTestId('home-hero-template-reset')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-type-tabs')).toBeVisible();
 }
 
