@@ -117,7 +117,7 @@ class ScannerFieldPathsTest(unittest.TestCase):
             ("GET/POST", "/board/selectBoard.do"),
         })
         self.assertIn("method", endpoints[("GET/POST", "/board/selectBoardList.do")]["note"])
-        self.assertEqual(endpoints[("POST", "/board/insertBoard.do")]["note"], "")
+        self.assertNotIn("모든 HTTP 메서드를 허용", endpoints[("POST", "/board/insertBoard.do")]["note"])
 
     def test_egov_fixture_binds_model_attribute_and_vo_parameters(self) -> None:
         document = _scan_fixture("scan_spring.py", "spring-egov")

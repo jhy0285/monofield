@@ -17,8 +17,14 @@ Modes:
   (default)         Full collection: routes + recursive DTO expansion +
                     dictionary-based Korean names -> interface-spec.json.
 
-The agent remains responsible for reviewing/refining the output (auth flags
-against the security config, Korean names the dictionary missed, notes).
+Per-endpoint `authRequired` comes from the Spring Security Java configuration
+and method-security annotations (see collector/spring_security.py). An endpoint
+without that evidence stays undecided: `authRequired: true` with
+`auth: {"type": "undecided"}` and a note saying why, the same mapping the
+contract uses for an undecided manual draft.
+
+The agent remains responsible for reviewing/refining the output (undecided
+auth, Korean names the dictionary missed, notes).
 """
 
 from __future__ import annotations
@@ -38,6 +44,7 @@ from tools.excel_generator.collector.controller_scanner import (  # noqa: E402
     scan_controllers,
     to_api_endpoints,
 )
+from tools.excel_generator.collector.spring_security import production_java_files  # noqa: E402
 from tools.excel_generator.collector.dto_expander import (  # noqa: E402
     expand_dto_to_spec_fields,
     expand_type_to_spec_fields,
@@ -54,18 +61,19 @@ _HANGUL = re.compile(r"[가-힣]")
 
 
 def detect_spring_auth(codebase: Path) -> dict | None:
-    """Best-effort static detection of the API's auth scheme.
+    """Best-effort static detection of the API's auth scheme (how, not whether).
 
-    Returns a stack-neutral auth scheme dict (or None if undetectable, in which
-    case the agent/human fills it in). Precedence: an explicit session-cookie
+    Returns a stack-neutral auth scheme dict for the document-level `auth`, or
+    None if undetectable, in which case the agent/human fills it in. Whether
+    each endpoint needs it is decided separately from the security
+    configuration; both read the same production sources, so a test-only
+    configuration never decides either. Precedence: an explicit session-cookie
     (a filter reading a named cookie) beats a bearer/JWT filter, because
     cookie-session apps often still carry JWT libraries for downstream calls.
     """
     hay_bearer = False
     session_cookie_name: str | None = None
-    java_files = [p for p in codebase.rglob("*.java")
-                  if not any(part in {"test", "tests", "build", "target"} for part in p.parts)]
-    for p in java_files[:4000]:
+    for p in production_java_files(codebase)[:4000]:
         try:
             text = p.read_text(encoding="utf-8", errors="ignore")
         except OSError:
@@ -102,6 +110,12 @@ def detect_spring_auth(codebase: Path) -> dict | None:
     if hay_bearer:
         return {"type": "bearer", "description": "인증 헤더", "valueFormat": "Bearer {accessToken}"}
     return None
+
+
+def auth_status(ep) -> str:
+    if ep.auth_required is None:
+        return "undecided"
+    return "required" if ep.auth_required else "public"
 
 
 def module_of(path: str) -> str:
@@ -238,7 +252,10 @@ def main() -> int:
                 "handlerName": ep.method_name or "",
                 "sourceFile": ep.controller_file or "",
                 **({"sourceLine": ep.controller_line} if ep.controller_line else {}),
-                "authRequired": bool(ep.auth_required),
+                # Undecided stays visible as a TBD auth row instead of a guessed one.
+                "authRequired": ep.auth_required is not False,
+                **({"auth": {"type": "undecided"}} if ep.auth_required is None else {}),
+                **({"evidenceRefs": ep.auth_evidence} if ep.auth_evidence else {}),
                 "requestBodyType": ep.request_body_type or "",
                 "queryDtoType": ep.query_dto_type or "",
                 "responseType": ep.response_type or "",
@@ -259,6 +276,7 @@ def main() -> int:
                 "endpointCount": len(doc["endpoints"]),
                 "modules": dict(Counter(module_of(ep.path) for ep in endpoints).most_common()),
                 "koreanNameCoverage": sum(1 for e in doc["endpoints"] if e["interfaceName"]) ,
+                "auth": dict(Counter(auth_status(ep) for ep in endpoints)),
             },
             ensure_ascii=False,
             indent=1,

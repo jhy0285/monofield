@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
+from tools.excel_generator.collector.spring_security import SpringSecurityModel, security_annotation
 from tools.excel_generator.models import ApiEndpoint, FieldSpec
 from tools.excel_generator.rules.naming import koreanize_identifier
 
@@ -59,10 +60,12 @@ class ApiSeed:
     request_body_type: str | None
     query_dto_type: str | None
     response_type: str | None
-    auth_required: bool
+    # None when the security configuration gives no static evidence either way.
+    auth_required: bool | None
     request_fields: list[FieldSpec]
     summary: str = ""
     note: str = ""
+    auth_evidence: list[dict] = field(default_factory=list)
 
 
 def _controller_display_path(path: Path, repo_root: Path, codebase_path: Path) -> str:
@@ -671,12 +674,18 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
     consts = _load_constants(java_root)
     service_method_returns = _load_service_method_returns(java_root)
     project_classes = _project_class_names(java_root)
+    security = SpringSecurityModel.load(
+        java_root, lambda source: _controller_display_path(source, repo_root, codebase_path)
+    )
     out: list[ApiSeed] = []
 
     for path in java_root.rglob("*Controller.java"):
         text = path.read_text(encoding="utf-8", errors="ignore")
         lines = text.splitlines()
         class_base = ""
+        class_match = CLASS_RE.search(text)
+        class_name = class_match.group(1) if class_match else path.stem
+        class_security = []
         service_fields = _service_fields_from_controller(text)
         package_name = _extract_package_name(text)
 
@@ -686,16 +695,18 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
                 while j >= 0 and lines[j].strip().startswith("@"):
                     j -= 1
                 for k in range(j + 1, i):
-                    s = lines[k].strip()
-                    if s.startswith("@RequestMapping"):
-                        anno, _ = _parse_annotation_block(lines, k)
+                    anno, _ = _parse_annotation_block(lines, k)
+                    if anno.startswith("@RequestMapping") and not class_base:
                         _, p = _extract_mapping(anno, consts)
                         class_base = p or ""
-                        break
+                    found = security_annotation(anno, path, k + 1, class_name)
+                    if found:
+                        class_security.append(found)
                 break
 
         idx = 0
         pending: list[str] = []
+        pending_lines: list[int] = []
         doc_block: list[str] = []
         while idx < len(lines):
             s = lines[idx].strip()
@@ -715,6 +726,7 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
             if s.startswith("@"):
                 anno, nxt = _parse_annotation_block(lines, idx)
                 pending.append(anno)
+                pending_lines.append(idx + 1)
                 idx = nxt
                 continue
 
@@ -734,7 +746,17 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
                         method, mpath = _extract_mapping(a, consts)
                         if method:
                             break
+                method_name = _extract_method_name(sig)
+                method_security = [
+                    found
+                    for found in (
+                        security_annotation(a, path, line_no, f"{class_name}.{method_name}")
+                        for a, line_no in zip(pending, pending_lines)
+                    )
+                    if found
+                ]
                 pending = []
+                pending_lines = []
                 summary = _javadoc_summary(doc_block)
                 doc_block = []
                 if not method:
@@ -807,7 +829,6 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
                         )
                 query_dto_type = ", ".join(form_types) or None
 
-                method_name = _extract_method_name(sig)
                 response_type = _extract_response_type(sig)
                 if response_type in {None, "Object"}:
                     builder_type = _extract_builder_generic_type(method_body)
@@ -817,7 +838,8 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
                     inferred = _infer_response_type_from_service_call(method_body, service_fields, service_method_returns)
                     if inferred:
                         response_type = inferred
-                auth_required = any(x in full_path for x in ["/api/v1/"])
+                auth = security.decide(method, full_path, method_security, class_security)
+                note = "; ".join(n for n in (ANY_METHOD_NOTE if method == ANY_METHOD else "", auth.note) if n)
                 service_name = _infer_service_name_from_method_body(method_body, service_fields)
 
                 out.append(
@@ -832,16 +854,18 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
                         request_body_type=request_body_type,
                         query_dto_type=query_dto_type,
                         response_type=response_type,
-                        auth_required=auth_required,
+                        auth_required=auth.auth_required,
                         request_fields=request_fields,
                         summary=summary,
-                        note=ANY_METHOD_NOTE if method == ANY_METHOD else "",
+                        note=note,
+                        auth_evidence=auth.evidence,
                     )
                 )
                 continue
 
             if pending and not s.startswith("@"):
                 pending = []
+                pending_lines = []
             if not s.startswith("//"):
                 doc_block = []
             idx += 1
@@ -867,6 +891,7 @@ def to_api_endpoints(seeds: list[ApiSeed]) -> list[ApiEndpoint]:
                 query_dto_type=s.query_dto_type,
                 response_type=s.response_type,
                 auth_required=s.auth_required,
+                auth_evidence=list(s.auth_evidence),
                 interface_name=s.summary or None,
                 note=s.note,
                 request_fields=list(s.request_fields),
