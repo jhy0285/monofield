@@ -168,8 +168,13 @@ export function interfaceSpecToOpenApi(doc: InterfaceSpecDocument): InterfaceSpe
     }
     const path = openApiPath(endpoint.path);
     const scheme = endpoint.authRequired ? securitySchemeFor(endpoint.auth ?? doc.auth) : null;
-    if (endpoint.authRequired && !scheme) {
-      warnings.push(`${endpoint.method} ${endpoint.path}: authentication is required but the scheme is undecided.`);
+    // `security: []` declares an operation public, so an auth-required endpoint
+    // without an OpenAPI scheme (none detected, `undecided`, `custom`) leaves
+    // `security` out and carries `x-auth-undecided`; scan_openapi.py reads that
+    // back as authRequired with an undecided scheme.
+    const authUndecided = endpoint.authRequired && !scheme;
+    if (authUndecided) {
+      warnings.push(`${endpoint.method} ${endpoint.path}: authentication is required but the scheme is undecided; exported without a security requirement (x-auth-undecided).`);
     }
     if (scheme) securitySchemes[scheme[0]] = scheme[1];
 
@@ -241,7 +246,8 @@ export function interfaceSpecToOpenApi(doc: InterfaceSpecDocument): InterfaceSpe
             : {}),
         },
       };
-      operation.security = scheme ? [{ [scheme[0]]: [] }] : [];
+      if (authUndecided) operation['x-auth-undecided'] = true;
+      else operation.security = scheme ? [{ [scheme[0]]: [] }] : [];
       paths[path] = { ...(paths[path] ?? {}), [method]: operation };
     }
   }

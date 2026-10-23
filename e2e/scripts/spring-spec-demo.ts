@@ -199,7 +199,8 @@ log(
 );
 
 // 5. Hand the reviewed spec to API tooling as OpenAPI 3.1 and prove it round-trips:
-// exporting and re-collecting must give back the same interfaces and field paths.
+// exporting and re-collecting must give back the same interfaces, field paths and
+// authentication requirement.
 const openApiPath = path.join(workspace, 'docs/orders.openapi.json');
 const exportRun = await run(process.execPath, [cli, 'docs', 'export-openapi', '--input', specPath, '--out', openApiPath]);
 const exportSummary = JSON.parse(exportRun.stdout) as { pathCount: number; warnings: string[] };
@@ -211,7 +212,8 @@ const fieldShape = (endpoint: Endpoint) =>
 const reimported = new Map(roundTrip.endpoints.map((endpoint) => [keyOf(endpoint), endpoint]));
 const roundTripMismatches = merged.endpoints.filter((endpoint) => {
   const back = reimported.get(keyOf(endpoint));
-  return !back || back.interfaceId !== endpoint.interfaceId || fieldShape(back) !== fieldShape(endpoint);
+  return !back || back.interfaceId !== endpoint.interfaceId || fieldShape(back) !== fieldShape(endpoint)
+    || back.authRequired !== endpoint.authRequired;
 }).map(keyOf);
 if (roundTripMismatches.length || reimported.size !== merged.endpoints.length) {
   throw new Error(`OpenAPI round trip changed: ${roundTripMismatches.join(', ') || 'endpoint count'}`);
