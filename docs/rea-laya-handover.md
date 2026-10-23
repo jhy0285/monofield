@@ -2,6 +2,8 @@
 
 MonoField `0.11.7-preview.2`에는 REA MCP 프리셋, `monofield rea` 설정 CLI, `legacy-system-handover` 스킬과 Laya 로컬 판단 연동이 포함됩니다. REA 엔진은 첫 사용 시 고정 버전으로 내려받고, Laya 모델·서버는 별도 설치합니다. 기존 Java 도구·코드 온톨로지·변경 검증·문서 검토 기능도 같은 소스에 포함됩니다.
 
+상황별 도구 선택과 실제 지시 예시는 [REA·Laya 실전 사용 가이드](rea-laya-practical-guide.md)를 참고하세요.
+
 ## 역할
 
 | 도구 | SI 인수인계에서 하는 일 |
