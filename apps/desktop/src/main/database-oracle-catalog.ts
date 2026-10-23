@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 // Pure Oracle-family (Oracle Database, Tibero) catalogue mapping for the
 // Desktop database broker. Nothing here opens a connection: the broker runs
 // the fixed statements below and passes the driver rows in unchanged. See
-// docs/adr/0002-oracle-tibero-metadata-access.md.
+// docs/adr/0003-oracle-tibero-metadata-access.md.
 
 /** node-oracledb returns NUMBER as a JS number; ODBC drivers may return SQL_NUMERIC as a string. */
 type CatalogNumber = number | string | null | undefined;
