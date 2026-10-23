@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { ensureRailOpen } from '@/playwright/rail';
-import { routeAgents } from '../lib/playwright/mock-factory.js';
+import { APP_CONFIG_URL, routeAgents } from '../lib/playwright/mock-factory.js';
 
 // Repro for #4303: the New Project → "Design system" dropdown renders
 // misaligned/truncated. The local picker (NewProjectPanel.tsx) opens its
@@ -58,7 +58,7 @@ test.beforeEach(async ({ page }) => {
     );
   }, STORAGE_KEY);
 
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     await route.fulfill({
       json: {
         config: {

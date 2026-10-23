@@ -1,7 +1,7 @@
 import { expect, test } from '@/playwright/suite';
 import { gotoEntryHome } from '@/playwright/entry';
 import { ensureRailOpen } from '@/playwright/rail';
-import { routeAgents } from '@/playwright/mock-factory';
+import { APP_CONFIG_URL, routeAgents } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 import type { Locator, Page } from '@playwright/test';
 
@@ -253,7 +253,7 @@ test('[P0] saving a Composio key from Integrations unlocks the connectors gate i
     savedComposioBody = route.request().postDataJSON();
     await route.fulfill({ status: 200, body: '{}' });
   });
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() === 'GET') {
       await route.fulfill({ status: 200, json: { config: null } });
       return;
@@ -312,7 +312,7 @@ test('[P1] typing a draft replacement Composio key does not trigger global autos
   }, STORAGE_KEY);
 
   const appConfigPersistBodies: unknown[] = [];
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() === 'GET') {
       await route.fulfill({ status: 200, json: { config: null } });
       return;

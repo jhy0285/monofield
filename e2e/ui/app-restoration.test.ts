@@ -1,5 +1,6 @@
 import { expect, test } from '@/playwright/suite';
 import { gotoEntryHome, waitForLoadingShell } from '@/playwright/entry';
+import { APP_CONFIG_URL } from '@/playwright/mock-factory';
 import { ensureRailOpen } from '@/playwright/rail';
 import { runErrorCard } from '@/playwright/chat';
 import type { Dialog, Locator, Page, Request, Response } from '@playwright/test';
@@ -46,7 +47,7 @@ test.beforeEach(async ({ page }) => {
     );
   }, STORAGE_KEY);
 
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() !== 'GET') {
       await route.continue();
       return;
@@ -2994,7 +2995,7 @@ test('[P1] project composer working directory replace and clear update linked di
   await page.route('**/api/dir-exists', async (route) => {
     await route.fulfill({ json: { exists: true } });
   });
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() === 'PUT') {
       await route.fulfill({ json: { config: { recentLinkedDirs: [workingDir] } } });
       return;
@@ -3040,7 +3041,7 @@ test('[P1] project composer working directory rejects stale folder without promo
   await page.route('**/api/dir-exists', async (route) => {
     await route.fulfill({ json: { exists: false } });
   });
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() === 'PUT') {
       const payload = route.request().postDataJSON() as Record<string, unknown>;
       if (JSON.stringify(payload).includes(staleDir)) {

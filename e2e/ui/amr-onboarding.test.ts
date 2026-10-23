@@ -2,7 +2,7 @@ import { expect, test } from '@/playwright/suite';
 import type { Locator, Page } from '@playwright/test';
 
 import { dismissPrivacyDialog, STORAGE_KEY, waitForLoadingToClear } from '@/playwright/amr';
-import { fulfillAgentsRoute } from '@/playwright/mock-factory';
+import { APP_CONFIG_URL, fulfillAgentsRoute } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 
 type OnboardingConfig = {
@@ -892,7 +892,7 @@ async function wireOnboardingMocks(
     await route.continue();
   });
 
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() === 'GET') {
       await route.fulfill({ json: { config } });
       return;
