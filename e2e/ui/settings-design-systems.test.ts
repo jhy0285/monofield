@@ -1,4 +1,5 @@
 import { expect, test } from '@/playwright/suite';
+import { gotoEntryHome } from '@/playwright/entry';
 import type { Page, Route } from '@playwright/test';
 import { openSettingsDialog } from '../lib/playwright/amr.js';
 
@@ -41,20 +42,6 @@ async function seedSettingsBase(page: Page, override?: Record<string, unknown>) 
     },
     { key: STORAGE_KEY, value: { ...baseConfig(), ...override } },
   );
-}
-
-async function waitForLoadingToClear(page: Page) {
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: 15_000 });
-}
-
-async function gotoEntryHome(page: Page) {
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible().catch(() => false)) {
-    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
-  }
-  await expect(page.getByTestId('home-hero')).toBeVisible();
 }
 
 async function routeBootstrapApis(

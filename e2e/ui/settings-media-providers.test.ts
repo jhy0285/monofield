@@ -1,4 +1,5 @@
 import { expect, test } from '@/playwright/suite';
+import { waitForLoadingShell } from '@/playwright/entry';
 import { ensureRailOpen } from '@/playwright/rail';
 import type { Page, Route } from '@playwright/test';
 import { openSettingsDialog } from '../lib/playwright/amr.js';
@@ -118,17 +119,9 @@ async function routeBootstrapApis(
   });
 }
 
-async function waitForLoadingToClear(page: Page) {
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: 15_000 });
-}
-
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible().catch(() => false)) {
-    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
-  }
+  await waitForLoadingShell(page);
 }
 
 async function openMediaSettings(page: Page) {

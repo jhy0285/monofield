@@ -1,4 +1,5 @@
 import { expect, test } from '@/playwright/suite';
+import { gotoEntryHome } from '@/playwright/entry';
 import { ensureRailOpen } from '@/playwright/rail';
 import { routeAgents } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
@@ -366,13 +367,6 @@ async function routeConnectors(page: Page, connectors: typeof CONNECTORS) {
       },
     });
   });
-}
-
-async function gotoEntryHome(page: Page) {
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
-  await expect(page.getByTestId('home-hero')).toBeVisible({ timeout: T.long });
-  await expect(page.getByTestId('home-hero-input')).toBeVisible({ timeout: T.long });
 }
 
 async function openIntegrationsConnectors(page: Page): Promise<Locator> {

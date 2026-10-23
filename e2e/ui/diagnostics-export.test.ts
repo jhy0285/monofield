@@ -5,6 +5,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 
 import { expect, test } from '@/playwright/suite';
+import { gotoEntryHome } from '@/playwright/entry';
 import type { Page } from '@playwright/test';
 
 const execFileAsync = promisify(execFile);
@@ -71,20 +72,6 @@ test('[P1] diagnostics export zip includes the primary daemon, web, and desktop 
     await rm(tmpRoot, { recursive: true, force: true });
   }
 });
-
-async function gotoEntryHome(page: Page) {
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible().catch(() => false)) {
-    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
-  }
-  await expect(page.getByTestId('home-hero')).toBeVisible();
-}
-
-async function waitForLoadingToClear(page: Page) {
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: 15_000 });
-}
 
 async function unzipList(zipPath: string): Promise<string[]> {
   const { stdout } = await execFileAsync('unzip', ['-Z1', zipPath]);

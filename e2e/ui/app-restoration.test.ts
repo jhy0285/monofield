@@ -1,4 +1,5 @@
 import { expect, test } from '@/playwright/suite';
+import { gotoEntryHome, waitForLoadingShell } from '@/playwright/entry';
 import { ensureRailOpen } from '@/playwright/rail';
 import { runErrorCard } from '@/playwright/chat';
 import type { Dialog, Locator, Page, Request, Response } from '@playwright/test';
@@ -3217,7 +3218,7 @@ async function createProject(
 }
 
 async function expectWorkspaceReady(page: Page) {
-  await waitForLoadingToClear(page);
+  await waitForLoadingShell(page);
   await expect(page).toHaveURL(/\/projects\//);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
@@ -3600,18 +3601,6 @@ async function createProjectNameOnly(
   await page.getByTestId('new-project-name').fill(entry.create.projectName);
 }
 
-async function gotoEntryHome(page: Page) {
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible()) {
-    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
-    await expect(privacyDialog).toHaveCount(0);
-  }
-  await expect(page.getByTestId('home-hero')).toBeVisible();
-  await expect(page.getByTestId('home-hero-input')).toBeVisible();
-}
-
 async function openNewProjectModal(page: Page) {
   await ensureRailOpen(page);
   await page.getByTestId('entry-nav-new-project').click();
@@ -3621,7 +3610,7 @@ async function openNewProjectModal(page: Page) {
 
 async function gotoProjectRoute(page: Page, path: string) {
   await page.goto(path, { waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
+  await waitForLoadingShell(page);
 }
 
 async function navigateProjectRouteInApp(page: Page, path: string) {
@@ -3634,7 +3623,7 @@ async function navigateProjectRouteInApp(page: Page, path: string) {
 
 async function reloadCurrentRoute(page: Page) {
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
+  await waitForLoadingShell(page);
 }
 
 async function createPrototypeProject(page: Page, projectName: string) {
@@ -3654,10 +3643,6 @@ async function expectProjectsView(page: Page) {
     await page.getByTestId('entry-nav-projects').click();
   }
   await expect(page.locator('.tab-panel-toolbar')).toBeVisible();
-}
-
-async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
 }
 
 async function getCurrentProjectContext(

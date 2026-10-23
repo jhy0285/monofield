@@ -1,4 +1,5 @@
 import { expect, test } from '@/playwright/suite';
+import { gotoEntryHome, waitForLoadingShell } from '@/playwright/entry';
 import { ensureRailOpen } from '@/playwright/rail';
 import { routeAgents } from '@/playwright/mock-factory';
 import type { Dialog, Locator, Page, Request, Response } from '@playwright/test';
@@ -436,7 +437,7 @@ test('[P0] @critical comment attachment flow attaches preview comments to the ne
   await page.reload();
   await expectWorkspaceReady(page);
   await page.goto(`/projects/${projectId}/files/${entry.mockArtifact.fileName}`, { waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
+  await waitForLoadingShell(page);
   await expect(artifactPreview(page)).toBeVisible();
 
   await runCommentAttachmentFlow(page, entry);
@@ -503,7 +504,7 @@ test('[P0] sending preview comments opens the refreshed follow-up artifact', asy
   await page.reload();
   await expectWorkspaceReady(page);
   await page.goto(`/projects/${projectId}/files/${entry.mockArtifact.fileName}`, { waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
+  await waitForLoadingShell(page);
   await expect(artifactPreview(page)).toBeVisible();
 
   await page.getByTestId('board-mode-toggle').click();
@@ -557,7 +558,7 @@ test('[P0] sending preview comments opens the refreshed follow-up artifact', asy
   const revisedFileName = await findProjectFileContaining(page, projectId, 'Revised headline');
   expect(revisedFileName).not.toBe('');
   await page.goto(`/projects/${projectId}/files/${revisedFileName}`, { waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
+  await waitForLoadingShell(page);
   const escapedRevisedFileName = revisedFileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   await expect(page).toHaveURL(
     new RegExp(`/projects/${projectId}(?:/conversations/[^/]+)?/files/${escapedRevisedFileName}$`),
@@ -760,7 +761,7 @@ async function createProject(
 }
 
 async function expectWorkspaceReady(page: Page) {
-  await waitForLoadingToClear(page);
+  await waitForLoadingShell(page);
   await expect(page).toHaveURL(/\/projects\//);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
@@ -768,7 +769,7 @@ async function expectWorkspaceReady(page: Page) {
 }
 
 async function expectProjectShellReady(page: Page) {
-  await waitForLoadingToClear(page);
+  await waitForLoadingShell(page);
   await expect(page).toHaveURL(/\/projects\//);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('file-workspace')).toBeVisible();
@@ -1263,27 +1264,11 @@ async function createProjectNameOnly(
   await page.getByTestId('new-project-name').fill(entry.create.projectName);
 }
 
-async function gotoEntryHome(page: Page) {
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible()) {
-    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
-    await expect(privacyDialog).toHaveCount(0);
-  }
-  await expect(page.getByTestId('home-hero')).toBeVisible();
-  await expect(page.getByTestId('home-hero-input')).toBeVisible();
-}
-
 async function openNewProjectModal(page: Page) {
   await ensureRailOpen(page);
   await page.getByTestId('entry-nav-new-project').click();
   await expect(page.getByTestId('new-project-modal')).toBeVisible();
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
-}
-
-async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
 }
 
 async function getCurrentProjectContext(
@@ -1591,11 +1576,11 @@ async function runDeepLinkPreviewFlow(
     throw new Error(`unexpected project route: ${current.pathname}`);
   }
   await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
+  await waitForLoadingShell(page);
   await expect(page.getByTestId('file-workspace')).toBeVisible();
 
   await page.goto(`/projects/${projectId}/files/${fileName}`, { waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
+  await waitForLoadingShell(page);
   const artifactTab = tabBySuffix(page, fileName);
   await expect(artifactTab).toBeVisible();
   await expect(artifactTab).toHaveAttribute('aria-selected', 'true');
