@@ -124,7 +124,20 @@ v1.0 워크북은 시트 8개(표지·목록 3개 + API 5개), v1.1은 `주문 �
 - 한글 필드명은 지정한 용어 사전 → 필드의 한글 주석(`/** 회원 ID */`,
   `// 회원 ID`) → 영문 분리 순서로 정합니다. 주석도 사전도 없으면 `member Id`
   처럼 남으므로 검토 대상입니다.
-- 인증 필요 여부(`authRequired`)는 경로가 `/api/v1/`를 포함하는지로만
-  추정합니다. 보안 설정과 대조하는 검토가 필요합니다.
+- 인증 필요 여부(`authRequired`)는 경로 모양이 아니라 Java 보안 설정
+  (`SecurityFilterChain`, `WebSecurityConfigurerAdapter`)의 규칙과
+  `@PreAuthorize`·`@Secured`·`@RolesAllowed` 애너테이션으로 정하고, 근거가 된
+  설정 파일과 줄을 `evidenceRefs`에 남깁니다. 시연 코드에서는
+  `/api/v1/members/join`만 `permitAll()`이라 인증 불필요, 나머지는
+  `anyRequest().authenticated()`라 인증 필요입니다.
+- 근거로 판정할 수 없는 엔드포인트는 추정하지 않고 "인증 여부 확인
+  필요"(`auth.type: "undecided"`)로 남기며, 비고에 이유를 적습니다. 보안 설정이
+  없을 때, 일치하는 규칙이 없을 때, 직접 만든 매처나 `hasIpAddress`처럼 정적으로
+  해석할 수 없는 규칙일 때, method가 없는 `@RequestMapping`에서 GET과 POST의
+  판정이 다를 때가 여기에 해당합니다.
+- XML 보안 설정(`context-security.xml` 등), 서블릿 필터, `HandlerInterceptor`는
+  읽지 않습니다. 이것으로만 보호하는 eGovFrame 프로젝트의 `.do` URL은 "인증 여부
+  확인 필요"로 남으므로 검토 단계에서 확정합니다. 서비스 계층의 메서드 보안
+  애너테이션과 직접 만든 메타 애너테이션도 보지 않습니다.
 - 스크립트의 제안은 실제 에이전트 출력이 아니라 재스캔 결과의 결정론적
   변경분입니다. 실제 에이전트 제안의 품질은 사용한 모델과 설정에 따라 다릅니다.

@@ -498,8 +498,33 @@ method-level `@RequestMapping` without `method` (recorded as `GET/POST` with a
 note, because Spring accepts every method), `@ModelAttribute` and un-annotated
 project `*VO` form objects (every bound form object is expanded), and Korean
 Javadoc/line comments as interface and field names when no dictionary entry
-exists. Review `authRequired` against the security configuration; the scanner
-only infers it from the path.
+exists.
+
+The Spring scanner decides `authRequired` per endpoint from static evidence,
+never from the URL shape. It reads the Java security configuration
+(`SecurityFilterChain` beans and `WebSecurityConfigurerAdapter`): ordered
+chains and their `securityMatcher` scope, `antMatchers`/`mvcMatchers`/
+`regexMatchers`/`requestMatchers`/`anyRequest()` rules in order (first match
+wins), `permitAll()`/`anonymous()` versus `authenticated()`/`hasRole(...)`/
+`access("...")`, `web.ignoring()`, and `String`/`String[]` constants. It then
+applies `@PreAuthorize`, `@Secured` and `@RolesAllowed`/`@PermitAll`/`@DenyAll`
+on the handler or controller class, but only when `@EnableMethodSecurity`/
+`@EnableGlobalMethodSecurity` switches that family on. Sources under `test`,
+`tests`, `build` and `target` directories are ignored, including for the
+document-level `auth` scheme. Each decided endpoint carries `evidenceRefs` pointing at the
+deciding rule or annotation, so `monofield docs impact` flags it when the
+security configuration changes.
+
+When the evidence does not decide an endpoint, the scanner keeps it undecided:
+`authRequired: true`, `auth: { "type": "undecided" }`, and a note starting
+`인증 여부 확인 필요:` with the reason. Reasons include no Java security
+configuration, no matching rule, a matcher or expression the parser cannot
+evaluate (for example a lambda `RequestMatcher` or `hasIpAddress`), or GET and
+POST getting different results on a method-less `@RequestMapping`. Resolve those
+endpoints from the code with the user; do not turn an undecided endpoint into
+`true` or `false` without evidence. XML security configuration
+(`context-security.xml`), servlet filters and `HandlerInterceptor`s are not
+read, so endpoints protected only by those stay undecided.
 
 Each scanner emits `requestExample` and `responseExample` with
 `exampleSource: "static-analysis"`. These examples combine traced request and

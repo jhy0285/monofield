@@ -103,6 +103,7 @@
         "./scripts/tools/excel_generator/collector/__init__.py",
         "./scripts/tools/excel_generator/collector/controller_scanner.py",
         "./scripts/tools/excel_generator/collector/dto_expander.py",
+        "./scripts/tools/excel_generator/collector/spring_security.py",
         "./scripts/tools/excel_generator/rules/__init__.py",
         "./scripts/tools/excel_generator/rules/naming.py",
         "./scripts/tools/excel_generator/rules/audit_fields.py",
