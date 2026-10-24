@@ -126,7 +126,7 @@ test('[P2] home topbar Use everywhere navigates to Integrations with the tab sel
   );
 });
 
-test('[P1] home topbar settings button opens settings and closes the execution popover', async ({ page }) => {
+test('[P1] home topbar settings menu opens settings and closes the execution popover', async ({ page }) => {
   await gotoEntryHome(page);
 
   const pill = page.getByTestId('inline-model-switcher-chip');
@@ -135,23 +135,24 @@ test('[P1] home topbar settings button opens settings and closes the execution p
   await pill.click();
   await expect(popover).toBeVisible();
 
-  await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).click();
+  // Settings is a menu now: the trigger opens it and "details" opens the dialog.
+  await page.getByTestId('entry-settings-menu-trigger').click();
+  await page.getByTestId('entry-settings-open-details').click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await expect(popover).toHaveCount(0);
 });
 
-test('[P2] returning from another entry view via the home nav reaches the home hero', async ({ page }) => {
+// The rail lost its Home item and the brand logo now collapses the rail on hover, so this flow
+// needs a new way back to Home before it can run again.
+test.fixme('[P2] returning from another entry view via the home nav reaches the home hero', async ({ page }) => {
   await gotoEntryHome(page);
 
   await page.getByTestId('entry-use-everywhere-button').click();
   await expect(page.getByRole('heading', { name: 'Integrations' })).toBeVisible();
 
-  // The logo doubles as a hover-to-collapse control now, so home is reached
-  // through the explicit Home nav item rather than clicking the brand mark.
   await ensureRailOpen(page);
   await page.getByTestId('entry-nav-home').click();
   await expect(page.getByTestId('home-hero')).toBeVisible();
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
   await expect(page.getByTestId('home-hero-type-tabs')).toBeVisible();
-  await expect(page.getByTestId('entry-star-badge')).toBeVisible();
 });

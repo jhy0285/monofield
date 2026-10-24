@@ -157,7 +157,11 @@ test('[P0] @critical workspace restores the last manually selected file tab afte
   const restoredArtifactTab = page.getByRole('tab', { name: /workspace-artifact\.html/i });
   if ((await restoredArtifactTab.count()) === 0) {
     const turnCard = page.locator('.msg.assistant').filter({ hasText: 'workspace-artifact.html' }).first();
-    const openButton = turnCard.getByRole('button', { name: /^Open$/ });
+    // The turn lists every produced file with its own Open button, so scope to the artifact's row.
+    const openButton = turnCard
+      .locator('.produced-file')
+      .filter({ hasText: 'workspace-artifact.html' })
+      .getByRole('button', { name: /^Open$/ });
     await expect(openButton).toBeVisible();
     await openButton.click();
 
