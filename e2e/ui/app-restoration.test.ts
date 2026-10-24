@@ -2567,7 +2567,7 @@ test('[P1] Browser Inspiration page_info action seeds Browser tab context into t
     page.getByTestId('file-workspace').getByRole('tab', { name: /Browser/ }),
   ).toBeVisible();
 
-  await page.getByTestId('file-workspace').getByRole('button', { name: 'Inspiration' }).click();
+  await openBrowserInspirationMenu(page);
   await page.locator('.db-browser-use-action').filter({ hasText: /^page_info/ }).click();
 
   const input = page.getByTestId('chat-composer-input');
@@ -2625,7 +2625,7 @@ test('[P1] Browser Inspiration navigate action carries Browser operation contrac
     page.getByTestId('file-workspace').getByRole('tab', { name: /Browser/ }),
   ).toBeVisible();
 
-  await page.getByTestId('file-workspace').getByRole('button', { name: 'Inspiration' }).click();
+  await openBrowserInspirationMenu(page);
   await page.locator('.db-browser-use-action').filter({ hasText: /^navigate/ }).click();
 
   const input = page.getByTestId('chat-composer-input');
@@ -2687,7 +2687,7 @@ test('[P1] Browser Inspiration page_info carries the active Browser URL context 
   await address.press('Enter');
   await expect(page.locator('.db-address-display')).toContainText('/api/health');
 
-  await page.getByTestId('file-workspace').getByRole('button', { name: 'Inspiration' }).click();
+  await openBrowserInspirationMenu(page);
   await page.locator('.db-browser-use-action').filter({ hasText: /^page_info/ }).click();
 
   const input = page.getByTestId('chat-composer-input');
@@ -2760,7 +2760,7 @@ test('[P1] Browser Inspiration page_info carries a loaded page title into the ne
   await expect(page.locator('.db-address-display')).toContainText('/browser-title-fixture.html');
   await expect(page.locator('.db-address-display')).toContainText('Browser Fixture Title');
 
-  await page.getByTestId('file-workspace').getByRole('button', { name: 'Inspiration' }).click();
+  await openBrowserInspirationMenu(page);
   await page.locator('.db-browser-use-action').filter({ hasText: /^page_info/ }).click();
 
   const input = page.getByTestId('chat-composer-input');
@@ -3993,4 +3993,11 @@ function homeDesignCard(page: Page, name: string): Locator {
   return page.locator('.design-card', {
     has: page.locator('.design-card-name', { hasText: name }),
   });
+}
+
+/** Inspiration lives in the Browser tab's overflow menu, not on the toolbar. */
+async function openBrowserInspirationMenu(page: Page) {
+  const workspace = page.getByTestId('file-workspace');
+  await workspace.getByRole('button', { name: 'Browser menu' }).click();
+  await workspace.getByRole('menuitem', { name: 'Inspiration' }).click();
 }
