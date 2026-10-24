@@ -67,29 +67,8 @@ const DESIGN_SYSTEMS = [
 
 test.describe.configure({ timeout: T.xlong });
 
-// Entry destinations open a first-visit feature tour whose backdrop swallows
-// pointer events. These flows are not about the tour, so mark every entry
-// guide as already seen.
-const ENTRY_FEATURE_GUIDES_KEY = 'monofield:entry-feature-guides:v1';
-const ENTRY_FEATURE_GUIDE_IDS = [
-  'navigation',
-  'new-project',
-  'projects',
-  'open-work',
-  'design-systems',
-  'tasks',
-  'plugins',
-  'integrations',
-] as const;
-
 test.beforeEach(async ({ page }) => {
   await applyStandardMocks(page);
-  await page.addInitScript(
-    ({ key, ids }) => {
-      window.localStorage.setItem(key, JSON.stringify(Object.fromEntries(ids.map((id) => [id, true]))));
-    },
-    { key: ENTRY_FEATURE_GUIDES_KEY, ids: [...ENTRY_FEATURE_GUIDE_IDS] },
-  );
 });
 
 test('[P0] @critical entry chrome exposes the primary home creation surface and settings entry', async ({ page }) => {

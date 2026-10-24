@@ -11,8 +11,32 @@ type PlaywrightToolsDevSuite = ToolsDevSuite & {
 };
 
 type TestFixtures = {
+  _entryFeatureGuidesSeen: void;
   _toolsDevFailureTracker: void;
 };
+
+// Entry destinations and Settings tabs open a first-visit feature tour whose
+// backdrop swallows pointer events. UI flows are not about the tour, so every
+// test starts with all guides marked as seen. Keep in sync with
+// `EntryFeatureGuideId` in apps/web/src/components/EntryFeatureGuide.tsx.
+const ENTRY_FEATURE_GUIDES_KEY = 'monofield:entry-feature-guides:v1';
+const ENTRY_FEATURE_GUIDE_IDS = [
+  'navigation',
+  'new-project',
+  'projects',
+  'open-work',
+  'design-systems',
+  'tasks',
+  'plugins',
+  'integrations',
+  'settings-overview',
+  'settings-memory',
+  'settings-media',
+  'settings-review',
+  'settings-pet',
+  'settings-database',
+  'settings-dictionaries',
+] as const;
 
 type WorkerFixtures = {
   toolsDev: PlaywrightToolsDevSuite;
@@ -59,6 +83,23 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   baseURL: async ({ toolsDev }, use) => {
     await use(toolsDev.url.web());
   },
+
+  _entryFeatureGuidesSeen: [
+    async ({ context }, use) => {
+      await context.addInitScript(
+        ({ key, ids }) => {
+          try {
+            window.localStorage.setItem(key, JSON.stringify(Object.fromEntries(ids.map((id) => [id, true]))));
+          } catch {
+            // Storage can be unavailable on opaque origins (about:blank); nothing to seed there.
+          }
+        },
+        { key: ENTRY_FEATURE_GUIDES_KEY, ids: [...ENTRY_FEATURE_GUIDE_IDS] },
+      );
+      await use();
+    },
+    { auto: true },
+  ],
 
   _toolsDevFailureTracker: [
     async ({ toolsDev }, use, testInfo) => {
