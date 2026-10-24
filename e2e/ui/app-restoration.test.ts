@@ -1,3 +1,5 @@
+import { join } from 'node:path';
+
 import { expect, test } from '@/playwright/suite';
 import { gotoEntryHome, waitForLoadingShell } from '@/playwright/entry';
 import { APP_CONFIG_URL } from '@/playwright/mock-factory';
@@ -6,6 +8,7 @@ import { runErrorCard } from '@/playwright/chat';
 import type { Dialog, Locator, Page, Request, Response } from '@playwright/test';
 import { automatedUiScenarios } from '@/playwright/resources';
 import type { UiScenario } from '@/playwright/resources';
+import { e2eWorkspaceRoot } from '@/tools-dev/runtime';
 import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
@@ -2983,7 +2986,8 @@ test('[P1] questions tab Continue sends selected answers into the next run reque
 });
 
 test('[P1] project composer working directory replace and clear update linked dirs metadata', async ({ page }) => {
-  const workingDir = '/Users/mac/open-design/open-design/e2e';
+  // The daemon validates linked dirs against the real filesystem, so pick a folder that exists on the machine running the suite.
+  const workingDir = join(e2eWorkspaceRoot(), 'e2e');
   const patchBodies: Array<Record<string, unknown>> = [];
 
   await page.route('**/api/recent-dirs', async (route) => {
