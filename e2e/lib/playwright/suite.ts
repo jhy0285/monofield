@@ -15,10 +15,12 @@ type TestFixtures = {
   _toolsDevFailureTracker: void;
 };
 
-// Entry destinations and Settings tabs open a first-visit feature tour whose
-// backdrop swallows pointer events. UI flows are not about the tour, so every
-// test starts with all guides marked as seen. Keep in sync with
-// `EntryFeatureGuideId` in apps/web/src/components/EntryFeatureGuide.tsx.
+// First-visit tours (entry destinations, Settings tabs, the development and
+// creation workspaces) put a backdrop over the page that swallows pointer
+// events. UI flows are not about the tours, so every test starts with them
+// marked as seen. Keep in sync with `EntryFeatureGuideId` in
+// apps/web/src/components/EntryFeatureGuide.tsx and the storage keys in
+// apps/web/src/components/DevelopmentWorkspaceTutorial.tsx.
 const ENTRY_FEATURE_GUIDES_KEY = 'monofield:entry-feature-guides:v1';
 const ENTRY_FEATURE_GUIDE_IDS = [
   'navigation',
@@ -36,6 +38,10 @@ const ENTRY_FEATURE_GUIDE_IDS = [
   'settings-pet',
   'settings-database',
   'settings-dictionaries',
+] as const;
+const WORKSPACE_TUTORIAL_DONE_KEYS = [
+  'monofield:development-workspace-tutorial:v2',
+  'monofield:creation-workspace-tutorial:v1',
 ] as const;
 
 type WorkerFixtures = {
@@ -87,14 +93,15 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   _entryFeatureGuidesSeen: [
     async ({ context }, use) => {
       await context.addInitScript(
-        ({ key, ids }) => {
+        ({ key, ids, doneKeys }) => {
           try {
             window.localStorage.setItem(key, JSON.stringify(Object.fromEntries(ids.map((id) => [id, true]))));
+            for (const doneKey of doneKeys) window.localStorage.setItem(doneKey, 'done');
           } catch {
             // Storage can be unavailable on opaque origins (about:blank); nothing to seed there.
           }
         },
-        { key: ENTRY_FEATURE_GUIDES_KEY, ids: [...ENTRY_FEATURE_GUIDE_IDS] },
+        { key: ENTRY_FEATURE_GUIDES_KEY, ids: [...ENTRY_FEATURE_GUIDE_IDS], doneKeys: [...WORKSPACE_TUTORIAL_DONE_KEYS] },
       );
       await use();
     },
