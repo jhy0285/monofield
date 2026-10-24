@@ -1,0 +1,492 @@
+<!doctype html>
+<!--
+  MonoField intro — a deterministic motion piece.
+
+  Every animation is a paused Web Animation; `window.seek(seconds)` moves all
+  of them to one point in time, so `render-intro-video.ts` can capture exact
+  frames and encode them with ffmpeg. Open it directly (`?lang=ko|en`) to watch
+  it live: it plays in a loop unless `?paused` is set.
+-->
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<title>MonoField intro</title>
+<style>
+  @font-face { font-family: Inter; font-weight: 500; src: url('/fonts/inter-latin-500-normal.woff2') format('woff2'); }
+  @font-face { font-family: Inter; font-weight: 700; src: url('/fonts/inter-latin-700-normal.woff2') format('woff2'); }
+  @font-face { font-family: Inter; font-weight: 800; src: url('/fonts/inter-latin-800-normal.woff2') format('woff2'); }
+  @font-face { font-family: NotoKR; font-weight: 500; src: url('/fonts/noto-sans-kr-korean-500-normal.woff2') format('woff2'); }
+  @font-face { font-family: NotoKR; font-weight: 700; src: url('/fonts/noto-sans-kr-korean-700-normal.woff2') format('woff2'); }
+  @font-face { font-family: NotoKR; font-weight: 800; src: url('/fonts/noto-sans-kr-korean-800-normal.woff2') format('woff2'); }
+
+  :root {
+    --ink: #07100b;
+    --ink-2: #0d1a13;
+    --card: #101f17;
+    --line: rgba(205, 242, 106, 0.16);
+    --forest: #244c3a;
+    --mint: #7fe0ae;
+    --lime: #cdf26a;
+    --paper: #f3f6ee;
+    --mute: #8da396;
+    --red: #ff7468;
+    --amber: #ffc65c;
+    --ease: cubic-bezier(0.23, 1, 0.32, 1);
+    --mono: "DejaVu Sans Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1280px; height: 720px; background: #000; overflow: hidden; }
+  body { font-family: Inter, NotoKR, "WenQuanYi Zen Hei", sans-serif; color: var(--paper); -webkit-font-smoothing: antialiased; }
+  #stage {
+    position: relative; width: 1280px; height: 720px; overflow: hidden;
+    background: radial-gradient(1100px 760px at 78% -10%, #17331f 0%, var(--ink) 62%);
+  }
+  .abs { position: absolute; }
+  .scene { position: absolute; inset: 0; opacity: 0; will-change: opacity, transform; }
+  #contours { position: absolute; inset: -40px; width: 1360px; height: 800px; }
+  #contours path { fill: none; stroke: var(--mint); stroke-linecap: round; }
+  #glow {
+    position: absolute; left: 0; top: 0; width: 620px; height: 620px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(205, 242, 106, 0.28) 0%, rgba(205, 242, 106, 0) 66%);
+    filter: blur(8px);
+  }
+  #progress { position: absolute; left: 0; bottom: 0; height: 4px; width: 1280px; background: linear-gradient(90deg, var(--mint), var(--lime)); transform-origin: left; transform: scaleX(0); }
+  #corner { position: absolute; left: 44px; top: 34px; font-size: 15px; font-weight: 800; letter-spacing: 0.26em; color: var(--mute); }
+  #corner i { color: var(--lime); font-style: normal; }
+
+  .eyebrow { font-size: 17px; font-weight: 800; letter-spacing: 0.22em; color: var(--lime); text-transform: uppercase; }
+  .h1 { font-size: 62px; font-weight: 800; letter-spacing: -0.045em; line-height: 1.12; }
+  .h2 { font-size: 46px; font-weight: 800; letter-spacing: -0.04em; line-height: 1.15; }
+  .lede { font-size: 24px; font-weight: 500; color: #bccbc2; line-height: 1.5; letter-spacing: -0.02em; }
+  .mask { display: block; overflow: hidden; padding-bottom: 0.12em; margin-bottom: -0.12em; }
+  .mask > span { display: block; }
+  .accent { color: var(--lime); }
+
+  .chip {
+    position: absolute; display: flex; align-items: center; gap: 12px; padding: 14px 20px;
+    border: 1px solid var(--line); border-radius: 14px; background: rgba(16, 31, 23, 0.86);
+    font-family: var(--mono); font-size: 19px; color: #d6e3da; white-space: nowrap;
+  }
+  .chip b { font-family: Inter, NotoKR, sans-serif; font-size: 13px; letter-spacing: 0.06em; padding: 5px 9px; border-radius: 7px; background: rgba(255, 116, 104, 0.16); color: var(--red); }
+  .ext { display: inline-grid; place-items: center; width: 38px; height: 38px; border-radius: 9px; font: 800 12px Inter, sans-serif; letter-spacing: 0.04em; color: #07100b; }
+
+  .card { position: absolute; border: 1px solid var(--line); border-radius: 22px; background: linear-gradient(180deg, rgba(20, 38, 28, 0.94), rgba(11, 22, 16, 0.94)); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45); }
+  .card-bar { display: flex; align-items: center; gap: 8px; height: 46px; padding: 0 18px; border-bottom: 1px solid var(--line); font-size: 14px; font-weight: 700; color: var(--mute); letter-spacing: 0.04em; }
+  .card-bar i { width: 11px; height: 11px; border-radius: 50%; background: #2c4638; }
+
+  .code { position: absolute; left: 28px; top: 66px; font-family: var(--mono); font-size: 19px; line-height: 1.78; color: #c9d8cf; white-space: pre; }
+  .code .l { display: block; opacity: 0.32; }
+  .code .k { color: var(--lime); }
+  .code .s { color: #9fe8c0; }
+  .code .t { color: #8ec7ff; }
+  #beam { position: absolute; left: 0; width: 100%; height: 3px; background: var(--lime); box-shadow: 0 0 26px 6px rgba(205, 242, 106, 0.55); opacity: 0; }
+
+  .row { position: absolute; left: 22px; right: 22px; height: 58px; display: grid; grid-template-columns: 66px 1fr 92px; align-items: center; gap: 12px; padding: 0 16px; border: 1px solid var(--line); border-radius: 12px; background: rgba(205, 242, 106, 0.05); font-family: var(--mono); font-size: 16px; }
+  .row .m { font: 800 15px Inter, sans-serif; letter-spacing: 0.05em; }
+  .row .p { color: #e3efe7; overflow: hidden; text-overflow: ellipsis; }
+  .tag { justify-self: end; font: 800 14px Inter, NotoKR, sans-serif; padding: 6px 12px; border-radius: 999px; }
+  .tag.req { background: var(--lime); color: #07100b; }
+  .tag.pub { border: 1px solid var(--mint); color: var(--mint); }
+  .head { position: absolute; left: 38px; right: 38px; top: 66px; display: grid; grid-template-columns: 66px 1fr 92px; gap: 12px; padding: 0 16px; font-size: 13px; font-weight: 800; letter-spacing: 0.14em; color: var(--mute); }
+
+  .node { position: absolute; display: grid; place-items: center; }
+  .deliv { position: absolute; width: 330px; height: 150px; padding: 22px 24px; display: flex; gap: 18px; align-items: flex-start; }
+  .deliv .ext { width: 56px; height: 56px; border-radius: 14px; font-size: 16px; flex: none; }
+  .deliv h4 { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; margin-top: 2px; }
+  .deliv p { font-size: 16px; font-weight: 500; color: var(--mute); margin-top: 8px; line-height: 1.45; }
+
+  .diff { position: absolute; left: 0; right: 0; height: 56px; display: flex; align-items: center; gap: 16px; padding: 0 26px; font-family: var(--mono); font-size: 18px; white-space: nowrap; }
+  .diff.del { background: rgba(255, 116, 104, 0.12); color: #ffc2bc; }
+  .diff.add { background: rgba(127, 224, 174, 0.14); color: #c4f4d9; }
+  .diff .sign { width: 14px; font-weight: 800; }
+  .badge { position: absolute; padding: 10px 18px; border-radius: 12px; font: 800 17px Inter, NotoKR, sans-serif; letter-spacing: 0.02em; display: flex; gap: 10px; align-items: center; }
+  .badge.info { background: rgba(127, 224, 174, 0.16); color: var(--mint); border: 1px solid rgba(127, 224, 174, 0.5); }
+  .badge.warn { background: rgba(255, 198, 92, 0.16); color: var(--amber); border: 1px solid rgba(255, 198, 92, 0.5); }
+  .badge.brk { background: rgba(255, 116, 104, 0.16); color: var(--red); border: 1px solid rgba(255, 116, 104, 0.55); }
+  .approve { position: absolute; padding: 16px 34px; border-radius: 999px; background: var(--lime); color: #07100b; font: 800 22px Inter, NotoKR, sans-serif; box-shadow: 0 0 0 0 rgba(205, 242, 106, 0.6); }
+
+  .pill { position: relative; display: flex; align-items: center; gap: 18px; padding: 22px 38px; border-radius: 999px; border: 1px solid rgba(205, 242, 106, 0.4); background: rgba(205, 242, 106, 0.08); font-size: 40px; font-weight: 800; letter-spacing: -0.03em; }
+  .pill .dot { width: 18px; height: 18px; border-radius: 50%; background: var(--lime); box-shadow: 0 0 22px 4px rgba(205, 242, 106, 0.6); }
+  .facts { position: absolute; display: flex; gap: 14px; }
+  .facts span { padding: 12px 22px; border-radius: 999px; border: 1px solid var(--line); background: rgba(16, 31, 23, 0.8); font-size: 21px; font-weight: 700; color: #d6e3da; }
+
+  .cta { position: absolute; display: flex; align-items: center; gap: 14px; padding: 20px 42px; border-radius: 999px; background: var(--lime); color: #07100b; font-size: 28px; font-weight: 800; letter-spacing: -0.02em; }
+  .url { position: absolute; font-size: 24px; font-weight: 700; letter-spacing: 0.04em; color: var(--mute); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <svg id="contours" viewBox="0 0 1360 800" aria-hidden="true"></svg>
+  <div id="glow"></div>
+  <div id="corner">MONO<i>FIELD</i></div>
+
+  <!-- S0 · logo -->
+  <div class="scene" id="s0">
+    <svg class="abs" id="mark" style="left:552px; top:150px" width="176" height="176" viewBox="0 0 444 444" fill="none">
+      <rect id="mark-bg" width="444" height="444" rx="104" fill="#f3f6ee" />
+      <path id="mark-m" d="M92 312V138L222 306L352 138V312" stroke="#07100b" stroke-width="40" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+    <div class="abs" style="left:0; width:1280px; top:366px; text-align:center">
+      <span class="mask" style="font-size:78px; font-weight:800; letter-spacing:-0.05em"><span id="s0-word">monofield</span></span>
+    </div>
+    <div class="abs lede" style="left:0; width:1280px; top:476px; text-align:center; font-size:30px">
+      <span class="mask"><span id="s0-tag" data-i="tag"></span></span>
+    </div>
+  </div>
+
+  <!-- S1 · problem -->
+  <div class="scene" id="s1">
+    <div class="abs eyebrow" style="left:84px; top:150px" id="s1-eyebrow" data-i="s1e"></div>
+    <div class="abs h1" style="left:84px; top:200px; width:600px">
+      <span class="mask"><span class="s1-l" data-i="s1a"></span></span>
+      <span class="mask"><span class="s1-l accent" data-i="s1b"></span></span>
+    </div>
+    <div class="abs lede" style="left:84px; top:466px; width:560px"><span class="mask"><span id="s1-sub" data-i="s1c"></span></span></div>
+    <div class="chip" id="c1" style="left:700px; top:150px">OrderController.java</div>
+    <div class="chip" id="c2" style="left:760px; top:236px">board-sql.xml</div>
+    <div class="chip" id="c3" style="left:690px; top:322px">security-context.xml</div>
+    <div class="chip" id="c4" style="left:742px; top:408px"><span data-i="chipX"></span><b data-i="chipOld"></b></div>
+    <div class="chip" id="c5" style="left:700px; top:494px">MemberMapper.xml</div>
+  </div>
+
+  <!-- S2 · code → spec -->
+  <div class="scene" id="s2">
+    <div class="abs eyebrow" style="left:70px; top:92px" data-i="s2e"></div>
+    <div class="abs h2" style="left:70px; top:122px; width:1100px"><span class="mask"><span id="s2-h" data-i="s2h"></span></span></div>
+    <div class="card" id="codecard" style="left:70px; top:232px; width:540px; height:370px; overflow:hidden">
+      <div class="card-bar"><i></i><i></i><i></i><span style="margin-left:10px">OrderController.java</span></div>
+      <div class="code" id="code"></div>
+      <div id="beam"></div>
+    </div>
+    <svg class="abs" id="flow" style="left:600px; top:380px" width="90" height="80" viewBox="0 0 90 80" fill="none">
+      <path id="flow-p" d="M8 40h64m-18-18 18 18-18 18" stroke="#cdf26a" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+    <div class="card" id="speccard" style="left:690px; top:232px; width:520px; height:370px; overflow:hidden">
+      <div class="card-bar"><i></i><i></i><i></i><span style="margin-left:10px" data-i="specbar"></span></div>
+      <div class="head"><span>METHOD</span><span>PATH</span><span style="text-align:right" data-i="auth"></span></div>
+      <div class="row" id="r1" style="top:104px"><span class="m" style="color:#cdf26a">POST</span><span class="p">/api/v1/orders</span><span class="tag req" data-i="req"></span></div>
+      <div class="row" id="r2" style="top:174px"><span class="m" style="color:#8ec7ff">GET</span><span class="p">/api/v1/orders/{orderId}</span><span class="tag req" data-i="req"></span></div>
+      <div class="row" id="r3" style="top:244px"><span class="m" style="color:#cdf26a">POST</span><span class="p">/api/v1/members/join</span><span class="tag pub" data-i="pub"></span></div>
+    </div>
+    <div class="abs lede" style="left:70px; top:636px; width:1140px; font-size:23px"><span class="mask"><span id="s2-cap" data-i="s2c"></span></span></div>
+  </div>
+
+  <!-- S3 · deliverables -->
+  <div class="scene" id="s3">
+    <div class="abs eyebrow" style="left:70px; top:92px" data-i="s3e"></div>
+    <div class="abs h2" style="left:70px; top:122px; width:1100px"><span class="mask"><span id="s3-h" data-i="s3h"></span></span></div>
+    <svg class="abs" id="links" style="left:0; top:0" width="1280" height="720" viewBox="0 0 1280 720" fill="none">
+      <path class="lk" d="M640 440 C640 380 410 400 330 352" stroke="#cdf26a" stroke-width="2.5" stroke-linecap="round" />
+      <path class="lk" d="M640 440 C640 380 870 400 950 352" stroke="#cdf26a" stroke-width="2.5" stroke-linecap="round" />
+      <path class="lk" d="M640 440 C640 500 410 500 330 560" stroke="#cdf26a" stroke-width="2.5" stroke-linecap="round" />
+      <path class="lk" d="M640 440 C640 500 870 500 950 560" stroke="#cdf26a" stroke-width="2.5" stroke-linecap="round" />
+    </svg>
+    <div class="node" id="hub" style="left:588px; top:388px; width:104px; height:104px; border-radius: 30px; background:#f3f6ee; box-shadow:0 0 70px 10px rgba(205,242,106,.35)">
+      <svg width="62" height="62" viewBox="0 0 444 444" fill="none"><path d="M92 312V138L222 306L352 138V312" stroke="#07100b" stroke-width="44" stroke-linecap="round" stroke-linejoin="round" /></svg>
+    </div>
+    <div class="card deliv" id="d1" style="left:60px; top:277px"><span class="ext" style="background:#7fe0ae">XLSX</span><div><h4 data-i="d1t"></h4><p data-i="d1p"></p></div></div>
+    <div class="card deliv" id="d2" style="left:890px; top:277px"><span class="ext" style="background:#ffc65c">PPTX</span><div><h4 data-i="d2t"></h4><p data-i="d2p"></p></div></div>
+    <div class="card deliv" id="d3" style="left:60px; top:485px"><span class="ext" style="background:#8ec7ff">DOCX</span><div><h4 data-i="d3t"></h4><p data-i="d3p"></p></div></div>
+    <div class="card deliv" id="d4" style="left:890px; top:485px"><span class="ext" style="background:#cdf26a">JSON</span><div><h4 data-i="d4t"></h4><p data-i="d4p"></p></div></div>
+  </div>
+
+  <!-- S4 · diff -->
+  <div class="scene" id="s4">
+    <div class="abs eyebrow" style="left:70px; top:92px" data-i="s4e"></div>
+    <div class="abs h2" style="left:70px; top:122px; width:1100px"><span class="mask"><span id="s4-h" data-i="s4h"></span></span></div>
+    <div class="card" id="diffcard" style="left:70px; top:236px; width:760px; height:350px; overflow:hidden">
+      <div class="card-bar"><i></i><i></i><i></i><span style="margin-left:10px" data-i="diffbar"></span></div>
+      <div class="diff del" id="x1" style="top:46px"><span class="sign">−</span><span>POST /api/v1/orders · deliveryMemo</span></div>
+      <div class="diff add" id="x2" style="top:102px"><span class="sign">+</span><span>POST /api/v1/orders · deliveryMemo (N, 200)</span></div>
+      <div class="diff del" id="x3" style="top:178px"><span class="sign">−</span><span>GET /api/v1/orders/{id} · legacyCode</span></div>
+      <div class="diff add" id="x4" style="top:234px"><span class="sign">+</span><span>GET /api/v1/orders/{id} · statusCode</span></div>
+      <div class="diff" id="x5" style="top:290px; color:var(--mute)"><span class="sign"> </span><span>…</span></div>
+    </div>
+    <div class="badge info" id="b1" style="left:880px; top:250px"><span>●</span><span data-i="bInfo"></span></div>
+    <div class="badge warn" id="b2" style="left:880px; top:330px"><span>●</span><span data-i="bWarn"></span></div>
+    <div class="badge brk" id="b3" style="left:880px; top:410px"><span>●</span><span data-i="bBrk"></span></div>
+    <div class="approve" id="ok" style="left:880px; top:510px" data-i="approve"></div>
+    <div class="abs lede" style="left:70px; top:636px; width:1140px; font-size:23px"><span class="mask"><span id="s4-cap" data-i="s4c"></span></span></div>
+  </div>
+
+  <!-- S5 · agents & local -->
+  <div class="scene" id="s5">
+    <div class="abs eyebrow" style="left:0; width:1280px; text-align:center; top:130px" data-i="s5e"></div>
+    <div class="abs h1" style="left:0; width:1280px; text-align:center; top:176px"><span class="mask"><span id="s5-h" data-i="s5h"></span></span></div>
+    <div class="abs" style="left:0; width:1280px; top:340px; display:flex; justify-content:center; gap:44px">
+      <div class="pill" id="p1"><span class="dot"></span>Codex</div>
+      <div class="pill" id="p2"><span class="dot"></span>Claude Code</div>
+    </div>
+    <div class="facts" id="facts" style="left:0; width:1280px; justify-content:center; top:520px">
+      <span data-i="f1"></span><span data-i="f2"></span><span>Apache-2.0</span><span data-i="f3"></span>
+    </div>
+  </div>
+
+  <!-- S6 · end -->
+  <div class="scene" id="s6">
+    <svg class="abs" id="mark2" style="left:582px; top:120px" width="116" height="116" viewBox="0 0 444 444" fill="none">
+      <rect width="444" height="444" rx="104" fill="#f3f6ee" />
+      <path d="M92 312V138L222 306L352 138V312" stroke="#07100b" stroke-width="40" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+    <div class="abs" style="left:0; width:1280px; top:262px; text-align:center"><span class="mask" style="font-size:68px; font-weight:800; letter-spacing:-0.05em"><span id="s6-word">monofield</span></span></div>
+    <div class="abs lede" style="left:0; width:1280px; top:372px; text-align:center; font-size:30px"><span class="mask"><span id="s6-tag" data-i="s6t"></span></span></div>
+    <div class="cta" id="cta" style="left:0; top:470px"><span data-i="cta"></span><span>↓</span></div>
+    <div class="url" id="url" style="left:0; width:1280px; text-align:center; top:576px">monofield.vercel.app</div>
+  </div>
+
+  <div id="progress"></div>
+</div>
+
+<script>
+const DURATION = 30;
+const params = new URLSearchParams(location.search);
+const lang = params.get('lang') === 'en' ? 'en' : 'ko';
+document.documentElement.lang = lang;
+
+const L = {
+  ko: {
+    tag: '코드에서 SI 산출물까지',
+    s1e: '매번 반복되는 일', s1a: '코드는 계속 바뀌는데,', s1b: '문서는 그대로입니다.', s1c: '레거시 코드, 낡은 산출물, 끝나지 않는 인수인계.',
+    chipX: '인터페이스_명세서_최종_진짜최종.xlsx', chipOld: '6개월 전',
+    s2e: '01 · 코드에서 명세서로', s2h: '폴더를 열면 명세서가 만들어집니다.', specbar: '인터페이스 명세서', auth: '인증',
+    req: '인증 필요', pub: '공개', s2c: '컨트롤러·DTO·보안 설정을 읽어 인터페이스 명세서 Excel을 만듭니다.',
+    s3e: '02 · 산출물까지 한 번에', s3h: '명세서에서 문서까지, 한 작업대에서.',
+    d1t: '인터페이스 명세서', d1p: '엔드포인트·필드·인증을 담은 Excel',
+    d2t: '화면명세서', d2p: '화면 구성과 흐름을 정리한 PPTX',
+    d3t: '인수인계 문서', d3p: '근거를 담은 Word 문서',
+    d4t: 'OpenAPI 3.1', d4p: '게이트웨이·목 서버·테스트에 바로',
+    s4e: '03 · 변경은 diff로', s4h: '코드가 바뀌면, 명세서 변경을 검토하세요.', diffbar: '명세서 변경 diff',
+    bInfo: '호환 · INFO', bWarn: '주의 · WARNING', bBrk: '호환 깨짐 · BREAKING', approve: '검토 후 반영', s4c: '변경 위험도를 분류해 보여주고, 승인한 변경만 명세서에 반영합니다.',
+    s5e: '04 · 내 PC에서', s5h: '쓰던 AI 그대로, 내 PC에서.', f1: '로컬 실행', f2: '무료', f3: 'Windows',
+    s6t: 'Codex·Claude Code로 SI 산출물까지 끝내는 작업대', cta: 'Windows 무료 다운로드',
+  },
+  en: {
+    tag: 'From code to SI deliverables',
+    s1e: 'THE USUAL STORY', s1a: 'The code keeps changing.', s1b: "The documents don't.", s1c: 'Legacy code, stale deliverables, handover that never ends.',
+    chipX: 'interface_spec_v3_FINAL_final.xlsx', chipOld: '6 months old',
+    s2e: '01 · CODE TO SPEC', s2h: 'Open a folder. Get the spec.', specbar: 'Interface specification', auth: 'AUTH',
+    req: 'Required', pub: 'Public', s2c: 'Reads controllers, DTOs and security config to build the interface spec workbook.',
+    s3e: '02 · ALL DELIVERABLES', s3h: 'From spec to documents, in one workbench.',
+    d1t: 'Interface spec', d1p: 'Excel with endpoints, fields and auth',
+    d2t: 'Screen spec', d2p: 'PPTX of screens and flows',
+    d3t: 'Handover document', d3p: 'Word document, with evidence',
+    d4t: 'OpenAPI 3.1', d4p: 'For gateways, mocks and contract tests',
+    s4e: '03 · CHANGES AS DIFFS', s4h: 'When code changes, review the spec update.', diffbar: 'Spec change diff',
+    bInfo: 'Compatible · INFO', bWarn: 'Careful · WARNING', bBrk: 'Breaking · BREAKING', approve: 'Review and apply', s4c: 'Every change is classified by risk; only approved changes reach the spec.',
+    s5e: '04 · ON YOUR PC', s5h: 'The AI you already use. On your PC.', f1: 'Runs locally', f2: 'Free', f3: 'Windows',
+    s6t: 'The workbench that takes Codex and Claude Code all the way to SI deliverables', cta: 'Free Windows download',
+  },
+}[lang];
+document.querySelectorAll('[data-i]').forEach((node) => { node.textContent = L[node.dataset.i]; });
+if (lang === 'en') {
+  document.getElementById('s6-tag').style.fontSize = '24px';
+}
+
+// --- code card content ---------------------------------------------------
+const codeLines = [
+  '<span class="k">@RestController</span>',
+  '<span class="k">@RequestMapping</span>(<span class="s">"/api/v1/orders"</span>)',
+  '<span class="k">class</span> <span class="t">OrderController</span> {',
+  '  <span class="k">@PostMapping</span>',
+  '  OrderResponse create(OrderRequest r)',
+  '',
+  '  <span class="k">@GetMapping</span>(<span class="s">"/{orderId}"</span>)',
+  '  OrderResponse get(Long orderId)',
+  '}',
+];
+const codeEl = document.getElementById('code');
+codeEl.innerHTML = codeLines.map((line) => `<span class="l">${line || ' '}</span>`).join('');
+
+// --- contour field ---------------------------------------------------------
+const contours = document.getElementById('contours');
+const NS = 'http://www.w3.org/2000/svg';
+const contourPaths = [];
+for (let i = 0; i < 15; i += 1) {
+  const phase = i * 0.52;
+  const base = 70 + i * 48;
+  let d = '';
+  for (let x = 0; x <= 1360; x += 20) {
+    const y = base + Math.sin(x / 210 + phase) * 46 + Math.sin(x / 95 + phase * 1.7) * 14 - x * 0.1;
+    d += `${x === 0 ? 'M' : 'L'}${x} ${y.toFixed(1)}`;
+  }
+  const path = document.createElementNS(NS, 'path');
+  path.setAttribute('d', d);
+  path.setAttribute('stroke-width', i % 4 === 0 ? '1.6' : '1');
+  contours.appendChild(path);
+  contourPaths.push(path);
+}
+
+// --- timeline ---------------------------------------------------------------
+const animations = [];
+const EASE = 'cubic-bezier(0.23, 1, 0.32, 1)';
+function A(el, keyframes, at, dur, { ease = EASE, fill = 'both' } = {}) {
+  const animation = el.animate(keyframes, { delay: at * 1000, duration: dur * 1000, easing: ease, fill });
+  animation.pause();
+  animations.push(animation);
+  return animation;
+}
+// A scene fades in, holds, fades out; it also drifts slightly like a slow camera push.
+function scene(id, start, end) {
+  const el = document.getElementById(id);
+  const total = end - start;
+  const fade = Math.min(0.45, total / 4);
+  A(el, [
+    { opacity: 0, transform: 'scale(1.0)', offset: 0 },
+    { opacity: 1, offset: fade / total },
+    { opacity: 1, offset: 1 - fade / total },
+    { opacity: 0, transform: 'scale(1.035)', offset: 1 },
+  ], start, total, { ease: 'linear' });
+}
+function rise(el, at, dur = 0.8, from = 105) {
+  A(el, [{ transform: `translateY(${from}%)` }, { transform: 'translateY(0)' }], at, dur);
+}
+function fadeUp(el, at, dur = 0.7, from = 26) {
+  A(el, [{ opacity: 0, transform: `translateY(${from}px)` }, { opacity: 1, transform: 'translateY(0)' }], at, dur);
+}
+function pop(el, at, dur = 0.6) {
+  A(el, [{ opacity: 0, transform: 'translateY(18px) scale(0.94)' }, { opacity: 1, transform: 'translateY(0) scale(1)' }], at, dur);
+}
+function reveal(el, at, dur) {
+  A(el, [{ clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0% 0 0)' }], at, dur, { ease: 'linear' });
+}
+
+const SCENES = { s0: [0, 3.5], s1: [3.1, 8.3], s2: [7.9, 14.1], s3: [13.7, 19.1], s4: [18.7, 24.7], s5: [24.3, 28.3], s6: [27.9, DURATION] };
+Object.entries(SCENES).forEach(([id, [start, end]]) => scene(id, start, end));
+
+// contours: draw in, drift, and breathe with the story
+contourPaths.forEach((path, index) => {
+  const length = path.getTotalLength();
+  path.style.strokeDasharray = `${length}`;
+  A(path, [{ strokeDashoffset: length }, { strokeDashoffset: 0 }], 0.1 + index * 0.07, 2.2, { ease: 'cubic-bezier(0.3, 0, 0.1, 1)' });
+  A(path, [{ opacity: 0.2 }, { opacity: 0.28 }, { opacity: 0.12 }, { opacity: 0.12 }, { opacity: 0.3 }], 0, DURATION, { ease: 'linear', fill: 'both' });
+});
+A(contours, [{ transform: 'translate(0, 0)' }, { transform: 'translate(-70px, 24px)' }], 0, DURATION, { ease: 'linear' });
+A(document.getElementById('glow'), [
+  { transform: 'translate(430px, 40px)' },
+  { transform: 'translate(40px, 80px)', offset: 0.2 },
+  { transform: 'translate(780px, 20px)', offset: 0.45 },
+  { transform: 'translate(300px, 300px)', offset: 0.7 },
+  { transform: 'translate(560px, 60px)' },
+], 0, DURATION, { ease: 'linear' });
+A(document.getElementById('progress'), [{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], 0, DURATION, { ease: 'linear' });
+A(document.getElementById('corner'), [{ opacity: 0 }, { opacity: 0 }, { opacity: 1 }], 0, 3.6, { ease: 'linear' });
+A(document.getElementById('corner'), [{ opacity: 1 }, { opacity: 0 }], 27.6, 0.5, { ease: 'linear', fill: 'forwards' });
+
+// S0 · logo
+{
+  const bg = document.getElementById('mark-bg');
+  const m = document.getElementById('mark-m');
+  const mLen = m.getTotalLength();
+  m.style.strokeDasharray = `${mLen}`;
+  A(document.getElementById('mark'), [{ opacity: 0, transform: 'scale(0.9)' }, { opacity: 1, transform: 'scale(1)' }], 0.15, 0.9);
+  A(bg, [{ opacity: 0 }, { opacity: 1 }], 0.15, 0.5);
+  A(m, [{ strokeDashoffset: mLen }, { strokeDashoffset: 0 }], 0.55, 1.0, { ease: 'cubic-bezier(0.65, 0, 0.35, 1)' });
+  rise(document.getElementById('s0-word'), 1.1, 0.9);
+  rise(document.getElementById('s0-tag'), 1.5, 0.9);
+}
+
+// S1 · problem
+{
+  fadeUp(document.getElementById('s1-eyebrow'), 3.45, 0.6, 14);
+  document.querySelectorAll('.s1-l').forEach((line, i) => rise(line, 3.6 + i * 0.28, 0.85));
+  rise(document.getElementById('s1-sub'), 4.5, 0.8);
+  ['c1', 'c2', 'c3', 'c4', 'c5'].forEach((id, i) => {
+    const el = document.getElementById(id);
+    pop(el, 4.0 + i * 0.22, 0.7);
+    A(el, [{ translate: '0 0' }, { translate: `${i % 2 ? -14 : 14}px ${i % 2 ? 10 : -10}px` }, { translate: '0 0' }], 4.2, 4.0, { ease: 'ease-in-out' });
+  });
+  // the stale spreadsheet gets a warning pulse
+  A(document.getElementById('c4'), [{ borderColor: 'rgba(205,242,106,0.16)' }, { borderColor: 'rgba(255,116,104,0.9)' }], 5.9, 0.5, { ease: 'linear' });
+}
+
+// S2 · code → spec
+{
+  fadeUp(document.getElementById('s2').querySelector('.eyebrow'), 8.05, 0.6, 14);
+  rise(document.getElementById('s2-h'), 8.2, 0.85);
+  pop(document.getElementById('codecard'), 8.5, 0.8);
+  pop(document.getElementById('speccard'), 8.7, 0.8);
+  const lines = Array.from(codeEl.children);
+  lines.forEach((line, i) => {
+    reveal(line, 9.0 + i * 0.16, 0.34);
+    // light each line up when the scan beam reaches it
+    A(line, [{ opacity: 0.32 }, { opacity: 1 }], 9.9 + i * 0.19, 0.3, { ease: 'linear' });
+  });
+  const beam = document.getElementById('beam');
+  A(beam, [{ opacity: 0, top: '70px' }, { opacity: 1, top: '110px', offset: 0.1 }, { opacity: 1, top: '320px', offset: 0.9 }, { opacity: 0, top: '340px' }], 9.8, 2.2, { ease: 'linear' });
+  A(document.getElementById('flow'), [{ opacity: 0, transform: 'translateX(-16px)' }, { opacity: 1, transform: 'translateX(0)' }], 10.6, 0.7);
+  ['r1', 'r2', 'r3'].forEach((id, i) => {
+    A(document.getElementById(id), [{ opacity: 0, transform: 'translateX(34px)' }, { opacity: 1, transform: 'translateX(0)' }], 11.0 + i * 0.5, 0.7);
+  });
+  rise(document.getElementById('s2-cap'), 12.3, 0.8);
+}
+
+// S3 · deliverables
+{
+  fadeUp(document.getElementById('s3').querySelector('.eyebrow'), 13.85, 0.6, 14);
+  rise(document.getElementById('s3-h'), 14.0, 0.85);
+  A(document.getElementById('hub'), [{ opacity: 0, transform: 'scale(0.86)' }, { opacity: 1, transform: 'scale(1)' }], 14.3, 0.8);
+  A(document.getElementById('hub'), [{ transform: 'scale(1)' }, { transform: 'scale(1.06)' }, { transform: 'scale(1)' }], 15.4, 3.4, { ease: 'ease-in-out', fill: 'none' });
+  document.querySelectorAll('.lk').forEach((path, i) => {
+    const length = path.getTotalLength();
+    path.style.strokeDasharray = `${length}`;
+    A(path, [{ strokeDashoffset: length }, { strokeDashoffset: 0 }], 14.7 + i * 0.18, 0.9, { ease: 'cubic-bezier(0.3, 0, 0.1, 1)' });
+  });
+  ['d1', 'd2', 'd3', 'd4'].forEach((id, i) => pop(document.getElementById(id), 15.1 + i * 0.28, 0.7));
+}
+
+// S4 · diff
+{
+  fadeUp(document.getElementById('s4').querySelector('.eyebrow'), 18.85, 0.6, 14);
+  rise(document.getElementById('s4-h'), 19.0, 0.85);
+  pop(document.getElementById('diffcard'), 19.4, 0.8);
+  ['x1', 'x2', 'x3', 'x4', 'x5'].forEach((id, i) => {
+    A(document.getElementById(id), [{ opacity: 0, transform: 'translateX(-22px)' }, { opacity: 1, transform: 'translateX(0)' }], 19.9 + i * 0.32, 0.5);
+  });
+  ['b1', 'b2', 'b3'].forEach((id, i) => pop(document.getElementById(id), 21.0 + i * 0.4, 0.6));
+  const ok = document.getElementById('ok');
+  pop(ok, 22.4, 0.6);
+  A(ok, [{ boxShadow: '0 0 0 0 rgba(205,242,106,0.6)' }, { boxShadow: '0 0 0 22px rgba(205,242,106,0)' }], 23.0, 1.1, { ease: 'ease-out', fill: 'none' });
+  rise(document.getElementById('s4-cap'), 22.0, 0.8);
+}
+
+// S5 · agents & local
+{
+  fadeUp(document.getElementById('s5').querySelector('.eyebrow'), 24.45, 0.6, 14);
+  rise(document.getElementById('s5-h'), 24.6, 0.9);
+  pop(document.getElementById('p1'), 25.0, 0.7);
+  pop(document.getElementById('p2'), 25.25, 0.7);
+  A(document.getElementById('facts'), [{ opacity: 0, transform: 'translateY(20px)' }, { opacity: 1, transform: 'translateY(0)' }], 25.7, 0.7);
+}
+
+// S6 · end card
+{
+  A(document.getElementById('mark2'), [{ opacity: 0, transform: 'scale(0.9)' }, { opacity: 1, transform: 'scale(1)' }], 28.1, 0.8);
+  rise(document.getElementById('s6-word'), 28.4, 0.9);
+  rise(document.getElementById('s6-tag'), 28.7, 0.9);
+  const cta = document.getElementById('cta');
+  // centre the pill without depending on its measured width
+  cta.style.left = '50%'; cta.style.marginLeft = `${-cta.offsetWidth / 2}px`;
+  pop(cta, 29.0, 0.7);
+  fadeUp(document.getElementById('url'), 29.3, 0.6, 12);
+}
+
+window.seek = (seconds) => {
+  const t = Math.max(0, Math.min(DURATION, seconds)) * 1000;
+  animations.forEach((animation) => { animation.currentTime = t; });
+};
+window.DURATION = DURATION;
+window.__ready = document.fonts.ready.then(() => true);
+
+if (!params.has('paused')) {
+  const started = performance.now();
+  const tick = () => {
+    window.seek(((performance.now() - started) / 1000) % (DURATION + 1.2));
+    requestAnimationFrame(tick);
+  };
+  tick();
+} else {
+  window.seek(0);
+}
+</script>
+</body>
+</html>

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#f8f9f5" />
+    <meta name="theme-color" content="#08110c" />
     <meta name="application-name" content="MonoField" />
     <meta
       name="description"
@@ -67,6 +67,7 @@
     <link rel="manifest" href="/site.webmanifest" />
     <link rel="stylesheet" href="/styles.css" />
     <script src="/script.js" defer></script>
+    <script src="/motion.js" defer></script>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -124,6 +125,17 @@
               "availability": "https://schema.org/InStock",
               "url": "https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.2/MonoField-release-preview-win-setup.exe"
             }
+          },
+          {
+            "@type": "VideoObject",
+            "@id": "https://monofield.vercel.app/#intro-video",
+            "name": "MonoField 30-second intro",
+            "description": "A silent, captioned 30-second tour: generate an interface spec from code, export every deliverable, review spec changes as diffs, and keep working with Codex or Claude Code on your own PC.",
+            "thumbnailUrl": "https://monofield.vercel.app/intro/monofield-intro-en-poster.jpg",
+            "contentUrl": "https://monofield.vercel.app/intro/monofield-intro-en.mp4",
+            "uploadDate": "2026-10-24",
+            "duration": "PT30S",
+            "inLanguage": ["ko", "en"]
           }
         ]
       }
@@ -199,12 +211,9 @@
     </header>
     <main id="main">
       <section class="hero" id="top" aria-labelledby="hero-title">
-        <div class="hero-contours" aria-hidden="true">
-          <svg viewBox="0 0 1440 1000" preserveAspectRatio="none">
-            <path
-              d="M-300 750C350-350 580 650 1630 40M-300 830C350-270 580 730 1630 120M-300 910C350-190 580 810 1630 200M-300 990C350-110 580 890 1630 280"
-            />
-          </svg>
+        <div class="hero-bg" aria-hidden="true">
+          <svg class="hero-contours" data-contours viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice"></svg>
+          <span class="hero-glow"></span>
         </div>
         <div class="hero-content">
           <p class="eyebrow">
@@ -248,21 +257,13 @@
                 aria-hidden="true"
               >
                 <path d="M12 3v12m-5-5 5 5 5-5M5 17v4h14v-4" /></svg></a
-            ><a class="button button-secondary" href="#product"
-              ><span data-ko="앱 둘러보기" data-en="Explore the app"
-                >앱 둘러보기</span
-              ><svg
-                class="icon"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.7"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M5 12h14M13 6l6 6-6 6" /></svg
-            ></a>
+            ><a class="button button-secondary button-video" href="#intro" data-play-intro
+              ><span class="play-dot" aria-hidden="true"
+                ><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z" /></svg></span
+              ><span data-ko="30초 소개 영상" data-en="Watch the 30-second intro"
+                >30초 소개 영상</span
+              ></a
+            >
           </div>
           <a class="hero-preview-link" href="#preview">
             <span class="release-pill">NEW</span>
@@ -279,7 +280,13 @@
             >
           </p>
         </div>
-        <figure class="hero-workspace">
+        <figure class="hero-workspace" data-tilt>
+          <div class="hero-floats" aria-hidden="true">
+            <span class="float float-1"><b class="ext ext-xlsx">XLSX</b><span data-ko="인터페이스 명세서" data-en="Interface spec">인터페이스 명세서</span></span>
+            <span class="float float-2"><b class="ext ext-pptx">PPTX</b><span data-ko="화면명세서" data-en="Screen spec">화면명세서</span></span>
+            <span class="float float-3"><b class="ext ext-docx">DOCX</b><span data-ko="인수인계 문서" data-en="Handover doc">인수인계 문서</span></span>
+            <span class="float float-4"><b class="ext ext-json">JSON</b><span>OpenAPI 3.1</span></span>
+          </div>
           <button
             class="screenshot-button"
             type="button"
@@ -312,6 +319,7 @@
                 >크게 보기</span
               ></span
             >
+            <span class="scan-line" aria-hidden="true"></span>
           </button>
           <figcaption>
             <span class="caption-dot" aria-hidden="true"></span
@@ -323,24 +331,14 @@
           </figcaption>
         </figure>
       </section>
-      <section
-        class="agent-strip container"
-        aria-label="Supported agent connections"
-      >
-        <p
-          data-ko="이미 쓰고 있는 AI와 함께."
-          data-en="Works with the AI you already use."
-        >
-          이미 쓰고 있는 AI와 함께.
-        </p>
-        <div class="agent-names">
-          <span>Codex</span><span>Claude Code</span><span>Gemini</span
-          ><span>OpenCode</span
-          ><span class="endpoint-label"
-            ><span data-ko="내 API 키" data-en="Your API key"
-              >내 API 키</span
-            ></span
-          >
+      <section class="agent-strip" aria-label="Supported agent connections">
+        <p class="agent-lead" data-ko="이미 쓰고 있는 AI와 함께." data-en="Works with the AI you already use.">이미 쓰고 있는 AI와 함께.</p>
+        <div class="marquee">
+          <div class="marquee-track">
+            <div class="agent-names"><span>Codex</span><span>Claude Code</span><span>Gemini</span><span>OpenCode</span><span class="endpoint-label"><span data-ko="내 API 키" data-en="Your API key">내 API 키</span></span></div>
+            <div class="agent-names" aria-hidden="true"><span>Codex</span><span>Claude Code</span><span>Gemini</span><span>OpenCode</span><span class="endpoint-label"><span >내 API 키</span></span></div>
+            <div class="agent-names" aria-hidden="true"><span>Codex</span><span>Claude Code</span><span>Gemini</span><span>OpenCode</span><span class="endpoint-label"><span >내 API 키</span></span></div>
+          </div>
         </div>
         <p
           data-ko="설치·로그인한 에이전트 또는 직접 설정한 모델을 연결하세요. 모델 이용료는 각 제공업체 기준으로 적용됩니다."
@@ -350,6 +348,32 @@
           설치·로그인한 에이전트 또는 직접 설정한 모델을 연결하세요. 모델
           이용료는 각 제공업체 기준으로 적용됩니다.
         </p>
+      </section>
+      <section class="intro-section" id="intro" aria-labelledby="intro-title">
+        <div class="container intro-grid">
+          <div class="intro-copy">
+            <p class="eyebrow"><span class="status-dot" aria-hidden="true"></span><span data-ko="소개 영상 · 30초" data-en="INTRO VIDEO · 30 SEC">소개 영상 · 30초</span></p>
+            <h2 id="intro-title">
+              <span data-ko="30초면 충분합니다." data-en="Thirty seconds is enough.">30초면 충분합니다.</span>
+              <span data-ko="코드에서 SI 산출물까지." data-en="From code to SI deliverables.">코드에서 SI 산출물까지.</span>
+            </h2>
+            <p class="intro-lede" data-ko="폴더를 열면 명세서가 만들어지고, 코드가 바뀌면 변경이 diff로 보입니다. 소리 없이 자막만으로 볼 수 있게 만들었습니다." data-en="Open a folder and the spec appears; change the code and the update shows up as a diff. Made to be watched without sound.">폴더를 열면 명세서가 만들어지고, 코드가 바뀌면 변경이 diff로 보입니다. 소리 없이 자막만으로 볼 수 있게 만들었습니다.</p>
+            <ol class="chapters" aria-label="Video chapters">
+              <li><button type="button" data-seek="7.9"><span class="chapter-time">0:08</span><span data-ko="코드에서 명세서로" data-en="Code to spec">코드에서 명세서로</span></button></li>
+              <li><button type="button" data-seek="13.7"><span class="chapter-time">0:14</span><span data-ko="산출물까지 한 번에" data-en="All deliverables">산출물까지 한 번에</span></button></li>
+              <li><button type="button" data-seek="18.7"><span class="chapter-time">0:19</span><span data-ko="변경은 diff로" data-en="Changes as diffs">변경은 diff로</span></button></li>
+              <li><button type="button" data-seek="24.3"><span class="chapter-time">0:24</span><span data-ko="쓰던 AI, 내 PC에서" data-en="Your AI, on your PC">쓰던 AI, 내 PC에서</span></button></li>
+            </ol>
+          </div>
+          <div class="intro-player">
+            <video id="intro-video" controls preload="metadata" playsinline poster="/intro/monofield-intro-ko-poster.jpg" width="1280" height="720" aria-label="MonoField intro video">
+              <source src="/intro/monofield-intro-ko.mp4" type="video/mp4" />
+            </video>
+            <button class="intro-play" type="button" data-intro-play aria-label="영상 재생">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" /></svg>
+            </button>
+          </div>
+        </div>
       </section>
       <section
         class="product-section container"

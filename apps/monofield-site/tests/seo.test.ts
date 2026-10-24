@@ -150,3 +150,35 @@ test('static hosting serves crawl files with explicit content types and bounded 
   assert.match(headerValue('/robots.txt', 'Cache-Control') ?? '', /must-revalidate/);
   assert.match(headerValue('/sitemap.xml', 'Cache-Control') ?? '', /must-revalidate/);
 });
+
+test('intro video ships both languages with posters, structured data and no inline script', async () => {
+  const [koVideo, enVideo, koPoster, enPoster, motion, styles] = await Promise.all([
+    readFile(new URL('../intro/monofield-intro-ko.mp4', import.meta.url)),
+    readFile(new URL('../intro/monofield-intro-en.mp4', import.meta.url)),
+    readFile(new URL('../intro/monofield-intro-ko-poster.jpg', import.meta.url)),
+    readFile(new URL('../intro/monofield-intro-en-poster.jpg', import.meta.url)),
+    readFile(new URL('../motion.js', import.meta.url), 'utf8'),
+    readFile(new URL('../styles.css', import.meta.url), 'utf8'),
+  ]);
+  for (const video of [koVideo, enVideo]) {
+    assert.equal(video.toString('ascii', 4, 8), 'ftyp', 'MP4 container');
+    assert.ok(video.byteLength > 200_000 && video.byteLength < 6_000_000);
+  }
+  for (const poster of [koPoster, enPoster]) {
+    assert.deepEqual([...poster.subarray(0, 3)], [0xff, 0xd8, 0xff], 'JPEG poster');
+  }
+  assert.match(home, /<video[^>]+id="intro-video"[^>]*poster="\/intro\/monofield-intro-ko-poster\.jpg"/);
+  assert.match(home, /<source src="\/intro\/monofield-intro-ko\.mp4" type="video\/mp4"/);
+  assert.match(home, /<script src="\/motion\.js" defer><\/script>/);
+  assert.doesNotMatch(home, /<script(?![^>]*\bsrc=)(?![^>]*application\/ld\+json)[^>]*>/i, 'CSP forbids inline scripts');
+
+  const video = structuredData(home)[0]?.['@graph']?.find((entry: Record<string, any>) => entry['@type'] === 'VideoObject');
+  assert.equal(video?.thumbnailUrl, `${siteUrl}/intro/monofield-intro-en-poster.jpg`);
+  assert.equal(video?.contentUrl, `${siteUrl}/intro/monofield-intro-en.mp4`);
+  assert.equal(video?.duration, 'PT30S');
+
+  // Motion is progressive and must stand down for reduced-motion visitors.
+  assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
+  assert.match(motion, /prefers-reduced-motion: reduce/);
+  assert.match(vercelSource, /"\/intro\/\(\.\*\)"/);
+});

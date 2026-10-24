@@ -41,3 +41,15 @@ The hero and preview section also link to the published `0.11.7-preview.2` relea
 Microsoft Store is hidden until a valid listing ID is configured in `index.html`. Do not invent a listing or display an unverified Store download button.
 
 The Korean/English language choice, project tabs, screenshot enlargement, mobile navigation, and FAQ work without a frontend framework. Disabled browser storage does not block navigation or downloads. The upstream license attribution remains on `/open-source`.
+
+## Motion and the intro video
+
+`motion.js` is a progressive layer on top of the static page: header tone, hero contour drawing, pointer parallax, scroll reveals, and the intro video controls. Without JavaScript every section is visible, and everything stands down under `prefers-reduced-motion`.
+
+The 30-second intro in `/intro` (Korean and English MP4 plus posters) is a silent, captioned motion piece. Its source is `intro-src/scene.html`, a pure function of time, so frames are exact. Re-render and refresh both the site copy and the in-app copy (`apps/web/public/guide`) with:
+
+```bash
+pnpm --filter @open-design/e2e exec tsx scripts/render-intro-video.ts
+```
+
+It needs `ffmpeg` and fetches the OFL fonts (Inter, Noto Sans KR) from npm once into the OS temp directory. Add `--preview 2,9.5,16` to write still frames instead. `intro-src` is excluded from the Vercel deployment; the CSP only allows same-origin scripts, so the scene is a render source, not a page.

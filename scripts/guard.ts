@@ -29,6 +29,8 @@ const allowedE2eScripts = new Set([
   "e2e/scripts/token-benchmark.ts",
   // Reproducible Spring interface-spec demo (docs/demo/spring-interface-spec-demo.md).
   "e2e/scripts/spring-spec-demo.ts",
+  // Renders the intro motion piece (apps/monofield-site/intro-src/scene.html) to the site and in-app videos.
+  "e2e/scripts/render-intro-video.ts",
   "e2e/scripts/all-in-one.ts",
   "e2e/scripts/visual-report.ts",
 ]);
@@ -92,6 +94,8 @@ const residualAllowedExactPaths = new Set([
   // Its language and preview-tab controller must remain a browser-loadable
   // JavaScript asset because Vercel serves this directory without a compile step.
   "apps/monofield-site/script.js",
+  // Same constraint for its progressive motion layer (reveals, parallax, intro video).
+  "apps/monofield-site/motion.js",
   // PostCSS loads Tailwind through a web-local .mjs compatibility config entry.
   "apps/web/postcss.config.mjs",
   "scripts/bake-html-ppt-examples.mjs",
