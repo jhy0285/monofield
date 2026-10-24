@@ -1,4 +1,5 @@
 import { expect, test } from '@/playwright/suite';
+import { markFeatureGuidesSeen } from '@/playwright/feature-guides';
 import type { Page } from '@playwright/test';
 import { gotoEntryHome } from '@/playwright/entry';
 import { APP_CONFIG_URL, routeAgents } from '@/playwright/mock-factory';
@@ -311,6 +312,8 @@ test.beforeEach(async ({ page }) => {
     window.sessionStorage.clear();
     window.localStorage.setItem(key, JSON.stringify(value));
   }, { key: STORAGE_KEY, value: HOME_CONFIG });
+  // The init script above wipes localStorage, so mark the first-visit tours as seen again.
+  await markFeatureGuidesSeen(page);
 
   await routeAgents(page, [
     {
