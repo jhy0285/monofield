@@ -18,10 +18,11 @@
   position: fixed;
   z-index: 1;
   pointer-events: none;
-  border: 2px solid #8ea8ff;
+  border: 2px solid #cdf26a;
   border-radius: 13px;
-  box-shadow: 0 0 0 4px rgb(118 152 253 / 20%), 0 0 34px rgb(118 152 253 / 34%);
-  transition: top 180ms ease, left 180ms ease, width 180ms ease, height 180ms ease;
+  box-shadow: 0 0 0 4px rgb(205 242 106 / 22%), 0 0 34px rgb(205 242 106 / 30%);
+  transition: top 180ms cubic-bezier(.23, 1, .32, 1), left 180ms cubic-bezier(.23, 1, .32, 1), width 180ms cubic-bezier(.23, 1, .32, 1), height 180ms cubic-bezier(.23, 1, .32, 1);
+  animation: feature-guide-pulse 2.6s ease-in-out 400ms infinite;
 }
 
 .callout {
@@ -39,6 +40,15 @@
   animation: feature-guide-callout-in 200ms cubic-bezier(.23, 1, .32, 1) both;
 }
 
+/* Brand accent along the top edge of the callout. */
+.callout::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: linear-gradient(90deg, #cdf26a, #7fe0ae);
+}
+
 .callout > header {
   min-height: 48px;
   display: flex;
@@ -49,10 +59,22 @@
 }
 
 .callout > header > span {
-  color: var(--blue);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
   font: 650 9px/1 var(--font-mono);
   letter-spacing: .13em;
   text-transform: uppercase;
+}
+
+.callout > header > span::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #cdf26a;
+  box-shadow: 0 0 0 3px rgb(205 242 106 / 28%);
 }
 
 .copy {
@@ -61,10 +83,10 @@
 
 .copy h2 {
   margin: 0 0 9px;
-  font-size: 22px;
+  font-size: 24px;
   line-height: 1.14;
-  letter-spacing: -.035em;
-  font-weight: 650;
+  letter-spacing: -.04em;
+  font-weight: 700;
 }
 
 .copy p {
@@ -84,13 +106,22 @@
 }
 
 .copy li {
-  padding: 6px 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
   color: var(--text);
   background: var(--bg-subtle);
   border: 1px solid var(--border);
-  border-radius: 7px;
-  font-size: 11px;
+  border-radius: 999px;
+  font-size: 11.5px;
   line-height: 1;
+}
+
+.copy li::before {
+  content: '✓';
+  color: var(--green);
+  font-weight: 800;
 }
 
 .callout > footer {
@@ -103,6 +134,10 @@
 }
 
 @keyframes feature-guide-blind-in { from { opacity: 0; } }
+@keyframes feature-guide-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgb(205 242 106 / 22%), 0 0 30px rgb(205 242 106 / 24%); }
+  50% { box-shadow: 0 0 0 9px rgb(205 242 106 / 10%), 0 0 46px rgb(205 242 106 / 38%); }
+}
 @keyframes feature-guide-callout-in { from { opacity: 0; transform: translateY(7px) scale(.985); } }
 
 @media (max-width: 620px) {

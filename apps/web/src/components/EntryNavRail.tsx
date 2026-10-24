@@ -35,6 +35,7 @@ interface Props {
   /** Collapse the rail — called after a destination is chosen or the user dismisses it. */
   onClose: () => void;
   onOpenFeatureGuide?: () => void;
+  onOpenGuide?: () => void;
 }
 
 interface NavButtonProps {
@@ -62,7 +63,7 @@ function NavButton({ active, ariaLabel, tooltip, onClick, testId, children }: Na
   );
 }
 
-export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose, onOpenFeatureGuide }: Props) {
+export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose, onOpenFeatureGuide, onOpenGuide }: Props) {
   const t = useT();
   const brandLabel = t('app.brand');
   const openWorkLabel = t('entry.navOpenWork');
@@ -200,7 +201,7 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose, 
       </div>
       <div className="entry-nav-rail__footer">
         <div className="entry-nav-rail__divider" role="separator" />
-        <EntryHelpMenu onOpenFeatureGuide={onOpenFeatureGuide} />
+        <EntryHelpMenu onOpenFeatureGuide={onOpenFeatureGuide} onOpenGuide={onOpenGuide} />
       </div>
     </nav>
   );

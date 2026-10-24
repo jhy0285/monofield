@@ -158,6 +158,7 @@ import {
   shouldOpenEntryFeatureGuide,
   type EntryFeatureGuideId,
 } from './EntryFeatureGuide';
+import { GuideCenter } from './GuideCenter';
 
 // Persist the entry nav-rail open/collapsed state so it survives both a
 // home -> project -> home navigation (EntryShell unmounts on the project
@@ -490,6 +491,7 @@ export function EntryShell({
   const view: EntryViewKind = route.kind === 'home' ? route.view : 'home';
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [productTutorialOpen, setProductTutorialOpen] = useState(false);
+  const [guideCenterOpen, setGuideCenterOpen] = useState(false);
   const [entryFeatureGuide, setEntryFeatureGuide] = useState<EntryFeatureGuideId | null>(null);
   // The entry nav rail is collapsed by default (Manus-style) so the entry
   // view opens clean and full-width; the panel toggle in the topbar opens it
@@ -770,6 +772,7 @@ export function EntryShell({
           open={railOpen}
           onClose={() => setRailOpen(false)}
           onOpenFeatureGuide={reopenFeatureGuide}
+          onOpenGuide={() => setGuideCenterOpen(true)}
         />
         <main className="entry-main entry-main--scroll" ref={entryMainScrollRef}>
           <div className="entry-main__topbar">
@@ -819,6 +822,7 @@ export function EntryShell({
             <EntryViewPane name="home" active={view === 'home'}>
               <HomeView
                 isActive={view === 'home'}
+                onOpenGuide={() => setGuideCenterOpen(true)}
                 projects={projects}
                 projectsLoading={projectsLoading}
                 designSystems={designSystems}
@@ -977,6 +981,18 @@ export function EntryShell({
       <ProductTutorial
         open={productTutorialOpen}
         onClose={() => setProductTutorialOpen(false)}
+      />
+      <GuideCenter
+        open={guideCenterOpen}
+        onClose={() => setGuideCenterOpen(false)}
+        onStartProject={() => {
+          setGuideCenterOpen(false);
+          openNewProject();
+        }}
+        onReplayTour={() => {
+          setGuideCenterOpen(false);
+          reopenFeatureGuide();
+        }}
       />
       <EntryFeatureGuide
         feature={entryFeatureGuide}

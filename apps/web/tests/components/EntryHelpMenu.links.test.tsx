@@ -40,4 +40,21 @@ describe('EntryHelpMenu links', () => {
     );
     expect(document.querySelector('a[href*="/pulls"]')).toBeNull();
   });
+
+  it('opens the guide center from the first menu item', () => {
+    const onOpenGuide = vi.fn();
+    render(
+      <I18nProvider initial="en">
+        <EntryHelpMenu onOpenGuide={onOpenGuide} />
+      </I18nProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId('entry-help-trigger'));
+    const items = screen.getAllByRole('menuitem');
+    expect(items[0]?.textContent).toBe('Guide & intro video');
+    fireEvent.click(screen.getByTestId('entry-help-guide-center'));
+
+    expect(onOpenGuide).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
 });

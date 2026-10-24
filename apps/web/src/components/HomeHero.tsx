@@ -130,6 +130,8 @@ interface Props {
   // existing user, undefined = projects still loading — the guide neither
   // arms nor completes until the answer is known.
   firstRunGuide?: boolean;
+  // Opens the Guide Center (intro video + four steps). Omit to hide the entry.
+  onOpenGuide?: () => void;
   prompt: string;
   onPromptChange: (value: string) => void;
   onSubmit: HomeHeroSubmitHandler;
@@ -273,6 +275,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onSubmit,
     onSubmitScenario = () => undefined,
     firstRunGuide,
+    onOpenGuide,
     sessionMode = 'docs',
     onSessionModeChange,
     workMode = 'creation',
@@ -1105,6 +1108,19 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         {t('homeHero.subtitlePrefix')}
       </p>
       <p className="home-hero__trust">{t('homeHero.trustLine')}</p>
+      {onOpenGuide ? (
+        <button
+          type="button"
+          className="home-hero__intro"
+          onClick={onOpenGuide}
+          data-testid="home-hero-intro-video"
+        >
+          <span className="home-hero__intro-dot" aria-hidden>
+            <Icon name="play" size={10} />
+          </span>
+          <span>{t('guide.playVideo')}</span>
+        </button>
+      ) : null}
 
       {onWorkModeChange ? (
         <ProjectWorkModeToggle value={workMode} onChange={onWorkModeChange} />

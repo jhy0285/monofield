@@ -202,6 +202,7 @@ const AUTHORING_DEFAULT_SCENARIO_INPUTS = {
 
 interface Props {
   isActive?: boolean;
+  onOpenGuide?: () => void;
   projects: Project[];
   projectsLoading?: boolean;
   designSystems?: DesignSystemSummary[];
@@ -234,6 +235,7 @@ const EMPTY_PROMPT_TEMPLATES: PromptTemplateSummary[] = [];
 
 export function HomeView({
   isActive = true,
+  onOpenGuide,
   projects,
   projectsLoading,
   designSystems = EMPTY_DESIGN_SYSTEMS,
@@ -1779,6 +1781,7 @@ export function HomeView({
         ref={inputRef}
         active={isActive}
         firstRunGuide={projectsLoading ? undefined : projects.length === 0}
+        {...(onOpenGuide ? { onOpenGuide } : {})}
         prompt={prompt}
         onPromptChange={handlePromptChange}
         onSubmit={submit}
