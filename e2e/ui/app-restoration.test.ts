@@ -2985,8 +2985,8 @@ test('[P1] questions tab Continue sends selected answers into the next run reque
   ).toBe(true);
 });
 
-test('[P1] project composer working directory replace and clear update linked dirs metadata', async ({ page }) => {
-  // The daemon validates linked dirs against the real filesystem, so pick a folder that exists on the machine running the suite.
+test('[P1] project composer working directory pick roots the project and removes the clear action', async ({ page }) => {
+  // POST /api/projects/:id/working-dir validates the folder on the real filesystem, so pick one that exists on the machine running the suite.
   const workingDir = join(e2eWorkspaceRoot(), 'e2e');
   const patchBodies: Array<Record<string, unknown>> = [];
 
@@ -3021,14 +3021,12 @@ test('[P1] project composer working directory replace and clear update linked di
   await expect(page.getByTestId('working-dir-trigger')).toContainText('e2e');
   await expect
     .poll(() => patchBodies.at(-1)?.metadata)
-    .toMatchObject({ linkedDirs: [workingDir] });
+    .toMatchObject({ baseDir: workingDir, importedFrom: 'folder' });
 
+  // A picked folder becomes the project root, so the composer offers no way to clear it.
   await page.getByTestId('working-dir-trigger').click();
-  await page.getByTestId('working-dir-clear').click();
-  await expect(page.getByTestId('working-dir-trigger')).toContainText('Select working directory');
-  await expect
-    .poll(() => patchBodies.at(-1)?.metadata)
-    .toMatchObject({ linkedDirs: [] });
+  await expect(page.getByTestId('working-dir-panel')).toBeVisible();
+  await expect(page.getByTestId('working-dir-clear')).toHaveCount(0);
 });
 
 test('[P1] project composer working directory rejects stale folder without promoting it to recents', async ({ page }) => {
@@ -3059,17 +3057,6 @@ test('[P1] project composer working directory rejects stale folder without promo
   await page.route('**/api/projects/*', async (route) => {
     if (route.request().method() === 'PATCH') {
       patchBodies.push(route.request().postDataJSON() as Record<string, unknown>);
-      await route.fulfill({
-        status: 400,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          error: {
-            code: 'INVALID_LINKED_DIR',
-            message: 'The linked directory no longer exists.',
-          },
-        }),
-      });
-      return;
     }
     await route.continue();
   });
@@ -3080,11 +3067,10 @@ test('[P1] project composer working directory rejects stale folder without promo
   await page.getByTestId('working-dir-trigger').click();
   await page.getByTestId('working-dir-pick').click();
 
+  // The daemon rejects the missing folder, so the project keeps no root and the path never reaches recents.
   await expect(page.getByTestId('working-dir-trigger')).toContainText('Select working directory');
   await expect(page.getByText("Couldn't set the working directory")).toBeVisible();
-  await expect
-    .poll(() => patchBodies.at(-1)?.metadata)
-    .toMatchObject({ linkedDirs: [staleDir] });
+  expect(patchBodies.filter((body) => JSON.stringify(body).includes(staleDir))).toHaveLength(0);
   expect(recentDirPutBodies).toHaveLength(0);
 });
 
