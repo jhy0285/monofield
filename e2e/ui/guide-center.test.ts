@@ -11,6 +11,14 @@ test.beforeEach(async ({ page }) => {
   await applyStandardMocks(page);
 });
 
+// An MP4 audio track announces itself with a sound-handler `hdlr` box.
+function hasAudioTrack(mp4: Buffer): boolean {
+  for (let at = mp4.indexOf('hdlr'); at !== -1; at = mp4.indexOf('hdlr', at + 4)) {
+    if (mp4.toString('ascii', at + 12, at + 16) === 'soun') return true;
+  }
+  return false;
+}
+
 async function openGuideCenter(page: Page) {
   await gotoEntryHome(page);
   await ensureRailOpen(page);
@@ -33,6 +41,16 @@ test('[P1] help menu opens the guide center with the intro video, chapters and f
   const asset = await page.request.get('/guide/monofield-intro-en.mp4', { headers: { Range: 'bytes=0-1023' } });
   expect([200, 206]).toContain(asset.status());
   expect((await page.request.get('/guide/monofield-intro-en-poster.jpg')).ok()).toBe(true);
+
+  // The intro is narrated: what the app serves must carry an audio track, and the
+  // player must not start muted or hide its controls.
+  for (const language of ['en', 'ko']) {
+    const served = await page.request.get(`/guide/monofield-intro-${language}.mp4`);
+    expect(served.ok()).toBe(true);
+    expect(hasAudioTrack(await served.body())).toBe(true);
+  }
+  await expect(video).toHaveJSProperty('muted', false);
+  await expect(video).toHaveJSProperty('controls', true);
 
   for (const index of [1, 2, 3, 4]) {
     await expect(page.getByTestId(`guide-center-chapter-${index}`)).toBeVisible();
