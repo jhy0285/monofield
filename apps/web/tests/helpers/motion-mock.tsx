@@ -17,8 +17,15 @@ function MotionConfig({
   return <div data-testid="motion-config" data-reduced-motion={reducedMotion}>{children}</div>;
 }
 
+// One component type per tag. Creating a new forwardRef on every property
+// access would hand React a different element type each render and remount
+// the whole subtree, which the real library never does.
+const motionComponents = new Map<string, ReturnType<typeof forwardRef>>();
+
 const motionHandler: ProxyHandler<object> = {
   get(_target, prop: string) {
+    const cached = motionComponents.get(prop);
+    if (cached) return cached;
     const Component = forwardRef<unknown, ComponentProps<ElementType>>((props, ref) => {
       const {
         variants: _variants,
@@ -36,10 +43,16 @@ const motionHandler: ProxyHandler<object> = {
       return <Tag ref={ref} {...rest} />;
     });
     Component.displayName = `motion.${prop}`;
+    motionComponents.set(prop, Component);
     return Component;
   },
 };
 
 const motion = new Proxy({}, motionHandler);
 
-export { AnimatePresence, MotionConfig, motion };
+// Tests never run exit animations, so a mounted child is always present.
+function useIsPresent(): boolean {
+  return true;
+}
+
+export { AnimatePresence, MotionConfig, motion, useIsPresent };

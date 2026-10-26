@@ -159,6 +159,7 @@ export const InterfaceSpecCollectorSchema = z.enum([
   'static-express',
   'static-django',
   'static-go',
+  'static-openapi',
   'manual',
 ]);
 export type InterfaceSpecCollector = z.infer<typeof InterfaceSpecCollectorSchema>;

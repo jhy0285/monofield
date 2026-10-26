@@ -7,14 +7,14 @@
 <h1 align="center">MonoField</h1>
 
 <p align="center">
-  <strong>code / design / documents</strong><br />
-  One workspace, every kind of work
+  <strong>Codex·Claude Code로 SI 산출물까지 끝내는 작업대</strong><br />
+  The workbench that takes Codex and Claude Code all the way to SI deliverables
 </p>
 
 <p align="center">
   <a href="https://monofield.vercel.app">Website</a> ·
-  <a href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.2/MonoField-release-preview-win-setup.exe">Windows preview · REA + Laya</a> ·
-  <a href="https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.2">0.11.7-preview.2 release</a> ·
+  <a href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.3/MonoField-release-preview-win-setup.exe">Windows preview · SI workbench</a> ·
+  <a href="https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.3">0.11.7-preview.3 release</a> ·
   <a href="docs/open-source-compliance.md">Open-source notices</a>
 </p>
 
@@ -32,18 +32,47 @@
   </a>
 </p>
 
-MonoField is a local-first desktop workbench for people who need to move from a
-request to a result without losing the project context along the way. The
-working folder, Git changes, run configuration, live browser, governed database
-access, references, and deliverables stay attached to one project.
+MonoField is a local Windows workbench for **Korean SI and public-sector
+developers and the people who hand systems over**. It runs the Codex or Claude
+Code CLI you already use against a real project folder, turns that code into
+interface spec workbooks (XLSX) and screen specs (PPTX), and — when the code
+changes — shows the spec update as a reviewable diff instead of a rewrite.
 
 ```text
-connect                         work                         prove
-folder · files · browser     →  ask · edit · run          →  diff · build · UI check
-database · rules · brand        compose · review · export    code · XLSX · PPTX · PDF
+open folder        →  generate spec          →  change code             →  review spec diff
+Spring / Java / …     interface XLSX · screen    Codex or Claude Code       changed fields only,
+                      PPTX from code evidence    edits + build/test         approve → export
 ```
 
-**Current development release: [0.11.7-preview.2](https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.2)** — includes the Java/ontology workspace, optional **REA MCP integration**, a bundled legacy-system handover skill, and **Laya local typed-decision integration**. [Download the Windows preview](https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.2/MonoField-release-preview-win-setup.exe). It installs alongside stable. REA is downloaded on first enabled use; Node/npm, Chromium, Laya model weights and its server are separate prerequisites.
+**한국어** — MonoField는 한국 SI·공공 프로젝트 개발자와 인수인계 담당자를 위한
+로컬 작업대입니다. 이미 쓰는 Codex 또는 Claude Code CLI로 프로젝트 폴더를 다루고,
+코드 근거로 인터페이스 명세서(Excel)와 화면명세서(PPTX)를 만들며, 코드가 바뀌면
+명세서 갱신분을 diff로 검토한 뒤 반영합니다.
+
+### Who it is for / 누구를 위한 도구인가
+
+- **SI·공공·금융 개발자** — 코드 변경과 함께 인터페이스 명세서·화면명세서를
+  계속 맞춰야 하는 사람.
+- **인수인계 담당자** — 기존 시스템을 근거 기반으로 조사하고 문서로 넘겨야 하는
+  사람 ([REA 인수인계 흐름](docs/rea-laya-handover.md)).
+- **PM·기획자·주니어 개발자** — 터미널 대신 GUI에서 같은 근거와 산출물을 보고 싶은
+  사람.
+
+### What you need / 필요한 것
+
+- Windows 10/11.
+- **Codex CLI 또는 Claude Code CLI** (로컬 설치). MonoField는 에이전트를
+  대체하지 않고 그 위에서 동작합니다. API 키(BYOK)만으로는 대화와 문서 생성만
+  가능하고 파일 수정·터미널·Git·브라우저 검증은 쓸 수 없습니다.
+
+If you only write code and are comfortable in a terminal or IDE, Codex or Claude
+Code alone may be all you need. MonoField earns its place when the job also ends
+in structured deliverables that must stay in sync with the code.
+
+The three-minute walkthrough of the full loop is in
+[docs/demo/spring-interface-spec-demo.md](docs/demo/spring-interface-spec-demo.md).
+
+**Current development release: [0.11.7-preview.3](https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.3)** — the SI-deliverables workbench: Spring / eGovFrame / OpenAPI interface-spec scanners with Spring Security–based auth detection, compatibility classification of spec changes, OpenAPI 3.1 export, and an in-app Guide Center with an intro video, on top of the Java/ontology workspace, optional **REA MCP integration**, the legacy-system handover skill and **Laya local typed-decision integration**. [Download the Windows preview](https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.3/MonoField-release-preview-win-setup.exe). It installs alongside stable and is unsigned (verify `SHA256SUMS.txt`). Oracle/Tibero live connections are not supported yet. REA is downloaded on first enabled use; Node/npm, Chromium, Laya model weights and its server are separate prerequisites.
 
 **한국어** — REA로 기존 시스템의 화면·API·SQLite 근거를 조사하고 MonoField의 인터페이스 Excel·화면명세 PPTX로 정리할 수 있습니다. Laya는 선택적으로 근거 검토와 검증 후보 선택을 보조합니다. [설정·SI 인수인계 흐름](docs/rea-laya-handover.md) · [실제 합성 샘플 실행 결과](docs/testing/rea-handover-2026-10-22.md).
 
@@ -124,16 +153,16 @@ tooling boundary.
 
 ## Install
 
-- [Windows REA/Laya preview installer](https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.2/MonoField-release-preview-win-setup.exe)
-- [Preview portable package](https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.2/MonoField-release-preview-win-portable.zip)
-- [Preview release notes and checksums](https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.2)
+- [Windows REA/Laya preview installer](https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.3/MonoField-release-preview-win-setup.exe)
+- [Preview portable package](https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.3/MonoField-release-preview-win-portable.zip)
+- [Preview release notes and checksums](https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.3)
 - [Stable Windows installer](https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-setup.exe)
 - [Stable portable package](https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-portable.zip)
 - [Stable release notes and checksums](https://github.com/jhy0285/monofield/releases/latest)
 - Microsoft Store — shown on the [MonoField website](https://monofield.vercel.app)
   after the public listing is certified
 
-Preview downloads are pinned to the REA/Laya `0.11.7-preview.2` release;
+Preview downloads are pinned to the REA/Laya `0.11.7-preview.3` release;
 stable links follow the latest stable GitHub Release.
 The current public Desktop build targets Windows 10/11. Direct-download builds
 are unsigned, so Windows can show an unrecognized-publisher warning; verify the
@@ -228,4 +257,4 @@ MonoField가 실제 작업에 도움이 됐거나 방향이 마음에 들었다�
 
 ---
 
-<p align="center"><strong>One workspace, every kind of work</strong></p>
+<p align="center"><strong>Codex·Claude Code로 SI 산출물까지</strong></p>

@@ -1,0 +1,48 @@
+{
+  "swagger": "2.0",
+  "info": { "title": "회원 서비스", "version": "1.0" },
+  "basePath": "/member-api",
+  "securityDefinitions": { "api_key": { "type": "apiKey", "name": "X-API-KEY", "in": "header" } },
+  "paths": {
+    "/members": {
+      "post": {
+        "tags": ["members"],
+        "summary": "회원 가입",
+        "operationId": "joinUsingPOST",
+        "security": [{ "api_key": [] }],
+        "parameters": [
+          { "in": "body", "name": "request", "required": true, "schema": { "$ref": "#/definitions/MemberJoinRequest" } }
+        ],
+        "responses": { "200": { "description": "OK", "schema": { "$ref": "#/definitions/MemberResponse" } } }
+      }
+    },
+    "/members/{memberId}": {
+      "get": {
+        "tags": ["members"],
+        "summary": "회원 조회",
+        "operationId": "getMemberUsingGET",
+        "parameters": [
+          { "name": "memberId", "in": "path", "required": true, "type": "integer", "format": "int64", "description": "회원 ID" }
+        ],
+        "responses": { "200": { "description": "OK", "schema": { "$ref": "#/definitions/MemberResponse" } } }
+      }
+    }
+  },
+  "definitions": {
+    "MemberJoinRequest": {
+      "type": "object",
+      "required": ["loginId"],
+      "properties": {
+        "loginId": { "type": "string", "minLength": 4, "maxLength": 20, "description": "로그인 ID" },
+        "memberName": { "type": "string", "description": "회원명" }
+      }
+    },
+    "MemberResponse": {
+      "type": "object",
+      "properties": {
+        "memberId": { "type": "integer", "format": "int64", "description": "회원 ID" },
+        "loginId": { "type": "string", "description": "로그인 ID" }
+      }
+    }
+  }
+}

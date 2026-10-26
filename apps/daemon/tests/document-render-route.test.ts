@@ -56,6 +56,51 @@ describe('document render route', () => {
     expect(output?.subarray(0, 2).toString()).toBe('PK');
   });
 
+  it('exports an interface specification as OpenAPI 3.1 JSON', async () => {
+    files.set('orders.interface-spec.json', Buffer.from(JSON.stringify({
+      schemaVersion: 1,
+      kind: 'interface-spec',
+      cover: { docName: 'Orders API', version: '1.2' },
+      source: { codebaseName: 'orders-service' },
+      auth: { type: 'bearer' },
+      endpoints: [
+        {
+          interfaceId: 'IF-ORD-001', interfaceName: 'Create order', method: 'POST', path: '/api/orders', authRequired: true,
+          requestFields: [{ nameEn: 'customerId', dataType: 'String', required: 'Y' }],
+          responseFields: [{ nameEn: 'orderId', dataType: 'Long', required: 'Y' }],
+        },
+        { interfaceId: 'EV-ORD-001', method: 'PUBLISH', path: 'orders.created' },
+      ],
+    })));
+
+    const response = await post({ inputFile: 'orders.interface-spec.json', action: 'export-openapi' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      ok: true, kind: 'interface-spec', action: 'export-openapi', outputFile: 'Orders_API_openapi.json', itemCount: 2,
+      warnings: [expect.stringContaining('"PUBLISH" is not an HTTP method')],
+    });
+    const openapi = JSON.parse(files.get(response.body.outputFile)!.toString('utf8'));
+    expect(openapi).toMatchObject({
+      openapi: '3.1.0',
+      info: { title: 'Orders API', version: '1.2' },
+      components: { securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer' } } },
+      paths: { '/api/orders': { post: { operationId: 'IF-ORD-001', 'x-interface-id': 'IF-ORD-001', security: [{ bearerAuth: [] }] } } },
+    });
+    expect(openapi.paths['/api/orders'].post.requestBody.content['application/json'].schema).toEqual({
+      type: 'object', required: ['customerId'], properties: { customerId: { type: 'string' } },
+    });
+  });
+
+  it('refuses OpenAPI export for screen specifications', async () => {
+    files.set('screens.screen-spec.json', Buffer.from(JSON.stringify({
+      schemaVersion: 1, kind: 'screen-spec', name: 'Screens', screens: [],
+    })));
+    const response = await post({ inputFile: 'screens.screen-spec.json', action: 'export-openapi' });
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({ ok: false, code: 'INVALID_DOCUMENT' });
+  });
+
   it('renders a screen specification preview and resolves project-relative images', async () => {
     files.set('spec/assets/login.png', Buffer.from('image-bytes'));
     files.set('spec/app.screen-spec.json', Buffer.from(JSON.stringify({

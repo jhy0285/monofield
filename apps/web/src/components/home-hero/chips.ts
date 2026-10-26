@@ -353,26 +353,42 @@ export function chipsForGroup(group: ChipGroup): HomeHeroChip[] {
   return HOME_HERO_CHIPS.filter((c) => c.group === group);
 }
 
-// Display order for the inline `create` scenario rail. The composer leads with
-// the slide deck ("Slides") followed by the core build scenarios in
-// decreasing generality (Prototype → Wireframe → Mobile → Document →
-// Animation), then the media scenarios. Brand Kit is intentionally omitted
-// here so it trails the scenario set — it dispatches into the Brand Kit tab
-// rather than seeding a scenario plugin. Any create chip not listed keeps its
-// catalog order after the explicit entries (see `orderedCreateChips`).
-export const CREATE_RAIL_ORDER = [
-  'deck',
-  'screen-spec',
+// The scenario cards the Home rail shows before the user asks for more. The
+// product leads with the SI deliverable loop — interface spec → screen spec →
+// supporting documents and decks — so a first-time user sees the work
+// MonoField is built for instead of a wall of media generators.
+export const PRIMARY_CREATE_RAIL_ORDER = [
   'interface-spec',
+  'screen-spec',
+  'document',
+  'deck',
+] as const;
+
+// The chip the first-run guide pulses for brand-new users: the first step of
+// the SI loop.
+export const FIRST_RUN_GUIDE_CHIP_ID: string = PRIMARY_CREATE_RAIL_ORDER[0];
+
+// Design and media scenarios stay fully supported but sit behind the rail's
+// "More templates" toggle. Brand Kit is intentionally omitted so it trails the
+// extended set — it dispatches into the Brand Kit tab rather than seeding a
+// scenario plugin.
+export const EXTENDED_CREATE_RAIL_ORDER = [
   'prototype',
   'wireframe',
   'mobile',
-  'document',
-  'hyperframes',
   'live-artifact',
+  'hyperframes',
   'image',
   'video',
   'audio',
+] as const;
+
+// Full display order for the `create` scenarios (primary, then extended). Any
+// create chip not listed keeps its catalog order after the explicit entries
+// (see `orderedCreateChips`).
+export const CREATE_RAIL_ORDER = [
+  ...PRIMARY_CREATE_RAIL_ORDER,
+  ...EXTENDED_CREATE_RAIL_ORDER,
 ] as const;
 
 // Chip ids the onboarding "build a design system" teaser intentionally omits.
@@ -392,7 +408,7 @@ export const ONBOARDING_ARTIFACT_CHIP_IDS = CREATE_RAIL_ORDER.filter(
 // The `create` chips in rail-display order. Listed ids come first in
 // `CREATE_RAIL_ORDER`; any unlisted create chip (e.g. `create-brand-kit`)
 // trails in catalog order. Reordering through this helper keeps the catalog
-// data table stable while letting the rail lead with the slide deck.
+// data table stable while letting the rail lead with the interface spec.
 export function orderedCreateChips(): HomeHeroChip[] {
   const create = chipsForGroup('create');
   const listed = CREATE_RAIL_ORDER
@@ -401,6 +417,23 @@ export function orderedCreateChips(): HomeHeroChip[] {
   const listedIds = new Set<string>(CREATE_RAIL_ORDER);
   const rest = create.filter((c) => !listedIds.has(c.id));
   return [...listed, ...rest];
+}
+
+const PRIMARY_CREATE_IDS = new Set<string>(PRIMARY_CREATE_RAIL_ORDER);
+
+// The cards the rail shows by default (the SI deliverable loop).
+export function primaryCreateChips(): HomeHeroChip[] {
+  return orderedCreateChips().filter((c) => PRIMARY_CREATE_IDS.has(c.id));
+}
+
+// Every other create chip, revealed by the rail's "More templates" toggle.
+export function extendedCreateChips(): HomeHeroChip[] {
+  return orderedCreateChips().filter((c) => !PRIMARY_CREATE_IDS.has(c.id));
+}
+
+export function isExtendedCreateChip(id: string | null | undefined): boolean {
+  if (!id) return false;
+  return extendedCreateChips().some((c) => c.id === id);
 }
 
 // Helper used by tests + the rail component to pull the chip metadata

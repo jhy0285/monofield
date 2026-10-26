@@ -1,6 +1,7 @@
 import { expect, test } from '@/playwright/suite';
+import { gotoEntryHome, waitForLoadingShell } from '@/playwright/entry';
 import { ensureRailOpen } from '@/playwright/rail';
-import { routeAgents } from '@/playwright/mock-factory';
+import { APP_CONFIG_URL, routeAgents } from '@/playwright/mock-factory';
 import type { Page } from '@playwright/test';
 import { T } from '@/timeouts';
 
@@ -37,7 +38,7 @@ test.beforeEach(async ({ page }) => {
     );
   }, STORAGE_KEY);
 
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() !== 'GET') {
       await route.continue();
       return;
@@ -495,7 +496,7 @@ test('[P0] @critical edited HTML file restores selected tab, source, and preview
   await expect(secondaryTab).toHaveAttribute('aria-selected', 'false');
 
   await page.reload();
-  await waitForLoadingToClear(page);
+  await waitForLoadingShell(page);
   await expect(page.getByTestId('file-workspace')).toBeVisible();
   const restoredTab = tabBySuffix(page, 'restore-edit.html');
   await expect(restoredTab).toBeVisible();
@@ -530,24 +531,12 @@ async function createEmptyProject(page: Page, name: string): Promise<string> {
   await openNewProjectModal(page);
   await page.getByTestId('new-project-name').fill(name);
   await page.getByTestId('create-project').click();
-  await waitForLoadingToClear(page);
+  await waitForLoadingShell(page);
   await expect(page).toHaveURL(/\/projects\//);
   const current = new URL(page.url());
   const [, projects, projectId] = current.pathname.split('/');
   if (projects !== 'projects' || !projectId) throw new Error(`unexpected project route: ${current.pathname}`);
   return projectId;
-}
-
-async function gotoEntryHome(page: Page) {
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible()) {
-    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
-    await expect(privacyDialog).toHaveCount(0);
-  }
-  await expect(page.getByTestId('home-hero')).toBeVisible();
-  await expect(page.getByTestId('home-hero-input')).toBeVisible();
 }
 
 async function openNewProjectModal(page: Page) {
@@ -692,10 +681,6 @@ async function openDesignFile(page: Page, fileName: string) {
     await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
   }
   await expect(preview).toBeVisible();
-}
-
-async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
 }
 
 async function expectFileSource(page: Page, projectId: string, fileName: string, snippets: string[]) {

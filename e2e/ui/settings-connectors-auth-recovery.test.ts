@@ -1,7 +1,8 @@
 import { expect, test } from '@/playwright/suite';
+import { gotoEntryHome } from '@/playwright/entry';
 import type { Locator, Page } from '@playwright/test';
 import { openSettingsDialog } from '../lib/playwright/amr.js';
-import { routeAgents } from '../lib/playwright/mock-factory.js';
+import { APP_CONFIG_URL, routeAgents } from '../lib/playwright/mock-factory.js';
 import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
@@ -80,20 +81,6 @@ function pendingAuthorizationStorage() {
 
 function connectorCard(scope: Page | Locator, id: string) {
   return scope.locator(`article.connector-card[data-connector-id="${id}"]`);
-}
-
-async function waitForLoadingToClear(page: Page) {
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: T.long });
-}
-
-async function gotoEntryHome(page: Page) {
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible()) {
-    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
-  }
-  await expect(page.getByTestId('home-hero')).toBeVisible();
 }
 
 async function openSettingsDialogFromEntry(page: Page) {
@@ -185,7 +172,7 @@ async function openConnectorsSettings(
     },
   ]);
 
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() === 'GET') {
       await route.fulfill({ json: { config: baseConfig() } });
       return;

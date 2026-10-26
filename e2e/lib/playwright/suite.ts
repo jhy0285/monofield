@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { expect, test as base } from '@playwright/test';
 
 import { createToolsDevSuite, e2eWorkspaceRoot } from '../tools-dev/runtime.ts';
+import { markFeatureGuidesSeen } from './feature-guides.ts';
 import type { ToolsDevSuite } from '../tools-dev/types.ts';
 
 type PlaywrightToolsDevSuite = ToolsDevSuite & {
@@ -11,6 +12,7 @@ type PlaywrightToolsDevSuite = ToolsDevSuite & {
 };
 
 type TestFixtures = {
+  _entryFeatureGuidesSeen: void;
   _toolsDevFailureTracker: void;
 };
 
@@ -59,6 +61,14 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   baseURL: async ({ toolsDev }, use) => {
     await use(toolsDev.url.web());
   },
+
+  _entryFeatureGuidesSeen: [
+    async ({ context }, use) => {
+      await markFeatureGuidesSeen(context);
+      await use();
+    },
+    { auto: true },
+  ],
 
   _toolsDevFailureTracker: [
     async ({ toolsDev }, use, testInfo) => {

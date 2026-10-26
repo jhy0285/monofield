@@ -1,10 +1,10 @@
 {
   "name": "monofield",
-  "version": "0.11.7-preview.2",
+  "version": "0.11.7-preview.3",
   "private": true,
   "packageManager": "pnpm@10.33.2",
   "type": "module",
-  "description": "MonoField is a local-first, model-independent AI workbench for code, design, and documents.",
+  "description": "MonoField is a local workbench that takes Codex and Claude Code all the way to Korean SI deliverables: interface specs, screen specs, and reviewed spec updates.",
   "license": "Apache-2.0",
   "bin": {
     "monofield": "./apps/daemon/bin/monofield.mjs"

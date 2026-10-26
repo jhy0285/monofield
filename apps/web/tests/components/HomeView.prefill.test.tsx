@@ -24,6 +24,16 @@ import {
   setHomeHeroPrompt,
 } from '../helpers/home-hero-lexical';
 
+// The Home rail shows the SI deliverable cards first and keeps design/media
+// templates behind "More templates"; open it only when the chip is hidden.
+async function findRailChip(id: string): Promise<HTMLElement> {
+  const existing = screen.queryByTestId(`home-hero-rail-${id}`);
+  if (existing) return existing;
+  const toggle = await screen.findByTestId('home-hero-rail-more-templates');
+  if (toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle);
+  return screen.findByTestId(`home-hero-rail-${id}`);
+}
+
 const AUTHORING_PLUGIN = {
   id: 'od-plugin-authoring',
   title: 'Plugin authoring',
@@ -728,7 +738,7 @@ describe('HomeView prompt handoff', () => {
     );
 
     await clearActiveTypeChip();
-    fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
+    fireEvent.click(await findRailChip('prototype'));
 
     await waitFor(() => {
       expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
@@ -830,7 +840,7 @@ describe('HomeView prompt handoff', () => {
     );
 
     await clearActiveTypeChip();
-    fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
+    fireEvent.click(await findRailChip('prototype'));
 
     await waitFor(() => {
       expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
@@ -891,7 +901,7 @@ describe('HomeView prompt handoff', () => {
     );
 
     await clearActiveTypeChip();
-    fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
+    fireEvent.click(await findRailChip('prototype'));
 
     // The personal default pre-selects, as before.
     await waitFor(() => {
@@ -954,7 +964,7 @@ describe('HomeView prompt handoff', () => {
     );
 
     await clearActiveTypeChip();
-    fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
+    fireEvent.click(await findRailChip('prototype'));
     fireEvent.click(await screen.findByTestId('home-hero-plugin-preset'));
 
     screen.getByTestId('home-hero-input');
@@ -1050,7 +1060,7 @@ describe('HomeView prompt handoff', () => {
     );
 
     await clearActiveTypeChip();
-    fireEvent.click(await screen.findByTestId('home-hero-rail-live-artifact'));
+    fireEvent.click(await findRailChip('live-artifact'));
 
     await waitFor(() => {
       expect(screen.getAllByTestId('home-hero-plugin-preset').length).toBeGreaterThan(0);
@@ -1128,7 +1138,7 @@ describe('HomeView prompt handoff', () => {
     );
 
     await clearActiveTypeChip();
-    fireEvent.click(await screen.findByTestId('home-hero-rail-live-artifact'));
+    fireEvent.click(await findRailChip('live-artifact'));
 
     await waitFor(() => {
       expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Live artifact');
@@ -1252,7 +1262,7 @@ describe('HomeView prompt handoff', () => {
     await screen.findByTestId('home-hero-input');
     await setPromptAndSettle('Keep my current brief');
     await clearActiveTypeChip();
-    fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
+    fireEvent.click(await findRailChip('prototype'));
 
     await waitFor(() => {
       expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
@@ -1318,7 +1328,7 @@ describe('HomeView prompt handoff', () => {
     });
 
     await clearActiveTypeChip();
-    fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
+    fireEvent.click(await findRailChip('prototype'));
     await waitFor(() => {
       expect(screen.getByTestId('home-hero-plugin-presets')).toBeTruthy();
     });

@@ -1,6 +1,7 @@
 import { expect, test } from '@/playwright/suite';
+import { waitForLoadingShell } from '@/playwright/entry';
 import type { Page } from '@playwright/test';
-import { routeAgents } from '@/playwright/mock-factory';
+import { APP_CONFIG_URL, routeAgents } from '@/playwright/mock-factory';
 
 // Verifies that the chat-log stays pinned to the bottom when the PinnedTodoSlot
 // grows (scenario A) and that a deliberate scroll-up is not overridden by a
@@ -35,7 +36,7 @@ async function seedAppConfig(page: Page) {
     );
   }, STORAGE_KEY);
 
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() !== 'GET') {
       await route.continue();
       return;
@@ -176,8 +177,7 @@ async function seedProjectWithTodos(
 // question 1" so waiting for that text confirms the daemon responded with
 // the stored message list.
 async function waitForChatReady(page: Page) {
-  const loading = page.getByText('Loading Open Design…');
-  await loading.waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {});
+  await waitForLoadingShell(page);
   await expect(page.locator('.chat-log')).toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId('chat-composer')).toBeVisible({ timeout: 10_000 });
   // Wait until at least one filler message has rendered so the chat-log has

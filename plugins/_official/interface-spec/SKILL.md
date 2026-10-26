@@ -484,6 +484,51 @@ Supported collectors:
 | Express / JavaScript | `scripts/scan_express.py` |
 | Django / DRF | `scripts/scan_django.py` |
 | Go (Gin, Echo, Chi) | `scripts/scan_go.py` |
+| OpenAPI 3.x / Swagger 2.0 contract (springdoc, springfox, any stack) | `scripts/scan_openapi.py --spec <openapi.json>` or `--codebase-path <dir>` |
+
+Prefer `scan_openapi.py` when the selected folder already contains the
+team-maintained OpenAPI/Swagger JSON (for example an exported springdoc
+`/v3/api-docs`): it keeps operation summaries, `x-interface-id`, parameter
+descriptions, enum values, size limits and security exactly as declared. Response
+fields stay `TBD` for presence when the contract has no `required` list. Run the
+source scanner as well when the contract may lag behind the code, and compare.
+`monofield docs export-openapi` writes an auth-required endpoint without a known
+scheme as `x-auth-undecided: true` with no `security` (never `security: []`,
+which means public); `scan_openapi.py` reads it back as `authRequired: true`
+with `auth: {"type": "undecided"}`.
+
+The Spring scanner also covers eGovFrame-style Spring MVC: `.do` mappings,
+method-level `@RequestMapping` without `method` (recorded as `GET/POST` with a
+note, because Spring accepts every method), `@ModelAttribute` and un-annotated
+project `*VO` form objects (every bound form object is expanded), and Korean
+Javadoc/line comments as interface and field names when no dictionary entry
+exists.
+
+The Spring scanner decides `authRequired` per endpoint from static evidence,
+never from the URL shape. It reads the Java security configuration
+(`SecurityFilterChain` beans and `WebSecurityConfigurerAdapter`): ordered
+chains and their `securityMatcher` scope, `antMatchers`/`mvcMatchers`/
+`regexMatchers`/`requestMatchers`/`anyRequest()` rules in order (first match
+wins), `permitAll()`/`anonymous()` versus `authenticated()`/`hasRole(...)`/
+`access("...")`, `web.ignoring()`, and `String`/`String[]` constants. It then
+applies `@PreAuthorize`, `@Secured` and `@RolesAllowed`/`@PermitAll`/`@DenyAll`
+on the handler or controller class, but only when `@EnableMethodSecurity`/
+`@EnableGlobalMethodSecurity` switches that family on. Sources under `test`,
+`tests`, `build` and `target` directories are ignored, including for the
+document-level `auth` scheme. Each decided endpoint carries `evidenceRefs` pointing at the
+deciding rule or annotation, so `monofield docs impact` flags it when the
+security configuration changes.
+
+When the evidence does not decide an endpoint, the scanner keeps it undecided:
+`authRequired: true`, `auth: { "type": "undecided" }`, and a note starting
+`인증 여부 확인 필요:` with the reason. Reasons include no Java security
+configuration, no matching rule, a matcher or expression the parser cannot
+evaluate (for example a lambda `RequestMatcher` or `hasIpAddress`), or GET and
+POST getting different results on a method-less `@RequestMapping`. Resolve those
+endpoints from the code with the user; do not turn an undecided endpoint into
+`true` or `false` without evidence. XML security configuration
+(`context-security.xml`), servlet filters and `HandlerInterceptor`s are not
+read, so endpoints protected only by those stay undecided.
 
 Each scanner emits `requestExample` and `responseExample` with
 `exampleSource: "static-analysis"`. These examples combine traced request and

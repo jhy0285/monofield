@@ -17,6 +17,16 @@ vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
 import { HomeView } from '../../src/components/HomeView';
 import { homeHeroPromptText, setHomeHeroPrompt } from '../helpers/home-hero-lexical';
 
+// The Home rail shows the SI deliverable cards first and keeps design/media
+// templates behind "More templates"; open it only when the chip is hidden.
+async function findRailChip(id: string): Promise<HTMLElement> {
+  const existing = screen.queryByTestId(`home-hero-rail-${id}`);
+  if (existing) return existing;
+  const toggle = await screen.findByTestId('home-hero-rail-more-templates');
+  if (toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle);
+  return screen.findByTestId(`home-hero-rail-${id}`);
+}
+
 // HomeHero's prompt input migrated from a <textarea>+highlight overlay to the
 // same Lexical contenteditable the project composer uses. The `home-hero-input`
 // hook is now a contenteditable <div> with no `.value`, so:
@@ -335,7 +345,7 @@ describe('HomeView context picker', () => {
       />,
     );
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
+    fireEvent.click(await findRailChip('prototype'));
     await waitFor(() => {
       expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
     });
@@ -415,7 +425,7 @@ describe('HomeView context picker', () => {
       expect(screen.getByTestId('home-hero-active-skill')).toBeTruthy();
     });
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
+    fireEvent.click(await findRailChip('prototype'));
     await waitFor(() => {
       expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
       expect(screen.queryByTestId('home-hero-active-skill')).toBeNull();

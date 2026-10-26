@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
+from tools.excel_generator.collector.spring_security import SpringSecurityModel, security_annotation
 from tools.excel_generator.models import ApiEndpoint, FieldSpec
 from tools.excel_generator.rules.naming import koreanize_identifier
 
@@ -16,6 +17,30 @@ MAPPING_ANNOS = (
     "@RequestMapping",
 )
 PACKAGE_RE = re.compile(r"^\s*package\s+([^;]+);", re.M)
+# A method-level @RequestMapping without `method` serves every HTTP method.
+ANY_METHOD = "GET/POST"
+ANY_METHOD_NOTE = "@RequestMapping에 method가 없어 모든 HTTP 메서드를 허용"
+# Spring binds these handler arguments itself; they never carry client input.
+FRAMEWORK_PARAM_TYPES = {
+    "HttpServletRequest", "HttpServletResponse", "ServletRequest", "ServletResponse", "HttpSession",
+    "WebRequest", "NativeWebRequest", "MultipartHttpServletRequest", "Model", "ModelMap", "ModelAndView",
+    "BindingResult", "Errors", "SessionStatus", "RedirectAttributes", "Principal", "Authentication",
+    "Locale", "TimeZone", "ZoneId", "InputStream", "OutputStream", "Reader", "Writer", "HttpMethod",
+    "UriComponentsBuilder", "HttpEntity", "RequestEntity", "Pageable", "Sort",
+}
+SIMPLE_PARAM_TYPES = {
+    "String", "Integer", "int", "Long", "long", "Short", "short", "Byte", "byte", "Double", "double",
+    "Float", "float", "Boolean", "boolean", "Character", "char", "BigDecimal", "BigInteger",
+    "LocalDate", "LocalDateTime", "LocalTime", "Date", "UUID",
+}
+# Argument annotations that bind something other than a form/query object.
+NON_FORM_PARAM_ANNOS = (
+    "@RequestHeader", "@CookieValue", "@SessionAttribute", "@RequestAttribute",
+    "@AuthenticationPrincipal", "@RequestPart", "@MatrixVariable", "@Value",
+)
+QUERY_DTO_SUFFIXES = (
+    "Dto", "DTO", "Form", "VO", "Vo", "Condition", "Criteria", "Cond", "Param", "Params", "Search", "Command",
+)
 CONST_RE = re.compile(r"public\s+static\s+final\s+String\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+?);")
 CLASS_RE = re.compile(r"\bclass\s+([A-Za-z_][A-Za-z0-9_]*)\b")
 SERVICE_FIELD_RE = re.compile(
@@ -35,8 +60,12 @@ class ApiSeed:
     request_body_type: str | None
     query_dto_type: str | None
     response_type: str | None
-    auth_required: bool
+    # None when the security configuration gives no static evidence either way.
+    auth_required: bool | None
     request_fields: list[FieldSpec]
+    summary: str = ""
+    note: str = ""
+    auth_evidence: list[dict] = field(default_factory=list)
 
 
 def _controller_display_path(path: Path, repo_root: Path, codebase_path: Path) -> str:
@@ -46,6 +75,57 @@ def _controller_display_path(path: Path, repo_root: Path, codebase_path: Path) -
         except ValueError:
             continue
     return str(path)
+
+
+def _join_mapping_path(class_base: str, method_path: str) -> str:
+    """Join a class @RequestMapping and a method mapping the way Spring resolves
+    them: an empty method mapping targets the class path itself (never a
+    trailing-slash twin), and duplicate separators collapse to one."""
+    segments = [
+        segment
+        for part in (class_base, method_path)
+        for segment in part.split("/")
+        if segment
+    ]
+    return "/" + "/".join(segments)
+
+
+def _javadoc_summary(block: list[str]) -> str:
+    """First descriptive line of a Javadoc/block comment, without tags or the closing period."""
+    for raw in block:
+        text = raw.strip().lstrip("/").lstrip("*").strip()
+        if text.endswith("*/"):
+            text = text[:-2].strip()
+        if not text or text.startswith("@"):
+            continue
+        return text.rstrip(".").strip()
+    return ""
+
+
+def _project_class_names(java_root: Path) -> set[str]:
+    names: set[str] = set()
+    for path in java_root.rglob("*.java"):
+        m = CLASS_RE.search(path.read_text(encoding="utf-8", errors="ignore"))
+        if m:
+            names.add(m.group(1))
+    return names
+
+
+def _form_object_type(param: str, p_type: str, project_classes: set[str]) -> bool:
+    """Whether Spring binds this handler argument from request parameters as a form object.
+
+    `@ModelAttribute` always does; an un-annotated argument does when it is a
+    non-simple type (Spring's implicit @ModelAttribute) that belongs to the
+    project or follows a DTO/VO naming convention.
+    """
+    base = re.sub(r"<.*", "", p_type).replace("[]", "").strip()
+    if base in FRAMEWORK_PARAM_TYPES or base in SIMPLE_PARAM_TYPES:
+        return False
+    if "@ModelAttribute" in param:
+        return True
+    if any(anno in param for anno in NON_FORM_PARAM_ANNOS):
+        return False
+    return base in project_classes or base.endswith(QUERY_DTO_SUFFIXES)
 
 
 def _normalize_type(type_raw: str) -> str:
@@ -153,9 +233,8 @@ def _extract_mapping(anno: str, consts: dict[str, str]) -> tuple[str | None, str
         inside = anno[anno.find("(") + 1 : anno.rfind(")")].strip()
 
     if anno.startswith("@RequestMapping"):
-        mm = re.search(r"method\s*=\s*RequestMethod\.([A-Z]+)", inside)
-        if mm:
-            method = mm.group(1)
+        methods = re.findall(r"RequestMethod\.([A-Z]+)", inside)
+        method = "/".join(dict.fromkeys(methods)) if methods else ANY_METHOD
         mv = re.search(r"(?:value|path)\s*=\s*([^,]+)", inside)
         if mv:
             path = _resolve_constant_expr(mv.group(1), consts)
@@ -594,12 +673,19 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
 
     consts = _load_constants(java_root)
     service_method_returns = _load_service_method_returns(java_root)
+    project_classes = _project_class_names(java_root)
+    security = SpringSecurityModel.load(
+        java_root, lambda source: _controller_display_path(source, repo_root, codebase_path)
+    )
     out: list[ApiSeed] = []
 
     for path in java_root.rglob("*Controller.java"):
         text = path.read_text(encoding="utf-8", errors="ignore")
         lines = text.splitlines()
         class_base = ""
+        class_match = CLASS_RE.search(text)
+        class_name = class_match.group(1) if class_match else path.stem
+        class_security = []
         service_fields = _service_fields_from_controller(text)
         package_name = _extract_package_name(text)
 
@@ -609,25 +695,38 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
                 while j >= 0 and lines[j].strip().startswith("@"):
                     j -= 1
                 for k in range(j + 1, i):
-                    s = lines[k].strip()
-                    if s.startswith("@RequestMapping"):
-                        anno, _ = _parse_annotation_block(lines, k)
+                    anno, _ = _parse_annotation_block(lines, k)
+                    if anno.startswith("@RequestMapping") and not class_base:
                         _, p = _extract_mapping(anno, consts)
                         class_base = p or ""
-                        break
+                    found = security_annotation(anno, path, k + 1, class_name)
+                    if found:
+                        class_security.append(found)
                 break
 
         idx = 0
         pending: list[str] = []
+        pending_lines: list[int] = []
+        doc_block: list[str] = []
         while idx < len(lines):
             s = lines[idx].strip()
             if not s:
                 idx += 1
                 continue
 
+            if s.startswith("/*"):
+                block = [lines[idx]]
+                while "*/" not in lines[idx] and idx + 1 < len(lines):
+                    idx += 1
+                    block.append(lines[idx])
+                doc_block = block
+                idx += 1
+                continue
+
             if s.startswith("@"):
                 anno, nxt = _parse_annotation_block(lines, idx)
                 pending.append(anno)
+                pending_lines.append(idx + 1)
                 idx = nxt
                 continue
 
@@ -647,13 +746,23 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
                         method, mpath = _extract_mapping(a, consts)
                         if method:
                             break
+                method_name = _extract_method_name(sig)
+                method_security = [
+                    found
+                    for found in (
+                        security_annotation(a, path, line_no, f"{class_name}.{method_name}")
+                        for a, line_no in zip(pending, pending_lines)
+                    )
+                    if found
+                ]
                 pending = []
+                pending_lines = []
+                summary = _javadoc_summary(doc_block)
+                doc_block = []
                 if not method:
                     continue
 
-                full_path = (class_base.rstrip("/") + "/" + mpath.lstrip("/")).replace("//", "/")
-                if not full_path.startswith("/"):
-                    full_path = "/" + full_path
+                full_path = _join_mapping_path(class_base, mpath)
 
                 p_start = sig.find("(")
                 p_end = sig.rfind(")")
@@ -661,7 +770,7 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
                 params = _split_params(params_text)
 
                 request_body_type = None
-                query_dto_type = None
+                form_types: list[str] = []
                 request_fields: list[FieldSpec] = []
 
                 for p in params:
@@ -698,11 +807,28 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
                                 note="request param",
                             )
                         )
-                    else:
-                        if p_type.endswith(("Dto", "Form", "SearchDto", "FormDto")) and query_dto_type is None:
-                            query_dto_type = p_type
+                    elif _form_object_type(p_clean, p_type, project_classes):
+                        form_type = re.sub(r"<.*", "", p_type).strip()
+                        if form_type not in form_types:
+                            form_types.append(form_type)
+                    elif re.sub(r"<.*", "", p_type).strip() in SIMPLE_PARAM_TYPES and not any(
+                        anno in p_clean for anno in NON_FORM_PARAM_ANNOS
+                    ):
+                        # Spring binds an un-annotated simple argument as an optional request parameter.
+                        nm = re.search(r"([A-Za-z_][A-Za-z0-9_]*)\s*$", re.sub(r"@\w+(\([^)]*\))?", "", p_clean).strip())
+                        name = nm.group(1) if nm else "queryParam"
+                        request_fields.append(
+                            FieldSpec(
+                                section="REQUEST",
+                                name_en=name,
+                                name_ko=koreanize_identifier(name),
+                                data_type=_short_type(p_type),
+                                required="N",
+                                note="request param",
+                            )
+                        )
+                query_dto_type = ", ".join(form_types) or None
 
-                method_name = _extract_method_name(sig)
                 response_type = _extract_response_type(sig)
                 if response_type in {None, "Object"}:
                     builder_type = _extract_builder_generic_type(method_body)
@@ -712,7 +838,8 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
                     inferred = _infer_response_type_from_service_call(method_body, service_fields, service_method_returns)
                     if inferred:
                         response_type = inferred
-                auth_required = any(x in full_path for x in ["/api/v1/"])
+                auth = security.decide(method, full_path, method_security, class_security)
+                note = "; ".join(n for n in (ANY_METHOD_NOTE if method == ANY_METHOD else "", auth.note) if n)
                 service_name = _infer_service_name_from_method_body(method_body, service_fields)
 
                 out.append(
@@ -727,14 +854,20 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
                         request_body_type=request_body_type,
                         query_dto_type=query_dto_type,
                         response_type=response_type,
-                        auth_required=auth_required,
+                        auth_required=auth.auth_required,
                         request_fields=request_fields,
+                        summary=summary,
+                        note=note,
+                        auth_evidence=auth.evidence,
                     )
                 )
                 continue
 
             if pending and not s.startswith("@"):
                 pending = []
+                pending_lines = []
+            if not s.startswith("//"):
+                doc_block = []
             idx += 1
 
     return out
@@ -758,6 +891,9 @@ def to_api_endpoints(seeds: list[ApiSeed]) -> list[ApiEndpoint]:
                 query_dto_type=s.query_dto_type,
                 response_type=s.response_type,
                 auth_required=s.auth_required,
+                auth_evidence=list(s.auth_evidence),
+                interface_name=s.summary or None,
+                note=s.note,
                 request_fields=list(s.request_fields),
                 response_fields=[],
             )

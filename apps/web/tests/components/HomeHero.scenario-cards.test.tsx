@@ -3,12 +3,13 @@
 // Scenario-card rail coverage.
 //   - The default create rail renders illustrated scenario cards carrying a
 //     title AND a one-line description.
-//   - The rail leads with the slide deck ("Slides") per the curated create
-//     order.
+//   - The rail leads with the interface spec (the first SI deliverable) per
+//     the curated create order.
 //   - The finer-grained scenarios (wireframe / mobile / document) exist and
-//     route to a working scenario plugin.
+//     route to a working scenario plugin; wireframe / mobile sit behind the
+//     "More templates" toggle.
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
@@ -46,6 +47,9 @@ function renderHero(overrides: Partial<React.ComponentProps<typeof HomeHero>> = 
 describe('HomeHero scenario cards', () => {
   it('renders each create scenario card with a title and a description', () => {
     renderHero();
+    const spec = screen.getByTestId('home-hero-rail-interface-spec');
+    expect(spec.textContent).toContain('Interface spec');
+    fireEvent.click(screen.getByTestId('home-hero-rail-more-templates'));
     const prototype = screen.getByTestId('home-hero-rail-prototype');
     expect(prototype.textContent).toContain('Prototype');
     expect(prototype.textContent).toContain('Interactive app mockups');
@@ -54,12 +58,13 @@ describe('HomeHero scenario cards', () => {
     expect(deck.textContent).toContain('Presentations & pitch decks');
   });
 
-  it('leads the create rail with the slide deck', () => {
-    expect(orderedCreateChips()[0]?.id).toBe('deck');
+  it('leads the create rail with the interface spec', () => {
+    expect(orderedCreateChips()[0]?.id).toBe('interface-spec');
   });
 
   it('adds the finer-grained scenarios as create cards routed to a scenario plugin', () => {
     renderHero();
+    fireEvent.click(screen.getByTestId('home-hero-rail-more-templates'));
     for (const id of ['wireframe', 'mobile', 'document']) {
       const card = screen.getByTestId(`home-hero-rail-${id}`);
       const tabs = screen.getByTestId('home-hero-type-tabs');

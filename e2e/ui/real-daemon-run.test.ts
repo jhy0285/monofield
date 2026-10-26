@@ -1,4 +1,5 @@
 import { expect, test } from '@/playwright/suite';
+import { gotoEntryHome, waitForLoadingShell } from '@/playwright/entry';
 import { ensureRailOpen } from '@/playwright/rail';
 import { runErrorCard } from '@/playwright/chat';
 import type { Page, Request, Response } from '@playwright/test';
@@ -91,7 +92,7 @@ test('[P0] real daemon run streams, persists, and previews an artifact', async (
   await expectProjectFileToContain(page, projectId, GENERATED_FILE, GENERATED_HEADING);
 
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
+  await waitForLoadingShell(page);
   await expect(artifactPreview(page)).toBeVisible();
   await expect(artifactPreviewFrame(page).getByRole('heading', { name: GENERATED_HEADING })).toBeVisible();
   await expectProjectFileToContain(page, projectId, GENERATED_FILE, GENERATED_HEADING);
@@ -316,11 +317,10 @@ test('[P1] plugin authoring produces a generated-plugin scaffold with action car
   await gotoEntryHome(page);
   await setBrowserAgentConfig(page, 'codex');
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
+  await waitForLoadingShell(page);
   await setBrowserAgentConfig(page, 'codex');
   await configureFakeAgent(page, 'codex');
   await expectBrowserAgentConfig(page, 'codex');
-  await dismissPrivacyDialog(page);
 
   await page.getByTestId('home-hero-shortcuts-trigger').click();
   await page.getByTestId('home-hero-rail-create-plugin').click();
@@ -393,11 +393,10 @@ async function createProject(page: Page, name: string, agentId: FakeAgentId = 'c
   await gotoEntryHome(page);
   await setBrowserAgentConfig(page, agentId);
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
+  await waitForLoadingShell(page);
   await setBrowserAgentConfig(page, agentId);
   await configureFakeAgent(page, agentId);
   await expectBrowserAgentConfig(page, agentId);
-  await dismissPrivacyDialog(page);
   await ensureRailOpen(page);
   await page.getByTestId('entry-nav-new-project').click();
   await expect(page.getByTestId('new-project-modal')).toBeVisible();
@@ -429,20 +428,8 @@ async function openProjectFromProjectsView(page: Page, projectId: string) {
   await recentProjects.locator(`[data-project-id="${projectId}"]`).click();
 }
 
-async function gotoEntryHome(page: Page) {
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible()) {
-    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
-    await expect(privacyDialog).toHaveCount(0);
-  }
-  await expect(page.getByTestId('home-hero')).toBeVisible();
-  await expect(page.getByTestId('home-hero-input')).toBeVisible();
-}
-
 async function expectWorkspaceReady(page: Page) {
-  await waitForLoadingToClear(page);
+  await waitForLoadingShell(page);
   await expect(page).toHaveURL(/\/projects\//);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
@@ -504,24 +491,11 @@ async function sendPromptAndReloadBeforeCreateResponse(page: Page, prompt: strin
 
 async function openNewProjectModal(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
-  await dismissPrivacyDialog(page);
+  await waitForLoadingShell(page);
   await ensureRailOpen(page);
   await page.getByTestId('entry-nav-new-project').click();
   await expect(page.getByTestId('new-project-modal')).toBeVisible();
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
-}
-
-async function dismissPrivacyDialog(page: Page) {
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible()) {
-    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
-    await expect(privacyDialog).toHaveCount(0);
-  }
-}
-
-async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: 30_000 });
 }
 
 async function configureFakeAgent(page: Page, agentId: FakeAgentId) {

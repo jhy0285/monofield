@@ -1,7 +1,8 @@
 import { expect, test } from '@/playwright/suite';
+import { gotoEntryHome } from '@/playwright/entry';
 import { ensureRailOpen } from '@/playwright/rail';
 import type { Page, Request } from '@playwright/test';
-import { applyStandardMocks, fulfillAgentsRoute, STORAGE_KEY } from '@/playwright/mock-factory';
+import { APP_CONFIG_URL, applyStandardMocks, fulfillAgentsRoute, STORAGE_KEY } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 const LOCAL_CLI_LABEL = /Local CLI|本机 CLI|本地 CLI/i;
 const STARTER_PLUGIN = makeStarterPlugin({
@@ -80,7 +81,6 @@ test('[P0] @critical entry chrome exposes the primary home creation surface and 
   });
 
   await gotoEntryHome(page);
-  await expect(page.getByTestId('entry-star-badge')).toBeVisible();
   await expect(page.getByTestId('entry-use-everywhere-button')).toBeVisible();
   await expect(page.getByTestId('recent-projects-strip')).toHaveCount(0);
   // The nav rail is collapsed by default — only the topbar toggle shows.
@@ -96,9 +96,12 @@ test('[P0] @critical entry chrome exposes the primary home creation surface and 
   await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
   const createTabs = page.getByTestId('home-hero-type-tabs');
   await expect(createTabs).toBeVisible();
+  await expect(page.getByTestId('home-hero-rail-interface-spec')).toBeVisible();
+  await expect(page.getByTestId('home-hero-rail-screen-spec')).toBeVisible();
+  await expect(page.getByTestId('home-hero-rail-deck')).toBeVisible();
+  await page.getByTestId('home-hero-rail-more-templates').click();
   await expect(page.getByTestId('home-hero-rail-prototype')).toBeVisible();
   await expect(page.getByTestId('home-hero-rail-live-artifact')).toBeVisible();
-  await expect(page.getByTestId('home-hero-rail-deck')).toBeVisible();
   await expect(page.getByTestId('home-hero-rail-image')).toBeVisible();
   await expect(page.getByTestId('home-hero-rail-video')).toBeVisible();
   await expect(page.getByTestId('home-hero-rail-hyperframes')).toBeVisible();
@@ -165,10 +168,13 @@ test('[P1] entry top navigation matches the current home tab structure', async (
   await gotoEntryHome(page);
   await ensureRailOpen(page);
 
+  // Home is no longer a rail item: it is the pinned workspace tab, and the
+  // rail logo is its shortcut.
+  await expect(homeWorkspaceTab(page)).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByTestId('entry-nav-logo')).toBeVisible();
-  await expect(page.getByTestId('entry-nav-home')).toHaveAttribute('aria-current', 'page');
   await expect(page.getByTestId('entry-nav-new-project')).toBeVisible();
   await expect(page.getByTestId('entry-nav-projects')).toBeVisible();
+  await expect(page.getByTestId('entry-nav-open-work')).toBeVisible();
   await expect(page.getByTestId('entry-nav-tasks')).toBeVisible();
   await expect(page.getByTestId('entry-nav-design-systems')).toBeVisible();
   await expect(page.locator('.entry-nav-rail__group').getByTestId('entry-nav-plugins')).toBeVisible();
@@ -176,29 +182,28 @@ test('[P1] entry top navigation matches the current home tab structure', async (
   await expect(page.locator('.entry-nav-rail__footer').getByTestId('entry-nav-plugins')).toHaveCount(0);
   await expect(page.locator('.entry-nav-rail__footer').getByTestId('entry-nav-integrations')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-type-tabs')).toBeVisible();
-  await expect(page.getByTestId('home-hero-active-type-chip')).toHaveCount(0);
-  await expect(page.getByTestId('home-hero-rail-prototype')).toHaveAttribute('aria-selected', 'false');
+  await expect(page.getByTestId('home-hero-template-trigger')).toContainText('None');
+  await expect(page.getByTestId('home-hero-rail-interface-spec')).toHaveAttribute('aria-selected', 'false');
   await expect(page.getByTestId('home-hero-footer-options')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-plugin-presets')).toHaveCount(0);
-  await expect(page.getByTestId('plugins-home-pill-category-all')).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('plugins-home-pill-category-prototype')).toHaveAttribute('aria-selected', 'false');
-  await expect(page.getByTestId('plugins-home-row-subcategory-prototype')).toHaveCount(0);
+  // The starters gallery (and its category pills) left Home for the Library
+  // destination; Home must not render it any more.
+  await expect(page.getByTestId('entry-view-home').getByTestId('plugins-home-section')).toHaveCount(0);
 });
 
-test('[P1] home view exposes the redesigned hero, recent projects, and starters', async ({ page }) => {
+test('[P1] home view exposes the hero, recent projects, and the Library entry', async ({ page }) => {
   await createProject(page, 'Home structure recent project');
   await gotoEntryHome(page);
 
-  // The redesigned entry shell keeps every view mounted (only the active one
-  // is visible), so `plugins-home-section` exists in both the home and plugins
-  // views; scope the lookup to the home view to keep the locator unambiguous.
-  const home = page.getByTestId('entry-view-home');
   await expect(page.getByTestId('recent-projects-strip')).toBeVisible();
   await expect(page.getByTestId('recent-projects-view-all')).toBeVisible();
-  await expect(home.getByTestId('plugins-home-section')).toBeVisible();
-  await expect(home.getByTestId('plugins-home-browse-registry')).toBeVisible();
   await expect(page.getByTestId('home-hero')).toBeVisible();
-  await expect(page.getByTestId('entry-nav-home')).toHaveAttribute('aria-current', 'page');
+  await expect(homeWorkspaceTab(page)).toHaveAttribute('aria-selected', 'true');
+
+  // Starters now live in Library; Home links there instead of embedding them.
+  await page.getByTestId('home-open-work-link').click();
+  await expect(page).toHaveURL(/\/open-work$/);
+  await expect(libraryView(page).getByTestId('plugins-home-section')).toBeVisible();
 
   await ensureRailOpen(page);
   await page.getByTestId('entry-nav-projects').click();
@@ -224,7 +229,7 @@ test('[P0] @critical recent projects strip opens a project card and view all rou
 test('[P1] design systems page is reachable from entry nav and supports search, preview, and default selection', async ({ page }) => {
   const persistedConfigs: Array<{ designSystemId?: string | null }> = [];
   await routeDesignSystems(page);
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() === 'PUT') {
       const body = route.request().postDataJSON() as { designSystemId?: string | null };
       persistedConfigs.push(body);
@@ -256,7 +261,7 @@ test('[P1] design systems page is reachable from entry nav and supports search, 
 
   await expect(page).toHaveURL(/\/design-systems$/);
   await expect(page.getByTestId('entry-nav-design-systems')).toHaveAttribute('aria-current', 'page');
-  await expect(page.getByRole('heading', { name: 'Design systems' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Brand & styles' })).toBeVisible();
   await expect(page.getByTestId('design-systems-tab')).toBeVisible();
   await page.getByRole('tab', { name: 'Official presets' }).click();
   await expect(page.getByTestId('design-system-card-agentic')).toBeVisible();
@@ -275,19 +280,13 @@ test('[P1] design systems page is reachable from entry nav and supports search, 
   await expect(page.getByTestId('design-system-card-agentic')).toHaveCount(0);
   await page.getByTestId('design-systems-surface-all').click();
 
-  // Master-detail: selecting a list row renders that system in the right
-  // preview pane, where the full-preview and "set as default" actions live.
+  // Master-detail: selecting a list row renders that system's kit inline in
+  // the right pane (the separate full-preview dialog is gone), and "set as
+  // default" moved into the kit header's overflow menu.
   await page.getByTestId('design-system-card-airbnb').click();
-  await page.getByTestId('design-system-preview-airbnb').click();
-  const preview = page.getByRole('dialog', { name: /Airbnb preview/i });
-  await expect(preview).toBeVisible();
-  await expect(preview.getByRole('tab', { name: /showcase/i })).toHaveAttribute('aria-selected', 'true');
-  await expect(preview.getByRole('tab', { name: /tokens/i })).toBeVisible();
-  await expect(preview.getByRole('button', { name: 'DESIGN.md', exact: true })).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(preview).toHaveCount(0);
-
-  await page.getByTestId('design-system-select-airbnb').click();
+  await expect(page.getByTestId('design-system-detail-airbnb')).toBeVisible();
+  await page.getByTestId('design-kit-more-actions').click();
+  await page.getByRole('menuitem', { name: 'Default for new chats' }).click();
   await expect(page.getByTestId('design-system-card-airbnb')).toContainText(/default/i);
   await expect
     .poll(() => persistedConfigs.at(-1)?.designSystemId)
@@ -381,7 +380,7 @@ test('[P0] @critical entry execution pill opens the Local CLI and BYOK switcher 
       },
     ]);
   });
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() !== 'GET') {
       await route.continue();
       return;
@@ -426,7 +425,7 @@ test('[P0] @critical entry execution pill opens the Local CLI and BYOK switcher 
   await expect(page.getByRole('tab', { name: LOCAL_CLI_LABEL })).toBeVisible();
 });
 
-test('[P2] entry help menu exposes community links and topbar routes Use everywhere', async ({ page }) => {
+test('[P2] entry help menu exposes GitHub help links and topbar routes Use everywhere', async ({ page }) => {
   await gotoEntryHome(page);
 
   // The help launcher lives in the (collapsed-by-default) rail footer.
@@ -434,13 +433,15 @@ test('[P2] entry help menu exposes community links and topbar routes Use everywh
   await page.getByTestId('entry-help-trigger').click();
   const menu = page.locator('.entry-help-popover[role="menu"]');
   await expect(menu).toBeVisible();
-  await expect(menu.getByRole('menuitem', { name: /Follow @OpenDesignHQ on X/i })).toHaveAttribute(
+  // The upstream X / Discord community links were dropped with the Open
+  // Design branding; help now routes to the MonoField GitHub issue forms.
+  await expect(menu.getByRole('menuitem', { name: /Get help on GitHub/i })).toHaveAttribute(
     'href',
-    'https://x.com/OpenDesignHQ',
+    /^https:\/\/github\.com\/jhy0285\/monofield\/issues\/new\?/,
   );
-  await expect(menu.getByRole('menuitem', { name: /Join Discord/i })).toHaveAttribute(
+  await expect(menu.getByRole('menuitem', { name: /Submit a feature request/i })).toHaveAttribute(
     'href',
-    'https://discord.gg/9ptkbbqRu',
+    /^https:\/\/github\.com\/jhy0285\/monofield\/issues\/new\?/,
   );
 
   await page.getByTestId('entry-use-everywhere-button').click();
@@ -450,11 +451,8 @@ test('[P2] entry help menu exposes community links and topbar routes Use everywh
     'true',
   );
 
+  await returnHome(page);
   await ensureRailOpen(page);
-  // Return home via the explicit Home nav (the logo is overlaid by the
-  // collapse button on hover, which would intercept the click).
-  await page.getByTestId('entry-nav-home').click();
-  await expect(page.getByTestId('home-hero')).toBeVisible();
   await page.getByTestId('entry-help-trigger').click();
   await expect(menu).toBeVisible();
   await page.keyboard.press('Escape');
@@ -497,9 +495,10 @@ test('[P1] entry execution pill remains available across secondary entry pages',
 
   const destinations = [
     { nav: 'entry-nav-projects', heading: 'Projects' },
+    { nav: 'entry-nav-open-work', heading: 'Reuse proven ways of working.' },
     { nav: 'entry-nav-tasks', heading: 'Automations' },
     { nav: 'entry-nav-plugins', heading: 'Plugins' },
-    { nav: 'entry-nav-design-systems', heading: 'Design systems' },
+    { nav: 'entry-nav-design-systems', heading: 'Brand & styles' },
     { nav: 'entry-nav-integrations', heading: 'Integrations' },
   ];
 
@@ -519,7 +518,10 @@ test('[P1] entry execution pill remains available across secondary entry pages',
   }
 });
 
-test('[P1] home starters can browse registry and use a starter from Home', async ({ page }) => {
+// The starters gallery left Home for the Library destination (see
+// `openLibrary`); Home's "Browse registry" link became Library's "Manage
+// plugins". Each starter case below drives the same flow from Library.
+test('[P1] library starters can browse the plugin manager and use a starter on Home', async ({ page }) => {
   await page.route('**/api/plugins', async (route) => {
     await route.fulfill({
       json: {
@@ -532,8 +534,8 @@ test('[P1] home starters can browse registry and use a starter from Home', async
   });
 
   await gotoEntryHome(page);
-  await expect(page.getByTestId('plugins-home-browse-registry')).toBeVisible();
-  await page.getByTestId('plugins-home-browse-registry').click();
+  const library = await openLibrary(page);
+  await library.getByTestId('open-work-manage-plugins').click();
   await expect(page).toHaveURL(/\/plugins$/);
   await expect(page.getByTestId('entry-nav-plugins')).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('h1').filter({ hasText: 'Plugins' })).toBeVisible();
@@ -543,22 +545,17 @@ test('[P1] home starters can browse registry and use a starter from Home', async
   await expect(page.getByTestId('plugins-create-button')).toBeVisible();
   await expect(page.getByTestId('plugins-import-button')).toBeVisible();
 
-  await ensureRailOpen(page);
-  // Return home via the explicit Home nav (the logo is overlaid by the
-  // collapse button on hover, which would intercept the click).
-  await page.getByTestId('entry-nav-home').click();
-  await expect(page.getByTestId('home-hero')).toBeVisible();
-  // Community is a gallery now (no inline Use button): open the starter's
-  // detail modal and use it. This starter ships an example query, so the
-  // primary Use button replicates (seeds the prompt) while binding it as the
-  // active driver; this case only asserts the active-plugin chip, which
-  // appears on either Use variant.
-  await openHomePluginDetails(page, 'localized-plugin', /Localized Plugin/i);
+  // The gallery has no inline Use button: open the starter's detail modal and
+  // use it. This starter ships an example query, so the primary Use button
+  // replicates (seeds the prompt) while binding it as the active driver; this
+  // case only asserts the active-plugin chip, which appears on either variant.
+  await openLibraryPluginDetails(page, 'localized-plugin', /Localized Plugin/i);
   await page.getByTestId('plugin-details-use-localized-plugin').click();
+  await expect(page.getByTestId('home-hero')).toBeVisible();
   await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
 });
 
-test('[P2] home starters shows the empty catalog state when no plugins are available', async ({ page }) => {
+test('[P2] library starters show the empty catalog state when no plugins are available', async ({ page }) => {
   await page.route('**/api/plugins', async (route) => {
     await route.fulfill({
       json: {
@@ -568,14 +565,13 @@ test('[P2] home starters shows the empty catalog state when no plugins are avail
   });
 
   await gotoEntryHome(page);
-  // `plugins-home-section` is rendered in both the home and plugins views (both
-  // stay mounted), so scope to the home view to keep the locator unambiguous.
-  await expect(page.getByTestId('entry-view-home').getByTestId('plugins-home-section')).toContainText(
-    'Catalog is empty.',
+  const library = await openLibrary(page);
+  await expect(library.getByTestId('plugins-home-section')).toContainText(
+    'No workflows are available yet.',
   );
 });
 
-test('[P2] home starters search and facet filters narrow the visible gallery', async ({ page }) => {
+test('[P2] library starters search and facet filters narrow the visible gallery', async ({ page }) => {
   await page.route('**/api/plugins', async (route) => {
     await route.fulfill({
       json: {
@@ -586,31 +582,31 @@ test('[P2] home starters search and facet filters narrow the visible gallery', a
 
   await gotoEntryHome(page);
 
-  const home = await revealHomeTemplates(page);
-  await expect(home.getByTestId('plugins-home-pill-category-all')).toContainText('4');
+  const library = await openLibrary(page);
+  await expect(library.getByTestId('plugins-home-pill-category-all')).toContainText('4');
 
-  await home.getByTestId('plugins-home-pill-category-deck').click({ force: true });
-  await expect(home.locator('[data-plugin-id="deck-writer"]')).toBeVisible();
-  await expect(home.locator('[data-plugin-id="figma-importer"]')).toHaveCount(0);
-  await expect(home.locator('[data-plugin-id="localized-plugin"]')).toHaveCount(0);
-  await expect(home.locator('[data-plugin-id="hyperframes-video"]')).toHaveCount(0);
+  await library.getByTestId('plugins-home-pill-category-deck').click({ force: true });
+  await expect(library.locator('[data-plugin-id="deck-writer"]')).toBeVisible();
+  await expect(library.locator('[data-plugin-id="figma-importer"]')).toHaveCount(0);
+  await expect(library.locator('[data-plugin-id="localized-plugin"]')).toHaveCount(0);
+  await expect(library.locator('[data-plugin-id="hyperframes-video"]')).toHaveCount(0);
 
-  await home.getByTestId('plugins-home-pill-category-all').click({ force: true });
-  await expect(home.locator('[data-plugin-id="figma-importer"]')).toBeVisible();
-  await expect(home.locator('[data-plugin-id="localized-plugin"]')).toBeVisible();
-  await expect(home.locator('[data-plugin-id="hyperframes-video"]')).toBeVisible();
-  await expect(home.locator('[data-plugin-id="deck-writer"]')).toBeVisible();
+  await library.getByTestId('plugins-home-pill-category-all').click({ force: true });
+  await expect(library.locator('[data-plugin-id="figma-importer"]')).toBeVisible();
+  await expect(library.locator('[data-plugin-id="localized-plugin"]')).toBeVisible();
+  await expect(library.locator('[data-plugin-id="hyperframes-video"]')).toBeVisible();
+  await expect(library.locator('[data-plugin-id="deck-writer"]')).toBeVisible();
 
-  const search = home.getByTestId('plugins-home-search');
+  const search = library.getByTestId('plugins-home-search');
   await search.fill('Deck Writer');
-  await expect(home.locator('[data-plugin-id="deck-writer"]')).toBeVisible();
-  await expect(home.locator('[data-plugin-id="localized-plugin"]')).toHaveCount(0);
-  await expect(home.locator('[data-plugin-id="hyperframes-video"]')).toHaveCount(0);
-  await home.getByTestId('plugins-home-search-clear').click({ force: true });
-  await expect(home.locator('[data-plugin-id="localized-plugin"]')).toBeVisible();
+  await expect(library.locator('[data-plugin-id="deck-writer"]')).toBeVisible();
+  await expect(library.locator('[data-plugin-id="localized-plugin"]')).toHaveCount(0);
+  await expect(library.locator('[data-plugin-id="hyperframes-video"]')).toHaveCount(0);
+  await library.getByTestId('plugins-home-search-clear').click({ force: true });
+  await expect(library.locator('[data-plugin-id="localized-plugin"]')).toBeVisible();
 });
 
-test('[P1] home starters can jump into plugin creation through the registry browse flow', async ({ page }) => {
+test('[P1] library starters can jump into plugin creation through the plugin manager', async ({ page }) => {
   await page.route('**/api/plugins', async (route) => {
     await route.fulfill({
       json: {
@@ -620,15 +616,16 @@ test('[P1] home starters can jump into plugin creation through the registry brow
   });
 
   await gotoEntryHome(page);
-  await page.getByTestId('plugins-home-browse-registry').click();
+  const library = await openLibrary(page);
+  await library.getByTestId('open-work-manage-plugins').click();
   await expect(page).toHaveURL(/\/plugins$/);
   await expect(page.locator('h1').filter({ hasText: 'Plugins' })).toBeVisible();
   await page.getByTestId('plugins-create-button').click();
 
-  await expect(page.getByTestId('home-hero-input')).toHaveText(/Create an Open Design plugin/i);
+  await expect(page.getByTestId('home-hero-input')).toHaveText(/Create a MonoField plugin/i);
 });
 
-test('[P2] home starters search can enter a no-results state and recover with clear', async ({ page }) => {
+test('[P2] library starters search can enter a no-results state and recover with clear', async ({ page }) => {
   await page.route('**/api/plugins', async (route) => {
     await route.fulfill({
       json: {
@@ -639,24 +636,23 @@ test('[P2] home starters search can enter a no-results state and recover with cl
 
   await gotoEntryHome(page);
 
-  // `plugins-home-section` and its children are rendered in both the home and
-  // plugins views (both stay mounted), so scope to the home view to keep these
-  // strict-mode locators unambiguous.
-  const home = await revealHomeTemplates(page);
-  await home.getByTestId('plugins-home-pill-category-all').click({ force: true });
-  const search = home.getByTestId('plugins-home-search');
+  // Visited entry views stay mounted, so keep these strict-mode locators
+  // scoped to the Library view.
+  const library = await openLibrary(page);
+  await library.getByTestId('plugins-home-pill-category-all').click({ force: true });
+  const search = library.getByTestId('plugins-home-search');
   await search.click({ force: true });
   await search.fill('no-such-starter');
   await expect(search).toHaveValue('no-such-starter');
-  await expect(home.getByTestId('plugins-home-section')).toContainText(
-    'No plugins match the current filters.',
+  await expect(library.getByTestId('plugins-home-section')).toContainText(
+    'No workflows match the current filters.',
   );
-  await home.getByRole('button', { name: /Clear filters/i }).click();
-  await expect(page.locator('[data-plugin-id="localized-plugin"]')).toBeVisible();
-  await expect(page.locator('[data-plugin-id="deck-writer"]')).toBeVisible();
+  await library.getByRole('button', { name: /Clear filters/i }).click();
+  await expect(library.locator('[data-plugin-id="localized-plugin"]')).toBeVisible();
+  await expect(library.locator('[data-plugin-id="deck-writer"]')).toBeVisible();
 });
 
-test('[P2] home starters details modal opens from a gallery card and closes on Escape', async ({ page }) => {
+test('[P2] library starters details modal opens from a gallery card and closes on Escape', async ({ page }) => {
   await page.route('**/api/plugins', async (route) => {
     await route.fulfill({
       json: {
@@ -667,10 +663,10 @@ test('[P2] home starters details modal opens from a gallery card and closes on E
 
   await gotoEntryHome(page);
 
-  const home = await revealHomeTemplates(page);
-  const card = home.locator('[data-plugin-id="localized-plugin"]').first();
+  const library = await openLibrary(page);
+  const card = library.locator('[data-plugin-id="localized-plugin"]').first();
   await expect(card).toBeVisible();
-  await home.getByTestId('plugins-home-details-localized-plugin').dispatchEvent('click');
+  await library.getByTestId('plugins-home-details-localized-plugin').dispatchEvent('click');
 
   const dialog = page.getByRole('dialog', { name: /Localized Plugin details/i });
   await expect(dialog).toBeVisible();
@@ -681,7 +677,7 @@ test('[P2] home starters details modal opens from a gallery card and closes on E
   await expect(dialog).toHaveCount(0);
 });
 
-test('[P1] home starters gallery card click opens the large preview detail modal', async ({ page }) => {
+test('[P1] library starters gallery card click opens the large preview detail modal', async ({ page }) => {
   const htmlPlugin = makeStarterPlugin({
     id: 'community-gallery-plugin',
     title: 'Community Gallery Plugin',
@@ -705,9 +701,9 @@ test('[P1] home starters gallery card click opens the large preview detail modal
   });
 
   await gotoEntryHome(page);
-  const home = await revealHomeTemplates(page);
+  const library = await openLibrary(page);
 
-  const card = home.locator('article.plugins-home__card[data-plugin-id="community-gallery-plugin"]');
+  const card = library.locator('article.plugins-home__card[data-plugin-id="community-gallery-plugin"]');
   await expect(card).toBeVisible();
   await expect(card).toHaveClass(/plugins-home__card--gallery/);
   await expect(card).toHaveAttribute('data-preview-kind', 'html');
@@ -721,7 +717,7 @@ test('[P1] home starters gallery card click opens the large preview detail modal
   await expect(page.getByTestId('plugin-details-use-community-gallery-plugin')).toBeVisible();
 });
 
-test('[P2] home starters html details modal exposes header actions and closes from the close button', async ({ page }) => {
+test('[P2] library starters html details modal exposes header actions and closes from the close button', async ({ page }) => {
   const htmlPlugin = makeStarterPlugin({
     id: 'html-details-plugin',
     title: 'HTML Details Plugin',
@@ -745,8 +741,9 @@ test('[P2] home starters html details modal exposes header actions and closes fr
   });
 
   await gotoEntryHome(page);
-  await page.locator('article.plugins-home__card[data-plugin-id="html-details-plugin"]').hover();
-  await page.getByTestId('plugins-home-details-html-details-plugin').click({ force: true });
+  const library = await openLibrary(page);
+  await library.locator('article.plugins-home__card[data-plugin-id="html-details-plugin"]').hover();
+  await library.getByTestId('plugins-home-details-html-details-plugin').click({ force: true });
 
   const dialog = page.getByRole('dialog', { name: /HTML Details Plugin preview/i });
   await expect(dialog).toBeVisible();
@@ -766,7 +763,7 @@ test('[P2] home starters html details modal exposes header actions and closes fr
   await expect(dialog).toHaveCount(0);
 });
 
-test('[P2] home starters html details modal shows metadata links and supports copy query', async ({ page }) => {
+test('[P2] library starters html details modal shows metadata links and supports copy query', async ({ page }) => {
   const htmlPlugin = makeStarterPlugin({
     id: 'html-metadata-plugin',
     title: 'HTML Metadata Plugin',
@@ -821,8 +818,9 @@ test('[P2] home starters html details modal shows metadata links and supports co
   });
 
   await gotoEntryHome(page);
-  await page.locator('article.plugins-home__card[data-plugin-id="html-metadata-plugin"]').hover();
-  await page.getByTestId('plugins-home-details-html-metadata-plugin').click({ force: true });
+  const library = await openLibrary(page);
+  await library.locator('article.plugins-home__card[data-plugin-id="html-metadata-plugin"]').hover();
+  await library.getByTestId('plugins-home-details-html-metadata-plugin').click({ force: true });
 
   const dialog = page.getByRole('dialog', { name: /HTML Metadata Plugin preview/i });
   await expect(dialog).toBeVisible();
@@ -835,9 +833,10 @@ test('[P2] home starters html details modal shows metadata links and supports co
     'href',
     'https://github.com/nexu-io/open-design',
   );
+  // The homepage link is the manifest's own `homepage`, not the author URL.
   await expect(page.getByTestId('plugin-details-author-homepage')).toHaveAttribute(
     'href',
-    'https://github.com/nexu-io/open-design',
+    'https://example.com/html-metadata-plugin',
   );
   await expect(dialog).toContainText('Context bundles');
   await expect(dialog).toContainText('./SKILL.md');
@@ -855,7 +854,7 @@ test('[P2] home starters html details modal shows metadata links and supports co
   // the redesign; sharing is offered through the header Share menu instead.
 });
 
-test('[P1] home starters Use plugin from the details modal applies the plugin to the home hero', async ({ page }) => {
+test('[P1] library starters Use plugin from the details modal applies the plugin to the home hero', async ({ page }) => {
   const htmlPlugin = makeStarterPlugin({
     id: 'detail-use-plugin',
     title: 'Detail Use Plugin',
@@ -881,8 +880,9 @@ test('[P1] home starters Use plugin from the details modal applies the plugin to
   });
 
   await gotoEntryHome(page);
-  await page.locator('article.plugins-home__card[data-plugin-id="detail-use-plugin"]').hover();
-  await page.getByTestId('plugins-home-details-detail-use-plugin').click({ force: true });
+  const library = await openLibrary(page);
+  await library.locator('article.plugins-home__card[data-plugin-id="detail-use-plugin"]').hover();
+  await library.getByTestId('plugins-home-details-detail-use-plugin').click({ force: true });
 
   const dialog = page.getByRole('dialog', { name: /Detail Use Plugin preview/i });
   await expect(dialog).toBeVisible();
@@ -899,7 +899,7 @@ test('[P1] home starters Use plugin from the details modal applies the plugin to
   await expect(page.getByTestId('home-hero-input')).toHaveText('');
 });
 
-test('[P0] @critical home starters Use-plugin-only routes the plugin as the active driver and keeps the prompt freeform', async ({ page }) => {
+test('[P0] @critical library starters Use-plugin-only routes the plugin as the active driver and keeps the prompt freeform', async ({ page }) => {
   await page.route('**/api/plugins', async (route) => {
     await route.fulfill({
       json: {
@@ -917,11 +917,11 @@ test('[P0] @critical home starters Use-plugin-only routes the plugin as the acti
   await expect(input).toHaveText('');
 
   const applyResponsePromise = page.waitForResponse('**/api/plugins/localized-plugin/apply');
-  // Community is a gallery (no inline Use button): open the starter's detail
+  // Library is a gallery (no inline Use button): open the starter's detail
   // modal and use it from there. This starter ships an example query, so the
   // primary Use button now replicates (seeds the prompt) — the structure-only
   // freeform path lives in the caret menu's "Use plugin only" option.
-  await openHomePluginDetails(page, 'localized-plugin', /Localized Plugin/i);
+  await openLibraryPluginDetails(page, 'localized-plugin', /Localized Plugin/i);
   await page.getByTestId('plugin-details-use-localized-plugin-menu').click();
   await page.getByTestId('plugin-details-use-option-localized-plugin').click();
   // "Use plugin only" routes the starter as the active driver (active-plugin
@@ -959,7 +959,7 @@ test('[P0] @critical home starters Use-plugin-only routes the plugin as the acti
   expect(projectBody.pluginId).toBe('localized-plugin');
 });
 
-test('[P1] home starters route the picked plugin as the active driver from its detail modal', async ({ page }) => {
+test('[P1] library starters route the picked plugin as the active driver from its detail modal', async ({ page }) => {
   await page.route('**/api/plugins', async (route) => {
     await route.fulfill({
       json: {
@@ -973,18 +973,16 @@ test('[P1] home starters route the picked plugin as the active driver from its d
 
   await gotoEntryHome(page);
 
-  const starterCard = page.locator('[data-plugin-id="localized-plugin"]').first();
-  await starterCard.scrollIntoViewIfNeeded();
-  // Community is a gallery: open the starter's detail modal and use it. This
+  // Library is a gallery: open the starter's detail modal and use it. This
   // starter ships an example query, so the primary Use button replicates and
   // binds the plugin as the active driver (active-plugin chip); this case only
   // asserts that chip, which appears on either Use variant.
-  await openHomePluginDetails(page, 'localized-plugin', /Localized Plugin/i);
+  await openLibraryPluginDetails(page, 'localized-plugin', /Localized Plugin/i);
   await page.getByTestId('plugin-details-use-localized-plugin').click();
   await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
 });
 
-test('[P0] @critical home starters Use with query carries the hydrated starter prompt into the created project and first user turn', async ({ page }) => {
+test('[P0] @critical library starters Use with query carries the hydrated starter prompt into the created project and first user turn', async ({ page }) => {
   await page.route('**/api/plugins', async (route) => {
     await route.fulfill({
       json: {
@@ -999,13 +997,13 @@ test('[P0] @critical home starters Use with query carries the hydrated starter p
   await gotoEntryHome(page);
 
   const input = page.getByTestId('home-hero-input');
-  const home = await revealHomeTemplates(page);
+  const library = await openLibrary(page);
   // Use the starter from its detail modal (gallery has no inline Use). This
   // starter ships an example query, so the primary Use button replicates: it
   // routes the plugin as the active run driver AND seeds the hydrated prompt.
   // We still fill the same brief explicitly to keep the assertion robust to the
   // async apply→seed roundtrip (the value is identical either way).
-  await openHomePluginDetails(page, 'localized-plugin', /Localized Plugin/i, home);
+  await openLibraryPluginDetails(page, 'localized-plugin', /Localized Plugin/i);
   await page.getByTestId('plugin-details-use-localized-plugin').click();
   await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
   await input.fill('Make a design systems brief.');
@@ -1060,8 +1058,8 @@ test('[P0] @critical home plugin input edits are reapplied and carried into proj
   });
 
   await gotoEntryHome(page);
-  const home = await revealHomeTemplates(page);
-  await home.getByTestId('plugins-home-details-parameterized-deck-plugin').click({ force: true });
+  const library = await openLibrary(page);
+  await library.getByTestId('plugins-home-details-parameterized-deck-plugin').click({ force: true });
   await page.getByTestId('plugin-details-use-parameterized-deck-plugin').click();
   await expect(page.getByTestId('home-hero-active-plugin')).toContainText('Parameterized Deck Plugin');
 
@@ -1132,8 +1130,8 @@ test('[P0] @critical required home plugin prompt parameters gate submit and bind
   });
 
   await gotoEntryHome(page);
-  const home = await revealHomeTemplates(page);
-  await openHomePluginDetails(page, 'guided-deck-plugin', /Guided Deck Plugin/i, home);
+  const library = await openLibrary(page);
+  await openLibraryPluginDetails(page, 'guided-deck-plugin', /Guided Deck Plugin/i);
   await page.getByTestId('plugin-details-use-guided-deck-plugin').click();
 
   const input = page.getByTestId('home-hero-input');
@@ -1171,7 +1169,8 @@ test('[P0] @critical home composer can route free-form Ask mode without the desi
 
   const modeTrigger = page.getByTestId('session-mode-trigger');
   await expect(modeTrigger).toBeVisible();
-  await expect(modeTrigger).toContainText('Design');
+  // The default "Design" session mode was renamed to "Docs".
+  await expect(modeTrigger).toContainText('Docs');
   await modeTrigger.click();
   await page.getByRole('menuitemradio', { name: /Ask mode/i }).click();
   await expect(modeTrigger).toContainText('Ask');
@@ -1199,7 +1198,10 @@ test('[P0] @critical home composer can route free-form Ask mode without the desi
   expect(body.metadata?.kind).toBe('other');
 });
 
-test('[P0] @critical home working directory creates the project with linked dirs instead of importing files', async ({ page }) => {
+// A Home-picked folder is no longer recorded as `metadata.linkedDirs`: the app
+// strips it from the create body and hands it to the post-create working-dir
+// route, which makes it the project root (after desktop token verification).
+test('[P0] @critical home working directory becomes the project root instead of importing files', async ({ page }) => {
   const workingDir = '/Users/mac/Projects/Dashboard-UI-Liquid-Glass';
   await page.route('**/api/recent-dirs', async (route) => {
     await route.fulfill({ json: { dirs: [workingDir] } });
@@ -1207,7 +1209,7 @@ test('[P0] @critical home working directory creates the project with linked dirs
   await page.route('**/api/dialog/open-folder', async (route) => {
     await route.fulfill({ json: { path: workingDir } });
   });
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() === 'PUT') {
       await route.fulfill({
         json: {
@@ -1231,6 +1233,11 @@ test('[P0] @critical home working directory creates the project with linked dirs
   await input.fill('Create a premium dashboard for operations review.');
 
   const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
+  const workingDirRequestPromise = page.waitForRequest(
+    (request) =>
+      request.method() === 'POST' &&
+      /^\/api\/projects\/[^/]+\/working-dir$/.test(new URL(request.url()).pathname),
+  );
   await page.getByTestId('home-hero-submit').click();
 
   const request = await projectRequestPromise;
@@ -1240,10 +1247,13 @@ test('[P0] @critical home working directory creates the project with linked dirs
     conversationMode?: string;
   };
   expect(body.pendingPrompt).toBe('Create a premium dashboard for operations review.');
-  expect(body.conversationMode).toBe('design');
-  expect(body.metadata?.linkedDirs).toEqual([workingDir]);
+  expect(body.conversationMode).toBe('docs');
+  expect(body.metadata?.linkedDirs).toBeUndefined();
   expect(body.metadata?.baseDir).toBeUndefined();
   expect(body.metadata?.userWorkingDir).toBeUndefined();
+
+  const workingDirRequest = await workingDirRequestPromise;
+  expect(workingDirRequest.postDataJSON()).toEqual({ baseDir: workingDir });
 });
 
 test('[P0] @critical clearing the home working directory removes linked dirs from project creation', async ({ page }) => {
@@ -1254,7 +1264,7 @@ test('[P0] @critical clearing the home working directory removes linked dirs fro
   await page.route('**/api/dialog/open-folder', async (route) => {
     await route.fulfill({ json: { path: workingDir } });
   });
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() === 'PUT') {
       await route.fulfill({
         json: {
@@ -1426,37 +1436,6 @@ test('[P1] collapsed rail stays out of the keyboard tab order on the home view',
   await expect(page.getByTestId('entry-nav-new-project')).toBeVisible();
 });
 
-test('[P1] collapsed new-user templates gallery stays out of the keyboard tab order', async ({ page }) => {
-  // Force the no-project (new-user) state so the templates gallery starts
-  // collapsed behind the scroll-up hint.
-  await page.route('**/api/projects', async (route) => {
-    if (route.request().method() === 'GET') {
-      await route.fulfill({ json: { projects: [] } });
-      return;
-    }
-    await route.continue();
-  });
-  await gotoEntryHome(page);
-
-  const body = page.locator('.home-templates-reveal__body');
-  await expect(body).toHaveAttribute('inert', '');
-
-  // Tabbing from the top of the document must never land inside the still-
-  // mounted (but hidden) Community-template controls.
-  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-  for (let i = 0; i < 12; i++) {
-    await page.keyboard.press('Tab');
-    const inBody = await page.evaluate(
-      () => !!document.activeElement?.closest('.home-templates-reveal__body'),
-    );
-    expect(inBody).toBe(false);
-  }
-
-  // Revealing the gallery (click the hint) drops inert and exposes the grid.
-  await page.getByTestId('home-templates-hint').click();
-  await expect(body).not.toHaveAttribute('inert', '');
-});
-
 test('[P1] rail can be collapsed again on coarse-pointer / non-hover devices', async ({ page }) => {
   // Emulate a touch device where `(hover: none)` matches: the collapse button
   // can't be revealed by hover and the topbar toggle is display:none once the
@@ -1481,55 +1460,39 @@ test('[P1] rail can be collapsed again on coarse-pointer / non-hover devices', a
   await expect(page.locator('.entry')).not.toHaveClass(/entry--rail-open/);
 });
 
-async function gotoEntryHome(page: Page) {
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible()) {
-    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
-    await expect(privacyDialog).toHaveCount(0);
-  }
-  if (!(await page.getByTestId('home-hero').isVisible().catch(() => false))) {
-    const homeWorkspaceTab = page.getByRole('tab', { name: /^Home$/ }).first();
-    if (await homeWorkspaceTab.isVisible().catch(() => false)) {
-      await homeWorkspaceTab.click();
-    } else if (await page.getByTestId('entry-nav-home').isVisible().catch(() => false)) {
-      await page.getByTestId('entry-nav-home').click();
-    }
-  }
+// Home is the pinned, leftmost workspace tab rather than a rail destination.
+function homeWorkspaceTab(page: Page) {
+  return page
+    .getByRole('tablist', { name: 'Open workspaces' })
+    .getByRole('tab', { name: 'Home', exact: true });
+}
+
+// The workspace "+" refocuses the pinned entry tab on Home. The rail logo is
+// also a Home shortcut, but on hover its collapse control overlays it.
+async function returnHome(page: Page) {
+  await page.getByTestId('workspace-tabs-new-tab').click();
   await expect(page.getByTestId('home-hero')).toBeVisible();
-  await expect(page.getByTestId('home-hero-input')).toBeVisible();
 }
 
-async function revealHomeTemplates(page: Page) {
-  const home = page.getByTestId('entry-view-home');
-  const hint = home.getByTestId('home-templates-hint');
-  if (await hint.count()) {
-    await hint.click({ force: true });
-    await expect(home.locator('.home-templates-reveal')).toHaveClass(/is-revealed/);
-    await expect(home.locator('.home-templates-reveal__body')).not.toHaveAttribute('inert', '');
-    await page.waitForTimeout(450);
-  }
-  const section = home.getByTestId('plugins-home-section');
-  await expect(section).toBeVisible();
-  await page.locator('.entry-main--scroll').evaluate((node) => {
-    node.scrollTop = node.scrollHeight;
-  });
-  return home;
+function libraryView(page: Page) {
+  return page.getByTestId('entry-view-open-work');
 }
 
-async function openHomePluginDetails(
-  page: Page,
-  pluginId: string,
-  name: RegExp,
-  scopedHome = page.getByTestId('entry-view-home'),
-) {
-  let home = scopedHome;
-  let card = home.locator(`article.plugins-home__card[data-plugin-id="${pluginId}"]`).first();
-  if (!(await card.isVisible().catch(() => false))) {
-    home = await revealHomeTemplates(page);
-    card = home.locator(`article.plugins-home__card[data-plugin-id="${pluginId}"]`).first();
-  }
+// The starters gallery moved off Home into the Library destination. Its
+// detail modal's Use actions hand the picked plugin back to the Home composer.
+async function openLibrary(page: Page) {
+  await ensureRailOpen(page);
+  await page.getByTestId('entry-nav-open-work').click();
+  const library = libraryView(page);
+  await expect(library.getByTestId('plugins-home-section')).toBeVisible();
+  return library;
+}
+
+async function openLibraryPluginDetails(page: Page, pluginId: string, name: RegExp) {
+  const library = (await libraryView(page).isVisible().catch(() => false))
+    ? libraryView(page)
+    : await openLibrary(page);
+  const card = library.locator(`article.plugins-home__card[data-plugin-id="${pluginId}"]`).first();
   await expect(card).toBeVisible();
   await card.dispatchEvent('click');
   const dialog = page.getByRole('dialog').filter({ hasText: name });

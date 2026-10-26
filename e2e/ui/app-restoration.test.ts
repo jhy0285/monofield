@@ -1,9 +1,14 @@
+import { join } from 'node:path';
+
 import { expect, test } from '@/playwright/suite';
+import { gotoEntryHome, waitForLoadingShell } from '@/playwright/entry';
+import { APP_CONFIG_URL } from '@/playwright/mock-factory';
 import { ensureRailOpen } from '@/playwright/rail';
 import { runErrorCard } from '@/playwright/chat';
 import type { Dialog, Locator, Page, Request, Response } from '@playwright/test';
 import { automatedUiScenarios } from '@/playwright/resources';
 import type { UiScenario } from '@/playwright/resources';
+import { e2eWorkspaceRoot } from '@/tools-dev/runtime';
 import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
@@ -45,7 +50,7 @@ test.beforeEach(async ({ page }) => {
     );
   }, STORAGE_KEY);
 
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() !== 'GET') {
       await route.continue();
       return;
@@ -152,7 +157,11 @@ test('[P0] @critical workspace restores the last manually selected file tab afte
   const restoredArtifactTab = page.getByRole('tab', { name: /workspace-artifact\.html/i });
   if ((await restoredArtifactTab.count()) === 0) {
     const turnCard = page.locator('.msg.assistant').filter({ hasText: 'workspace-artifact.html' }).first();
-    const openButton = turnCard.getByRole('button', { name: /^Open$/ });
+    // The turn lists every produced file with its own Open button, so scope to the artifact's row.
+    const openButton = turnCard
+      .locator('.produced-file')
+      .filter({ hasText: 'workspace-artifact.html' })
+      .getByRole('button', { name: /^Open$/ });
     await expect(openButton).toBeVisible();
     await openButton.click();
 
@@ -2980,8 +2989,9 @@ test('[P1] questions tab Continue sends selected answers into the next run reque
   ).toBe(true);
 });
 
-test('[P1] project composer working directory replace and clear update linked dirs metadata', async ({ page }) => {
-  const workingDir = '/Users/mac/open-design/open-design/e2e';
+test('[P1] project composer working directory pick roots the project and removes the clear action', async ({ page }) => {
+  // POST /api/projects/:id/working-dir validates the folder on the real filesystem, so pick one that exists on the machine running the suite.
+  const workingDir = join(e2eWorkspaceRoot(), 'e2e');
   const patchBodies: Array<Record<string, unknown>> = [];
 
   await page.route('**/api/recent-dirs', async (route) => {
@@ -2993,7 +3003,7 @@ test('[P1] project composer working directory replace and clear update linked di
   await page.route('**/api/dir-exists', async (route) => {
     await route.fulfill({ json: { exists: true } });
   });
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() === 'PUT') {
       await route.fulfill({ json: { config: { recentLinkedDirs: [workingDir] } } });
       return;
@@ -3015,14 +3025,12 @@ test('[P1] project composer working directory replace and clear update linked di
   await expect(page.getByTestId('working-dir-trigger')).toContainText('e2e');
   await expect
     .poll(() => patchBodies.at(-1)?.metadata)
-    .toMatchObject({ linkedDirs: [workingDir] });
+    .toMatchObject({ baseDir: workingDir, importedFrom: 'folder' });
 
+  // A picked folder becomes the project root, so the composer offers no way to clear it.
   await page.getByTestId('working-dir-trigger').click();
-  await page.getByTestId('working-dir-clear').click();
-  await expect(page.getByTestId('working-dir-trigger')).toContainText('Select working directory');
-  await expect
-    .poll(() => patchBodies.at(-1)?.metadata)
-    .toMatchObject({ linkedDirs: [] });
+  await expect(page.getByTestId('working-dir-panel')).toBeVisible();
+  await expect(page.getByTestId('working-dir-clear')).toHaveCount(0);
 });
 
 test('[P1] project composer working directory rejects stale folder without promoting it to recents', async ({ page }) => {
@@ -3039,7 +3047,7 @@ test('[P1] project composer working directory rejects stale folder without promo
   await page.route('**/api/dir-exists', async (route) => {
     await route.fulfill({ json: { exists: false } });
   });
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() === 'PUT') {
       const payload = route.request().postDataJSON() as Record<string, unknown>;
       if (JSON.stringify(payload).includes(staleDir)) {
@@ -3053,17 +3061,6 @@ test('[P1] project composer working directory rejects stale folder without promo
   await page.route('**/api/projects/*', async (route) => {
     if (route.request().method() === 'PATCH') {
       patchBodies.push(route.request().postDataJSON() as Record<string, unknown>);
-      await route.fulfill({
-        status: 400,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          error: {
-            code: 'INVALID_LINKED_DIR',
-            message: 'The linked directory no longer exists.',
-          },
-        }),
-      });
-      return;
     }
     await route.continue();
   });
@@ -3074,11 +3071,10 @@ test('[P1] project composer working directory rejects stale folder without promo
   await page.getByTestId('working-dir-trigger').click();
   await page.getByTestId('working-dir-pick').click();
 
+  // The daemon rejects the missing folder, so the project keeps no root and the path never reaches recents.
   await expect(page.getByTestId('working-dir-trigger')).toContainText('Select working directory');
   await expect(page.getByText("Couldn't set the working directory")).toBeVisible();
-  await expect
-    .poll(() => patchBodies.at(-1)?.metadata)
-    .toMatchObject({ linkedDirs: [staleDir] });
+  expect(patchBodies.filter((body) => JSON.stringify(body).includes(staleDir))).toHaveLength(0);
   expect(recentDirPutBodies).toHaveLength(0);
 });
 
@@ -3217,7 +3213,7 @@ async function createProject(
 }
 
 async function expectWorkspaceReady(page: Page) {
-  await waitForLoadingToClear(page);
+  await waitForLoadingShell(page);
   await expect(page).toHaveURL(/\/projects\//);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
@@ -3600,18 +3596,6 @@ async function createProjectNameOnly(
   await page.getByTestId('new-project-name').fill(entry.create.projectName);
 }
 
-async function gotoEntryHome(page: Page) {
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible()) {
-    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
-    await expect(privacyDialog).toHaveCount(0);
-  }
-  await expect(page.getByTestId('home-hero')).toBeVisible();
-  await expect(page.getByTestId('home-hero-input')).toBeVisible();
-}
-
 async function openNewProjectModal(page: Page) {
   await ensureRailOpen(page);
   await page.getByTestId('entry-nav-new-project').click();
@@ -3621,7 +3605,7 @@ async function openNewProjectModal(page: Page) {
 
 async function gotoProjectRoute(page: Page, path: string) {
   await page.goto(path, { waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
+  await waitForLoadingShell(page);
 }
 
 async function navigateProjectRouteInApp(page: Page, path: string) {
@@ -3634,7 +3618,7 @@ async function navigateProjectRouteInApp(page: Page, path: string) {
 
 async function reloadCurrentRoute(page: Page) {
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
+  await waitForLoadingShell(page);
 }
 
 async function createPrototypeProject(page: Page, projectName: string) {
@@ -3654,10 +3638,6 @@ async function expectProjectsView(page: Page) {
     await page.getByTestId('entry-nav-projects').click();
   }
   await expect(page.locator('.tab-panel-toolbar')).toBeVisible();
-}
-
-async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
 }
 
 async function getCurrentProjectContext(

@@ -1,7 +1,8 @@
 import { expect, test } from '@/playwright/suite';
+import { waitForLoadingShell } from '@/playwright/entry';
 import type { Locator, Page } from '@playwright/test';
 import { openSettingsDialog } from '../lib/playwright/amr.js';
-import { routeAgents } from '../lib/playwright/mock-factory.js';
+import { APP_CONFIG_URL, routeAgents } from '../lib/playwright/mock-factory.js';
 import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
@@ -11,17 +12,9 @@ const MODEL_POPOVER_SELECTOR = '.model-select-searchable__popover';
 
 test.describe.configure({ timeout: T.xlong });
 
-async function waitForLoadingToClear(page: Page) {
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: T.long });
-}
-
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible()) {
-    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
-  }
+  await waitForLoadingShell(page);
   await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
 }
 
@@ -582,7 +575,7 @@ test('[P1] Settings autosave failure surfaces an error instead of reporting save
   await page.route('**/api/health', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
   });
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() === 'GET') {
       await route.fulfill({ json: { config } });
       return;
@@ -641,7 +634,7 @@ test('[P1] Settings autosave recovers after a later successful daemon sync', asy
   await page.route('**/api/health', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
   });
-  await page.route('**/api/app-config', async (route) => {
+  await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() === 'GET') {
       await route.fulfill({ json: { config } });
       return;

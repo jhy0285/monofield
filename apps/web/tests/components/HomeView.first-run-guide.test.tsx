@@ -3,7 +3,7 @@
 // First-run guidance trail (home-hero/firstRunGuide.ts).
 //
 // A brand-new user (no projects, fresh storage) gets a sheen pulse on the
-// Prototype type chip; picking any type chip advances the persisted stage
+// Interface spec type chip (the first SI deliverable the rail leads with); picking any type chip advances the persisted stage
 // so the first example card can pulse next, and the trail never replays.
 // Users with existing projects have the trail completed silently.
 
@@ -60,12 +60,12 @@ afterEach(() => {
 });
 
 describe('Home first-run guide trail', () => {
-  it('pulses the Prototype chip for a fresh user and advances on chip pick', async () => {
+  it('pulses the Interface spec chip for a fresh user and advances on chip pick', async () => {
     stubPluginsFetch();
     renderHome([]);
 
     expect(readHomeGuideStage()).toBe('chip');
-    const chip = await screen.findByTestId('home-hero-rail-prototype');
+    const chip = await screen.findByTestId('home-hero-rail-interface-spec');
     await waitFor(
       () => {
         expect(chip.className).toContain('home-hero__attention-sheen');
@@ -86,7 +86,7 @@ describe('Home first-run guide trail', () => {
     await waitFor(() => {
       expect(readHomeGuideStage()).toBe('done');
     });
-    const chip = screen.queryByTestId('home-hero-rail-prototype');
+    const chip = screen.queryByTestId('home-hero-rail-interface-spec');
     expect(chip?.className ?? '').not.toContain('home-hero__attention-sheen');
   });
 
@@ -104,7 +104,7 @@ describe('Home first-run guide trail', () => {
       </I18nProvider>,
     );
 
-    const chip = await screen.findByTestId('home-hero-rail-prototype');
+    const chip = await screen.findByTestId('home-hero-rail-interface-spec');
     await new Promise((resolve) => setTimeout(resolve, 1200));
     // Unknown projects state: no pulse, and crucially the stage is NOT
     // silently completed — a brand-new user still gets the trail once
@@ -129,7 +129,7 @@ describe('Home first-run guide trail', () => {
 
     // The user clicks a chip while projects are still loading — the stage
     // moves to 'card' before we know whether they are new.
-    fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
+    fireEvent.click(await screen.findByTestId('home-hero-rail-interface-spec'));
     expect(readHomeGuideStage()).toBe('card');
 
     // Loading resolves: existing user. The stage must close so no chip's
@@ -154,28 +154,28 @@ describe('Home first-run guide trail', () => {
     // The chip's default plugin exists (so the chip binds) but nothing
     // matches the example filter — the chip renders static prompt-example
     // cards, and the guide's beat 2 must land on the first of those.
-    const WEB_PROTOTYPE_PLUGIN = {
-      id: 'example-web-prototype',
-      title: 'Web Prototype',
+    const INTERFACE_SPEC_PLUGIN = {
+      id: 'od-interface-spec',
+      title: 'Interface spec',
       version: '0.1.0',
       trust: 'bundled' as const,
       sourceKind: 'bundled' as const,
-      source: '/tmp/web-prototype',
+      source: '/tmp/interface-spec',
       capabilitiesGranted: ['prompt:inject'],
-      fsPath: '/tmp/web-prototype',
+      fsPath: '/tmp/interface-spec',
       installedAt: 0,
       updatedAt: 0,
       manifest: {
-        name: 'example-web-prototype',
-        title: 'Web Prototype',
+        name: 'od-interface-spec',
+        title: 'Interface spec',
         version: '0.1.0',
-        description: 'General-purpose desktop web prototype.',
+        description: 'Korean SI-style interface spec workbook.',
         od: { kind: 'scenario', taskKind: 'new-generation' },
       },
     };
     vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL) => {
       if (typeof url === 'string' && url === '/api/plugins') {
-        return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
+        return new Response(JSON.stringify({ plugins: [INTERFACE_SPEC_PLUGIN] }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
@@ -184,7 +184,7 @@ describe('Home first-run guide trail', () => {
     }));
     renderHome([]);
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
+    fireEvent.click(await screen.findByTestId('home-hero-rail-interface-spec'));
     expect(readHomeGuideStage()).toBe('card');
 
     const exampleCards = await screen.findAllByTestId('home-hero-prompt-example');
@@ -202,7 +202,7 @@ describe('Home first-run guide trail', () => {
     stubPluginsFetch();
     renderHome([]);
 
-    const chip = await screen.findByTestId('home-hero-rail-prototype');
+    const chip = await screen.findByTestId('home-hero-rail-interface-spec');
     await new Promise((resolve) => setTimeout(resolve, 1200));
     expect(chip.className).not.toContain('home-hero__attention-sheen');
   });

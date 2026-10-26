@@ -1,0 +1,104 @@
+{
+  "openapi": "3.0.1",
+  "info": { "title": "주문 서비스 API", "version": "2.3.0" },
+  "security": [{ "bearerAuth": [] }],
+  "paths": {
+    "/api/v1/orders": {
+      "get": {
+        "tags": ["orders"],
+        "summary": "주문 목록 조회",
+        "operationId": "searchOrders",
+        "parameters": [
+          { "name": "status", "in": "query", "description": "주문 상태", "schema": { "type": "string", "enum": ["PAID", "PENDING", "CANCELLED"] } },
+          { "name": "page", "in": "query", "schema": { "type": "integer", "format": "int32" } },
+          { "$ref": "#/components/parameters/TraceId" }
+        ],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/OrderResponse" } } } } }
+        }
+      },
+      "post": {
+        "tags": ["orders"],
+        "summary": "주문 등록",
+        "operationId": "createOrder",
+        "x-interface-id": "IF-ORD-001",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OrderCreateRequest" } } }
+        },
+        "responses": {
+          "201": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OrderResponse" } } } }
+        }
+      }
+    },
+    "/api/v1/orders/{orderId}": {
+      "parameters": [
+        { "name": "orderId", "in": "path", "required": true, "description": "주문 ID", "schema": { "type": "integer", "format": "int64" } }
+      ],
+      "get": {
+        "tags": ["orders"],
+        "summary": "주문 단건 조회",
+        "operationId": "getOrder",
+        "responses": {
+          "200": { "description": "OK", "content": { "*/*": { "schema": { "$ref": "#/components/schemas/OrderResponse" } } } },
+          "404": { "description": "Not found" }
+        }
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "tags": ["system"],
+        "summary": "Health check",
+        "operationId": "health",
+        "security": [],
+        "deprecated": true,
+        "responses": { "200": { "description": "OK" } }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "TraceId": { "name": "X-Trace-Id", "in": "header", "description": "추적 ID", "schema": { "type": "string" } }
+    },
+    "securitySchemes": {
+      "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" }
+    },
+    "schemas": {
+      "Audited": {
+        "type": "object",
+        "properties": { "createdAt": { "type": "string", "format": "date-time", "description": "생성 일시" } }
+      },
+      "OrderItemRequest": {
+        "type": "object",
+        "required": ["productId", "quantity"],
+        "properties": {
+          "productId": { "type": "integer", "format": "int64", "description": "상품 ID" },
+          "quantity": { "type": "integer", "format": "int32", "description": "주문 수량" }
+        }
+      },
+      "OrderCreateRequest": {
+        "type": "object",
+        "required": ["memberId", "items"],
+        "properties": {
+          "memberId": { "type": "integer", "format": "int64", "description": "회원 ID" },
+          "items": { "type": "array", "description": "주문 상품 목록", "items": { "$ref": "#/components/schemas/OrderItemRequest" } },
+          "deliveryMemo": { "type": "string", "maxLength": 200, "description": "배송 요청 사항. 택배 기사에게 전달됩니다." }
+        }
+      },
+      "OrderResponse": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Audited" },
+          {
+            "type": "object",
+            "required": ["orderId", "status"],
+            "properties": {
+              "orderId": { "type": "integer", "format": "int64", "description": "주문 ID" },
+              "status": { "type": "string", "description": "주문 상태", "enum": ["PAID", "PENDING", "CANCELLED"] },
+              "totalAmount": { "type": "number", "description": "주문 금액" }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,1 +1,3 @@
 tests/
+# Motion-piece source; the rendered videos in /intro are what ships.
+intro-src

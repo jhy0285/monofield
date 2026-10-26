@@ -1,6 +1,11 @@
 import type { Express } from 'express';
 import { createHash } from 'node:crypto';
-import { applyInterfaceSpecProposal, parseInterfaceSpecDocument, validateInterfaceSpecDocument } from '@open-design/contracts';
+import {
+  applyInterfaceSpecProposal,
+  compareInterfaceSpecDocuments,
+  parseInterfaceSpecDocument,
+  validateInterfaceSpecDocument,
+} from '@open-design/contracts';
 import { getProject } from '../db.js';
 import { resolveProjectDir, resolveProjectFilePath, listFiles } from '../projects.js';
 import { isDocumentPath, loadProjectDocumentGraph } from '../services/project-document-graph.js';
@@ -121,6 +126,7 @@ export function registerDocumentImpactRoutes(app: Express, deps: RegisterDocumen
       res.set('Cache-Control', 'no-store');
       res.json({ ok: true, inputFile: original.name, proposalFile: proposal.name, contentSha256,
         format: incremental ? 'changes' : 'complete', changesApplied: 'changesApplied' in result ? result.changesApplied : null,
+        compatibility: compareInterfaceSpecDocuments(parsedOriginal.doc, result.doc),
         ...(includeDocument ? { document: result.doc } : {}),
       });
     } catch (error) {

@@ -19,7 +19,10 @@ vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
 import { HomeHero } from '../../src/components/HomeHero';
 import {
   HOME_HERO_CHIPS,
+  extendedCreateChips,
   findChip,
+  isExtendedCreateChip,
+  primaryCreateChips,
 } from '../../src/components/home-hero/chips';
 
 afterEach(() => {
@@ -100,9 +103,67 @@ function renderHero(overrides: Partial<React.ComponentProps<typeof HomeHero>> = 
   return { onPickChip, onPickPlugin, onPickExamplePlugin, onClearActiveChip };
 }
 
+function expandMoreTemplates() {
+  const toggle = screen.getByTestId('home-hero-rail-more-templates');
+  if (toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle);
+}
+
 describe('HomeHero intent rail', () => {
+  it('leads with the SI deliverable cards and keeps the rest behind More templates', () => {
+    renderHero();
+    const tabs = screen.getByTestId('home-hero-type-tabs');
+    const primaryIds = primaryCreateChips().map((chip) => chip.id);
+    expect(primaryIds).toEqual(['interface-spec', 'screen-spec', 'document', 'deck']);
+    for (const id of primaryIds) {
+      expect(tabs.contains(screen.getByTestId(`home-hero-rail-${id}`))).toBe(true);
+    }
+    for (const chip of extendedCreateChips()) {
+      expect(screen.queryByTestId(`home-hero-rail-${chip.id}`)).toBeNull();
+    }
+
+    const toggle = screen.getByTestId('home-hero-rail-more-templates');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(toggle.textContent).toContain(`More templates (${extendedCreateChips().length})`);
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    for (const chip of extendedCreateChips()) {
+      expect(tabs.contains(screen.getByTestId(`home-hero-rail-${chip.id}`))).toBe(true);
+    }
+
+    fireEvent.click(toggle);
+    expect(screen.queryByTestId('home-hero-rail-prototype')).toBeNull();
+  });
+
+  it('keeps More templates open after an extended chip is picked and cleared', () => {
+    const props = {
+      prompt: '',
+      onPromptChange: () => undefined,
+      onSubmit: () => undefined,
+      activePluginTitle: null,
+      onClearActivePlugin: () => undefined,
+      pluginOptions: [],
+      pluginsLoading: false,
+      pendingPluginId: null,
+      pendingChipId: null,
+      onPickPlugin: () => undefined,
+      onPickChip: () => undefined,
+      contextItemCount: 0,
+      error: null,
+    } as unknown as React.ComponentProps<typeof HomeHero>;
+    const { rerender } = render(<HomeHero {...props} activeChipId="video" />);
+    // An active chip hides the rail; clearing it brings the rail back with the
+    // extended templates still visible so the user can pick a sibling.
+    expect(screen.queryByTestId('home-hero-type-tabs')).toBeNull();
+    rerender(<HomeHero {...props} activeChipId={null} />);
+    expect(screen.getByTestId('home-hero-rail-more-templates').getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByTestId('home-hero-rail-video')).toBeTruthy();
+    expect(isExtendedCreateChip('video')).toBe(true);
+    expect(isExtendedCreateChip('interface-spec')).toBe(false);
+  });
+
   it('renders creation chips as composer tabs and collapses shortcuts behind More', () => {
     renderHero();
+    expandMoreTemplates();
     const tabs = screen.getByTestId('home-hero-type-tabs');
     for (const chip of HOME_HERO_CHIPS) {
       if (chip.group === 'create') {
@@ -138,6 +199,7 @@ describe('HomeHero intent rail', () => {
 
   it('forwards the matching chip descriptor when clicked', () => {
     const { onPickChip } = renderHero();
+    expandMoreTemplates();
     fireEvent.click(screen.getByTestId('home-hero-rail-image'));
     expect(onPickChip).toHaveBeenCalledTimes(1);
     expect(onPickChip).toHaveBeenCalledWith(findChip('image'));
@@ -424,6 +486,7 @@ describe('HomeHero intent rail', () => {
 
   it('disables every visible chip while a plugin apply is in flight', () => {
     renderHero({ pendingPluginId: 'od-figma-migration', pendingChipId: 'figma' });
+    expandMoreTemplates();
     for (const chip of HOME_HERO_CHIPS.filter((item) => item.group === 'create')) {
       const node = screen.getByTestId(`home-hero-rail-${chip.id}`);
       expect((node as HTMLButtonElement).disabled).toBe(true);

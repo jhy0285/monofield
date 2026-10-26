@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test tests/seo.test.ts",
-    "typecheck": "node --check script.js && node --check tests/seo.test.ts"
+    "typecheck": "node --check script.js && node --check motion.js && node --check tests/seo.test.ts"
   },
   "engines": {
     "node": "~24"

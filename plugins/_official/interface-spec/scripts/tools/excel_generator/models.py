@@ -32,9 +32,13 @@ class ApiEndpoint:
     request_body_type: Optional[str] = None
     query_dto_type: Optional[str] = None
     response_type: Optional[str] = None
-    auth_required: bool = False
+    # None: undecided, no static evidence either way.
+    auth_required: Optional[bool] = False
+    # interface-spec `evidenceRefs` behind the auth decision.
+    auth_evidence: list[dict] = field(default_factory=list)
     interface_id: Optional[str] = None
     interface_name: Optional[str] = None
+    note: str = ""
     request_fields: list[FieldSpec] = field(default_factory=list)
     response_fields: list[FieldSpec] = field(default_factory=list)
 

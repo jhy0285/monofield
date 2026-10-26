@@ -2,7 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@open-design/components';
-import type { DocumentImpactResponse, DocumentProposalResponse, InterfaceSpecDocument } from '@open-design/contracts';
+import type {
+  DocumentImpactResponse,
+  DocumentProposalResponse,
+  InterfaceSpecCompatibilityReport,
+  InterfaceSpecDocument,
+} from '@open-design/contracts';
 import { useI18n } from '../../i18n';
 import { fetchProjectFileText } from '../../providers/registry';
 import styles from './DocumentImpactPanel.module.css';
@@ -22,12 +27,13 @@ export function DocumentImpactPanel({ projectId, inputFile, doc, loadedContentSh
   const { t } = useI18n();
   const [report, setReport] = useState<DocumentImpactResponse | null>(null);
   const [proposal, setProposal] = useState<InterfaceSpecDocument | null>(null);
+  const [compatibility, setCompatibility] = useState<InterfaceSpecCompatibilityReport | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const changes = useMemo(() => proposal ? compareInterfaceDocuments(doc, proposal) : [], [doc, proposal]);
   const scope = useRef(0);
   useEffect(() => {
-    scope.current += 1; setReport(null); setProposal(null); setError(''); setBusy(false);
+    scope.current += 1; setReport(null); setProposal(null); setCompatibility(null); setError(''); setBusy(false);
     return () => { scope.current += 1; };
   }, [projectId, inputFile]);
 
@@ -68,7 +74,7 @@ export function DocumentImpactPanel({ projectId, inputFile, doc, loadedContentSh
       if (!response.ok || !('ok' in result) || !result.document) {
         throw new Error('error' in result ? result.error?.message : t('docs.impact.proposalMissing'));
       }
-      if (currentScope === scope.current) setProposal(result.document);
+      if (currentScope === scope.current) { setProposal(result.document); setCompatibility(result.compatibility ?? null); }
     } catch (failure) { if (currentScope === scope.current) setError(failure instanceof Error ? failure.message : String(failure)); }
     finally { if (currentScope === scope.current) setBusy(false); }
   }
@@ -85,7 +91,7 @@ export function DocumentImpactPanel({ projectId, inputFile, doc, loadedContentSh
         requestFields: endpoint.requestFields.map((field) => field.reviewStatus === 'unreviewed' ? { ...field, reviewStatus: 'accepted' } : field),
         responseFields: endpoint.responseFields.map((field) => field.reviewStatus === 'unreviewed' ? { ...field, reviewStatus: 'accepted' } : field),
       })) });
-      setProposal(null); setReport(null);
+      setProposal(null); setCompatibility(null); setReport(null);
     } catch (failure) { if (currentScope === scope.current) setError(failure instanceof Error ? failure.message : String(failure)); }
     finally { if (currentScope === scope.current) setBusy(false); }
   }
@@ -106,6 +112,7 @@ export function DocumentImpactPanel({ projectId, inputFile, doc, loadedContentSh
     </div> : null}
     {proposal ? <div>
       <p>{t('docs.impact.reviewHint')}</p>
+      {compatibility ? <CompatibilitySummary report={compatibility} /> : null}
       <div className={styles.changes}><table>
         <thead><tr><th>{t('docs.impact.change')}</th><th>{t('docs.impact.before')}</th><th>{t('docs.impact.after')}</th></tr></thead>
         <tbody>{changes.slice(0, 200).map((change) => <tr key={change.target}><th>{change.target}</th><td>{change.before}</td><td>{change.after}</td></tr>)}</tbody>
@@ -120,4 +127,34 @@ export function DocumentImpactPanel({ projectId, inputFile, doc, loadedContentSh
       <Button variant="primary" disabled={dirty || busy} onClick={() => void apply()}>{t('docs.impact.apply')}</Button>
     </div> : null}
   </section>;
+}
+
+const LEVEL_KEY = {
+  breaking: 'docs.impact.compat.level.breaking',
+  warning: 'docs.impact.compat.level.warning',
+  info: 'docs.impact.compat.level.info',
+  none: 'docs.impact.compat.level.none',
+} as const;
+
+/** Caller compatibility of the reviewed proposal; breaking and warning items are listed first. */
+function CompatibilitySummary({ report }: { report: InterfaceSpecCompatibilityReport }) {
+  const { t } = useI18n();
+  const attention = report.changes.filter((change) => change.level !== 'info');
+  return <div className={styles.compat} data-testid="document-impact-compatibility" data-level={report.level}>
+    <div className={styles.compatHeading}>
+      <strong>{t('docs.impact.compat.title')}</strong>
+      <span className={styles.compatBadge} data-level={report.level}>{t(LEVEL_KEY[report.level])}</span>
+      {report.level !== 'none' ? <span className={styles.compatCounts}>{t('docs.impact.compat.counts', report.counts)}</span> : null}
+    </div>
+    {attention.length ? <ul className={styles.compatList}>{attention.slice(0, 50).map((change, index) => (
+      <li key={`${change.route}-${change.code}-${change.field ?? ''}-${index}`} data-level={change.level}>
+        <span className={styles.compatBadge} data-level={change.level}>{t(LEVEL_KEY[change.level])}</span>
+        <span>{t(`docs.impact.compat.${change.code}`)}</span>
+        <code>{[change.interfaceId, change.route, change.field].filter(Boolean).join(' · ')}</code>
+        {change.before !== undefined || change.after !== undefined
+          ? <span className={styles.compatValues}>{change.before ?? '—'} → {change.after ?? '—'}</span>
+          : null}
+      </li>
+    ))}</ul> : null}
+  </div>;
 }

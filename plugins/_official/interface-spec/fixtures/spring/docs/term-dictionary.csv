@@ -1,0 +1,18 @@
+# 프로젝트 용어 사전 (영문 식별자,한글명). 인터페이스 명세서 스캔 시 --name-dict로 전달합니다.
+memberId,회원 ID
+loginId,로그인 ID
+memberName,회원명
+mobileNo,휴대전화번호
+orderId,주문 ID
+items,주문상품목록
+productId,상품 ID
+quantity,주문수량
+deliveryAddress,배송지주소
+deliveryMemo,배송요청사항
+status,주문상태
+totalAmount,주문금액
+orderedAt,주문일시
+fromDate,조회시작일
+toDate,조회종료일
+reasonCode,취소사유코드
+reasonDetail,취소사유상세

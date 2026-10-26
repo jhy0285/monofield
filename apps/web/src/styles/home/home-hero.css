@@ -208,6 +208,41 @@
   flex: 0 0 34px;
   padding: 7px;
 }
+/* "More templates" toggle under the create card rail. Owned by the Home
+   SI-first rail (see `primaryCreateChips` in home-hero/chips.ts). It sits
+   outside the horizontally scrolling tablist so it is always visible. */
+.home-hero__more-templates {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 8px auto 0;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 560;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: color 120ms var(--ease-out), background-color 120ms var(--ease-out);
+}
+.home-hero__more-templates:hover {
+  color: var(--text-strong);
+  background: var(--bg-panel);
+}
+.home-hero__more-templates:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.home-hero__more-templates-icon {
+  transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.home-hero__more-templates[aria-expanded="true"] .home-hero__more-templates-icon {
+  transform: rotate(180deg);
+}
 
 /* Second-level sub-type rail — lighter/smaller than the primary type tabs
    so it reads as a child row, mirroring Manus's website sub-category pills. */
@@ -3031,6 +3066,46 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .home-hero__template-card .home-hero__scenario-art-svg {
+    transition: none;
+  }
+}
+
+/* Intro video entry under the trust line (owner: Guide Center). */
+.home-hero__intro {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px auto 0;
+  padding: 6px 14px 6px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 160ms cubic-bezier(0.23, 1, 0.32, 1), color 160ms cubic-bezier(0.23, 1, 0.32, 1), transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.home-hero__intro:hover {
+  border-color: var(--text);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.home-hero__intro-dot {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding-left: 1px;
+  border-radius: 50%;
+  background: #07100b;
+  color: #cdf26a;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-hero__intro {
     transition: none;
   }
 }

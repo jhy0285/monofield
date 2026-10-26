@@ -32,7 +32,13 @@ const LATEST_RELEASE_URL = `${GITHUB_REPO_URL}/releases/latest`;
 
 const ext = { target: '_blank', rel: 'noreferrer noopener' } as const;
 
-export function EntryHelpMenu({ onOpenFeatureGuide }: { onOpenFeatureGuide?: () => void }) {
+export function EntryHelpMenu({
+  onOpenFeatureGuide,
+  onOpenGuide,
+}: {
+  onOpenFeatureGuide?: () => void;
+  onOpenGuide?: () => void;
+}) {
   const t = useT();
   const analytics = useAnalytics();
   const [open, setOpen] = useState(false);
@@ -106,6 +112,23 @@ export function EntryHelpMenu({ onOpenFeatureGuide }: { onOpenFeatureGuide?: () 
           animate="visible"
           exit="exit"
         >
+          {onOpenGuide ? (
+            <button
+              type="button"
+              className="entry-help-popover__item"
+              role="menuitem"
+              data-testid="entry-help-guide-center"
+              onClick={() => {
+                setOpen(false);
+                onOpenGuide();
+              }}
+            >
+              <span className="entry-help-popover__icon" aria-hidden>
+                <Icon name="play" size={14} />
+              </span>
+              <span>{t('guide.menuItem')}</span>
+            </button>
+          ) : null}
           {onOpenFeatureGuide ? (
             <button
               type="button"
@@ -123,7 +146,7 @@ export function EntryHelpMenu({ onOpenFeatureGuide }: { onOpenFeatureGuide?: () 
               <span>{t('entry.featureGuide')}</span>
             </button>
           ) : null}
-          {onOpenFeatureGuide ? <div className="entry-help-popover__divider" aria-hidden /> : null}
+          {onOpenFeatureGuide || onOpenGuide ? <div className="entry-help-popover__divider" aria-hidden /> : null}
           <a
             className="entry-help-popover__item"
             href={GITHUB_SUPPORT_URL}

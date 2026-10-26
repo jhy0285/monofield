@@ -15,6 +15,16 @@ import { I18nProvider } from '../../src/i18n';
 import { writeHomeGuideStage } from '../../src/components/home-hero/firstRunGuide';
 import { createPluginUseHandoff } from '../../src/components/home-hero/plugin-authoring';
 
+// The Home rail shows the SI deliverable cards first and keeps design/media
+// templates behind "More templates"; open it only when the chip is hidden.
+async function findRailChip(id: string): Promise<HTMLElement> {
+  const existing = screen.queryByTestId(`home-hero-rail-${id}`);
+  if (existing) return existing;
+  const toggle = await screen.findByTestId('home-hero-rail-more-templates');
+  if (toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle);
+  return screen.findByTestId(`home-hero-rail-${id}`);
+}
+
 const WEB_PROTOTYPE_PLUGIN = {
   id: 'example-web-prototype',
   title: 'Web Prototype',
@@ -133,7 +143,7 @@ describe('static prompt-example send pulse', () => {
 
     // The chip's default plugin exists (so the chip binds) but no plugin
     // matches the example filter → fallback static prompt-example cards.
-    fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
+    fireEvent.click(await findRailChip('prototype'));
     const exampleCards = await screen.findAllByTestId('home-hero-prompt-example');
     const firstExample = exampleCards[0];
     if (!firstExample) throw new Error('expected at least one prompt-example card');

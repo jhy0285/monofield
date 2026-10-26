@@ -34,10 +34,22 @@ Download links are initialized to the existing Windows installer, portable ZIP, 
 
 Workspace screenshots are actual app captures of the 0.11.6 UI. The download version, sizes, and URLs are obtained independently from the public release API. The static SoftwareApplication metadata records the published 0.11.6 version; update it when publishing another stable release.
 
-The hero and preview section also link to the published `0.11.7-preview.2` release by exact tag and asset name. These links do not use the stable release updater attributes, so a stable API response or a language change preserves the selected preview. The preview section has its own application metadata, installer, portable ZIP, checksums, release notes and development capture. The existing two stable download cards continue to follow the latest stable API. Update pinned preview URLs and sizes together when publishing another preview.
+The hero and preview section also link to the published `0.11.7-preview.3` release by exact tag and asset name. These links do not use the stable release updater attributes, so a stable API response or a language change preserves the selected preview. The preview section has its own application metadata, installer, portable ZIP, checksums, release notes and development capture. The existing two stable download cards continue to follow the latest stable API. Update pinned preview URLs and sizes together when publishing another preview.
 
 `monofield-preview-workspace.png` is the actual editor-and-diff capture from the committed development-workspace evidence dated 2026-10-18. Its caption identifies it as a development capture. Preview copy discloses the REA MCP integration, separate runtime/model prerequisites, and preview status. The handover section shows an actual REA capture of the explicitly labeled synthetic sample and links to the run report.
 
 Microsoft Store is hidden until a valid listing ID is configured in `index.html`. Do not invent a listing or display an unverified Store download button.
 
 The Korean/English language choice, project tabs, screenshot enlargement, mobile navigation, and FAQ work without a frontend framework. Disabled browser storage does not block navigation or downloads. The upstream license attribution remains on `/open-source`.
+
+## Motion and the intro video
+
+`motion.js` is a progressive layer on top of the static page: header tone, hero contour drawing, pointer parallax, scroll reveals, and the intro video controls. Without JavaScript every section is visible, and everything stands down under `prefers-reduced-motion`.
+
+The 30-second intro in `/intro` (Korean and English MP4 plus posters) is a silent, captioned motion piece. Its source is `intro-src/scene.html`, a pure function of time, so frames are exact. Re-render and refresh both the site copy and the in-app copy (`apps/web/public/guide`) with:
+
+```bash
+pnpm --filter @open-design/e2e exec tsx scripts/render-intro-video.ts
+```
+
+It needs `ffmpeg` and fetches the OFL fonts (Inter, Noto Sans KR) from npm once into the OS temp directory. Add `--preview 2,9.5,16` to write still frames instead. `intro-src` is excluded from the Vercel deployment; the CSP only allows same-origin scripts, so the scene is a render source, not a page.

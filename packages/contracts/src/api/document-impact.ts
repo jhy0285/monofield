@@ -16,6 +16,8 @@ export interface DocumentProposalResponse {
   contentSha256: string;
   format: 'complete' | 'changes';
   changesApplied: number | null;
+  /** Caller compatibility of the proposal against the original (breaking / warning / info). */
+  compatibility: import('../docs/interface-spec-compatibility.js').InterfaceSpecCompatibilityReport;
   document?: import('../docs/interface-spec.js').InterfaceSpecDocument;
 }
 

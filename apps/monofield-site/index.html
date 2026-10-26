@@ -3,11 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#f8f9f5" />
+    <meta name="theme-color" content="#08110c" />
     <meta name="application-name" content="MonoField" />
     <meta
       name="description"
-      content="MonoField(모노필드) is a local-first AI workbench for code, builds, browser verification, governed data, design, and documents. 개발부터 문서까지 한 프로젝트에서 이어갑니다."
+      content="MonoField(모노필드)는 Codex·Claude Code로 SI 산출물까지 끝내는 작업대입니다. 코드에서 인터페이스 명세서 Excel과 화면명세서 PPTX를 만들고, 코드가 바뀌면 명세서 갱신을 diff로 검토합니다. A local workbench that takes Codex and Claude Code all the way to Korean SI deliverables."
     />
     <meta
       name="robots"
@@ -17,11 +17,11 @@
     <meta property="og:site_name" content="MonoField" />
     <meta
       property="og:title"
-      content="MonoField (모노필드) | Local-first AI workbench"
+      content="MonoField (모노필드) | Codex·Claude Code SI 산출물 작업대"
     />
     <meta
       property="og:description"
-      content="Connect code, diffs, builds, browser verification, governed data, design, and documents in one local-first Windows app."
+      content="Scan a legacy codebase into an interface spec workbook, change the code with Codex or Claude Code, and review the spec update as a diff — in one local Windows app for Korean SI and public-sector teams."
     />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://monofield.vercel.app/" />
@@ -41,11 +41,11 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta
       name="twitter:title"
-      content="MonoField (모노필드) | Local-first AI workbench"
+      content="MonoField (모노필드) | Codex·Claude Code SI 산출물 작업대"
     />
     <meta
       name="twitter:description"
-      content="Code, design, and documents with your chosen agent in one local-first Windows workbench."
+      content="Take Codex and Claude Code from a code change to reviewed interface and screen specs in one local Windows workbench."
     />
     <meta
       name="twitter:image"
@@ -67,6 +67,7 @@
     <link rel="manifest" href="/site.webmanifest" />
     <link rel="stylesheet" href="/styles.css" />
     <script src="/script.js" defer></script>
+    <script src="/motion.js" defer></script>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -77,7 +78,7 @@
             "url": "https://monofield.vercel.app/",
             "name": "MonoField",
             "alternateName": ["모노필드", "monofield.vercel.app"],
-            "description": "A local-first workbench for code, design, and documents.",
+            "description": "A local workbench that takes Codex and Claude Code all the way to SI deliverables: interface specs, screen specs, and reviewed spec updates.",
             "inLanguage": ["en", "ko"]
           },
           {
@@ -86,7 +87,7 @@
             "name": "MonoField",
             "alternateName": "모노필드",
             "url": "https://monofield.vercel.app/",
-            "description": "A local-first Windows workbench that connects code, diffs, builds, browser verification, governed data, design, and documents with the agent you choose.",
+            "description": "A local Windows workbench for Korean SI and public-sector developers and handover owners. It runs your Codex or Claude Code CLI, generates interface spec XLSX and screen spec PPTX from real code, and reviews spec updates as diffs when the code changes.",
             "applicationCategory": "DeveloperApplication",
             "operatingSystem": "Windows",
             "softwareVersion": "0.11.6",
@@ -112,23 +113,34 @@
             "description": "A development preview with REA MCP integration for legacy handover, optional local Laya decisions, Java tools and code ontology.",
             "applicationCategory": "DeveloperApplication",
             "operatingSystem": "Windows",
-            "softwareVersion": "0.11.7-preview.2",
+            "softwareVersion": "0.11.7-preview.3",
             "isAccessibleForFree": true,
-            "downloadUrl": "https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.2/MonoField-release-preview-win-setup.exe",
-            "releaseNotes": "https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.2",
+            "downloadUrl": "https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.3/MonoField-release-preview-win-setup.exe",
+            "releaseNotes": "https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.3",
             "screenshot": "https://monofield.vercel.app/monofield-preview-workspace.png",
             "offers": {
               "@type": "Offer",
               "price": "0",
               "priceCurrency": "USD",
               "availability": "https://schema.org/InStock",
-              "url": "https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.2/MonoField-release-preview-win-setup.exe"
+              "url": "https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.3/MonoField-release-preview-win-setup.exe"
             }
+          },
+          {
+            "@type": "VideoObject",
+            "@id": "https://monofield.vercel.app/#intro-video",
+            "name": "MonoField 30-second intro",
+            "description": "A silent, captioned 30-second tour: generate an interface spec from code, export every deliverable, review spec changes as diffs, and keep working with Codex or Claude Code on your own PC.",
+            "thumbnailUrl": "https://monofield.vercel.app/intro/monofield-intro-en-poster.jpg",
+            "contentUrl": "https://monofield.vercel.app/intro/monofield-intro-en.mp4",
+            "uploadDate": "2026-10-24",
+            "duration": "PT30S",
+            "inLanguage": ["ko", "en"]
           }
         ]
       }
     </script>
-    <title>MonoField (모노필드) | Local-first AI workbench</title>
+    <title>MonoField (모노필드) | Codex·Claude Code SI 산출물 작업대</title>
   </head>
   <body>
     <a class="skip-link" href="#main"
@@ -199,41 +211,39 @@
     </header>
     <main id="main">
       <section class="hero" id="top" aria-labelledby="hero-title">
-        <div class="hero-contours" aria-hidden="true">
-          <svg viewBox="0 0 1440 1000" preserveAspectRatio="none">
-            <path
-              d="M-300 750C350-350 580 650 1630 40M-300 830C350-270 580 730 1630 120M-300 910C350-190 580 810 1630 200M-300 990C350-110 580 890 1630 280"
-            />
-          </svg>
+        <div class="hero-bg" aria-hidden="true">
+          <svg class="hero-contours" data-contours viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice"></svg>
+          <span class="hero-glow"></span>
         </div>
         <div class="hero-content">
           <p class="eyebrow">
             <span class="status-dot" aria-hidden="true"></span
             ><span
-              data-ko="내 컴퓨터에서 시작하는 AI 워크벤치"
-              data-en="YOUR LOCAL AI WORKBENCH"
-              >내 컴퓨터에서 시작하는 AI 워크벤치</span
+              data-ko="한국 SI·공공 개발자와 인수인계 담당자를 위한 작업대"
+              data-en="FOR KOREAN SI, PUBLIC-SECTOR AND HANDOVER TEAMS"
+              >한국 SI·공공 개발자와 인수인계 담당자를 위한 작업대</span
             >
           </p>
           <h1 id="hero-title">
-            <span data-ko="개발부터 문서까지," data-en="From code to creation."
-              >개발부터 문서까지,</span
-            ><span data-ko="하나의 작업 공간." data-en="One workspace."
-              >하나의 작업 공간.</span
+            <span data-ko="Codex·Claude Code로" data-en="Codex and Claude Code,"
+              >Codex·Claude Code로</span
+            ><span data-ko="SI 산출물까지 끝냅니다." data-en="all the way to SI deliverables."
+              >SI 산출물까지 끝냅니다.</span
             >
           </h1>
           <p
-            data-ko="내 프로젝트와 익숙한 AI를 연결하세요. 코드 수정, 실행 화면 검증, 문서 제작까지 한곳에서 이어집니다."
-            data-en="Bring your project and your preferred AI. Change code, verify the running app, and create documents in one place."
+            data-ko="프로젝트 폴더를 열고, 코드에서 인터페이스 명세서·화면명세서를 만들고, 코드가 바뀌면 명세서 갱신을 diff로 검토하세요. 쓰던 Codex·Claude Code를 그대로 사용합니다."
+            data-en="Open a project folder, generate interface and screen specs from the code, and review the spec update as a diff when the code changes. Keep using the Codex or Claude Code you already have."
             class="hero-copy"
           >
-            내 프로젝트와 익숙한 AI를 연결하세요. 코드 수정, 실행 화면 검증,
-            문서 제작까지 한곳에서 이어집니다.
+            프로젝트 폴더를 열고, 코드에서 인터페이스 명세서·화면명세서를 만들고,
+            코드가 바뀌면 명세서 갱신을 diff로 검토하세요. 쓰던 Codex·Claude Code를
+            그대로 사용합니다.
           </p>
           <div class="hero-actions">
             <a
               class="button button-primary"
-              href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.2/MonoField-release-preview-win-setup.exe"
+              href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.3/MonoField-release-preview-win-setup.exe"
               ><span data-ko="Windows Preview 다운로드" data-en="Download Windows Preview"
                 >Windows Preview 다운로드</span
               ><svg
@@ -247,25 +257,17 @@
                 aria-hidden="true"
               >
                 <path d="M12 3v12m-5-5 5 5 5-5M5 17v4h14v-4" /></svg></a
-            ><a class="button button-secondary" href="#product"
-              ><span data-ko="앱 둘러보기" data-en="Explore the app"
-                >앱 둘러보기</span
-              ><svg
-                class="icon"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.7"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M5 12h14M13 6l6 6-6 6" /></svg
-            ></a>
+            ><a class="button button-secondary button-video" href="#intro" data-play-intro
+              ><span class="play-dot" aria-hidden="true"
+                ><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z" /></svg></span
+              ><span data-ko="30초 소개 영상" data-en="Watch the 30-second intro"
+                >30초 소개 영상</span
+              ></a
+            >
           </div>
           <a class="hero-preview-link" href="#preview">
             <span class="release-pill">NEW</span>
-            <span data-ko="0.11.7-preview.2 · 새 개발 프리뷰 살펴보기" data-en="0.11.7-preview.2 · Explore the development preview">0.11.7-preview.2 · 새 개발 프리뷰 살펴보기</span>
+            <span data-ko="0.11.7-preview.3 · 새 개발 프리뷰 살펴보기" data-en="0.11.7-preview.3 · Explore the development preview">0.11.7-preview.3 · 새 개발 프리뷰 살펴보기</span>
             <span aria-hidden="true">↗</span>
           </a>
           <p class="hero-meta">
@@ -273,12 +275,18 @@
               >무료 데스크톱 앱</span
             ><span aria-hidden="true">·</span><span>Apache-2.0</span
             ><span aria-hidden="true">·</span
-            ><span data-ko="내 AI, 내 선택" data-en="Your AI, your choice"
-              >내 AI, 내 선택</span
+            ><span data-ko="Codex 또는 Claude Code CLI 필요" data-en="Requires Codex or Claude Code CLI"
+              >Codex 또는 Claude Code CLI 필요</span
             >
           </p>
         </div>
-        <figure class="hero-workspace">
+        <figure class="hero-workspace" data-tilt>
+          <div class="hero-floats" aria-hidden="true">
+            <span class="float float-1"><b class="ext ext-xlsx">XLSX</b><span data-ko="인터페이스 명세서" data-en="Interface spec">인터페이스 명세서</span></span>
+            <span class="float float-2"><b class="ext ext-pptx">PPTX</b><span data-ko="화면명세서" data-en="Screen spec">화면명세서</span></span>
+            <span class="float float-3"><b class="ext ext-docx">DOCX</b><span data-ko="인수인계 문서" data-en="Handover doc">인수인계 문서</span></span>
+            <span class="float float-4"><b class="ext ext-json">JSON</b><span>OpenAPI 3.1</span></span>
+          </div>
           <button
             class="screenshot-button"
             type="button"
@@ -311,6 +319,7 @@
                 >크게 보기</span
               ></span
             >
+            <span class="scan-line" aria-hidden="true"></span>
           </button>
           <figcaption>
             <span class="caption-dot" aria-hidden="true"></span
@@ -322,24 +331,14 @@
           </figcaption>
         </figure>
       </section>
-      <section
-        class="agent-strip container"
-        aria-label="Supported agent connections"
-      >
-        <p
-          data-ko="이미 쓰고 있는 AI와 함께."
-          data-en="Works with the AI you already use."
-        >
-          이미 쓰고 있는 AI와 함께.
-        </p>
-        <div class="agent-names">
-          <span>Codex</span><span>Claude Code</span><span>Gemini</span
-          ><span>OpenCode</span
-          ><span class="endpoint-label"
-            ><span data-ko="내 API 키" data-en="Your API key"
-              >내 API 키</span
-            ></span
-          >
+      <section class="agent-strip" aria-label="Supported agent connections">
+        <p class="agent-lead" data-ko="이미 쓰고 있는 AI와 함께." data-en="Works with the AI you already use.">이미 쓰고 있는 AI와 함께.</p>
+        <div class="marquee">
+          <div class="marquee-track">
+            <div class="agent-names"><span>Codex</span><span>Claude Code</span><span>Gemini</span><span>OpenCode</span><span class="endpoint-label"><span data-ko="내 API 키" data-en="Your API key">내 API 키</span></span></div>
+            <div class="agent-names" aria-hidden="true"><span>Codex</span><span>Claude Code</span><span>Gemini</span><span>OpenCode</span><span class="endpoint-label"><span >내 API 키</span></span></div>
+            <div class="agent-names" aria-hidden="true"><span>Codex</span><span>Claude Code</span><span>Gemini</span><span>OpenCode</span><span class="endpoint-label"><span >내 API 키</span></span></div>
+          </div>
         </div>
         <p
           data-ko="설치·로그인한 에이전트 또는 직접 설정한 모델을 연결하세요. 모델 이용료는 각 제공업체 기준으로 적용됩니다."
@@ -349,6 +348,32 @@
           설치·로그인한 에이전트 또는 직접 설정한 모델을 연결하세요. 모델
           이용료는 각 제공업체 기준으로 적용됩니다.
         </p>
+      </section>
+      <section class="intro-section" id="intro" aria-labelledby="intro-title">
+        <div class="container intro-grid">
+          <div class="intro-copy">
+            <p class="eyebrow"><span class="status-dot" aria-hidden="true"></span><span data-ko="소개 영상 · 30초" data-en="INTRO VIDEO · 30 SEC">소개 영상 · 30초</span></p>
+            <h2 id="intro-title">
+              <span data-ko="30초면 충분합니다." data-en="Thirty seconds is enough.">30초면 충분합니다.</span>
+              <span data-ko="코드에서 SI 산출물까지." data-en="From code to SI deliverables.">코드에서 SI 산출물까지.</span>
+            </h2>
+            <p class="intro-lede" data-ko="폴더를 열면 명세서가 만들어지고, 코드가 바뀌면 변경이 diff로 보입니다. 소리 없이 자막만으로 볼 수 있게 만들었습니다." data-en="Open a folder and the spec appears; change the code and the update shows up as a diff. Made to be watched without sound.">폴더를 열면 명세서가 만들어지고, 코드가 바뀌면 변경이 diff로 보입니다. 소리 없이 자막만으로 볼 수 있게 만들었습니다.</p>
+            <ol class="chapters" aria-label="Video chapters">
+              <li><button type="button" data-seek="7.9"><span class="chapter-time">0:08</span><span data-ko="코드에서 명세서로" data-en="Code to spec">코드에서 명세서로</span></button></li>
+              <li><button type="button" data-seek="13.7"><span class="chapter-time">0:14</span><span data-ko="산출물까지 한 번에" data-en="All deliverables">산출물까지 한 번에</span></button></li>
+              <li><button type="button" data-seek="18.7"><span class="chapter-time">0:19</span><span data-ko="변경은 diff로" data-en="Changes as diffs">변경은 diff로</span></button></li>
+              <li><button type="button" data-seek="24.3"><span class="chapter-time">0:24</span><span data-ko="쓰던 AI, 내 PC에서" data-en="Your AI, on your PC">쓰던 AI, 내 PC에서</span></button></li>
+            </ol>
+          </div>
+          <div class="intro-player">
+            <video id="intro-video" controls preload="metadata" playsinline poster="/intro/monofield-intro-ko-poster.jpg" width="1280" height="720" aria-label="MonoField intro video">
+              <source src="/intro/monofield-intro-ko.mp4" type="video/mp4" />
+            </video>
+            <button class="intro-play" type="button" data-intro-play aria-label="영상 재생">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" /></svg>
+            </button>
+          </div>
+        </div>
       </section>
       <section
         class="product-section container"
@@ -892,23 +917,23 @@
           </div>
           <article class="preview-release" id="preview" aria-labelledby="preview-title">
             <div class="preview-release-copy">
-              <p class="eyebrow"><span class="release-pill">PREVIEW</span><span>0.11.7-preview.2</span></p>
-              <h3 id="preview-title" data-ko="REA로 조사하고, Laya로 검토하세요." data-en="Investigate with REA. Review with Laya.">REA로 조사하고, Laya로 검토하세요.</h3>
-              <p data-ko="기존 시스템의 근거 조사부터 코드 변경, 검증, 인수인계 문서까지 같은 프로젝트에서 이어가세요." data-en="Keep legacy-system evidence, code changes, verification and handover documents together in one project.">기존 시스템의 근거 조사부터 코드 변경, 검증, 인수인계 문서까지 같은 프로젝트에서 이어가세요.</p>
+              <p class="eyebrow"><span class="release-pill">PREVIEW</span><span>0.11.7-preview.3</span></p>
+              <h3 id="preview-title" data-ko="코드에서 명세서까지, 바뀐 것만 검토하세요." data-en="From code to spec. Review only what changed.">코드에서 명세서까지, 바뀐 것만 검토하세요.</h3>
+              <p data-ko="Spring·전자정부프레임워크 코드에서 인터페이스 명세서를 만들고, 코드가 바뀌면 호환성 위험도와 함께 갱신안을 diff로 검토합니다." data-en="Generate interface specs from Spring and eGovFrame code, then review spec updates as diffs with a compatibility risk level when the code changes.">Spring·전자정부프레임워크 코드에서 인터페이스 명세서를 만들고, 코드가 바뀌면 호환성 위험도와 함께 갱신안을 diff로 검토합니다.</p>
               <ul class="preview-features">
-                <li data-ko="Java 코드 탐색·디버깅" data-en="Java code navigation and debugging">Java 코드 탐색·디버깅</li>
-                <li data-ko="코드 온톨로지·변경 영향·문서 계획" data-en="Code ontology, impact analysis and document planning">코드 온톨로지·변경 영향·문서 계획</li>
-                <li data-ko="선택형 JEV·로컬 Laya 판단 보조" data-en="Optional JEV and local Laya decision support">선택형 JEV·로컬 Laya 판단 보조</li>
-                <li data-ko="REA MCP 연결·기존 시스템 인수인계 스킬" data-en="REA MCP integration and a legacy-system handover skill">REA MCP 연결·기존 시스템 인수인계 스킬</li>
+                <li data-ko="Spring·전자정부·OpenAPI 스캐너와 Spring Security 기반 인증 판단" data-en="Spring, eGovFrame and OpenAPI scanners with Spring Security–based auth detection">Spring·전자정부·OpenAPI 스캐너와 Spring Security 기반 인증 판단</li>
+                <li data-ko="명세서 변경의 호환성 분류(깨짐·확인 필요·추가)와 OpenAPI 3.1 내보내기" data-en="Compatibility classification of spec changes and OpenAPI 3.1 export">명세서 변경의 호환성 분류(깨짐·확인 필요·추가)와 OpenAPI 3.1 내보내기</li>
+                <li data-ko="소개 영상이 들어 있는 앱 안 가이드" data-en="An in-app guide with the intro video">소개 영상이 들어 있는 앱 안 가이드</li>
+                <li data-ko="REA·Laya 연동과 Java 코드 탐색·검증 도구 유지" data-en="REA and Laya integration, plus Java navigation and verification tools">REA·Laya 연동과 Java 코드 탐색·검증 도구 유지</li>
               </ul>
               <div class="preview-actions">
-                <a class="button button-primary" href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.2/MonoField-release-preview-win-setup.exe"><span data-ko="Preview 설치본" data-en="Preview installer">Preview 설치본</span><span aria-hidden="true">↓</span></a>
-                <a class="inline-link" href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.2/MonoField-release-preview-win-portable.zip"><span data-ko="포터블 ZIP" data-en="Portable ZIP">포터블 ZIP</span></a>
+                <a class="button button-primary" href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.3/MonoField-release-preview-win-setup.exe"><span data-ko="Preview 설치본" data-en="Preview installer">Preview 설치본</span><span aria-hidden="true">↓</span></a>
+                <a class="inline-link" href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.3/MonoField-release-preview-win-portable.zip"><span data-ko="포터블 ZIP" data-en="Portable ZIP">포터블 ZIP</span></a>
               </div>
               <p class="preview-release-links">
-                <a class="inline-link" href="https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.2"><span data-ko="프리뷰 릴리스 안내" data-en="Preview release notes">프리뷰 릴리스 안내</span></a>
+                <a class="inline-link" href="https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.3"><span data-ko="프리뷰 릴리스 안내" data-en="Preview release notes">프리뷰 릴리스 안내</span></a>
                 <span aria-hidden="true">·</span>
-                <a class="inline-link" href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.2/SHA256SUMS.txt"><span data-ko="체크섬" data-en="Checksums">체크섬</span></a>
+                <a class="inline-link" href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.3/SHA256SUMS.txt"><span data-ko="체크섬" data-en="Checksums">체크섬</span></a>
               </p>
             </div>
             <figure class="preview-release-image">
