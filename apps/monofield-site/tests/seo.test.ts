@@ -151,6 +151,14 @@ test('static hosting serves crawl files with explicit content types and bounded 
   assert.match(headerValue('/sitemap.xml', 'Cache-Control') ?? '', /must-revalidate/);
 });
 
+// An MP4 audio track announces itself with a sound-handler `hdlr` box.
+function hasAudioTrack(mp4: Buffer): boolean {
+  for (let at = mp4.indexOf('hdlr'); at !== -1; at = mp4.indexOf('hdlr', at + 4)) {
+    if (mp4.toString('ascii', at + 12, at + 16) === 'soun') return true;
+  }
+  return false;
+}
+
 test('intro video ships both languages with posters, structured data and no inline script', async () => {
   const [koVideo, enVideo, koPoster, enPoster, motion, styles] = await Promise.all([
     readFile(new URL('../intro/monofield-intro-ko.mp4', import.meta.url)),
@@ -162,7 +170,8 @@ test('intro video ships both languages with posters, structured data and no inli
   ]);
   for (const video of [koVideo, enVideo]) {
     assert.equal(video.toString('ascii', 4, 8), 'ftyp', 'MP4 container');
-    assert.ok(video.byteLength > 200_000 && video.byteLength < 6_000_000);
+    assert.ok(video.byteLength > 200_000 && video.byteLength < 1_048_576, 'under the 1 MiB changed-file limit in CI');
+    assert.ok(hasAudioTrack(video), 'narration and music are part of the MP4');
   }
   for (const poster of [koPoster, enPoster]) {
     assert.deepEqual([...poster.subarray(0, 3)], [0xff, 0xd8, 0xff], 'JPEG poster');
