@@ -46,7 +46,7 @@ The Korean/English language choice, project tabs, screenshot enlargement, mobile
 
 `motion.js` is a progressive layer on top of the static page: header tone, hero contour drawing, pointer parallax, scroll reveals, and the intro video controls. Without JavaScript every section is visible, and everything stands down under `prefers-reduced-motion`.
 
-The 30-second intro in `/intro` (Korean and English MP4 plus posters) is a silent, captioned motion piece. Its source is `intro-src/scene.html`, a pure function of time, so frames are exact. Re-render and refresh both the site copy and the in-app copy (`apps/web/public/guide`) with:
+The 30-second intro in `/intro` (Korean and English MP4 plus posters) is a captioned motion piece with narration and a music bed. Its source is `intro-src/scene.html`, a pure function of time, so frames are exact; the sound lives in `intro-src/audio/` (see its README for the voices, script and licenses) and is muxed in as-is. Each MP4 must stay under 1 MiB because CI rejects larger changed files. Re-render and refresh both the site copy and the in-app copy (`apps/web/public/guide`) with:
 
 ```bash
 pnpm --filter @open-design/e2e exec tsx scripts/render-intro-video.ts
