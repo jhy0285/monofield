@@ -43,6 +43,9 @@ describe('GuideCenter', () => {
     const video = screen.getByTestId('guide-center-video') as HTMLVideoElement;
     expect(video.getAttribute('poster')).toBe('/guide/monofield-intro-ko-poster.jpg');
     expect(video.querySelector('source')?.getAttribute('src')).toBe('/guide/monofield-intro-ko.mp4');
+    // The video carries narration, so it must never start muted or hide its controls.
+    expect(video.muted).toBe(false);
+    expect(video.hasAttribute('controls')).toBe(true);
     expect(screen.getAllByRole('listitem').length).toBeGreaterThanOrEqual(8);
     expect(screen.getByText('폴더를 여세요')).toBeTruthy();
     expect(screen.getByText('산출물을 내보내세요')).toBeTruthy();

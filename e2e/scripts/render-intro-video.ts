@@ -8,8 +8,10 @@
 // the output is reproducible. Requires ffmpeg on PATH. Inter and Noto Sans KR
 // (both OFL) are fetched once from npm into the OS temp directory.
 //
-// The encode targets under 1 MiB per file: CI rejects larger changed blobs, and
-// the scene is flat graphics, so CRF 33 keeps it sharp at that size.
+// The encode targets under 1 MiB per file: CI rejects larger changed blobs. The
+// scene is flat graphics, so CRF 35 stays sharp and leaves room for a 64 kbps
+// AAC track. When apps/monofield-site/intro-src/audio/intro-<lang>.m4a exists
+// (narration plus a music bed, see that folder's README) it is muxed in as-is.
 
 import { spawn, spawnSync } from 'node:child_process';
 import { copyFile, mkdir, readFile, readdir, rm } from 'node:fs/promises';
@@ -126,10 +128,13 @@ async function main() {
 
       await mkdir(siteDir, { recursive: true });
       const mp4 = join(siteDir, `monofield-intro-${lang}.mp4`);
+      const audio = join(sceneDir, 'audio', `intro-${lang}.m4a`);
+      const withAudio = existsSync(audio);
       await run('ffmpeg', [
         '-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', join(framesDir, '%04d.png'),
-        '-c:v', 'libx264', '-profile:v', 'high', '-pix_fmt', 'yuv420p', '-crf', '33', '-preset', 'slow',
-        '-movflags', '+faststart', '-an', mp4,
+        ...(withAudio ? ['-i', audio] : []),
+        '-c:v', 'libx264', '-profile:v', 'high', '-pix_fmt', 'yuv420p', '-crf', '35', '-preset', 'slow',
+        '-movflags', '+faststart', ...(withAudio ? ['-c:a', 'copy', '-t', String(duration)] : ['-an']), mp4,
       ]);
       const poster = join(siteDir, `monofield-intro-${lang}-poster.jpg`);
       await run('ffmpeg', ['-y', '-loglevel', 'error', '-i', posterPng, '-q:v', '4', poster]);
