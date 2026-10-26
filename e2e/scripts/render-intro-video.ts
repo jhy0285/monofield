@@ -7,6 +7,9 @@
 // The scene is a pure function of time (`window.seek`), so frames are exact and
 // the output is reproducible. Requires ffmpeg on PATH. Inter and Noto Sans KR
 // (both OFL) are fetched once from npm into the OS temp directory.
+//
+// The encode targets under 1 MiB per file: CI rejects larger changed blobs, and
+// the scene is flat graphics, so CRF 33 keeps it sharp at that size.
 
 import { spawn, spawnSync } from 'node:child_process';
 import { copyFile, mkdir, readFile, readdir, rm } from 'node:fs/promises';
@@ -125,7 +128,7 @@ async function main() {
       const mp4 = join(siteDir, `monofield-intro-${lang}.mp4`);
       await run('ffmpeg', [
         '-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', join(framesDir, '%04d.png'),
-        '-c:v', 'libx264', '-profile:v', 'high', '-pix_fmt', 'yuv420p', '-crf', '27', '-preset', 'slow',
+        '-c:v', 'libx264', '-profile:v', 'high', '-pix_fmt', 'yuv420p', '-crf', '33', '-preset', 'slow',
         '-movflags', '+faststart', '-an', mp4,
       ]);
       const poster = join(siteDir, `monofield-intro-${lang}-poster.jpg`);
