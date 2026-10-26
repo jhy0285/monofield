@@ -27,10 +27,10 @@ video stays under the 1 MiB changed-file limit CI enforces.
 
 | Scene | Korean | English |
 | --- | --- | --- |
-| 0:00 title | 코드에서 산출물까지. | From code to deliverables. |
+| 0:00 title | 코드에서, 산출물까지. | From code to deliverables. |
 | 0:03 problem | 코드는 계속 바뀌는데, 문서는 그대로입니다. | The code keeps changing. The documents don't. |
 | 0:08 code to spec | 폴더를 열면, 코드를 읽어 명세서가 만들어집니다. | Open a folder, and get the interface spec. |
-| 0:14 deliverables | 명세서에서 문서까지, 한 작업대에서. | From spec to documents, in one workbench. |
+| 0:14 deliverables | 코드에서 명세서, 문서까지 한 작업대에서. | From spec to documents, in one workbench. |
 | 0:19 diffs | 코드가 바뀌면 변경을 검토하고, 승인한 것만 적용합니다. | When code changes, review the update, then apply only what you approve. |
 | 0:25 your PC | 쓰던 에이아이를 내 피씨에서. | The AI you already use, on your PC. |
 | 0:28 call to action | 무료 다운로드. | Free Windows download. |
