@@ -789,7 +789,23 @@
   background: var(--bg);
   border-left: 1px solid var(--border);
   position: relative;
+  /* The column's height follows the panel, which shrinks whenever a bottom
+     tool (changes, terminal, logs) opens beneath it. Its content must scroll
+     in here instead of painting over that tool. */
+  overflow: hidden;
 }
+/* Scrolls the thumbnail and file details; the close button stays pinned to the
+   column because it is a sibling of this wrapper. */
+.df-preview-scroll {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.df-preview-scroll > * { flex-shrink: 0; }
 .df-preview-empty {
   flex: 1;
   display: flex;

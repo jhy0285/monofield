@@ -1371,65 +1371,67 @@ function DfPreview({
       >
         <Icon name="close" size={13} />
       </button>
-      <div className={`df-preview-thumb${thumbCanOpen ? ' is-openable' : ''}`}>
-        {rendersSketchJson ? (
-          <SketchPreview projectId={projectId} file={file} />
-        ) : file.kind === 'image' || file.kind === 'sketch' ? (
-          <img src={`${url}?v=${Math.round(file.mtime)}`} alt={file.name} />
-        ) : file.kind === 'html' ? (
-          <HtmlPreviewThumbnail projectId={projectId} file={file} />
-        ) : file.kind === 'video' ? (
-          <video
-            src={`${url}?v=${Math.round(file.mtime)}`}
-            controls
-            playsInline
-            preload="metadata"
-          />
-        ) : file.kind === 'audio' ? (
-          <audio src={`${url}?v=${Math.round(file.mtime)}`} controls preload="metadata" />
-        ) : (
-          <div
-            style={{
-              width: '100%',
-              height: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--text-faint)',
-              fontSize: 38,
-            }}
-          >
-            {categoryGlyph(fileCategory(file))}
-          </div>
-        )}
-        {thumbCanOpen ? (
-          <button
-            type="button"
-            className="df-preview-thumb-open"
-            onClick={onOpen}
-            title={openPreviewLabel}
-            aria-label={openPreviewLabel}
-          />
-        ) : null}
-      </div>
-      <div className="df-preview-meta" data-testid="design-file-preview">
-        <button type="button" className="df-preview-open-cta" onClick={onOpen}>
-          <Icon name="eye" size={14} />
-          <span>{t('designFiles.previewOpen')}</span>
-        </button>
-        <div className="df-preview-name">{file.name}</div>
-        <div className="df-preview-kind">{categoryLabel(fileCategory(file), t)}</div>
-        <div className="df-preview-stats">
-          {t('designFiles.modifiedExt', {
-            time: relativeTime(file.mtime, t),
-            size: humanBytes(file.size),
-            ext: fileExtensionLabel(file.name),
-          })}
+      <div className="df-preview-scroll">
+        <div className={`df-preview-thumb${thumbCanOpen ? ' is-openable' : ''}`}>
+          {rendersSketchJson ? (
+            <SketchPreview projectId={projectId} file={file} />
+          ) : file.kind === 'image' || file.kind === 'sketch' ? (
+            <img src={`${url}?v=${Math.round(file.mtime)}`} alt={file.name} />
+          ) : file.kind === 'html' ? (
+            <HtmlPreviewThumbnail projectId={projectId} file={file} />
+          ) : file.kind === 'video' ? (
+            <video
+              src={`${url}?v=${Math.round(file.mtime)}`}
+              controls
+              playsInline
+              preload="metadata"
+            />
+          ) : file.kind === 'audio' ? (
+            <audio src={`${url}?v=${Math.round(file.mtime)}`} controls preload="metadata" />
+          ) : (
+            <div
+              style={{
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--text-faint)',
+                fontSize: 38,
+              }}
+            >
+              {categoryGlyph(fileCategory(file))}
+            </div>
+          )}
+          {thumbCanOpen ? (
+            <button
+              type="button"
+              className="df-preview-thumb-open"
+              onClick={onOpen}
+              title={openPreviewLabel}
+              aria-label={openPreviewLabel}
+            />
+          ) : null}
         </div>
-        <a className="df-preview-download" href={url} download={file.name}>
-          <Icon name="download" size={13} />
-          <span>{t('designFiles.download')}</span>
-        </a>
+        <div className="df-preview-meta" data-testid="design-file-preview">
+          <button type="button" className="df-preview-open-cta" onClick={onOpen}>
+            <Icon name="eye" size={14} />
+            <span>{t('designFiles.previewOpen')}</span>
+          </button>
+          <div className="df-preview-name">{file.name}</div>
+          <div className="df-preview-kind">{categoryLabel(fileCategory(file), t)}</div>
+          <div className="df-preview-stats">
+            {t('designFiles.modifiedExt', {
+              time: relativeTime(file.mtime, t),
+              size: humanBytes(file.size),
+              ext: fileExtensionLabel(file.name),
+            })}
+          </div>
+          <a className="df-preview-download" href={url} download={file.name}>
+            <Icon name="download" size={13} />
+            <span>{t('designFiles.download')}</span>
+          </a>
+        </div>
       </div>
     </aside>
   );
