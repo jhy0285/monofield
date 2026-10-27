@@ -9,6 +9,7 @@ This file is the single source of truth for agents entering this repository. Rea
 - Architecture and protocols: `docs/spec.md`, `docs/architecture.md`, `docs/skills-protocol.md`, `docs/agent-adapters.md`, `docs/modes.md`.
 - Roadmap and references: `docs/roadmap.md`, `docs/references.md`, `docs/code-review-guidelines.md`, `specs/current/maintainability-roadmap.md`.
 - Directory-level agent guidance: `.github/AGENTS.md`, `apps/AGENTS.md`, `packages/AGENTS.md`, `tools/AGENTS.md`, `e2e/AGENTS.md`.
+- Agent handoff history: `docs/agent-history.md`. Read it right after this file, and update it before finishing any task (see **Agent history handoff**).
 - Packaged auto-update architecture and high-confidence local harness: read `tools/pack/AGENTS.md` section "Packaged auto-update architecture and harness" before touching packaged updater code, release-channel identity, installer behavior, or updater UI.
 
 ## Workspace directories
@@ -32,6 +33,15 @@ This file is the single source of truth for agents entering this repository. Rea
 - Local runtime data, `.tmp/`, Playwright reports, and agent scratch directories must stay out of git. For daemon-managed data paths, read and follow **Daemon data directory contract** below; do not restate or improvise path conventions elsewhere.
 
 # Development workflow
+
+## Agent history handoff
+
+`docs/agent-history.md` is the repository's handoff record, so any AI agent (Claude Code, Codex, or another) can continue where the previous one stopped. It holds the current state, the open items, and a newest-first log of finished work.
+
+- Read it after this file and before starting work. Do not redo work an entry records as done.
+- Before finishing any task that changes the repository, or an investigation whose findings the next agent would otherwise have to rediscover, update it in the same commit as the work: add a Log entry at the top, refresh **Current state**, and update **Open items**. A task without that update is not finished.
+- Record only what you verified: the exact commands you ran and their results, and a baseline comparison before calling a failure pre-existing. Mark what you did not run as not run.
+- Follow the file's own **Update protocol** for the entry template and content rules (repository-relative paths, no secrets, no daemon data directory examples). Keep module details in the layer's `AGENTS.md`, not in the history.
 
 ## Environment baseline
 
