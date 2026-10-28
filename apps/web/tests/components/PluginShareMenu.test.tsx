@@ -134,7 +134,7 @@ describe('PluginShareMenu', () => {
     openPopover();
     clickItem('Copy install command');
     await Promise.resolve();
-    expect(writes).toContain('od plugin install open-design/mp-plugin');
+    expect(writes).toContain('monofield plugin install open-design/mp-plugin');
   });
 
   it('copies the github source string for github-installed plugins', async () => {
@@ -148,7 +148,7 @@ describe('PluginShareMenu', () => {
     openPopover();
     clickItem('Copy install command');
     await Promise.resolve();
-    expect(writes).toContain('od plugin install github:owner/repo@main/sub');
+    expect(writes).toContain('monofield plugin install github:owner/repo@main/sub');
   });
 
   it('does not duplicate the template share link action', () => {
@@ -180,7 +180,7 @@ describe('PluginShareMenu', () => {
     await Promise.resolve();
     expect(writes.some((value) => (
       value.includes('Badge Plugin') &&
-      value.includes('https://open-design.ai/plugins/badge-plugin')
+      value.includes('https://monofield.vercel.app/plugins/badge-plugin')
     ))).toBe(true);
   });
 
@@ -258,13 +258,13 @@ describe('PluginShareMenu', () => {
     // Bundled plugins have a public detail page, so the link is the public
     // open-design.ai URL — not a local /marketplace path.
     expect(marketplaceLink?.getAttribute('href')).toBe(
-      'https://open-design.ai/plugins/plain/',
+      'https://monofield.vercel.app/plugins/plain/',
     );
   });
 
   it('builds a public open-design.ai share link for bundled plugins', () => {
     expect(buildPluginShareUrl(make({ id: 'simple-deck' }))).toBe(
-      'https://open-design.ai/plugins/simple-deck/',
+      'https://monofield.vercel.app/plugins/simple-deck/',
     );
   });
 
@@ -283,7 +283,7 @@ describe('PluginShareMenu', () => {
           marketplaceEntryName: 'community/registry-starter',
         }),
       ),
-    ).toBe('https://open-design.ai/plugins/registry-starter/');
+    ).toBe('https://monofield.vercel.app/plugins/registry-starter/');
   });
 
   it('copies a README badge for community marketplace plugins', async () => {
@@ -304,7 +304,7 @@ describe('PluginShareMenu', () => {
       writes.some(
         (value) =>
           value.includes('Community Registry Starter') &&
-          value.includes('https://open-design.ai/plugins/registry-starter/'),
+          value.includes('https://monofield.vercel.app/plugins/registry-starter/'),
       ),
     ).toBe(true);
   });
@@ -324,7 +324,7 @@ describe('PluginShareMenu', () => {
       container.querySelectorAll<HTMLAnchorElement>('a.plugin-share-item'),
     ).find((link) => link.textContent?.includes('Open in marketplace'));
     expect(marketplaceLink?.getAttribute('href')).toBe(
-      'https://open-design.ai/plugins/registry-starter/',
+      'https://monofield.vercel.app/plugins/registry-starter/',
     );
   });
 

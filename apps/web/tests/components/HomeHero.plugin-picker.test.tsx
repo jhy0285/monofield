@@ -445,7 +445,7 @@ describe('HomeHero plugin picker', () => {
     await settle();
 
     expect(screen.getByTestId('home-hero-plugin-picker')).toBeTruthy();
-    expect(screen.getByRole('tab', { name: /design files/i })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /docs files/i })).toBeTruthy();
     expect(screen.getByRole('tab', { name: /plugins/i })).toBeTruthy();
     expect(screen.getByRole('tab', { name: /skills/i })).toBeTruthy();
     expect(screen.getByRole('tab', { name: /mcp/i })).toBeTruthy();

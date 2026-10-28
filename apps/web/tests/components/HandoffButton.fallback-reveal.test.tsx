@@ -129,12 +129,13 @@ describe('HandoffButton zero-editors fallback', () => {
     const amrWebsiteUrl = new URL(amrWebsiteLink.href);
     expect(amrWebsiteUrl.searchParams.get('od_origin')).toBe('open_design');
     expect(amrWebsiteUrl.searchParams.get('od_entry_source')).toBe('handoff_amr_website');
-    expect(amrWebsiteUrl.searchParams.get('od_device_id')).toBe('od-install-abc');
-    expect(fetchMock).toHaveBeenCalledWith(
+    // MonoField never forwards a device id and never mirrors AMR attribution.
+    expect(amrWebsiteUrl.searchParams.get('od_device_id')).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalledWith(
       '/api/integrations/vela/analytics-entry',
-      expect.objectContaining({ method: 'POST' }),
+      expect.anything(),
     );
-    expect(screen.getByTestId('handoff-cli-item-amr').textContent).toContain('Open Design AMR');
+    expect(screen.getByTestId('handoff-cli-item-amr').textContent).toContain('MonoField AMR');
     expect(screen.getByTestId('handoff-cli-item-amr').textContent).not.toContain('未安装');
     expect(
       screen.getByTestId('handoff-cli-item-amr').compareDocumentPosition(

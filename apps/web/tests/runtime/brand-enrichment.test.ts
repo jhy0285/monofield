@@ -20,7 +20,7 @@ describe('brand enrichment runtime helpers', () => {
   it('builds a complete fallback prompt when no seeded prompt is available', () => {
     const prompt = buildBrandEnrichmentPrompt('');
 
-    expect(prompt).toContain('AI optimize this Open Design design system in place.');
+    expect(prompt).toContain('AI optimize this MonoField design system in place.');
     expect(prompt).toContain('Do not create a duplicate system.');
     expect(prompt).toContain('10-20');
     expect(prompt).toContain('anti-bot verification page');

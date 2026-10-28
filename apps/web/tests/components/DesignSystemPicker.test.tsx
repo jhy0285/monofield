@@ -143,7 +143,9 @@ describe('DesignSystemPicker', () => {
 
     // Category chips were removed from the list/preview per design; only the
     // surrounding picker copy needs to localize.
-    expect(screen.getByPlaceholderText('Rechercher des systèmes de design')).toBeTruthy();
-    expect(screen.getByText('Aucun système de design')).toBeTruthy();
+    // Non-English dictionaries load on demand, so the French copy arrives after
+    // the first render.
+    expect(await screen.findByPlaceholderText('Rechercher des systèmes de design')).toBeTruthy();
+    expect(await screen.findByText('Aucun système de design')).toBeTruthy();
   });
 });

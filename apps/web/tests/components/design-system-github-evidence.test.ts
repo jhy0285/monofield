@@ -116,7 +116,7 @@ describe('repoConnectCopy', () => {
   it('asks the user to connect when GitHub is not connected', () => {
     const copy = repoConnectCopy(t, false);
     expect(copy.buttonLabel).toBe('Connect GitHub');
-    expect(copy.bannerTitle).toBe('Connect your repo to pull aspects of your design system');
+    expect(copy.bannerTitle).toBe('Connect your repo to pull aspects of your document style');
     expect(copy.cardTitle).toBe('Connect your repo');
   });
 

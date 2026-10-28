@@ -166,9 +166,9 @@ describe('AssistantMessage feedback gate', () => {
         onFeedback={vi.fn()}
       />,
     );
-    expect(screen.getByRole('group', { name: 'Feedback' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Rate this response' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Helpful' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Not helpful' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Needs improvement' })).toBeTruthy();
   });
 
   it('shows the feedback widget for a successful text-only turn with no producedFiles', () => {
@@ -180,7 +180,7 @@ describe('AssistantMessage feedback gate', () => {
         onFeedback={vi.fn()}
       />,
     );
-    expect(screen.getByRole('group', { name: 'Feedback' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Rate this response' })).toBeTruthy();
   });
 
   it('hides the feedback widget while the turn is still streaming', () => {
@@ -196,7 +196,7 @@ describe('AssistantMessage feedback gate', () => {
         onFeedback={vi.fn()}
       />,
     );
-    expect(screen.queryByRole('group', { name: 'Feedback' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Rate this response' })).toBeNull();
   });
 
   it('shows the feedback widget when the run failed', () => {
@@ -213,7 +213,7 @@ describe('AssistantMessage feedback gate', () => {
     );
     // A failed turn is a settled outcome worth rating ??it's exactly the case a
     // user most wants to thumbs-down, so the feedback row must be present.
-    expect(screen.getByRole('group', { name: 'Feedback' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Rate this response' })).toBeTruthy();
   });
 
   it('hides the feedback widget when the run ended with an empty_response status', () => {
@@ -230,7 +230,7 @@ describe('AssistantMessage feedback gate', () => {
         onFeedback={vi.fn()}
       />,
     );
-    expect(screen.queryByRole('group', { name: 'Feedback' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Rate this response' })).toBeNull();
   });
 });
 

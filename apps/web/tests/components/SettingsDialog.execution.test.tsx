@@ -524,7 +524,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     const trigger = screen.getByTestId('settings-byok-no-file-tools-trigger');
     expect(trigger).toBeTruthy();
     const notice = screen.getByRole('tooltip');
-    expect(notice.textContent).toContain("BYOK can't read, write, or edit project files");
+    expect(notice.textContent).toContain('it cannot read or edit the working folder');
     expect(notice.textContent).toContain('Local CLI');
 
     fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
@@ -963,7 +963,8 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Ollama Cloud' }));
     expect(screen.queryByRole('button', { name: 'Fetch models' })).toBeNull();
-    expect(screen.getByText('Model discovery is not available for this protocol.')).toBeTruthy();
+    // The settings no longer print a "discovery unavailable" hint for it.
+    expect(screen.queryByText(/model discovery is not available/i)).toBeNull();
   });
 
   it('auto-loads provider models after a pasted dirty key is cleaned on blur', async () => {
@@ -1014,7 +1015,9 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       apiProtocol: 'openai',
       apiKey: 'sk-openai',
       baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-4o',
+      // The provider preset's own default: only an untouched preset is replaced
+      // by a model from the account.
+      model: 'gpt-5.6-terra',
       apiProviderBaseUrl: 'https://api.openai.com/v1',
     });
 
@@ -1044,7 +1047,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     const { onPersist } = renderSettingsDialog({
       apiProtocol: 'openai',
       baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-4o',
+      model: 'gpt-5.6-terra',
       apiProviderBaseUrl: 'https://api.openai.com/v1',
     });
 
@@ -1055,7 +1058,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     // provider preset id before discovery runs.
     fireEvent.click(screen.getByRole('combobox', { name: 'Model' }));
     const modelPopover = screen.getByTestId('settings-byok-model-popover');
-    fireEvent.click(within(modelPopover).getByRole('option', { name: 'gpt-4o' }));
+    fireEvent.click(within(modelPopover).getByRole('option', { name: 'gpt-5.6-terra' }));
 
     // Supplying the key triggers account-model discovery.
     fireEvent.change(screen.getByLabelText('API key'), {
@@ -1068,13 +1071,13 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     // The explicit pick must survive discovery — no silent rewrite to the
     // first fetched account model.
     const modelCombobox = screen.getByRole('combobox', { name: 'Model' });
-    expect(modelCombobox.textContent).toContain('gpt-4o');
+    expect(modelCombobox.textContent).toContain('gpt-5.6-terra');
     expect(modelCombobox.textContent).not.toContain('account-ready-model');
     await waitForPersist(
       onPersist,
       expect.objectContaining({
         apiProtocol: 'openai',
-        model: 'gpt-4o',
+        model: 'gpt-5.6-terra',
       }),
       {},
     );
@@ -2098,7 +2101,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     pending.resolve(nextAgents);
 
     await waitFor(() => {
-      expect(screen.getByText('Scan complete. 2 available.')).toBeTruthy();
+      expect(screen.getByText('Agent and model scan complete. 2 available.')).toBeTruthy();
       expect((screen.getByRole('button', { name: /Rescan/i }) as HTMLButtonElement).disabled).toBe(false);
     });
   });
@@ -3257,7 +3260,7 @@ describe('SettingsDialog MCP server interactions', () => {
     });
     expect(screen.getByText(/Run this in your terminal/i)).toBeTruthy();
     await waitFor(() => {
-      expect(screen.getByText(/claude mcp add-json --scope user open-docs/i)).toBeTruthy();
+      expect(screen.getByText(/claude mcp add-json --scope user monofield/i)).toBeTruthy();
     });
     expect(screen.getByText(/Restart your client to pick up the new server/i)).toBeTruthy();
     expect(screen.getByText(/MonoField must be running for MCP tool calls to succeed/i)).toBeTruthy();
@@ -3270,7 +3273,7 @@ describe('SettingsDialog MCP server interactions', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/claude mcp add-json --scope user open-docs/i)).toBeTruthy();
+      expect(screen.getByText(/claude mcp add-json --scope user monofield/i)).toBeTruthy();
     });
 
     fireEvent.click(screen.getByRole('button', { name: /Claude Code/i }));
@@ -3279,7 +3282,7 @@ describe('SettingsDialog MCP server interactions', () => {
     await waitFor(() => {
       expect(screen.getByText(/Append this table to ~\/\.codex\/config\.toml/i)).toBeTruthy();
     });
-    expect(screen.getByText(/\[mcp_servers\.open-docs\]/i)).toBeTruthy();
+    expect(screen.getByText(/\[mcp_servers\.monofield\]/i)).toBeTruthy();
 
     // Scope to the picker trigger ("Codex" + the TOML method chip) so
     // we don't collide with the new one-click "Install in Codex" /
@@ -3301,14 +3304,14 @@ describe('SettingsDialog MCP server interactions', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/claude mcp add-json --scope user open-docs/i)).toBeTruthy();
+      expect(screen.getByText(/claude mcp add-json --scope user monofield/i)).toBeTruthy();
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Copy MCP configuration snippet' }));
 
     await waitFor(() => {
       expect(writeTextMock).toHaveBeenCalledWith(
-        expect.stringContaining("claude mcp add-json --scope user open-docs"),
+        expect.stringContaining("claude mcp add-json --scope user monofield"),
       );
     });
     expect(screen.getByText('Copied')).toBeTruthy();
@@ -3364,7 +3367,8 @@ describe('SettingsDialog language interactions', () => {
     fireEvent.click(screen.getByRole('radio', { name: /فارسی/i }));
 
     expect(window.localStorage.getItem('open-design:locale')).toBe('fa');
-    expect(document.documentElement.getAttribute('lang')).toBe('fa');
+    // The Persian dictionary loads on demand; the document follows once it has.
+    await waitFor(() => expect(document.documentElement.getAttribute('lang')).toBe('fa'));
     expect(document.documentElement.getAttribute('dir')).toBe('rtl');
   });
 
@@ -3374,7 +3378,7 @@ describe('SettingsDialog language interactions', () => {
     fireEvent.click(screen.getByRole('radio', { name: /Deutsch/i }));
 
     expect(window.localStorage.getItem('open-design:locale')).toBe('de');
-    expect(document.documentElement.getAttribute('lang')).toBe('de');
+    await waitFor(() => expect(document.documentElement.getAttribute('lang')).toBe('de'));
 
     fireEvent.click(screen.getByTitle(/close|schließen/i));
     expect(onPersist).not.toHaveBeenCalled();
