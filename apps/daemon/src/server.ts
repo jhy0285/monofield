@@ -4122,6 +4122,9 @@ export async function startServer({
     const installed = getInstalledPlugin(db, snapshot.pluginId);
     return installed && isManagedInstalledPluginAllowed(installed) ? snapshot : null;
   };
+  // The plugin route deps look a snapshot up as `getSnapshot(db, id)`, while the
+  // policy-aware lookup above is already bound to this daemon's database.
+  const getPolicyAllowedSnapshotForRoutes = (_db, snapshotId) => getPolicyAllowedSnapshot(snapshotId);
   const resolvePolicyPluginSnapshot = (input) => resolvePluginSnapshot({
     ...input,
     ...(MANAGED_PLUGIN_INSTALL_ONLY
@@ -5308,7 +5311,7 @@ export async function startServer({
       installFromLocalFolder,
       applyPlugin,
       doctorPlugin,
-      getSnapshot: getPolicyAllowedSnapshot,
+      getSnapshot: getPolicyAllowedSnapshotForRoutes,
       pruneExpiredSnapshots,
       readPluginLockfile,
       resolvePluginSnapshot: resolvePolicyPluginSnapshot,
@@ -5387,7 +5390,7 @@ export async function startServer({
       installFromLocalFolder,
       applyPlugin,
       doctorPlugin,
-      getSnapshot: getPolicyAllowedSnapshot,
+      getSnapshot: getPolicyAllowedSnapshotForRoutes,
       pruneExpiredSnapshots,
       readPluginLockfile,
       resolvePluginSnapshot: resolvePolicyPluginSnapshot,
