@@ -145,6 +145,74 @@ describe('QuickSwitcher render', () => {
     expect(markup).toContain('placeholder=');
   });
 
+  // A file that is open in a tab is both a tab and a project file. Listing it
+  // twice makes every open file show up as two rows with the same name.
+  describe('a file that is open in a tab', () => {
+    const files = [file({ name: 'alpha-file.png', kind: 'image' }), file({ name: 'beta-file.png', kind: 'image' })];
+    const fileTab = {
+      id: 'file:alpha-file.png',
+      kind: 'file' as const,
+      label: 'alpha-file.png',
+      tabId: 'alpha-file.png',
+      path: 'alpha-file.png',
+    };
+    const browserTab = {
+      id: 'browser:__browser__:1',
+      kind: 'browser' as const,
+      label: 'Dribbble',
+      tabId: '__browser__:1',
+      url: 'https://dribbble.com/',
+    };
+    const renderSwitcher = () => render(
+      <QuickSwitcher
+        projectId="p1"
+        files={files}
+        workspaceContexts={[fileTab, browserTab]}
+        onOpenFile={vi.fn()}
+        onOpenTab={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    it('is listed once without a query', () => {
+      renderSwitcher();
+      const names = screen.getAllByRole('option').map((row) => row.querySelector('.qs-name')?.textContent);
+      expect(names.filter((name) => name === 'alpha-file.png')).toHaveLength(1);
+      expect(names).toContain('beta-file.png');
+      expect(names).toContain('Dribbble');
+    });
+
+    it('is listed once when it matches the query', () => {
+      renderSwitcher();
+      fireEvent.change(screen.getByRole('textbox'), { target: { value: 'alpha' } });
+      expect(screen.getAllByRole('option')).toHaveLength(1);
+    });
+
+    it('still opens the file when its row is chosen', () => {
+      const onOpenFile = vi.fn();
+      render(
+        <QuickSwitcher projectId="p1" files={files} workspaceContexts={[fileTab]} onOpenFile={onOpenFile} onOpenTab={vi.fn()} onClose={vi.fn()} />,
+      );
+      fireEvent.change(screen.getByRole('textbox'), { target: { value: 'alpha' } });
+      fireEvent.click(screen.getByRole('option'));
+      expect(onOpenFile).toHaveBeenCalledWith('alpha-file.png');
+    });
+
+    it('keeps a file tab whose file is not in the project list', () => {
+      render(
+        <QuickSwitcher
+          projectId="p1"
+          files={[]}
+          workspaceContexts={[{ ...fileTab, label: 'outside.png', path: 'outside.png', tabId: 'outside.png' }]}
+          onOpenFile={vi.fn()}
+          onOpenTab={vi.fn()}
+          onClose={vi.fn()}
+        />,
+      );
+      expect(screen.getAllByRole('option')).toHaveLength(1);
+    });
+  });
+
   it('searches workspace tabs and opens the selected tab', () => {
     const onOpenTab = vi.fn();
     const onClose = vi.fn();
