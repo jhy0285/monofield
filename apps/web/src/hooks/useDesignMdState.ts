@@ -1,10 +1,15 @@
 // Drives the Continue in CLI button's existence + staleness chip without
-// a daemon-side endpoint. Fetches the project's file list to detect
-// DESIGN.md, downloads its body to parse the `## Provenance` section,
-// then compares the recorded generatedAt against the max mtime across
-// project files (excluding DESIGN.md itself) and the max conversation
-// updatedAt. A "stale" verdict means the design intent recorded in
-// DESIGN.md likely no longer matches the current project state.
+// a daemon-side endpoint. Reads DESIGN.md directly (a 404 means it does not
+// exist) and parses its `## Provenance` section. Only when DESIGN.md exists
+// does it fetch the project's file list, to compare the recorded generatedAt
+// against the max mtime across project files (excluding DESIGN.md itself)
+// and the max conversation updatedAt. A "stale" verdict means the design
+// intent recorded in DESIGN.md likely no longer matches the current project
+// state.
+//
+// The file list is deliberately not the existence probe: a development
+// workspace can hold tens of thousands of files, and this hook re-runs on
+// every file-changed event.
 
 import { useCallback, useEffect, useState } from 'react';
 import type {
@@ -74,6 +79,25 @@ export function useDesignMdState(projectId: string, refreshKey: number = 0): Des
       const projectIdEnc = encodeURIComponent(projectId);
       setState((prev) => ({ ...prev, loading: true, error: null }));
       try {
+        const designResp = await fetch(
+          `/api/projects/${projectIdEnc}/files/${encodeURIComponent(DESIGN_MD)}`,
+          { signal },
+        );
+        if (signal?.aborted) return;
+        if (designResp.status === 404) {
+          setState({
+            ...INITIAL,
+            loading: false,
+          });
+          return;
+        }
+        if (!designResp.ok) {
+          throw new Error(`GET DESIGN.md → HTTP ${designResp.status}`);
+        }
+        const designText = await designResp.text();
+        if (signal?.aborted) return;
+        const provenance = parseProvenance(designText);
+
         const filesResp = await fetch(`/api/projects/${projectIdEnc}/files`, { signal });
         if (!filesResp.ok) {
           throw new Error(`GET files → HTTP ${filesResp.status}`);
@@ -81,26 +105,6 @@ export function useDesignMdState(projectId: string, refreshKey: number = 0): Des
         const filesBody = (await filesResp.json()) as ProjectFilesResponse;
         if (signal?.aborted) return;
         const files = filesBody.files ?? [];
-        const designMd = files.find((f) => f.name === DESIGN_MD);
-
-        if (!designMd) {
-          setState({
-            ...INITIAL,
-            loading: false,
-          });
-          return;
-        }
-
-        const designResp = await fetch(
-          `/api/projects/${projectIdEnc}/files/${encodeURIComponent(DESIGN_MD)}`,
-          { signal },
-        );
-        if (!designResp.ok) {
-          throw new Error(`GET DESIGN.md → HTTP ${designResp.status}`);
-        }
-        const designText = await designResp.text();
-        if (signal?.aborted) return;
-        const provenance = parseProvenance(designText);
 
         const convsResp = await fetch(`/api/projects/${projectIdEnc}/conversations`, {
           signal,

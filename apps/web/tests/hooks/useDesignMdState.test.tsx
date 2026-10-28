@@ -20,8 +20,16 @@ const FRESH_GENERATED_MS = Date.parse('2026-05-08T12:00:00Z');
 
 interface MockEndpoints {
   files?: { ok?: boolean; body: unknown };
-  designMd?: { ok?: boolean; body: string };
+  // `missing` makes the DESIGN.md read answer 404. When the endpoint is not
+  // configured it is derived from the file list, so a project whose list has no
+  // DESIGN.md also has no DESIGN.md to read.
+  designMd?: { ok?: boolean; missing?: boolean; body?: string };
   conversations?: { ok?: boolean; body: unknown };
+}
+
+function listsDesignMd(endpoints: MockEndpoints): boolean {
+  const body = endpoints.files?.body as { files?: Array<{ name: string }> } | undefined;
+  return (body?.files ?? []).some((file) => file.name === 'DESIGN.md');
 }
 
 function installFetchMock(endpoints: MockEndpoints) {
@@ -43,6 +51,8 @@ function installFetchMock(endpoints: MockEndpoints) {
     }
     if (url.includes('/files/DESIGN.md')) {
       const m = endpoints.designMd;
+      const missing = m?.missing ?? (m === undefined && !listsDesignMd(endpoints));
+      if (missing) return new Response('not found', { status: 404 });
       return new Response(m?.body ?? FRESH_DESIGN_MD, {
         status: m?.ok === false ? 500 : 200,
         headers: { 'content-type': 'text/markdown' },
@@ -57,6 +67,31 @@ afterEach(() => {
 });
 
 describe('useDesignMdState', () => {
+  // A development workspace can hold tens of thousands of files. Listing them
+  // only to learn that DESIGN.md is not there costs megabytes per file change,
+  // so the hook asks for DESIGN.md itself and lists files only when it exists.
+  it('does not list the project files when DESIGN.md is absent', async () => {
+    const fetchMock = installFetchMock({ designMd: { missing: true, body: '' } });
+
+    const { result } = renderHook(() => useDesignMdState('p1'));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.exists).toBe(false);
+    expect(result.current.error).toBeNull();
+    const requested = fetchMock.mock.calls.map(([input]) => (typeof input === 'string' ? input : (input as Request).url));
+    expect(requested.some((url) => url.endsWith('/files'))).toBe(false);
+  });
+
+  it('surfaces an error, not "absent", when DESIGN.md cannot be read', async () => {
+    installFetchMock({ designMd: { ok: false, body: '' } });
+
+    const { result } = renderHook(() => useDesignMdState('p1'));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.exists).toBe(false);
+    expect(result.current.error).toBeInstanceOf(Error);
+  });
+
   it('returns { exists: false, isStale: false } when DESIGN.md is absent', async () => {
     installFetchMock({
       files: { body: { files: [{ name: 'index.html', size: 10, mtime: 1, kind: 'html', mime: 'text/html' }] } },
