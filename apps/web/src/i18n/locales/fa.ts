@@ -4293,4 +4293,8 @@ export const fa: Dict = {
   "ontology.issue.excluded-file": "Excluded input",
   "ontology.issue.limit": "Analysis limit",
   "ontology.changed": "Source changed or was refreshed after this snapshot. Rebuild before using the investigation draft.",
+  'development.dock.resize': 'تغییر ارتفاع پنل ابزار',
+  'designFiles.resizePreview': 'تغییر عرض پیش‌نمایش فایل',
+  'development.dock.hideInput': 'پنهان کردن ورودی',
+  'development.dock.showInput': 'نمایش ورودی',
 };

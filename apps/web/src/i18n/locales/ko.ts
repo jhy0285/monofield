@@ -4315,4 +4315,8 @@ export const ko: Dict = {
   "ontology.issue.excluded-file": "입력 제외",
   "ontology.issue.limit": "분석 한도",
   "ontology.changed": "구축 후 코드 변경·새로고침이 감지되었습니다. 조사 요청을 만들기 전에 다시 구축하세요.",
+  'development.dock.resize': '도구 패널 높이 조절',
+  'designFiles.resizePreview': '파일 미리보기 너비 조절',
+  'development.dock.hideInput': '입력창 접기',
+  'development.dock.showInput': '입력창 펼치기',
 };

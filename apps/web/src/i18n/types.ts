@@ -3673,6 +3673,10 @@ export interface Dict {
   'agent.community': string;
   'agent.communityHint': string;
   'settings.moreSections': string;
+  'development.dock.resize': string;
+  'designFiles.resizePreview': string;
+  'development.dock.hideInput': string;
+  'development.dock.showInput': string;
   'agentPicker.modeChoose': string;
   'agentPicker.localCli': string;
   'agentPicker.daemonOff': string;

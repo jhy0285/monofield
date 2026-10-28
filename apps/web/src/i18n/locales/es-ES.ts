@@ -4298,4 +4298,8 @@ export const esES: Dict = {
   "ontology.issue.excluded-file": "Excluded input",
   "ontology.issue.limit": "Analysis limit",
   "ontology.changed": "Source changed or was refreshed after this snapshot. Rebuild before using the investigation draft.",
+  'development.dock.resize': 'Ajustar la altura del panel de herramientas',
+  'designFiles.resizePreview': 'Ajustar el ancho de la vista previa del archivo',
+  'development.dock.hideInput': 'Ocultar entrada',
+  'development.dock.showInput': 'Mostrar entrada',
 };

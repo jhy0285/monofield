@@ -4299,4 +4299,8 @@ export const zhTW: Dict = {
   "ontology.issue.excluded-file": "Excluded input",
   "ontology.issue.limit": "Analysis limit",
   "ontology.changed": "Source changed or was refreshed after this snapshot. Rebuild before using the investigation draft.",
+  'development.dock.resize': '調整工具面板高度',
+  'designFiles.resizePreview': '調整檔案預覽寬度',
+  'development.dock.hideInput': '收合輸入框',
+  'development.dock.showInput': '展開輸入框',
 };

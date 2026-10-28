@@ -1,5 +1,12 @@
 .compact { min-height: 0; }
 .compactToolbar { display: flex; align-items: center; gap: 10px; padding: 4px 16px 0; font-size: 11px; color: var(--text-muted); }
+.composerToggle { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 22px; border-radius: 6px; color: var(--text-muted); }
+.composerToggle:hover { background: var(--control-hover); color: var(--text); }
+.composerToggle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.composerToggle svg { transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1); }
+.composerToggle[aria-expanded='false'] svg { transform: rotate(180deg); }
+.compact[data-composer-collapsed='true'] :global(.chat-composer-slot) { display: none; }
+@media (prefers-reduced-motion: reduce) { .composerToggle svg { transition: none; } }
 .compactToolbar button { border: 0; padding: 2px 0; background: transparent; color: var(--text); cursor: pointer; font-size: 12px; }
 .compact :global(.composer) { margin: 0 auto; padding: 4px 16px 8px; width: 100%; max-width: 960px; }
 .compact :global(.composer-input-editor), .compact :global(.composer-input-editor [contenteditable='true']) { min-height: 32px; max-height: 72px; }

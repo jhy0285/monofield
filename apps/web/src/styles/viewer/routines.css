@@ -1892,7 +1892,7 @@
      narrow splits (list 460 + preview 320 = 780px), pushing the toolbar
      buttons and the preview off-screen. With `minmax(0, …)` the preview
      shrinks first so the panel never exceeds its container width. */
-  grid-template-columns: minmax(280px, 1fr) minmax(0, 360px);
+  grid-template-columns: minmax(280px, 1fr) minmax(0, var(--df-preview-width, 360px));
 }
 .app .df-main {
   border-right-color: var(--border);

@@ -19,6 +19,8 @@ import { getResolvedDeviceId } from '../analytics/client';
 import { trackChatPanelClick, trackMessageQueueClick, trackRunFailedToastSurfaceView } from '../analytics/events';
 import { amrHandoffDeviceId, attributedAmrUrl, recordAmrEntry } from '../analytics/amr-attribution';
 import compactStyles from './ChatPane.module.css';
+
+const COMPOSER_COLLAPSED_STORAGE_KEY = 'monofield:layout:development-composer-collapsed';
 import { useT } from '../i18n';
 import {
   FEATURED_DESIGN_TOOLBOX_ACTION_IDS,
@@ -843,6 +845,7 @@ export function ChatPane({
   const amrAuthPrevLoggedInRef = useRef<boolean | undefined>(undefined);
   const chatLogScrollIdleTimerRef = useRef<number | null>(null);
   const historyWrapRef = useRef<HTMLDivElement | null>(null);
+  const [composerCollapsed, setComposerCollapsed] = useState(false);
   const composerRef = useRef<ChatComposerHandle | null>(null);
   const composerSlotRef = useRef<HTMLDivElement | null>(null);
   const composerLayerRef = useRef<HTMLDivElement | null>(null);
@@ -1936,6 +1939,25 @@ export function ChatPane({
       onShowToast={onShowToast}
     />
   );
+  // The compact composer can fold away so the editor above it keeps the room;
+  // the draft stays mounted and the choice is remembered per browser.
+  useEffect(() => {
+    if (!compact) return;
+    try {
+      setComposerCollapsed(window.localStorage.getItem(COMPOSER_COLLAPSED_STORAGE_KEY) === '1');
+    } catch {
+      // Storage can be blocked; the composer simply stays open.
+    }
+  }, [compact]);
+  const toggleComposerCollapsed = () => {
+    const next = !composerCollapsed;
+    setComposerCollapsed(next);
+    try {
+      window.localStorage.setItem(COMPOSER_COLLAPSED_STORAGE_KEY, next ? '1' : '0');
+    } catch {
+      // Not persisted; the choice still holds for this session.
+    }
+  };
   const shouldPortalComposer =
     !inlineComposer && !compact && tab === 'chat'
     && composerPortalTarget !== null
@@ -1946,8 +1968,22 @@ export function ChatPane({
     : undefined;
 
   return (
-    <div className={`pane ${compact ? compactStyles.compact : ''}`}>
+    <div
+      className={`pane ${compact ? compactStyles.compact : ''}`}
+      data-composer-collapsed={compact && composerCollapsed ? 'true' : undefined}
+    >
       {compact ? <div className={compactStyles.compactToolbar}>
+        <button
+          type="button"
+          className={compactStyles.composerToggle}
+          data-testid="development-composer-toggle"
+          aria-expanded={!composerCollapsed}
+          aria-label={t(composerCollapsed ? 'development.dock.showInput' : 'development.dock.hideInput')}
+          title={t(composerCollapsed ? 'development.dock.showInput' : 'development.dock.hideInput')}
+          onClick={toggleComposerCollapsed}
+        >
+          <Icon name="chevron-down" size={14} />
+        </button>
         <button type="button" onClick={onExpand} data-testid="development-expand-chat">{t('development.dock.chat')}</button>
         {streaming ? <span role="status">{t('ontology.working')}</span> : null}
         {error ? <span role="alert">{error}</span> : null}

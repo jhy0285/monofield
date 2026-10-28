@@ -4298,4 +4298,8 @@ export const ptBR: Dict = {
   "ontology.issue.excluded-file": "Excluded input",
   "ontology.issue.limit": "Analysis limit",
   "ontology.changed": "Source changed or was refreshed after this snapshot. Rebuild before using the investigation draft.",
+  'development.dock.resize': 'Ajustar a altura do painel de ferramentas',
+  'designFiles.resizePreview': 'Ajustar a largura da visualização do arquivo',
+  'development.dock.hideInput': 'Ocultar entrada',
+  'development.dock.showInput': 'Mostrar entrada',
 };

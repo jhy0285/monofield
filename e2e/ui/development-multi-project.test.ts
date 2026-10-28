@@ -114,3 +114,113 @@ test('[P1] the module picker finds a module declared inside a project and switch
   await trigger.click();
   await expect(page.getByRole('menuitemradio', { name: /ear-web/ })).toHaveAttribute('aria-checked', 'true');
 });
+
+async function dragBy(page: Page, handle: ReturnType<Page['getByTestId']>, dx: number, dy: number): Promise<void> {
+  const box = await handle.boundingBox();
+  if (!box) throw new Error('resize handle is not visible');
+  const x = box.x + box.width / 2; const y = box.y + box.height / 2;
+  await page.mouse.move(x, y); await page.mouse.down();
+  await page.mouse.move(x + dx, y + dy, { steps: 8 }); await page.mouse.up();
+}
+
+test('[P1] the bottom tools panel can be resized by dragging or keyboard and keeps its size after a reload', async ({ page, toolsDev }, testInfo) => {
+  test.setTimeout(4 * T.xlong); await page.setViewportSize({ width: 1500, height: 1000 });
+  const root = join(toolsDev.root, 'scratch', 'si-multi-dock-resize'); await mkdir(root, { recursive: true });
+  await createMultiProjectWorkspace(root);
+  await openDevelopmentWorkspace(page, root);
+  const panel = () => page.getByTestId('development-tools-dock').locator('[role="tabpanel"]:not([hidden])');
+  const heightOf = async () => Math.round((await panel().boundingBox())!.height);
+  await page.getByTestId('development-open-changes').click();
+  await expect(page.getByTestId('git-changes-panel')).toBeVisible({ timeout: T.long });
+  const handle = page.getByTestId('development-dock-resizer');
+  await expect(handle).toHaveAttribute('aria-orientation', 'horizontal');
+
+  const initial = await heightOf();
+  await dragBy(page, handle, 0, -120);
+  await expect.poll(heightOf).toBeGreaterThan(initial + 100);
+  const dragged = await heightOf();
+  await page.screenshot({ path: testInfo.outputPath('03-dock-dragged-taller.png'), fullPage: true, animations: 'disabled' });
+
+  await handle.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect.poll(heightOf).toBe(dragged - 16);
+  await page.keyboard.press('Home');
+  await expect.poll(heightOf).toBe(96);
+
+  await page.keyboard.press('End');
+  const maximum = await heightOf();
+  expect(maximum).toBeLessThanOrEqual(Math.round(1000 * 0.7));
+  await dragBy(page, handle, 0, 80);
+  await expect.poll(heightOf).toBeLessThan(maximum - 60);
+  const saved = await heightOf();
+
+  await page.reload();
+  await expect(page.getByTestId('development-tools-dock')).toBeVisible({ timeout: T.xlong });
+  await page.getByTestId('development-open-changes').click();
+  await expect(page.getByTestId('git-changes-panel')).toBeVisible({ timeout: T.long });
+  await expect.poll(heightOf).toBe(saved);
+
+  await page.getByTestId('development-dock-resizer').dblclick();
+  await expect.poll(heightOf).toBe(initial);
+});
+
+test('[P1] the Design Files preview column can be resized and never squeezes the file list below its minimum', async ({ page, toolsDev }, testInfo) => {
+  test.setTimeout(4 * T.xlong); await page.setViewportSize({ width: 1500, height: 1000 });
+  const root = join(toolsDev.root, 'scratch', 'si-multi-preview-resize'); await mkdir(root, { recursive: true });
+  await createMultiProjectWorkspace(root);
+  await openDevelopmentWorkspace(page, root);
+  const row = page.getByTestId(`design-file-row-${MODULES[0]}/src/main/webapp/index.html`);
+  await expect(row).toBeVisible({ timeout: T.long });
+  await row.locator('.df-row-icon').click();
+  await expect(page.getByTestId('design-file-preview')).toBeVisible();
+  const preview = page.locator('.df-preview');
+  const widthOf = async (locator: typeof preview) => Math.round((await locator.boundingBox())!.width);
+  const handle = page.getByTestId('design-files-preview-resizer');
+  await expect(handle).toHaveAttribute('aria-orientation', 'vertical');
+
+  const initial = await widthOf(preview);
+  expect(initial).toBe(360);
+  await dragBy(page, handle, -140, 0);
+  await expect.poll(() => widthOf(preview)).toBe(500);
+  await page.screenshot({ path: testInfo.outputPath('04-preview-wider.png'), fullPage: true, animations: 'disabled' });
+
+  await handle.focus();
+  await page.keyboard.press('End');
+  await expect.poll(() => widthOf(page.locator('.df-main'))).toBe(280);
+  await page.keyboard.press('Home');
+  await expect.poll(() => widthOf(preview)).toBe(220);
+
+  await page.reload();
+  await expect(page.getByTestId('design-files-tab')).toBeVisible({ timeout: T.xlong });
+  await page.getByTestId(`design-file-row-${MODULES[0]}/src/main/webapp/index.html`).locator('.df-row-icon').click();
+  await expect.poll(() => widthOf(page.locator('.df-preview'))).toBe(220);
+
+  await page.getByTestId('design-files-preview-resizer').focus();
+  await page.keyboard.press('Enter');
+  await expect.poll(() => widthOf(page.locator('.df-preview'))).toBe(360);
+});
+
+test('[P1] the AI input under the workspace can be folded to give the editor its room back', async ({ page, toolsDev }, testInfo) => {
+  test.setTimeout(4 * T.xlong); await page.setViewportSize({ width: 1280, height: 720 });
+  const root = join(toolsDev.root, 'scratch', 'si-multi-composer-fold'); await mkdir(root, { recursive: true });
+  await createMultiProjectWorkspace(root);
+  await openDevelopmentWorkspace(page, root);
+  await page.getByTestId('development-open-changes').click();
+  await expect(page.getByTestId('git-changes-panel')).toBeVisible({ timeout: T.long });
+  const listHeight = async () => Math.round((await page.locator('.df-main').boundingBox())!.height);
+  const toggle = page.getByTestId('development-composer-toggle');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  const before = await listHeight();
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByTestId('chat-composer-input')).toBeHidden();
+  await expect.poll(listHeight).toBeGreaterThan(before + 120);
+  await page.screenshot({ path: testInfo.outputPath('05-composer-folded.png'), fullPage: true, animations: 'disabled' });
+
+  await page.reload();
+  await expect(page.getByTestId('development-composer-toggle')).toHaveAttribute('aria-expanded', 'false', { timeout: T.xlong });
+  await page.getByTestId('development-composer-toggle').click();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+});

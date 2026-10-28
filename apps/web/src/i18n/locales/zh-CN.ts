@@ -4299,4 +4299,8 @@ export const zhCN: Dict = {
   'ontology.issue.excluded-file': '已从输入中排除',
   'ontology.issue.limit': '分析上限',
   'ontology.changed': '构建之后检测到代码变更或已刷新。请在生成调查请求之前重新构建。',
+  'development.dock.resize': '调整工具面板高度',
+  'designFiles.resizePreview': '调整文件预览宽度',
+  'development.dock.hideInput': '收起输入框',
+  'development.dock.showInput': '展开输入框',
 };

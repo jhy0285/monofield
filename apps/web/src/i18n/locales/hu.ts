@@ -4298,4 +4298,8 @@ export const hu: Dict = {
   "ontology.issue.excluded-file": "Excluded input",
   "ontology.issue.limit": "Analysis limit",
   "ontology.changed": "Source changed or was refreshed after this snapshot. Rebuild before using the investigation draft.",
+  'development.dock.resize': 'Eszközpanel magasságának módosítása',
+  'designFiles.resizePreview': 'Fájlelőnézet szélességének módosítása',
+  'development.dock.hideInput': 'Beviteli mező elrejtése',
+  'development.dock.showInput': 'Beviteli mező megjelenítése',
 };

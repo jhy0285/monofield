@@ -4298,4 +4298,8 @@ export const fr: Dict = {
   "ontology.issue.excluded-file": "Excluded input",
   "ontology.issue.limit": "Analysis limit",
   "ontology.changed": "Source changed or was refreshed after this snapshot. Rebuild before using the investigation draft.",
+  'development.dock.resize': 'Ajuster la hauteur du panneau d\'outils',
+  'designFiles.resizePreview': 'Ajuster la largeur de l\'aperçu du fichier',
+  'development.dock.hideInput': 'Masquer la saisie',
+  'development.dock.showInput': 'Afficher la saisie',
 };

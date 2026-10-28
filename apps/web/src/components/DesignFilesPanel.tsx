@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Splitter } from '@open-design/components';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useAnalytics } from '../analytics/provider';
 import { trackFileManagerClick } from '../analytics/events';
+import { usePersistentSize } from '../hooks/usePersistentSize';
 import { useT } from '../i18n';
 import { LIBRARY_UI_VISIBLE } from '../features/libraryUi';
 import type { Dict } from '../i18n/types';
@@ -14,6 +16,11 @@ import {
 } from '../utils/fileSystemErrors';
 import { isVisualStabilityMode } from '../utils/visualStability';
 import { selectInitialDesignPreviewFile } from './design-files/designArtifacts';
+import {
+  DF_PREVIEW_WIDTH_STORAGE_KEY,
+  designFilesPreviewBounds,
+  resolvePreviewWidth,
+} from './design-files/previewSize';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { getPluginFolderCandidates } from './design-files/pluginFolders';
 import { Icon } from './Icon';
@@ -312,6 +319,21 @@ export function DesignFilesPanel({
   const MENU_ESTIMATED_HEIGHT = 145;
   const MENU_SAFE_PADDING = 8;
   const [preview, setPreview] = useState<string | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const [panelWidth, setPanelWidth] = useState(0);
+  const previewSize = usePersistentSize(DF_PREVIEW_WIDTH_STORAGE_KEY);
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return undefined;
+    setPanelWidth(panel.getBoundingClientRect().width);
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width;
+      if (typeof width === 'number') setPanelWidth(width);
+    });
+    observer.observe(panel);
+    return () => observer.disconnect();
+  }, []);
   const autoPreviewAppliedRef = useRef(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const lastKeyPress = useRef<Map<string, number>>(new Map());
@@ -946,9 +968,15 @@ export function DesignFilesPanel({
 
   const visibleUploadError = uploadError ?? dropReadError;
   const hasSelection = selected.size > 0;
+  const previewBounds = designFilesPreviewBounds(panelWidth);
+  const previewWidth = resolvePreviewWidth(previewBounds, previewSize.stored);
 
   return (
-    <div className={`df-panel ${previewFile ? '' : 'no-preview'} ${hasSelection ? 'has-selection' : ''}`}>
+    <div
+      ref={panelRef}
+      className={`df-panel ${previewFile ? '' : 'no-preview'} ${hasSelection ? 'has-selection' : ''}`}
+      style={previewFile ? ({ '--df-preview-width': `${previewWidth}px` } as CSSProperties) : undefined}
+    >
       {reloading ? (
         <div className="df-reloading-overlay" data-testid="design-files-reloading">
           <span className="loading-spinner">
@@ -1289,6 +1317,24 @@ export function DesignFilesPanel({
           file={previewFile}
           onOpen={() => onOpenFile(previewFile.name)}
           onClose={() => setPreview(null)}
+        />
+      ) : null}
+      {preview && previewFile ? (
+        <Splitter
+          className="df-preview-splitter"
+          orientation="vertical"
+          resizes="after"
+          label={t('designFiles.resizePreview')}
+          value={previewWidth}
+          min={previewBounds.min}
+          max={previewBounds.max}
+          defaultValue={previewBounds.defaultWidth}
+          data-testid="design-files-preview-resizer"
+          onChange={previewSize.preview}
+          onCommit={(next) => {
+            if (next === previewBounds.defaultWidth) previewSize.reset();
+            else previewSize.commit(next);
+          }}
         />
       ) : null}
       {menuPos ? (

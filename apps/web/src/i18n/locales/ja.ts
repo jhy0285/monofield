@@ -4298,4 +4298,8 @@ export const ja: Dict = {
   'ontology.issue.excluded-file': '入力から除外',
   'ontology.issue.limit': '分析の上限',
   'ontology.changed': '構築後にコードの変更または再読み込みを検出しました。調査リクエストを作成する前に、もう一度構築してください。',
+  'development.dock.resize': 'ツールパネルの高さを調整',
+  'designFiles.resizePreview': 'ファイルプレビューの幅を調整',
+  'development.dock.hideInput': '入力欄を閉じる',
+  'development.dock.showInput': '入力欄を開く',
 };

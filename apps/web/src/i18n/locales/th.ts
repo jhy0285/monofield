@@ -4298,4 +4298,8 @@ export const th: Dict = {
   "ontology.issue.excluded-file": "Excluded input",
   "ontology.issue.limit": "Analysis limit",
   "ontology.changed": "Source changed or was refreshed after this snapshot. Rebuild before using the investigation draft.",
+  'development.dock.resize': 'ปรับความสูงของแผงเครื่องมือ',
+  'designFiles.resizePreview': 'ปรับความกว้างของตัวอย่างไฟล์',
+  'development.dock.hideInput': 'ซ่อนช่องป้อนข้อความ',
+  'development.dock.showInput': 'แสดงช่องป้อนข้อความ',
 };
