@@ -58,7 +58,9 @@ describe('Design Files preview list styles', () => {
     // …while the preview pane YIELDS (minmax(0, …)) instead of pinning a
     // rigid track, so the two columns never sum past the panel width and
     // push the toolbar / preview off-screen.
-    expect(cols).toMatch(/minmax\(0,\s*\d+px\)/);
+    // The width is the person's resized value (--df-preview-width) with a px
+    // fallback; either way the track keeps a 0 minimum.
+    expect(cols).toMatch(/minmax\(0,\s*(?:\d+px|var\(--df-preview-width,\s*\d+px\))\)/);
     // The toolbar stays on a single row: it does NOT wrap; instead the
     // breadcrumb (the growable/shrinkable side) yields while the action
     // cluster holds its place on the right.
