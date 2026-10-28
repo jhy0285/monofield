@@ -89,23 +89,23 @@ function diffManifest(out: PluginDiffEntry[], a: PluginManifest, b: PluginManife
   diffScalar(out, 'monofield.taskKind',          a.od?.taskKind,  b.od?.taskKind);
   diffScalar(out, 'monofield.mode',              a.od?.mode,      b.od?.mode);
   diffArray (out, 'monofield.capabilities',      a.od?.capabilities ?? [], b.od?.capabilities ?? []);
-  diffArray (out, 'od.inputs[]',
+  diffArray (out, 'monofield.inputs[]',
     (a.od?.inputs ?? []).map((i) => i?.name).filter(Boolean) as string[],
     (b.od?.inputs ?? []).map((i) => i?.name).filter(Boolean) as string[]);
-  diffArray (out, 'od.context.skills',
+  diffArray (out, 'monofield.context.skills',
     (a.od?.context?.skills ?? []).map((s) => s?.ref ?? s?.path ?? '').filter(Boolean),
     (b.od?.context?.skills ?? []).map((s) => s?.ref ?? s?.path ?? '').filter(Boolean));
-  diffArray (out, 'od.context.craft',
+  diffArray (out, 'monofield.context.craft',
     (a.od?.context?.craft ?? []).slice() as string[],
     (b.od?.context?.craft ?? []).slice() as string[]);
-  diffArray (out, 'od.context.assets',
+  diffArray (out, 'monofield.context.assets',
     (a.od?.context?.assets ?? []).slice() as string[],
     (b.od?.context?.assets ?? []).slice() as string[]);
   diffPipeline(out, a.od?.pipeline, b.od?.pipeline);
-  diffArray (out, 'od.connectors.required',
+  diffArray (out, 'monofield.connectors.required',
     (a.od?.connectors?.required ?? []).map((c) => c?.id ?? '').filter(Boolean),
     (b.od?.connectors?.required ?? []).map((c) => c?.id ?? '').filter(Boolean));
-  diffArray (out, 'od.genui.surfaces',
+  diffArray (out, 'monofield.genui.surfaces',
     (a.od?.genui?.surfaces ?? []).map((s) => s?.id ?? '').filter(Boolean),
     (b.od?.genui?.surfaces ?? []).map((s) => s?.id ?? '').filter(Boolean));
 }
