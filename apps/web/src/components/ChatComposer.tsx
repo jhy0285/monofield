@@ -422,7 +422,16 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const nextAttachmentOrderRef = useRef(0);
     const [libraryPickerOpen, setLibraryPickerOpen] = useState(false);
     const [figmaModalOpen, setFigmaModalOpen] = useState(false);
-    const [stagedVisualComments, setStagedVisualComments] = useState<ChatCommentAttachment[]>([]);
+    const [stagedVisualComments, setStagedVisualCommentsState] = useState<ChatCommentAttachment[]>([]);
+    // Annotation uploads resolve independently, so two marks made close together
+    // each run their continuation against the render they started in. The ref
+    // always holds the latest committed list, which keeps the second mark from
+    // rebuilding the `[#N]` prompt lines out of a list that is missing the first.
+    const stagedVisualCommentsRef = useRef<ChatCommentAttachment[]>([]);
+    const setStagedVisualComments = useCallback((next: ChatCommentAttachment[]) => {
+      stagedVisualCommentsRef.current = next;
+      setStagedVisualCommentsState(next);
+    }, []);
     const streamingAnnotationSendPendingRef = useRef(false);
     // Remembers the entry_from that the deferred streaming send must carry once
     // it flushes. The Mark draw-overlay tags 'mark' synchronously; without this
@@ -1642,16 +1651,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                   })
                 : null;
               if (stagedVisualAttachment) {
-                setStagedVisualComments((current) => [
-                  ...current,
+                const nextVisualComments = [
+                  ...stagedVisualCommentsRef.current,
                   stagedVisualAttachment,
-                ]);
-              }
-              if (stagedVisualAttachment) {
-                syncVisualAnnotationDraft([
-                  ...stagedVisualComments,
-                  stagedVisualAttachment,
-                ]);
+                ];
+                setStagedVisualComments(nextVisualComments);
+                syncVisualAnnotationDraft(nextVisualComments);
               } else if (detail.note.trim()) {
                 // Accumulate a non-visual annotation note in the prompt when
                 // there is no structured screenshot target to attach.
