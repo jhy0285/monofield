@@ -196,7 +196,7 @@ interface PendingPluginUseHandoff {
 const AUTHORING_DEFAULT_SCENARIO_INPUTS = {
   artifactKind: 'MonoField plugin',
   audience: 'MonoField plugin authors',
-  topic: 'packaging a reusable workflow as an MonoField plugin',
+  topic: 'packaging a reusable workflow as a MonoField plugin',
 };
 
 
