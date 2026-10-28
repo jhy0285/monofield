@@ -78,9 +78,11 @@ As of 2026-10-28.
   `pnpm guard`, `pnpm typecheck` and `pnpm i18n:check` pass. Unit suites pass in
   full: `@open-design/web` 402 files / 3891 tests (13 skipped),
   `@open-design/daemon` 459 files / 5530 tests, `@open-design/components`
-  2 files / 18 tests. UI specs `development-multi-project`, `development-focus`,
-  `app-design-files` and `workspace-keyboard-flows` pass (25 tests). The rest of
-  `e2e/ui` and `e2e/tests` were not run in this session.
+  2 files / 18 tests. The whole Playwright suite (`e2e/ui`, 367 tests) and the
+  Vitest e2e suites (`e2e/specs`, `e2e/tests`, 37 files) were run once; 90
+  Playwright tests fail, every one of them also fails on the commit before this
+  series except for 23 AMR tests that were not run there (see Known baseline
+  failures). No regression was found.
 - Layout: regions can be resized or folded in the development workspace (tools
   panel height, Design Files preview width, AI input) and the classic chat
   panel width; see the newest Log entry and `Splitter` in
@@ -118,22 +120,95 @@ machine. Check before relying on them.
   clear or override them; one `xai` token spec that needs a mode-000 file to be
   unreadable is skipped as root. A spec that fails only here is probably a new
   one that forgot to isolate the environment.
+- A full `e2e/ui` run keeps about 390 MB of scratch per failed worker under
+  `.tmp/e2e/`, and Playwright starts a new worker after every failure, so a run
+  with many failures fills the disk (it reached 25 GB). Delete `.tmp/e2e/playwright-*`
+  folders that nothing has touched for a while, from a loop if the run is long.
+- A failing `e2e/ui` test waits for the whole test timeout; the default used here
+  (`OD_PLAYWRIGHT_TIMEOUT=400000`) is 6.7 minutes, which made one pass take hours.
+  A timeout of 100000 was enough for every test that can pass. The list reporter
+  prints failure details only when the run ends, so a run that is stopped early
+  loses them; use `--reporter=list,json` and let it finish.
+- Two Playwright runs at once (two processes with one worker each, or one with
+  two workers) worked on 4 cores, but heavy load made two tests fail that pass
+  alone (`app-restoration` line 73, `settings-hover-contrast` line 150), and two
+  `e2e/tests/dialog` specs failed with a missing-selector error until run alone.
+  Re-run a failure by itself before calling it a regression.
+- The Vitest e2e specs that call `chromium.launch()` (`tests/dialog/*`) need the
+  Playwright browser build their version expects. With a mismatch, point
+  `PLAYWRIGHT_BROWSERS_PATH` at a scratch folder holding a
+  `chromium_headless_shell-<build>/chrome-headless-shell-linux64/chrome-headless-shell`
+  link to the installed Chromium; nothing outside the scratch folder changes.
+- The AMR e2e specs need `OD_ENABLE_AMR=1` (daemon) and
+  `NEXT_PUBLIC_OD_ENABLE_AMR=1` (web); AMR is off otherwise. Even with both set,
+  four `e2e/tests/amr` specs fail with "Desktop credential vault authorization is
+  unavailable" because they save AMR credentials through `/api/app-config` and the
+  vault exists only while MonoField Desktop runs.
+- Stopping a background script with `pkill -f <name>` kills the shell that
+  contains `<name>` in its own command line. Find the PID with `ps -eo pid,args`
+  and a bracketed pattern such as `grep "[e]2e-cleaner"`.
 - Running a daemon spec against an older commit needs the daemon's own
   `node_modules`; a git worktree of the older commit with `apps/daemon/node_modules`
   symlinked to the main checkout's worked for the baseline comparison.
 
 ### Known baseline failures
 
-None known. On 2026-10-27, on the commit before this series (the merge of pull
-request 11), the web suite had 95 failing tests, the daemon suite 90 (23 files)
-and `e2e/ui` 9. All were investigated and resolved; the Log below says how (test
-drift to the rebrand and the telemetry-off decision in most cases, five real
-defects fixed in code). The daemon failure set was compared test by test against
-that commit before it was changed, and the two sets were identical.
+Web unit and daemon unit suites: none. On 2026-10-27, on the commit before this
+series (the merge of pull request 11), the web suite had 95 failing tests and the
+daemon suite 90 (23 files); all were investigated and resolved (see the Log). The
+daemon failure set was compared test by test against that commit before it was
+changed, and the two sets were identical.
+
+`e2e/ui`: 90 of 367 tests fail on the head of the branch when run alone, in 26
+AMR tests and 64 others. For the 64 others, each one was also run on the commit
+before this series, under the same conditions, and fails there too, so none comes
+from this series. For the AMR tests, three were run on that commit and fail
+there; the other 23 were not, but the baseline had `ENABLE_AMR_RUNTIME = false`
+fixed in the renderer, so the AMR screens they drive could not appear. They need
+the two AMR flags (see Environment notes), which the harness does not set.
+
+The 64 others, by file (cause known only where stated):
+
+- `settings-memory-routines` 14 (30 s test timeout; the "New memory" dialog
+  button is never found), `project-management-flows` 8 (the navigation rail,
+  hand-off trigger and avatar menu are not found), `settings-api-protocol` 7
+  (config `toMatchObject` mismatches), `visual-entry` 7 (it looks for the
+  "Sign in to Open Design" heading and the plugin catalog section),
+  `app-restoration` 4 (Browser Inspiration actions), `critique-theater` 3 (no
+  "Design Jury" region), `design-systems-manager` 3, `settings-design-systems` 3,
+  `chat-todo-autoscroll` 2 (no pinned to-do), `new-project-ds-picker-clipping` 2
+  (`page.goto` receives an invalid URL, so the spec builds no base URL),
+  `settings-media-providers` 2, and one each in `app-manual-edit`, `app`,
+  `change-plan`, `chat-design-system-switch`, `composer-toolbar-alignment`,
+  `critical-smoke`, `document-review` and `real-daemon-run`.
+- Not investigated one by one. Several look like the same drift as the specs
+  fixed in this series (rebrand copy, the verified-delivery receipt that a mocked
+  `/api/runs` cannot give); that is a guess, not a finding.
+
+`e2e/specs` and `e2e/tests`: 10 of 207 tests failed on the first run. One was
+stale (`specs/namespace`, fixed); two (`tests/dialog/*`) pass alone once the
+browser build is matched; three AMR specs (`relogin-required`) pass with the AMR
+flags set; four AMR specs need the Desktop credential vault and cannot pass
+without it. These were not run on the commit before this series; the code they
+exercise is unchanged by it.
 
 ## Open items
 
 Newest first within each group. Remove an item when it is done.
+
+End-to-end tests:
+
+- Triage the 64 persistent non-AMR `e2e/ui` failures listed under Known baseline
+  failures. Start with `settings-memory-routines` (14) and
+  `project-management-flows` (8): they are the largest and look like one shared
+  cause each. Fix the spec or the product, whichever is wrong, one file at a time,
+  and re-run each file alone.
+- Decide what to do with the 26 AMR `e2e/ui` tests and the 4 `e2e/tests/amr`
+  specs that need the Desktop credential vault: run them with the AMR flags in a
+  job that has a vault stand-in, rewrite them for the local-CLI path, or delete
+  them with the AMR surfaces. Today they fail on every run.
+- `e2e/ui/new-project-ds-picker-clipping.test.ts` calls `page.goto` with an
+  invalid URL; check how it gets its base URL.
 
 Layout and UI:
 
@@ -197,6 +272,35 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-10-28 — Full e2e regression run (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** run all of e2e and check for regressions.
+- **Changed:** one stale spec, `e2e/specs/namespace/main.spec.ts`, which looked for
+  `OD_SIDECAR_IPC_PATH` and `OD_DATA_DIR` in `/api/mcp/install-info`; the daemon
+  emits the `MONOFIELD_*` names and its code is unchanged since before this
+  series. Nothing else was changed; the failures found are recorded, not fixed.
+- **Why:** the earlier verification had run only four of the 49 `e2e/ui` files and
+  none of `e2e/specs` and `e2e/tests`.
+- **Verified:** all 367 Playwright tests got a result (one worker, then two for the
+  second half to save time). 92 failed on the first pass; two of them
+  (`app-restoration` line 73, `settings-hover-contrast` line 150) pass alone, so
+  they failed under load. The other 90 (26 AMR, 64 others) were re-run alone on
+  the branch and failed again, and the 64 others were re-run on the commit before
+  this series with the same timeout and workers and failed there too: no
+  regression. Three of the 26 AMR tests were also run there and fail. The Vitest
+  e2e suites: 10 of 207 tests failed; after the namespace fix and the follow-ups in
+  Known baseline failures, the remaining failures are the four vault-bound AMR
+  specs.
+- **Not done:** the 23 other AMR tests and the Vitest e2e failures were not run on
+  the base commit; the causes are the unchanged flag and vault code, not a
+  measurement. The 64 persistent failures were not diagnosed.
+- **Next agent:** read Environment notes before starting a long e2e run: disk, the
+  timeout, and the rule to re-run a failure alone. The base-commit comparison was
+  done by checking out that commit in the same working tree (it was clean),
+  rebuilding the daemon, running, and checking the branch out again, which also
+  needed the daemon rebuilt; `next dev` rewrites `apps/web/next-env.d.ts` during
+  a run, so restore it with `git checkout` before committing.
 
 ### 2026-10-28 — Resizable regions and a foldable AI input (`ccr-8432aecf-n9xdfd`)
 
