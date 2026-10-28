@@ -66,7 +66,7 @@ describe('AssistantMessage feedback analytics', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Helpful' }));
     fireEvent.click(await screen.findByLabelText('Understood my request'));
-    fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save feedback' }));
 
     const resultCall = analyticsMocks.track.mock.calls.find(
       ([event]) => event === 'feedback_submit_result',

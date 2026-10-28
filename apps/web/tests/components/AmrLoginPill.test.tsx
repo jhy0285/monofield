@@ -312,11 +312,12 @@ describe('AmrLoginPill', () => {
     expect(url.searchParams.get('source')).toBe('open_design');
     expect(url.searchParams.get('od_origin')).toBe('open_design');
     expect(url.searchParams.get('od_entry_source')).toBe('settings_amr_console');
-    expect(url.searchParams.get('od_device_id')).toBe('od-install-abc');
+    // MonoField never forwards a device id and never mirrors AMR attribution.
+    expect(url.searchParams.get('od_device_id')).toBeNull();
     expect(url.searchParams.get('od_entry_id')).toMatch(/^od-amr-/u);
-    expect(fetchMock).toHaveBeenCalledWith(
+    expect(fetchMock).not.toHaveBeenCalledWith(
       '/api/integrations/vela/analytics-entry',
-      expect.objectContaining({ method: 'POST' }),
+      expect.anything(),
     );
   });
 
@@ -443,7 +444,8 @@ describe('AmrLoginPill', () => {
     );
     const body = JSON.parse(String((loginCall?.[1] as RequestInit).body));
     expect(body.attribution.sourceDetail).toBe('settings_amr_authorize');
-    expect(body.attribution.odDeviceId).toBe('od-install-abc');
+    // The login hand-off carries the entry context but no device id.
+    expect(body.attribution.odDeviceId).toBeUndefined();
   });
 
   it('shows an AMR error instead of staying in signing-in state when login fails immediately', async () => {
