@@ -3670,6 +3670,9 @@ export interface Dict {
 
   // Agent picker (legacy / alt)
   'agentPicker.label': string;
+  'agent.community': string;
+  'agent.communityHint': string;
+  'settings.moreSections': string;
   'agentPicker.modeChoose': string;
   'agentPicker.localCli': string;
   'agentPicker.daemonOff': string;

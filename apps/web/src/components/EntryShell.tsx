@@ -103,6 +103,7 @@ import { homeHeroChipLabel } from './home-hero/chip-labels';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { Icon } from './Icon';
 import { AgentIcon } from './AgentIcon';
+import { AgentSupportTag } from './AgentSupportTag';
 import { LanguageMenu } from './LanguageMenu';
 import type { IntegrationTab } from './IntegrationsView';
 import { InlineModelSwitcher } from './InlineModelSwitcher';
@@ -2693,7 +2694,7 @@ function OnboardingCliSetupPanel({
             >
               <AgentIcon id={agent.id} size={22} />
               <span>
-                <strong>{agent.name}</strong>
+                <strong>{agent.name}<AgentSupportTag id={agent.id} /></strong>
                 <small>{agent.version ?? t('common.installed')}</small>
               </span>
             </button>
