@@ -52,13 +52,13 @@ describe('namespace isolation spec', () => {
       expect(daemonStatus).not.toHaveProperty('namespace');
 
       const installInfo = await requestJson<McpInstallInfoResponse>(webUrl, '/api/mcp/install-info');
-      const ipcPath = installInfo.env.OD_SIDECAR_IPC_PATH;
+      const ipcPath = installInfo.env.MONOFIELD_SIDECAR_IPC_PATH;
       if (typeof ipcPath !== 'string' || ipcPath.length === 0) {
-        throw new Error('MCP install-info did not include OD_SIDECAR_IPC_PATH');
+        throw new Error('MCP install-info did not include MONOFIELD_SIDECAR_IPC_PATH');
       }
       expect(ipcPath).toEqual(expect.any(String));
       expect(installInfo.args).not.toContain('--daemon-url');
-      expect(installInfo.env.OD_DATA_DIR).toBe(suite.dataDir);
+      expect(installInfo.env.MONOFIELD_DATA_DIR).toBe(suite.dataDir);
       expect(installInfo.env).not.toHaveProperty('OD_NAMESPACE');
       expect(installInfo.env).not.toHaveProperty('OD_SIDECAR_NAMESPACE');
       expect(installInfo.env).not.toHaveProperty('OD_SIDECAR_IPC_BASE');
