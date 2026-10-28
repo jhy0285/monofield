@@ -88,7 +88,10 @@ test('[P1] quick switcher arrow keys move selection before opening a file', asyn
   const quickSwitcherInput = page.locator('.qs-input');
   const selectedOption = page.getByRole('option', { selected: true });
   await expect(quickSwitcher).toBeVisible();
-  await expect(page.getByRole('option')).toHaveCount(3);
+  // The always-present Docs Files tab is listed first, then one row per file.
+  // A file that is already open in a tab appears once, as its file row.
+  await expect(page.getByRole('option', { name: /arrow-(alpha|beta|gamma)\.png/i })).toHaveCount(3);
+  await expect(page.getByRole('option')).toHaveCount(4);
 
   const initialSelection = await selectedOption.textContent();
   await quickSwitcherInput.press('ArrowDown');
@@ -121,7 +124,7 @@ test('[P0] workspace tab launcher creates a Browser tab on the reference board h
   const browserTab = page.getByTestId('file-workspace').getByRole('tab', { name: /^Browser\b/i });
   await expect(browserTab).toBeVisible();
   await expect(browserTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByRole('region', { name: /Design Browser/i })).toBeVisible();
+  await expect(page.getByRole('region', { name: /Built-in browser/i })).toBeVisible();
   await expect(page.getByRole('heading', { name: /Reference Board/i })).toBeVisible();
   await expect(page.getByRole('searchbox', { name: /Search references/i })).toBeVisible();
 });
@@ -360,80 +363,39 @@ test('[P1] quick switcher leaves the Design Files panel and opens the selected f
   await expect(page.getByTestId('design-file-preview')).toHaveCount(0);
 });
 
-test('[P1] quick switcher can switch from a design file tab back to a generated artifact tab', async ({ page }) => {
-  await page.route('**/api/runs', async (route) => {
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"mock-run"}',
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    const artifact =
-      '<artifact identifier="quick-switcher-artifact" type="text/html" title="Quick Switcher Artifact">' +
-      '<!doctype html><html><body><main><h1>Quick Switcher Artifact</h1></main></body></html>' +
-      '</artifact>';
-    const body = [
-      'event: start',
-      'data: {"bin":"mock-agent"}',
-      '',
-      'event: stdout',
-      `data: ${JSON.stringify({ chunk: artifact })}`,
-      '',
-      'event: end',
-      'data: {"code":0,"status":"succeeded"}',
-      '',
-      '',
-    ].join('\n');
-
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
-  });
-
+test('[P1] quick switcher can switch from a design file tab back to an HTML artifact tab', async ({ page }) => {
   await gotoEntryHome(page);
   await createProject(page, 'Quick switcher artifact mix');
   await expectWorkspaceReady(page);
 
-  await sendPrompt(page, 'Create a quick switcher artifact');
-  const artifactTab = page.getByRole('tab', { name: /quick-switcher-artifact\.html/i });
+  // Seed the artifact through the files API. Chat-produced artifacts now open
+  // only after the daemon acknowledges a verified delivery receipt, which a
+  // mocked /api/runs cannot provide, so the tab would open at an unpredictable
+  // moment and steal the selection from the tab this test activates.
+  const projectId = currentProjectId(page);
+  await seedProjectFile(
+    page,
+    projectId,
+    'quick-switcher-artifact.html',
+    '<!doctype html><html><body><main><h1>Quick Switcher Artifact</h1></main></body></html>',
+  );
+  await seedProjectFile(page, projectId, 'artifact-mix-file.png', TINY_PNG_B64, 'base64');
+  await page.reload();
+  await expectWorkspaceReady(page);
+
+  await openFileFromQuickSwitcher(page, 'quick-switcher-artifact');
+  const artifactTab = tabBySuffix(page, 'quick-switcher-artifact.html');
   await expect(artifactTab).toHaveAttribute('aria-selected', 'true');
 
-  await uploadTinyPng(page, 'artifact-mix-file.png');
+  await openFileFromQuickSwitcher(page, 'artifact-mix-file');
   const fileTab = tabBySuffix(page, 'artifact-mix-file.png');
-  await fileTab.click();
   await expect(fileTab).toHaveAttribute('aria-selected', 'true');
   await expect(artifactTab).toHaveAttribute('aria-selected', 'false');
 
-  await openQuickSwitcher(page);
-  const quickSwitcher = page.locator('.qs-overlay');
-  const quickSwitcherInput = page.locator('.qs-input');
-  await expect(quickSwitcher).toBeVisible();
-
-  await quickSwitcherInput.fill('quick-switcher-artifact');
-  await expect(page.getByRole('option', { name: /quick-switcher-artifact\.html/i })).toBeVisible();
-  await quickSwitcherInput.press('Enter');
-
-  await expect(quickSwitcher).toBeHidden();
+  await openFileFromQuickSwitcher(page, 'quick-switcher-artifact');
   await expect(artifactTab).toHaveAttribute('aria-selected', 'true');
   await expect(fileTab).toHaveAttribute('aria-selected', 'false');
-  const current = new URL(page.url());
-  const [, projects, projectId] = current.pathname.split('/');
-  if (projects !== 'projects' || !projectId) throw new Error(`unexpected project route: ${current.pathname}`);
-  await expect
-    .poll(async () => {
-      const response = await page.request.get(`/api/projects/${projectId}/files/quick-switcher-artifact.html`);
-      if (!response.ok()) return '';
-      return response.text();
-    })
-    .toContain('Quick Switcher Artifact');
 });
-
 
 async function createProject(
   page: Page,
@@ -536,16 +498,15 @@ async function openQuickSwitcher(page: Page) {
   await expect(quickSwitcher).toBeVisible();
 }
 
-async function sendPrompt(page: Page, prompt: string) {
-  const input = page.getByTestId('chat-composer-input');
-  const sendButton = page.getByTestId('chat-send');
-  await input.click();
-  await input.fill(prompt);
-  await expect(input).toHaveText(prompt, { timeout: 1500 });
-  await expect(sendButton).toBeEnabled({ timeout: 1500 });
-  const chatResponse = page.waitForResponse(isCreateRunResponse, { timeout: 2000 });
-  await sendButton.evaluate((button: HTMLButtonElement) => button.click());
-  await chatResponse;
+async function openFileFromQuickSwitcher(page: Page, query: string) {
+  await openQuickSwitcher(page);
+  const quickSwitcher = page.locator('.qs-overlay');
+  await expect(quickSwitcher).toBeVisible();
+  await page.locator('.qs-input').fill(query);
+  const result = page.getByRole('option', { name: new RegExp(escapeRegExp(query), 'i') });
+  await expect(result).toHaveCount(1);
+  await page.locator('.qs-input').press('Enter');
+  await expect(quickSwitcher).toBeHidden();
 }
 
 function tabBySuffix(page: Page, name: string): Locator {

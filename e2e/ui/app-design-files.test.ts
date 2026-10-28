@@ -331,8 +331,10 @@ async function runPythonSourcePreviewFlow(page: Page, entry: UiScenario) {
   await page.reload();
   await openDesignFile(page, 'app.py');
 
-  await expect(page.locator('.code-viewer')).toContainText('def greet');
-  await expect(page.locator('.code-viewer')).toContainText('hello from python');
+  // Source files open in an editable textarea, so assert on its value.
+  const sourceEditor = page.getByRole('textbox', { name: /app\.py editor/i });
+  await expect(sourceEditor).toHaveValue(/def greet/);
+  await expect(sourceEditor).toHaveValue(/hello from python/);
   await expectScenarioFiles(page, entry, projectId);
 }
 
@@ -490,7 +492,7 @@ test('[P0] @critical file workspace restores HTML preview after switching throug
   await sourceRow.getByRole('button').first().click();
   await clickDesignFilePreviewOpen(page);
   await expect(page.getByRole('tab', { name: /logic\.ts/i })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.locator('.code-viewer')).toContainText('riskScore');
+  await expect(page.getByRole('textbox', { name: /logic\.ts editor/i })).toHaveValue(/riskScore/);
 
   await page.getByRole('tab', { name: /dashboard\.html/i }).click();
   await expect(page.getByRole('tab', { name: /dashboard\.html/i })).toHaveAttribute('aria-selected', 'true');
