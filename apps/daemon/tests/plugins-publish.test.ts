@@ -59,17 +59,17 @@ describe('buildPublishLink', () => {
     expect(link.prBody).toContain('npx skills add open-design/sample-plugin');
   });
 
-  it('builds an Open Design registry submission URL', () => {
+  it('builds a MonoField registry submission URL', () => {
     // The dedicated `open-design/plugin-registry` repo per
     // docs/plans/plugin-registry.md §1.2 is the long-term target; until that
     // operational launch step happens, submissions land in `nexu-io/open-design`
     // (plugins/community/<plugin-name>/), keeping contribution where stars and
     // PR traffic already are.
     const link = buildPublishLink({ catalog: 'open-design', meta: META });
-    expect(link.catalogLabel).toBe('nexu-io/open-design');
-    expect(link.url).toMatch(/^https:\/\/github\.com\/nexu-io\/open-design\/issues\/new\?/);
-    expect(link.prBody).toContain('plugins/community/<plugin-name>/open-design.json');
-    expect(link.prBody).toContain('plugins/registry/community/open-design-marketplace.json');
+    expect(link.catalogLabel).toBe('jhy0285/monofield');
+    expect(link.url).toMatch(/^https:\/\/github\.com\/jhy0285\/monofield\/issues\/new\?/);
+    expect(link.prBody).toContain('plugins/community/<plugin-name>/monofield.json');
+    expect(link.prBody).toContain('plugins/registry/community/monofield-marketplace.json');
   });
 
   it('falls back to owner/repo placeholder when repoUrl is missing for skills-sh', () => {

@@ -32,21 +32,21 @@ describe('resolveDataDir', () => {
     await rm(projectRoot, { recursive: true, force: true });
   });
 
-  it('returns <projectRoot>/.od when OD_DATA_DIR is unset', () => {
-    expect(resolveDataDir(undefined, projectRoot)).toBe(path.join(projectRoot, '.od'));
-    expect(resolveDataDir('', projectRoot)).toBe(path.join(projectRoot, '.od'));
+  it('returns <projectRoot>/.monofield when MONOFIELD_DATA_DIR is unset', () => {
+    expect(resolveDataDir(undefined, projectRoot)).toBe(path.join(projectRoot, '.monofield'));
+    expect(resolveDataDir('', projectRoot)).toBe(path.join(projectRoot, '.monofield'));
   });
 
-  it('requires an explicit OD_DATA_DIR when sandbox mode requires one', () => {
+  it('requires an explicit MONOFIELD_DATA_DIR when sandbox mode requires one', () => {
     expect(() =>
       resolveDataDir(undefined, projectRoot, { requireExplicit: true }),
-    ).toThrow('OD_DATA_DIR is required when OD_SANDBOX_MODE is enabled');
+    ).toThrow('MONOFIELD_DATA_DIR is required when managed sandbox mode is enabled');
     expect(() => resolveDataDir('', projectRoot, { requireExplicit: true })).toThrow(
-      'OD_DATA_DIR is required when OD_SANDBOX_MODE is enabled',
+      'MONOFIELD_DATA_DIR is required when managed sandbox mode is enabled',
     );
     expect(() =>
       resolveDataDir('   ', projectRoot, { requireExplicit: true }),
-    ).toThrow('OD_DATA_DIR is required when OD_SANDBOX_MODE is enabled');
+    ).toThrow('MONOFIELD_DATA_DIR is required when managed sandbox mode is enabled');
   });
 
   it('trims OD_DATA_DIR before resolving the storage root', () => {

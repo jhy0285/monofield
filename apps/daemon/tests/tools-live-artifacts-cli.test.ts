@@ -253,24 +253,27 @@ describe('live artifact tool CLI environment', () => {
   });
 
   it('fails before making a request when the injected environment is missing', async () => {
+    delete process.env.MONOFIELD_DAEMON_URL;
     delete process.env.OD_DAEMON_URL;
+    delete process.env.MONOFIELD_TOOL_TOKEN;
     delete process.env.OD_TOOL_TOKEN;
 
     const result = await runLiveArtifactsToolCli(['list']);
 
     expect(result.exitCode).toBe(1);
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(stderrOutput.join('')).toContain('OD_DAEMON_URL is required');
+    expect(stderrOutput.join('')).toContain('MONOFIELD_DAEMON_URL is required');
   });
 
-  it('requires OD_TOOL_TOKEN from the injected environment', async () => {
+  it('requires MONOFIELD_TOOL_TOKEN from the injected environment', async () => {
     process.env.OD_DAEMON_URL = 'http://127.0.0.1:7456';
+    delete process.env.MONOFIELD_TOOL_TOKEN;
     delete process.env.OD_TOOL_TOKEN;
 
     const result = await runLiveArtifactsToolCli(['list']);
 
     expect(result.exitCode).toBe(1);
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(stderrOutput.join('')).toContain('OD_TOOL_TOKEN is required');
+    expect(stderrOutput.join('')).toContain('MONOFIELD_TOOL_TOKEN is required');
   });
 });

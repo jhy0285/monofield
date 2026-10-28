@@ -361,7 +361,7 @@ describe('agent-driven brand extraction engine', () => {
     expect(project).toBeTruthy();
     expect(project?.metadata?.kind).toBe('brand');
     expect(project?.pendingPrompt ?? '').toContain('DESIGN SYSTEM ENRICHMENT');
-    expect(project?.pendingPrompt ?? '').toContain(`od brand preview ${result.id}`);
+    expect(project?.pendingPrompt ?? '').toContain(`monofield brand preview ${result.id}`);
 
     // brand.html is seeded as the active tab; the site stays as a secondary
     // browser tab the user can use to clear an anti-bot wall by hand.

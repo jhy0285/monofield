@@ -68,7 +68,7 @@ describe('CLI startup boundaries', () => {
     );
 
     try {
-      const line = await waitForStdoutLine(child, /\[od\] listening on (http:\/\/[^\s]+) \(headless\)/u);
+      const line = await waitForStdoutLine(child, /\[monofield\] listening on (http:\/\/[^\s]+) \(headless\)/u);
       const match = line.match(/(http:\/\/[^\s]+)/u);
       const daemonUrl = match?.[1];
       expect(daemonUrl).toBeTruthy();
