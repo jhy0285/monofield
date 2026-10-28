@@ -1,14 +1,13 @@
 // @vitest-environment jsdom
 //
-// High-fidelity integration test for the onboarding -> home agent-selection
-// bug: the user picks (or accepts the recommended default) Open Design AMR
-// during first-run onboarding, but the home agent picker comes back showing
-// Claude Code. Unlike the component-level EntryShell tests (which mock
-// `onAgentChange` so it never updates config), this mounts the REAL `App`
-// with the REAL router and REAL EntryView/onboarding UI, so the App-level
-// config lifecycle + auto-select interact exactly as in production. Only the
-// daemon/provider boundary is mocked, and AMR (vela) detection is made to lag
-// the first agent probe — the exact window in which the bug surfaces.
+// High-fidelity integration test for the onboarding -> home agent selection:
+// the user picks a local coding agent during first-run onboarding, and the home
+// agent picker must come back showing that agent, not the first one detected.
+// Unlike the component-level EntryShell tests (which mock `onAgentChange` so it
+// never updates config), this mounts the REAL `App` with the REAL router and
+// REAL EntryView/onboarding UI, so the App-level config lifecycle and the
+// auto-select interact exactly as in production. Only the daemon/provider
+// boundary is mocked.
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -25,7 +24,6 @@ import {
   fetchPromptTemplates,
   fetchSkills,
 } from '../../src/providers/registry';
-import { fetchAmrModels } from '../../src/providers/daemon';
 import { listProjects, listTemplates } from '../../src/state/projects';
 
 const analyticsMocks = vi.hoisted(() => ({ track: vi.fn() }));
@@ -69,13 +67,6 @@ vi.mock('../../src/providers/registry', async () => {
   };
 });
 
-vi.mock('../../src/providers/daemon', async () => {
-  const actual = await vi.importActual<typeof import('../../src/providers/daemon')>(
-    '../../src/providers/daemon',
-  );
-  return { ...actual, fetchAmrModels: vi.fn() };
-});
-
 vi.mock('../../src/state/projects', async () => {
   const actual = await vi.importActual<typeof import('../../src/state/projects')>(
     '../../src/state/projects',
@@ -109,7 +100,6 @@ const mockedFetchDesignSystems = vi.mocked(fetchDesignSystems);
 const mockedFetchDesignTemplates = vi.mocked(fetchDesignTemplates);
 const mockedFetchPromptTemplates = vi.mocked(fetchPromptTemplates);
 const mockedFetchSkills = vi.mocked(fetchSkills);
-const mockedFetchAmrModels = vi.mocked(fetchAmrModels);
 const mockedListProjects = vi.mocked(listProjects);
 const mockedListTemplates = vi.mocked(listTemplates);
 const mockedLoadConfig = vi.mocked(loadConfig);
@@ -123,13 +113,13 @@ const claudeAgent = {
   version: '1.0.0',
   models: [{ id: 'sonnet', label: 'Sonnet' }],
 };
-const amrAgent = {
-  id: 'amr',
-  name: 'AMR',
-  bin: 'vela',
+const codexAgent = {
+  id: 'codex',
+  name: 'Codex CLI',
+  bin: 'codex',
   available: true,
   version: '1.0.0',
-  models: [{ id: 'amr-model', label: 'AMR Model' }],
+  models: [{ id: 'gpt-5-codex', label: 'GPT-5 Codex' }],
 };
 
 function firstRunConfig(): AppConfig {
@@ -186,12 +176,8 @@ beforeEach(() => {
   window.history.replaceState(null, '', '/');
 
   mockedDaemonIsLive.mockResolvedValue(true);
-  // AMR (vela) detection LAGS: the first probe only sees Claude. Every
-  // subsequent probe (the onboarding shell re-scans when it finds no AMR)
-  // returns AMR as well.
-  mockedFetchAgentsStream
-    .mockResolvedValueOnce([{ ...claudeAgent }])
-    .mockResolvedValue([{ ...amrAgent }, { ...claudeAgent }]);
+  // Claude Code is detected first, Codex second: picking Codex must stick.
+  mockedFetchAgentsStream.mockResolvedValue([{ ...claudeAgent }, { ...codexAgent }]);
   mockedFetchSkills.mockResolvedValue([]);
   mockedFetchDesignSystems.mockResolvedValue([]);
   mockedFetchDesignTemplates.mockResolvedValue([]);
@@ -199,33 +185,12 @@ beforeEach(() => {
   mockedFetchAppVersionInfo.mockResolvedValue(null);
   mockedListProjects.mockResolvedValue([]);
   mockedListTemplates.mockResolvedValue([]);
-  mockedFetchAmrModels.mockResolvedValue({
-    source: 'preset',
-    refreshing: false,
-    models: [{ id: 'amr-model', label: 'AMR Model' }],
-  });
   mockedLoadConfig.mockReturnValue(firstRunConfig());
   mockedFetchDaemonConfig.mockResolvedValue({});
 
-  // The onboarding + inline switcher poll the vela login status; report a
-  // signed-in account so the AMR runtime is fully selectable.
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      const json = url.includes('/api/integrations/vela/status')
-        ? {
-            loggedIn: true,
-            profile: 'prod',
-            user: { id: 'u', email: 'user@example.com' },
-            configPath: '/x',
-          }
-        : {};
-      return new Response(JSON.stringify(json), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }),
+    vi.fn(async () => new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })),
   );
 });
 
@@ -236,36 +201,25 @@ afterEach(() => {
   analyticsMocks.track.mockReset();
 });
 
-describe('onboarding -> home AMR selection (end to end)', () => {
-  it('lands on the home agent picker with AMR selected after accepting the AMR default', async () => {
+describe('onboarding -> home agent selection (end to end)', () => {
+  it('lands on the home agent picker with the agent the user chose in onboarding', async () => {
     render(<App />);
 
-    // Bootstrap routes a first-run user into onboarding. AMR detection lags
-    // the first agent probe, so wait for the cloud sign-in CTA to resolve to
-    // the signed-in state before advancing past the Connect step.
-    const runtimeContinue = await screen.findByRole(
-      'button',
-      { name: /Continue \(signed in\)/i },
-      { timeout: 10000 },
-    );
-    await waitFor(() => {
-      expect((runtimeContinue as HTMLButtonElement).disabled).toBe(false);
-    });
-    fireEvent.click(runtimeContinue);
+    // First run opens the Connect step with the detected local agents.
+    const codexChip = await screen.findByRole('button', { name: /Codex CLI/i }, { timeout: 10000 });
+    fireEvent.click(codexChip);
+    await waitFor(() => expect(codexChip.getAttribute('aria-pressed')).toBe('true'));
+    fireEvent.click(await screen.findByRole('button', { name: /^Continue$/i }));
 
-    // Advance from About you directly to the final setup screen.
-    const aboutYouContinue = await screen.findByRole('button', { name: /^Continue$/i });
-    fireEvent.click(aboutYouContinue);
+    // Profile step, then the final setup screen.
+    fireEvent.click(await screen.findByRole('button', { name: /^Continue$/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Go to home/i }));
 
-    const finishToHome = await screen.findByRole('button', { name: /Go to home/i });
-    fireEvent.click(finishToHome);
-
-    // Now on home: the inline model switcher chip must reflect AMR, not the
-    // Claude default the App-level auto-select used to snap to while AMR was
-    // still being detected.
+    // Now on home: the inline model switcher chip must reflect the choice, not
+    // the first agent the probe happened to return.
     const chip = await screen.findByTestId('inline-model-switcher-chip');
     await waitFor(() => {
-      expect(chip.getAttribute('aria-label') ?? '').toContain('AMR');
+      expect(chip.getAttribute('aria-label') ?? '').toContain('Codex');
     });
     expect(chip.getAttribute('aria-label') ?? '').not.toContain('Claude');
   });
