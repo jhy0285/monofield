@@ -62,7 +62,34 @@ describe('POST /api/runs headless fallbacks', () => {
     expect(runBody.conversationId).toBe(seededConversationId);
   });
 
-  it('falls back past a stale saved agent to the first detected available runtime', async () => {
+  // A saved runtime is the user's explicit choice: the run keeps it even when
+  // its binary is missing, and the spawn layer reports that error. Scanning the
+  // adapter catalog is reserved for installs with no valid saved runtime.
+  it('keeps a saved agent whose binary is missing instead of scanning for another', async () => {
+    const agentId = await runAgentIdWithSavedConfig({
+      agentId: 'claude',
+      agentCliEnv: (binDir, opencodeBin) => ({
+        claude: { CLAUDE_BIN: path.join(binDir, 'missing-claude') },
+        opencode: { OPENCODE_BIN: opencodeBin },
+      }),
+    });
+    expect(agentId).toBe('claude');
+  });
+
+  it('falls back to the first detected available runtime when no runtime is saved', async () => {
+    const agentId = await runAgentIdWithSavedConfig({
+      agentId: null,
+      agentCliEnv: (_binDir, opencodeBin) => ({
+        opencode: { OPENCODE_BIN: opencodeBin },
+      }),
+    });
+    expect(agentId).toBe('opencode');
+  });
+
+  async function runAgentIdWithSavedConfig(saved: {
+    agentId: string | null;
+    agentCliEnv: (binDir: string, opencodeBin: string) => Record<string, Record<string, string>>;
+  }): Promise<string | null> {
     started = await startTestServer();
     const binDir = await mkdtemp(path.join(os.tmpdir(), 'od-headless-run-bin-'));
     const emptyAgentHome = await mkdtemp(path.join(os.tmpdir(), 'od-headless-run-home-'));
@@ -76,16 +103,13 @@ describe('POST /api/runs headless fallbacks', () => {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          agentId: 'claude',
-          agentCliEnv: {
-            claude: { CLAUDE_BIN: path.join(binDir, 'missing-claude') },
-            opencode: { OPENCODE_BIN: opencodeBin },
-          },
+          agentId: saved.agentId,
+          agentCliEnv: saved.agentCliEnv(binDir, opencodeBin),
         }),
       });
       expect(configResponse.status).toBe(200);
 
-      const { projectId } = await createProject(started.url, 'Headless stale agent project');
+      const { projectId } = await createProject(started.url, 'Headless saved agent project');
       const runResponse = await fetch(`${started.url}/api/runs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -101,13 +125,13 @@ describe('POST /api/runs headless fallbacks', () => {
       );
       expect(statusResponse.status).toBe(200);
       const statusBody = await statusResponse.json() as { agentId: string | null };
-      expect(statusBody.agentId).toBe('opencode');
+      return statusBody.agentId;
     } finally {
       await restoreAppConfig(started.url, priorConfig);
       await rm(binDir, { recursive: true, force: true });
       await rm(emptyAgentHome, { recursive: true, force: true });
     }
-  });
+  }
 });
 
 async function startTestServer(): Promise<StartedServer> {

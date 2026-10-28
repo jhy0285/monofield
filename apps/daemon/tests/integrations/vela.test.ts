@@ -15,6 +15,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+// The AMR runtime ships off (see runtimes/registry.ts). These specs cover it, so
+// switch it on before the registry module is imported.
+vi.hoisted(() => vi.stubEnv('OD_ENABLE_AMR', '1'));
+
 import {
   forgetVelaLogin,
   readVelaCredentialRevision,
