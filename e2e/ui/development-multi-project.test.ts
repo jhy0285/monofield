@@ -79,3 +79,38 @@ test('[P1] the file preview stays inside its column when a bottom tool opens ben
   expect(leaked.hits, `preview content painted over the tools dock (preview bottom ${leaked.columnBottom}, dock top ${leaked.dockTop})`).toEqual([]);
   await expect(dock).toBeVisible();
 });
+
+test('[P1] the module picker finds a module declared inside a project and switches to it', async ({ page, toolsDev }, testInfo) => {
+  test.setTimeout(4 * T.xlong); await page.setViewportSize({ width: 1500, height: 1000 });
+  const root = join(toolsDev.root, 'scratch', 'si-multi-module-picker'); await mkdir(root, { recursive: true });
+  const git = (dir: string, ...args: string[]) => execFileSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', ...args], { cwd: dir });
+  for (let index = 1; index <= 8; index += 1) {
+    const dir = join(root, `svc-0${index}`); await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, 'package.json'), JSON.stringify({ name: `svc-0${index}` }));
+    git(dir, 'init', '--quiet'); git(dir, 'add', '.'); git(dir, 'commit', '--quiet', '--no-verify', '-m', 'baseline');
+  }
+  const ear = join(root, 'legacy-ear');
+  await mkdir(join(ear, 'ear-web'), { recursive: true }); await mkdir(join(ear, 'ear-ejb'), { recursive: true });
+  await writeFile(join(ear, 'pom.xml'), '<project><modelVersion>4.0.0</modelVersion><packaging>pom</packaging><modules><module>ear-web</module><module>ear-ejb</module></modules></project>');
+  await writeFile(join(ear, 'ear-web', 'pom.xml'), '<project><modelVersion>4.0.0</modelVersion><packaging>war</packaging></project>');
+  await writeFile(join(ear, 'ear-ejb', 'pom.xml'), '<project><modelVersion>4.0.0</modelVersion></project>');
+  git(ear, 'init', '--quiet'); git(ear, 'add', '.'); git(ear, 'commit', '--quiet', '--no-verify', '-m', 'baseline');
+  await openDevelopmentWorkspace(page, root);
+
+  const trigger = page.getByTestId('development-active-project');
+  await expect(trigger).toContainText('11');
+  await trigger.click();
+  const search = page.getByRole('searchbox');
+  await expect(search).toBeVisible();
+  await search.fill('ear-web');
+  const match = page.getByRole('menuitemradio', { name: /ear-web/ });
+  await expect(match).toHaveCount(1);
+  await expect(match).toContainText('legacy-ear');
+  await expect(match).toContainText('Maven');
+  await page.screenshot({ path: testInfo.outputPath('03-module-picker-search.png'), animations: 'disabled' });
+  await match.click();
+  await expect(page.getByRole('menu')).toHaveCount(0);
+  await expect(trigger).toContainText('ear-web');
+  await trigger.click();
+  await expect(page.getByRole('menuitemradio', { name: /ear-web/ })).toHaveAttribute('aria-checked', 'true');
+});

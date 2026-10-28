@@ -1024,3 +1024,10 @@
 .df-row-popover button:hover { background: var(--bg-subtle); }
 .df-row-popover button.danger { color: var(--red); }
 .df-row-popover button.danger:hover { background: var(--red-bg); }
+
+/* The folder a development workspace is acting on (see the module picker). */
+.df-dir-row[data-active-module='true'] {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.df-dir-row[data-active-module='true'] .df-row-icon { color: var(--accent); }

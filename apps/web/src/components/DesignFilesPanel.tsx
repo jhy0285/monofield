@@ -70,6 +70,8 @@ interface Props {
   onClearUploadError?: () => void;
   preferredPreviewFile?: string | null;
   autoPreviewDesignArtifacts?: boolean;
+  /** Folder of the module a development workspace is acting on, relative to the project root. */
+  activeModulePath?: string | null;
   onPluginFolderAgentAction?: (
     relativePath: string,
     action: PluginFolderAgentAction,
@@ -293,6 +295,7 @@ export function DesignFilesPanel({
   onClearUploadError,
   preferredPreviewFile = null,
   autoPreviewDesignArtifacts = false,
+  activeModulePath = null,
   onCurrentDirChange,
   onPluginFolderAgentAction,
   activePluginActionPaths = new Set(),
@@ -758,8 +761,15 @@ export function DesignFilesPanel({
   function renderDirRow(dirName: string) {
     const fullPath = currentDir === '' ? dirName : `${currentDir}/${dirName}`;
     const count = descendantCountByDir.get(dirName) ?? 0;
+    const isActiveModule = activeModulePath != null && activeModulePath !== '.' && fullPath === activeModulePath;
     return (
-      <div key={`dir:${fullPath}`} className="df-row df-dir-row" onClick={() => navigateToDirectory(fullPath)}>
+      <div
+        key={`dir:${fullPath}`}
+        className="df-row df-dir-row"
+        data-active-module={isActiveModule ? 'true' : undefined}
+        aria-current={isActiveModule ? 'true' : undefined}
+        onClick={() => navigateToDirectory(fullPath)}
+      >
         <span className="df-row-check" aria-hidden />
         <span className="df-row-icon" data-kind="folder" aria-hidden>
           <Icon name="folder" size={14} />

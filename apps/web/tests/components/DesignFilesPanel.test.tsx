@@ -345,6 +345,49 @@ describe('DesignFilesPanel directory navigation', () => {
     expect(dirRows[0]!.textContent).toContain('2');
   });
 
+  // In a workspace of several projects the module picked in the toolbar is the
+  // folder the rest of the workspace (run, Git, terminal) acts on, so the list
+  // shows which folder that is.
+  it('marks the folder that is the active development module', () => {
+    renderPanel(
+      [
+        file({ name: 'api-gateway/pom.xml', kind: 'text' }),
+        file({ name: 'legacy-ear/ear-web/pom.xml', kind: 'text' }),
+        file({ name: 'portal-web/package.json', kind: 'text' }),
+      ],
+      { activeModulePath: 'portal-web' },
+    );
+
+    const marked = document.querySelectorAll('.df-dir-row[data-active-module="true"]');
+    expect(marked.length).toBe(1);
+    expect(marked[0]!.textContent).toContain('portal-web');
+    expect(marked[0]!.getAttribute('aria-current')).toBe('true');
+  });
+
+  it('marks a nested module only inside the folder that holds it', () => {
+    renderPanel(
+      [
+        file({ name: 'legacy-ear/ear-web/pom.xml', kind: 'text' }),
+        file({ name: 'legacy-ear/ear-ejb/pom.xml', kind: 'text' }),
+      ],
+      { activeModulePath: 'legacy-ear/ear-web' },
+    );
+
+    expect(document.querySelectorAll('.df-dir-row[data-active-module]').length).toBe(0);
+    fireEvent.click(document.querySelector('.df-dir-row .df-row-name-btn')!);
+    const marked = document.querySelectorAll('.df-dir-row[data-active-module="true"]');
+    expect(marked.length).toBe(1);
+    expect(marked[0]!.textContent).toContain('ear-web');
+  });
+
+  it('marks nothing when the workspace root is the module or no module is chosen', () => {
+    renderPanel([file({ name: 'assets/logo.png', kind: 'image' })], { activeModulePath: '.' });
+    expect(document.querySelectorAll('[data-active-module]').length).toBe(0);
+    cleanup();
+    renderPanel([file({ name: 'assets/logo.png', kind: 'image' })]);
+    expect(document.querySelectorAll('[data-active-module]').length).toBe(0);
+  });
+
   it('pins folders into a Folders section', () => {
     renderPanel([
       file({ name: 'assets/logo.png', kind: 'image' }),
