@@ -1480,7 +1480,7 @@ export const id: Dict = {
   'newproj.createFromTemplate': 'Buat dari templat',
   'newproj.createDisabledTitle': 'Simpan proyek sebagai templat dulu.',
   'newproj.importClaudeZip': 'Import MonoField ZIP',
-  'newproj.importClaudeZipTitle': 'Import an MonoField .zip export',
+  'newproj.importClaudeZipTitle': 'Import a MonoField .zip export',
   'newproj.importingClaudeZip': 'Mengimpor...',
   'newproj.privacyFooter': 'Secara default hanya kamu yang bisa melihat proyekmu.',
   'newproj.designSystem': 'Sistem desain',

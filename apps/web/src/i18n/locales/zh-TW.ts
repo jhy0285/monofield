@@ -1480,7 +1480,7 @@ export const zhTW: Dict = {
   'newproj.createFromTemplate': '基於範本建立',
   'newproj.createDisabledTitle': '請先在任意專案內透過「分享」選單將其儲存為範本。',
   'newproj.importClaudeZip': 'Import MonoField ZIP',
-  'newproj.importClaudeZipTitle': 'Import an MonoField .zip export',
+  'newproj.importClaudeZipTitle': 'Import a MonoField .zip export',
   'newproj.importingClaudeZip': '正在匯入…',
   'newproj.privacyFooter': '預設情況下只有你能看到自己的專案。',
   'newproj.designSystem': '設計系統',

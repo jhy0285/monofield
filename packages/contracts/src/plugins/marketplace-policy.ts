@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-/** Package types that can be distributed through an MonoField marketplace. */
+/** Package types that can be distributed through a MonoField marketplace. */
 export const MarketplacePackageKindSchema = z.enum([
   'plugin',
   'skill',

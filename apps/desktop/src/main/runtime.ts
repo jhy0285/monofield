@@ -1590,7 +1590,7 @@ async function showDirectoryPickerForSender(
     buttonLabel: "Use as working directory",
     ...(defaultPath ? { defaultPath } : {}),
     properties: ["openDirectory", "createDirectory"],
-    title: "Select an MonoField working directory",
+    title: "Select a MonoField working directory",
   };
   return parent
     ? dialog.showOpenDialog(parent, pickerOptions)

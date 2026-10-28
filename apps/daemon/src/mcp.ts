@@ -352,7 +352,7 @@ const TOOL_DEFS = [
   {
     name: 'delete_project',
     description:
-      'Permanently delete an MonoField project including its files and conversations. Requires both an explicit project id/name AND confirm:true — there is no active-project fallback because the operation is irreversible.',
+      'Permanently delete a MonoField project including its files and conversations. Requires both an explicit project id/name AND confirm:true — there is no active-project fallback because the operation is irreversible.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -599,7 +599,7 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
         'available at od://skills/<id>/SKILL.md but are mostly relevant',
         'when the user asks about how a particular artifact was generated.',
         '',
-        'When extending an MonoField design in another codebase, pull',
+        'When extending a MonoField design in another codebase, pull',
         'the full bundle once with get_artifact and work from those files',
         'locally - do not fetch files one-by-one if you can avoid it.',
       ].join('\n'),

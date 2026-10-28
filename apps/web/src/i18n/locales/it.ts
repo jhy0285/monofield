@@ -1480,7 +1480,7 @@ export const it: Dict = {
   'newproj.createFromTemplate': 'Crea dal modello',
   'newproj.createDisabledTitle': 'Salva prima un progetto come modello (menu Condividi in un progetto).',
   'newproj.importClaudeZip': 'Import MonoField ZIP',
-  'newproj.importClaudeZipTitle': 'Import an MonoField .zip export',
+  'newproj.importClaudeZipTitle': 'Import a MonoField .zip export',
   'newproj.importingClaudeZip': 'Importazione…',
   'newproj.privacyFooter': 'Solo tu puoi vedere il tuo progetto per impostazione predefinita.',
   'newproj.designSystem': 'Design system',

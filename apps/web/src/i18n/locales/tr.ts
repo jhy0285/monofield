@@ -1480,7 +1480,7 @@ export const tr: Dict = {
   'newproj.createFromTemplate': 'Şablondan oluştur',
   'newproj.createDisabledTitle': 'Önce bir projeyi şablon olarak kaydedin (herhangi bir projenin içinde Paylaş menüsünden).',
   'newproj.importClaudeZip': 'Import MonoField ZIP',
-  'newproj.importClaudeZipTitle': 'Import an MonoField .zip export',
+  'newproj.importClaudeZipTitle': 'Import a MonoField .zip export',
   'newproj.importingClaudeZip': 'İçe aktarılıyor…',
   'newproj.privacyFooter': 'Projeyi varsayılan olarak yalnızca siz görebilirsiniz.',
   'newproj.designSystem': 'Tasarım sistemi',

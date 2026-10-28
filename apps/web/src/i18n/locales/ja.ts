@@ -1400,7 +1400,7 @@ export const ja: Dict = {
   'newproj.createFromTemplate': 'テンプレートから作成',
   'newproj.createDisabledTitle': '最初にプロジェクトをテンプレートとして保存してください（プロジェクト内の共有メニュー）。',
   'newproj.importClaudeZip': 'Import MonoField ZIP',
-  'newproj.importClaudeZipTitle': 'Import an MonoField .zip export',
+  'newproj.importClaudeZipTitle': 'Import a MonoField .zip export',
   'newproj.importingClaudeZip': 'インポート中…',
   'newproj.privacyFooter': 'デフォルトではあなただけがプロジェクトを見ることができます。',
   'newproj.designSystem': 'デザインシステム',

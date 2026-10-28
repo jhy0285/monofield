@@ -1480,7 +1480,7 @@ export const fa: Dict = {
   'newproj.createFromTemplate': 'ایجاد از قالب',
   'newproj.createDisabledTitle': 'ابتدا یک پروژه را به عنوان قالب ذخیره کنید (منوی اشتراک‌گذاری در داخل هر پروژه).',
   'newproj.importClaudeZip': 'Import MonoField ZIP',
-  'newproj.importClaudeZipTitle': 'Import an MonoField .zip export',
+  'newproj.importClaudeZipTitle': 'Import a MonoField .zip export',
   'newproj.importingClaudeZip': 'در حال وارد کردن…',
   'newproj.privacyFooter': 'به طور پیش‌فرض فقط شما می‌توانید پروژه خود را ببینید.',
   'newproj.designSystem': 'سیستم طراحی',

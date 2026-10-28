@@ -1480,7 +1480,7 @@ export const ru: Dict = {
   'newproj.createFromTemplate': 'Создать из шаблона',
   'newproj.createDisabledTitle': 'Сначала сохраните проект как шаблон (меню «Поделиться» в любом проекте).',
   'newproj.importClaudeZip': 'Import MonoField ZIP',
-  'newproj.importClaudeZipTitle': 'Import an MonoField .zip export',
+  'newproj.importClaudeZipTitle': 'Import a MonoField .zip export',
   'newproj.importingClaudeZip': 'Импорт…',
   'newproj.privacyFooter': 'По умолчанию только вы можете видеть свой проект.',
   'newproj.designSystem': 'Дизайн-система',

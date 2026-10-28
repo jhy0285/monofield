@@ -1400,7 +1400,7 @@ export const zhCN: Dict = {
   'newproj.createFromTemplate': '基于模板创建',
   'newproj.createDisabledTitle': '请先在任意项目内通过「分享」菜单将其保存为模板。',
   'newproj.importClaudeZip': 'Import MonoField ZIP',
-  'newproj.importClaudeZipTitle': 'Import an MonoField .zip export',
+  'newproj.importClaudeZipTitle': 'Import a MonoField .zip export',
   'newproj.importingClaudeZip': '正在导入…',
   'newproj.privacyFooter': '默认情况下只有你能看到自己的项目。',
   'newproj.designSystem': '设计体系',

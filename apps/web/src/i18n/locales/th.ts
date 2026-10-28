@@ -1480,7 +1480,7 @@ export const th: Dict = {
   'newproj.createFromTemplate': 'สร้างจากเทมเพลต',
   'newproj.createDisabledTitle': 'คุณต้องบันทึกโปรเจกต์เป็นเทมเพลตก่อน',
   'newproj.importClaudeZip': 'Import MonoField ZIP',
-  'newproj.importClaudeZipTitle': 'Import an MonoField .zip export',
+  'newproj.importClaudeZipTitle': 'Import a MonoField .zip export',
   'newproj.importingClaudeZip': 'กำลังนำเข้า…',
   'newproj.privacyFooter': 'โดยค่าเริ่มต้น คุณเท่านั้นที่สามารถดูโปรเจกต์ของคุณได้',
   'newproj.designSystem': 'ระบบการออกแบบ',

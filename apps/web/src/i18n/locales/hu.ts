@@ -1480,7 +1480,7 @@ export const hu: Dict = {
   'newproj.createFromTemplate': 'Létrehozás sablonból',
   'newproj.createDisabledTitle': 'Először ments el egy projektet sablonként (bármely projekt Megosztás menüjéből).',
   'newproj.importClaudeZip': 'Import MonoField ZIP',
-  'newproj.importClaudeZipTitle': 'Import an MonoField .zip export',
+  'newproj.importClaudeZipTitle': 'Import a MonoField .zip export',
   'newproj.importingClaudeZip': 'Importálás…',
   'newproj.privacyFooter': 'Alapértelmezetten csak te láthatod a projekted.',
   'newproj.designSystem': 'Designrendszer',

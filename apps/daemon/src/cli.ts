@@ -8006,7 +8006,7 @@ async function runDesignSystemImportShadcn(args) {
     console.log(`Usage:
   monofield design-systems import-shadcn <reference> [--name <name>] [--import-mode <mode>] [--craft <slugs>] [--json] [--daemon-url <url>]
 
-Imports a shadcn registry item as an MonoField design system.
+Imports a shadcn registry item as a MonoField design system.
 
   <reference>            "<owner>/<repo>/<item>" (e.g. shadcn/ui/theme-zinc)
                          or an https URL to a registry-item JSON document.

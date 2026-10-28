@@ -1480,7 +1480,7 @@ export const ar: Dict = {
   'newproj.createFromTemplate': 'إنشاء من قالب',
   'newproj.createDisabledTitle': 'احفظ مشروعاً كقالب أولاً (قائمة المشاركة داخل أي مشروع).',
   'newproj.importClaudeZip': 'Import MonoField ZIP',
-  'newproj.importClaudeZipTitle': 'Import an MonoField .zip export',
+  'newproj.importClaudeZipTitle': 'Import a MonoField .zip export',
   'newproj.importingClaudeZip': 'جاري الاستيراد...',
   'newproj.privacyFooter': 'أنت فقط من يمكنه رؤية مشروعك افتراضياً.',
   'newproj.designSystem': 'نظام التصميم',

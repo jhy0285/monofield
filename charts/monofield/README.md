@@ -15,7 +15,7 @@ To install the chart with the release name `my-release`:
 helm install my-release ./charts/monofield
 ```
 
-These commands deploy an MonoField application on the Kubernetes cluster in the default configuration.
+These commands deploy a MonoField application on the Kubernetes cluster in the default configuration.
 
 > **Tip**: List all releases using `helm list`
 
