@@ -1,0 +1,120 @@
+.splitter {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+  background: transparent;
+  touch-action: none;
+  user-select: none;
+  outline: none;
+}
+
+.vertical {
+  align-self: stretch;
+  width: 8px;
+  min-width: 8px;
+  cursor: col-resize;
+}
+
+.horizontal {
+  width: 100%;
+  height: 8px;
+  min-height: 8px;
+  cursor: row-resize;
+}
+
+/* A wider invisible target than the 1px line, so the handle is easy to grab. */
+.splitter::before {
+  content: "";
+  position: absolute;
+}
+
+.vertical::before {
+  inset: 0 -6px;
+}
+
+.horizontal::before {
+  inset: -6px 0;
+}
+
+/* The divider line. */
+.splitter::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--border) 92%, transparent);
+  transition:
+    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    width 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    height 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.vertical::after {
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 0.5px);
+  width: 1px;
+}
+
+.horizontal::after {
+  left: 0;
+  right: 0;
+  top: calc(50% - 0.5px);
+  height: 1px;
+}
+
+/* A short pill in the middle says the line can be dragged. */
+.grip {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 55%, var(--border));
+  opacity: 0;
+  transition: opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.vertical .grip {
+  top: calc(50% - 14px);
+  left: calc(50% - 2px);
+  width: 4px;
+  height: 28px;
+}
+
+.horizontal .grip {
+  left: calc(50% - 14px);
+  top: calc(50% - 2px);
+  width: 28px;
+  height: 4px;
+}
+
+.splitter:hover::after,
+.splitter:focus-visible::after,
+.splitter[data-dragging="true"]::after {
+  background: color-mix(in srgb, var(--accent) 70%, var(--border));
+}
+
+.splitter:hover .grip,
+.splitter:focus-visible .grip,
+.splitter[data-dragging="true"] .grip {
+  opacity: 1;
+}
+
+/* Keyboard focus thickens the line instead of drawing an outline, which a
+   one-pixel handle has no room for. */
+.vertical:focus-visible::after {
+  left: calc(50% - 1.5px);
+  width: 3px;
+  background: var(--focus-ring);
+}
+
+.horizontal:focus-visible::after {
+  top: calc(50% - 1.5px);
+  height: 3px;
+  background: var(--focus-ring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splitter::after,
+  .grip {
+    transition: none;
+  }
+}
