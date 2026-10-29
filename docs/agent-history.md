@@ -83,9 +83,9 @@ As of 2026-10-29.
   2026-10-28; 90 Playwright tests failed, every one of them also fails on the
   commit before this series except for 23 AMR tests that were not run there (see
   Known baseline failures). No regression was found. On 2026-10-29 `pnpm guard`
-  and `pnpm typecheck` passed again, and 60 of those 64 non-AMR failures were
-  fixed file by file (see the four newest Log entries), leaving 4 non-AMR and 26
-  AMR.
+  and `pnpm typecheck` passed again, and 63 of those 64 non-AMR failures were
+  fixed file by file (see the five newest Log entries), leaving 1 non-AMR (found
+  later: `real-daemon-run`, one test; see Known baseline failures) and 26 AMR.
 - Layout: regions can be resized or folded in the development workspace (tools
   panel height, Design Files preview width, AI input) and the classic chat
   panel width; see the newest Log entry and `Splitter` in
@@ -160,6 +160,11 @@ machine. Check before relying on them.
   A killed Playwright run leaves its daemon and web sidecars running with parent 1;
   find them by `--od-stamp-namespace=playwright-...` and stop them by PID, or the
   next run competes with them for CPU.
+- A `test.describe.configure({ mode: 'serial' })` file skips every test after the
+  first failure, so its failure count understates the damage; run a suspect test by
+  its line number to see it.
+- A full disk makes Chromium crash ("Page crashed") and fails whatever runs next.
+  `.tmp/e2e/playwright-*` held 27 GB again; delete those folders between runs.
 - A spec whose config omits `privacyDecisionAt` gets the first-run privacy notice
   over the bottom right of the window, which can cover buttons it needs. The other
   specs set `privacyDecisionAt: 1`.
@@ -188,14 +193,16 @@ but the baseline had `ENABLE_AMR_RUNTIME = false` fixed in the renderer, so the 
 screens they drive could not appear. They need the two AMR flags (see Environment
 notes), which the harness does not set.
 
-On 2026-10-29, 60 of the 64 were fixed and each file re-run alone:
+On 2026-10-29, 63 of the 64 were fixed and each file re-run alone:
 `settings-memory-routines` (16 of 16 pass), `project-management-flows` (37 of 37),
 `visual-entry` (11 of 11), `settings-api-protocol` (12 of 12),
 `design-systems-manager` (3 of 3), `settings-design-systems` (3 of 3),
 `critique-theater` (4 pass, 3 are `test.fixme`), `settings-media-providers` (3 of 3),
 `document-review` (2 of 2), `chat-todo-autoscroll` (2 of 2), `change-plan`,
-`app-restoration` (Browser Inspiration, see below), `critical-smoke`,
-`app-manual-edit` and `new-project-ds-picker-clipping`. Causes were spec drift (the
+`app-restoration` (Browser Inspiration, see below), `chat-design-system-switch`,
+`composer-toolbar-alignment`, `app` (the one failing test), `real-daemon-run` (12 of
+13 pass, see below), `critical-smoke`, `app-manual-edit` and
+`new-project-ds-picker-clipping`. Causes were spec drift (the
 Memory page moved its add and import flows into a modal; the navigation rail,
 settings menu and hand-off controls changed; onboarding opens on the local coding
 agent and the plugin gallery moved from Home to the Library view; saved BYOK keys go
@@ -203,6 +210,9 @@ to the credential vault instead of local storage; "Design systems" is "Document
 Styles" in Settings and "Design Jury" is "HTML Design Review (Experimental)" in
 English; Brand & styles became a list with a detail panel; a first-run privacy notice
 covers the bottom right of the window unless the config sets `privacyDecisionAt`;
+the question form is in the Questions tab and Continue sends it, after which the chat
+banner is a finished, disabled marker; the composer's document style pill is the shared
+`project-ds-picker-*`;
 the document dependency panel (and the change plan inside it) is collapsed until
 its summary is opened; the to-do card is inline in the chat log, not pinned above
 the composer; media provider keys are kept out of browser storage),
@@ -211,12 +221,17 @@ a hydration race in the shared
 design system dropdown clipped inside the New Project panel, and the "Memory created"
 confirmation vanished with the modal). Still failing, as of the last run that
 included them (a partial re-run of this list under load, so each needs its own
-re-run before being believed), 4 non-AMR tests, each a different cause not yet fixed:
+re-run before being believed), one non-AMR test:
 
-- `app` (`question-form-submit-persistence`: no "Send answers" button in the form),
-  `chat-design-system-switch` (no "Open CLI and model settings" control),
-  `composer-toolbar-alignment` (3 composer footer controls found, 4 expected), and
-  `real-daemon-run` (the real daemon run never writes the expected file).
+- `real-daemon-run` `survives reload before the create response reaches the browser`
+  (line 219). It was hidden for as long as the file's earlier test failed, because the
+  file runs in `serial` mode and skips the rest after a failure: the five tests after
+  it were never run before 2026-10-29, and four of them pass. This one fails with and
+  without the changes of that day. The reload leaves the message without a run id; the
+  daemon then ends the run and marks the message `succeeded` with its text but no
+  produced files, and the reattach scan skips it (a terminal message with content is not
+  replayed), so the artifact is never delivered. Fixing it needs the scan to check the
+  run's delivery status for the latest terminal message.
 - Not investigated one by one. Several look like the same drift as the specs
   fixed; that is a guess, not a finding.
 
@@ -233,8 +248,8 @@ Newest first within each group. Remove an item when it is done.
 
 End-to-end tests:
 
-- Triage the 4 remaining non-AMR `e2e/ui` failures listed under Known baseline
-  failures. Fix
+- Fix the remaining non-AMR `e2e/ui` failure listed under Known baseline failures
+  (`real-daemon-run` line 219). Fix
   the spec or the product, whichever is wrong, one file at a time, and re-run each
   file alone on a quiet machine (no second Playwright run).
 - Decide what to do with the 26 AMR `e2e/ui` tests and the 4 `e2e/tests/amr`
@@ -304,6 +319,49 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-10-29 — Fix reload during a run, folder-relative delivery names, and the last small specs (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** continue with the remaining baseline `e2e/ui` failures.
+- **Changed (product):** (1) `apps/web/src/runtime/page-lifecycle.ts` (`isPageHiding`,
+  set on `beforeunload`/`pagehide`, cleared on `pageshow` or after 3 s): when the page is
+  being torn down, the stream error that follows is not a failed run, so
+  `providers/daemon.ts` (`streamViaDaemon` catch, the disconnect branch) and
+  `ProjectView.tsx` (both `onError` handlers and the reattach `.catch`) leave the message
+  running and the next load reattaches. Before, a reload mid-run marked the message
+  `failed` and the run was never picked up again. (2) `ProjectView.tsx`: a page that
+  reattaches to a run that is still going now owns its artifact delivery
+  (`interruptedArtifactDeliveryRecovery` is also true for active runs that owe delivery);
+  before, the stream reconciled the final status before `onDone` and always found
+  delivery unacknowledged, so every such run ended `ARTIFACT_DELIVERY_INCOMPLETE`.
+  (3) `ProjectView.tsx`: a file name the request gives relative to a folder it also asks for
+  ("produce a folder named generated-plugin with SKILL.md") is satisfied by that file in
+  the folder (`deliveryFileMatchesDeclared`, matching at a path-segment boundary). Before,
+  every plugin authoring run failed delivery.
+- **Changed (specs):** `app` question form flow uses the Questions tab and the answered
+  banner; `chat-design-system-switch` uses `project-ds-picker-*` and polls for the PATCH;
+  `composer-toolbar-alignment` expects 3 or more controls (the working directory control
+  left the row); `real-daemon-run` plugin authoring and `lib/fake-agents.ts` use the
+  "Create a MonoField plugin for:" prompt and `monofield.json`.
+- **Why:** the three product changes are bugs a reader of the specs would call data loss:
+  a reload mid-run lost the artifact. They were found by the `real-daemon-run` slow-reload
+  test, then by the plugin authoring test that the serial skip had hidden.
+- **Verified:** red then green: `tests/runtime/page-lifecycle.test.ts` (5), the new
+  `ProjectView.reattach-restore` test (fails without the change) and the new
+  `ProjectView.api-empty-response` test for folder-relative names. `pnpm guard` and
+  `pnpm typecheck` pass. `pnpm --filter @open-design/web test`: 403 of 404 files pass; the
+  one failure, `BrandsTab.refresh`, passes 3 of 3 alone (a polling timing test under
+  load). `e2e/ui`, one worker, each alone: `app` question-form test, `chat-design-system-switch`,
+  `composer-toolbar-alignment`, `real-daemon-run` lines 71-189 (7 of 7 in one run) and 240,
+  265, 297, 314 (plugin authoring: 2 of 3 runs after the final change; the failing run
+  timed out on a menu item reported outside the viewport) and 368. Line 163 failed once in
+  a file run and passed in the four later runs that included it. Not run: the daemon unit suite, `e2e/ui` as a whole after
+  these changes, the Vitest e2e suites.
+- **Not done:** `real-daemon-run` line 219 (see Known baseline failures). A provider-level
+  unit test for the `streamViaDaemon` catch guard (the e2e covers it).
+- **Next agent:** `isPageHiding` relies on `beforeunload` because the browser cuts
+  the fetches before `pagehide`; do not move the guard to `pagehide` only. The cause of
+  line 219 is described under Known baseline failures.
 
 ### 2026-10-29 — Fix `app-restoration`, `chat-todo-autoscroll`, `settings-media-providers`, `document-review` and `change-plan` specs (`ccr-8432aecf-n9xdfd`)
 

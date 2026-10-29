@@ -324,7 +324,7 @@ test('[P1] plugin authoring produces a generated-plugin scaffold with action car
 
   await page.getByTestId('home-hero-shortcuts-trigger').click();
   await page.getByTestId('home-hero-rail-create-plugin').click();
-  await expect(page.getByTestId('home-hero-input')).toHaveText(/Create an Open Design plugin for:/);
+  await expect(page.getByTestId('home-hero-input')).toHaveText(/Create a MonoField plugin for:/);
 
   const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
   const runRequestPromise = page.waitForRequest(isCreateRunRequest);
@@ -346,11 +346,11 @@ test('[P1] plugin authoring produces a generated-plugin scaffold with action car
   await expectWorkspaceReady(page);
   const { projectId } = await currentProjectContext(page);
   await expectProjectFilesToContain(page, projectId, [
-    'generated-plugin/open-design.json',
+    'generated-plugin/monofield.json',
     'generated-plugin/SKILL.md',
     'generated-plugin/examples/demo.md',
   ]);
-  await expectProjectFileToContain(page, projectId, 'generated-plugin/open-design.json', '"name": "generated-plugin"');
+  await expectProjectFileToContain(page, projectId, 'generated-plugin/monofield.json', '"name": "generated-plugin"');
   await expectProjectFileToContain(page, projectId, 'generated-plugin/SKILL.md', '# Generated Plugin');
 
   await expect(page.getByText('Files from this turn')).toBeVisible();

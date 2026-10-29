@@ -115,6 +115,7 @@ import type { TodoItem } from '../runtime/todos';
 import { appendErrorStatusEvent } from '../runtime/chat-events';
 import { getActiveBrowserVerification } from '../runtime/browser-verification';
 import { RESUME_CONTINUE_PROMPT } from '../runtime/resume';
+import { isPageHiding } from '../runtime/page-lifecycle';
 import { cancelBrandExtraction, extractBrandFromHtml, finalizeBrandProject } from '../runtime/brands';
 import { getBrandBrowser, BRAND_BROWSER_TAB_ID } from '../runtime/brand-browser-bridge';
 import {
@@ -3433,10 +3434,16 @@ export function ProjectView({
           completedReattachRunsRef.current.add(runId);
           continue;
         }
+        // Delivery is acknowledged by the browser, so a reload leaves it owed in
+        // two cases: the run finished while no page was attached, and the run is
+        // still going and will finish under this reattached page, which then owns
+        // the delivery. The stream reconciles the final status before this page's
+        // onDone runs, so without the second case it would always find delivery
+        // unacknowledged and fail the run.
         const interruptedArtifactDeliveryRecovery =
-          status.status === 'succeeded'
-          && status.artifactDeliveryRequired === true
-          && status.artifactDelivery?.status !== 'succeeded';
+          status.artifactDeliveryRequired === true
+          && status.artifactDelivery?.status !== 'succeeded'
+          && (status.status === 'succeeded' || isActiveRunStatus(status.status));
         updateMessageById(
           message.id,
           (prev) => ({
@@ -3993,6 +4000,8 @@ export function ProjectView({
               textBuffer.flush();
               textBuffer.cancel();
               unregisterTextBuffer();
+              // Same as the send path: a stream cut by a reload is not a failed run.
+              if (isPageHiding()) return;
               if (runMayFinalize) {
                 setError(err.message);
                 appendAssistantErrorEvent(message.id, err.message, errorCode);
@@ -4141,7 +4150,7 @@ export function ProjectView({
             // surface a global failure over the replacement.
             const runMayFinalize =
               !supersededRunsRef.current.has(controller);
-            if ((err as Error).name !== 'AbortError' && runMayFinalize) {
+            if ((err as Error).name !== 'AbortError' && runMayFinalize && !isPageHiding()) {
               const msg = err instanceof Error ? err.message : String(err);
               setError(msg);
               appendAssistantErrorEvent(message.id, msg);
@@ -5443,6 +5452,10 @@ export function ProjectView({
           cancelSendTextBuffer();
           deliveryController.abort();
           releaseDeliveryController();
+          // A reload or navigation cuts the event stream with a network error while the
+          // run carries on in the daemon. Leave the message as it was, so the next
+          // load reattaches to the run instead of finding it already marked failed.
+          if (isPageHiding()) return;
           if (runMayFinalize) {
             setError(err.message);
             appendAssistantErrorEvent(assistantId, err.message, errorCode);
@@ -8231,16 +8244,28 @@ function normalizeDeliveryFileName(name: string): string {
   return name.replace(/\\/g, '/').replace(/^\.\//, '').toLowerCase();
 }
 
+/**
+ * A request can name a file relative to a folder it also asks for ("produce a
+ * folder named generated-plugin with SKILL.md"), so a delivered path counts when
+ * it is the requested name or ends with it at a path-segment boundary.
+ */
+function deliveryFileMatchesDeclared(deliveredKey: string, declaredKey: string): boolean {
+  return deliveredKey === declaredKey || deliveredKey.endsWith(`/${declaredKey}`);
+}
+
 export function missingDeclaredDeliveryFiles(
   declaredNames: readonly string[],
   receiptFiles: readonly Pick<ProjectFile, 'name' | 'path'>[],
 ): string[] {
-  const receipts = new Set<string>();
+  const receipts: string[] = [];
   for (const file of receiptFiles) {
-    receipts.add(normalizeDeliveryFileName(file.name));
-    if (file.path) receipts.add(normalizeDeliveryFileName(file.path));
+    receipts.push(normalizeDeliveryFileName(file.name));
+    if (file.path) receipts.push(normalizeDeliveryFileName(file.path));
   }
-  return declaredNames.filter((name) => !receipts.has(normalizeDeliveryFileName(name)));
+  return declaredNames.filter((name) => {
+    const declaredKey = normalizeDeliveryFileName(name);
+    return !receipts.some((receipt) => deliveryFileMatchesDeclared(receipt, declaredKey));
+  });
 }
 
 function uniqueProjectFiles(files: readonly ProjectFile[]): ProjectFile[] {
@@ -8288,8 +8313,8 @@ export function selectArtifactDeliveryReceiptFiles({
   const artifactReceiptKeys = new Set(
     artifactReceiptFiles.map((file) => normalizeDeliveryFileName(file.path || file.name)),
   );
-  const declaredKeys = new Set(declaredFileNames.map(normalizeDeliveryFileName));
-  const allowUnnamedPrimary = declaredKeys.size === 0;
+  const declaredKeys = declaredFileNames.map(normalizeDeliveryFileName);
+  const allowUnnamedPrimary = declaredKeys.length === 0;
   return uniqueProjectFiles([
     ...artifactReceiptFiles,
     ...changedFiles.filter((file) => {
@@ -8298,7 +8323,7 @@ export function selectArtifactDeliveryReceiptFiles({
         .map(normalizeDeliveryFileName);
       return (
         fileKeys.some((key) => artifactReceiptKeys.has(key))
-        || fileKeys.some((key) => declaredKeys.has(key))
+        || fileKeys.some((key) => declaredKeys.some((declared) => deliveryFileMatchesDeclared(key, declared)))
         || Boolean(file.artifactManifest)
         || (allowUnnamedPrimary && isUnnamedPrimaryDeliveryFile(file))
       );

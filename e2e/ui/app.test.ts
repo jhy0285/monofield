@@ -1056,11 +1056,16 @@ async function runQuestionFormSubmitPersistenceFlow(
   await toneQuestion.locator('label.qf-chip', { has: page.getByText('Editorial / magazine') }).click();
   await toneQuestion.locator('label.qf-chip', { has: page.getByText('Modern minimal') }).click();
 
-  await form.getByRole('button', { name: 'Send answers' }).click();
+  // The form renders in the Questions tab; Continue sends the answers.
+  await page.getByTestId('questions-panel').getByRole('button', { name: /^Continue$/i }).click();
 
   await expect(page.getByText('[form answers — discovery]', { exact: false })).toBeVisible();
-  await expect(form.getByText('answered', { exact: true })).toBeVisible();
-  await expect(form.getByText('Answers sent — agent is using these for the rest of the session.')).toBeVisible();
+  // Sending closes the Questions tab and the chat banner becomes a finished,
+  // non-interactive marker: there is nothing left to open.
+  const answeredBanner = page.getByTestId('questions-banner');
+  await expect(answeredBanner).toHaveAttribute('data-answered', 'true');
+  await expect(answeredBanner).toBeDisabled();
+  await expect(page.getByTestId('questions-tab')).toHaveCount(0);
 
   const { projectId, conversationId } = await getCurrentProjectContext(page);
   const messagesResponse = await page.request.get(
@@ -1070,13 +1075,16 @@ async function runQuestionFormSubmitPersistenceFlow(
   const { messages } = (await messagesResponse.json()) as { messages: Array<{ role: string; content: string }> };
   const formAnswerMessage = messages.find((message) => message.role === 'user' && message.content.includes('[form answers — discovery]'));
   expect(formAnswerMessage).toBeTruthy();
+  expect(formAnswerMessage?.content).toContain('Editorial / magazine');
+  expect(formAnswerMessage?.content).toContain('Modern minimal');
 
   await page.reload();
-  const restoredForm = page.locator('.question-form').first();
-  await expect(restoredForm).toBeVisible();
-  await expect(restoredForm.getByText('answered', { exact: true })).toBeVisible();
-  await expect(restoredForm.locator('input[type="checkbox"]:checked')).toHaveCount(2);
-  await expect(restoredForm.getByRole('button', { name: 'Send answers' })).toHaveCount(0);
+  // The answers survive the reload, and the form stays answered: no way to resend it.
+  const restoredBanner = page.getByTestId('questions-banner');
+  await expect(restoredBanner).toHaveAttribute('data-answered', 'true');
+  await expect(restoredBanner).toBeDisabled();
+  await expect(page.getByTestId('questions-tab')).toHaveCount(0);
+  await expect(page.getByTestId('questions-panel').getByRole('button', { name: /^Continue$/i })).toHaveCount(0);
 }
 
 async function runGenerationDoesNotCreateExtraFileFlow(

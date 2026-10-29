@@ -647,6 +647,126 @@ describe('ProjectView daemon reattach restore', () => {
     );
   });
 
+  it('lets a page reattached to a still-running run deliver its artifact when the run finishes', async () => {
+    const startedAt = Date.now();
+    const replayed =
+      '<artifact identifier="index.html" type="text/html">' +
+      '<!doctype html><html><head><title>Dashboard</title></head><body><main>ready</main></body></html>' +
+      '</artifact>';
+    const written = new Map<string, string>();
+    const currentFiles = () => [...written.entries()].map(([name, content], index) => ({
+      name,
+      path: name,
+      size: content.length,
+      mtime: startedAt + index + 1,
+      kind: 'html',
+      mime: 'text/html',
+    }));
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'user-running-delivery',
+        role: 'user',
+        content: 'Create index.html.',
+      } satisfies ChatMessage,
+      {
+        id: 'msg-running-delivery',
+        role: 'assistant',
+        content: '',
+        events: [],
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-running-delivery',
+        runStatus: 'running',
+        preTurnFileNames: [],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockImplementation(async () => currentFiles());
+    fetchProjectFileText.mockImplementation(async (_projectId: string, name: string) => (
+      written.get(name) ?? null
+    ));
+    writeProjectTextFile.mockImplementation(async (
+      _projectId: string,
+      name: string,
+      content: string,
+    ) => {
+      written.set(name, content);
+      return currentFiles().find((file) => file.name === name) ?? null;
+    });
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    // The run is still going when the page reloads and reattaches, and the
+    // browser owes the delivery; by the time the stream ends it has succeeded.
+    fetchChatRunStatus.mockResolvedValueOnce({
+      id: 'run-running-delivery',
+      status: 'running',
+      createdAt: startedAt,
+      updatedAt: startedAt,
+      exitCode: null,
+      signal: null,
+      artifactDeliveryRequired: true,
+    });
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-running-delivery',
+      status: 'succeeded',
+      createdAt: startedAt,
+      updatedAt: startedAt + 5,
+      exitCode: 0,
+      signal: null,
+      artifactDeliveryRequired: true,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+    acknowledgeChatRunArtifactDelivery.mockResolvedValue({
+      ok: true,
+      applied: true,
+      run: {
+        id: 'run-running-delivery',
+        status: 'succeeded',
+        artifactDeliveryRequired: true,
+        artifactDelivery: {
+          status: 'succeeded',
+          acknowledgedAt: startedAt + 10,
+          files: [{ name: 'index.html', saved: true, readBack: true, previewReady: true }],
+        },
+      },
+    });
+    let allowedRecovery: boolean | undefined;
+    reattachDaemonRun.mockImplementation(async (options: any) => {
+      allowedRecovery = options.allowArtifactDeliveryRecovery;
+      options.handlers.onDelta(replayed);
+      options.onRunStatus?.('succeeded');
+      options.handlers.onDone();
+    });
+    rememberArtifactDeliveryCapability(
+      'run-running-delivery',
+      'client-running-delivery',
+    );
+
+    renderProjectView();
+
+    await waitFor(() => {
+      const restored = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .find((message) => (
+          message?.id === 'msg-running-delivery'
+          && message.runStatus === 'succeeded'
+          && message.producedFiles?.length === 1
+        ));
+      expect(restored?.producedFiles?.map((file) => file.name)).toEqual(['index.html']);
+    });
+    expect(allowedRecovery).toBe(true);
+    expect([...written.keys()]).toEqual(['index.html']);
+    expect(acknowledgeChatRunArtifactDelivery).toHaveBeenCalledWith(
+      'run-running-delivery',
+      expect.objectContaining({ clientRequestId: 'client-running-delivery', status: 'succeeded' }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
   it('keeps a single reattach owner and streaming UI until deferred recovery settles', async () => {
     const startedAt = Date.now();
     const html =

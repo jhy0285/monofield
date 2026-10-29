@@ -82,9 +82,11 @@ test('[P1] composer footer controls share one height and baseline', async ({ pag
   const metrics = await page.evaluate(() => {
     const row = document.querySelector('.composer-row');
     if (!row) return { error: 'no .composer-row' as const };
+    // The working directory control moved below the composer card, out of this
+    // row, and the session mode toggle only renders when it has a mode to offer;
+    // the add button, the agent trigger and Send are always in the row.
     const selectors = [
       '.icon-btn',
-      '.working-dir-pill-trigger',
       '.avatar-agent-trigger',
       '.session-mode-toggle__trigger',
       '.composer-send',
@@ -104,14 +106,14 @@ test('[P1] composer footer controls share one height and baseline', async ({ pag
 
   // The toolbar should never collapse to a single control; if it does, the
   // selectors below are stale and the height assertion is meaningless.
-  expect(controls.length).toBeGreaterThanOrEqual(4);
+  expect(controls.length).toBeGreaterThanOrEqual(3);
 
   const heights = controls.map((c) => c.height);
   const centers = controls.map((c) => c.center);
   const spread = (xs: number[]) => Math.max(...xs) - Math.min(...xs);
 
   // One control system: identical heights. On main these drift (e.g. the +
-  // at 32px, the working-dir pill at 28px, Send at 30px) and this fails.
+  // at 32px, the agent trigger at 28px, Send at 30px) and this fails.
   expect(spread(heights), `control heights: ${JSON.stringify(controls)}`).toBeLessThanOrEqual(1);
   // ...and a shared vertical center so nothing rides high or low in the row.
   expect(spread(centers), `control centers: ${JSON.stringify(controls)}`).toBeLessThanOrEqual(1);
