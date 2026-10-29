@@ -20,9 +20,23 @@ type WorkerFixtures = {
   toolsDev: PlaywrightToolsDevSuite;
 };
 
-export const test = base.extend<TestFixtures, WorkerFixtures>({
+type WorkerOptions = {
+  /**
+   * Start the worker's stack with the AMR cloud runtime on. MonoField ships it off
+   * (`OD_ENABLE_AMR` for the daemon, `NEXT_PUBLIC_OD_ENABLE_AMR` for the renderer), so only
+   * the AMR specs turn it on, with `test.use({ amrEnabled: true })`.
+   */
+  amrEnabled: boolean;
+};
+
+const AMR_RUNTIME_ENV = { OD_ENABLE_AMR: '1', NEXT_PUBLIC_OD_ENABLE_AMR: '1' } as const;
+
+export const test = base.extend<TestFixtures, WorkerFixtures & WorkerOptions>({
+  amrEnabled: [false, { option: true, scope: 'worker' }],
+
   toolsDev: [
-    async ({}, use, workerInfo) => {
+    async ({ amrEnabled }, use, workerInfo) => {
+      const stackEnv = amrEnabled ? { ...AMR_RUNTIME_ENV } : {};
       const suite = await createPlaywrightToolsDevSuite(workerInfo.workerIndex);
       let failed = false;
       const toolsDev: PlaywrightToolsDevSuite = Object.assign(suite, {
@@ -34,7 +48,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       let useError: unknown = null;
       let stopError: unknown = null;
       try {
-        await toolsDev.startWeb();
+        await toolsDev.startWeb(stackEnv);
         await warmUpWeb(toolsDev.url.web());
         await use(toolsDev);
       } catch (error) {
@@ -43,7 +57,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         throw error;
       } finally {
         try {
-          await toolsDev.stopWeb();
+          await toolsDev.stopWeb(stackEnv);
         } catch (error) {
           stopError = error;
           failed = true;

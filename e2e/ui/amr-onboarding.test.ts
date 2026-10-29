@@ -5,6 +5,9 @@ import { dismissPrivacyDialog, STORAGE_KEY, waitForLoadingToClear } from '@/play
 import { APP_CONFIG_URL, fulfillAgentsRoute } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 
+// MonoField ships the AMR cloud runtime off; these specs run against a stack that has it on.
+test.use({ amrEnabled: true });
+
 type OnboardingConfig = {
   mode: 'daemon';
   apiKey: string;
@@ -1040,7 +1043,7 @@ function cloudPrimaryButton(page: Page): Locator {
 }
 
 function cloudSignInText(): RegExp {
-  return /Sign in to Open Design Cloud|登录 Open Design 云端/i;
+  return /Sign in to MonoField Cloud|登录 MonoField 云端/i;
 }
 
 async function clickCloudPrimary(page: Page) {
@@ -1057,7 +1060,7 @@ async function clickLocalRuntime(page: Page) {
 
 // The connect step heading — the stable "we're still on Connect" marker.
 function connectLandingHeading(page: Page): Locator {
-  return page.getByRole('heading', { name: /Sign in to Open Design|登录 Open Design/i });
+  return page.getByRole('heading', { name: /Sign in to MonoField|登录 MonoField/i });
 }
 
 async function seedOnboardingConfig(page: Page, config: OnboardingConfig) {

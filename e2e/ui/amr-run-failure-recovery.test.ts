@@ -19,6 +19,9 @@ import {
   STORAGE_KEY,
 } from '@/playwright/amr';
 
+// MonoField ships the AMR cloud runtime off; these specs run against a stack that has it on.
+test.use({ amrEnabled: true });
+
 let codexRuntime: Awaited<ReturnType<typeof createFakeAgentRuntimes>>['codex'];
 const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
 
@@ -335,7 +338,7 @@ test('[P0] @critical Settings preserves AMR account, recharge shortcut, and mode
 
   await settings.getByTestId('settings-agent-select-codex').click();
   await expect(settings.getByTestId('settings-agent-select-codex')).toHaveAttribute('aria-pressed', 'true');
-  await expect(settings.getByTestId('settings-agent-select-amr')).toContainText('Open Design AMR');
+  await expect(settings.getByTestId('settings-agent-select-amr')).toContainText('MonoField AMR');
 
   await settings.getByTestId('settings-agent-select-amr').click();
   await expect(settings.getByTestId('settings-agent-select-amr')).toHaveAttribute('aria-pressed', 'true');
@@ -386,7 +389,7 @@ test('[P0] after an AMR failure the user can switch to Codex and complete a fres
   await gotoProject(page, amr.projectId);
   await sendPrompt(page, 'AMR auth failure before switch smoke');
   await expect(runErrorCard(page)).toContainText(
-    /Open Design agent isn't signed in yet|AMR sign-in is required/i,
+    /MonoField agent isn't signed in yet|Open Design agent isn't signed in yet|AMR sign-in is required/i,
     { timeout: 15_000 },
   );
   await expect(page.getByRole('button', { name: /Authorize.*retry|授权并重试/i }).first()).toBeVisible();

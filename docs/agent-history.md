@@ -84,7 +84,9 @@ As of 2026-10-29.
   commit before this series except for 23 AMR tests that were not run there (see
   Known baseline failures). No regression was found. On 2026-10-29 `pnpm guard`
   and `pnpm typecheck` passed again, and all 64 of those non-AMR failures were fixed
-  file by file (see the six newest Log entries), leaving only the 26 AMR tests.
+  file by file (see the newest Log entries), leaving the AMR tests; two of the four AMR UI
+  files pass since the `amrEnabled` worker option, `amr-onboarding` and
+  `amr-run-failure-recovery` still fail (a decision is open).
 - Layout: regions can be resized or folded in the development workspace (tools
   panel height, Design Files preview width, AI input) and the classic chat
   panel width; see the newest Log entry and `Splitter` in
@@ -220,7 +222,8 @@ a hydration race in the shared
 design system dropdown clipped inside the New Project panel, and the "Memory created"
 confirmation vanished with the modal), and four were reload bugs and a prompt-matching
 bug in the run and delivery path (see the newest Log entries). None of the 64 is known
-to fail now; the 26 AMR tests below still do. Caution: `real-daemon-run` runs in `serial`
+to fail now; the AMR tests of `amr-onboarding` and `amr-run-failure-recovery` still do
+(the 26 counted on 2026-10-28 were those four files' failures). Caution: `real-daemon-run` runs in `serial`
 mode, so a failure there hid the five tests after it, which were never run before
 2026-10-29 (one of them failed for the reload bug above and one for the plugin prompt).
 
@@ -242,10 +245,10 @@ End-to-end tests:
   together; each file was run alone, and the run and delivery changes of 2026-10-29 were
   re-checked only on `app`, `app-restoration`, `chat-*`, `document-review` and
   `real-daemon-run` (see the newest Log entry).
-- Decide what to do with the 26 AMR `e2e/ui` tests and the 4 `e2e/tests/amr`
-  specs that need the Desktop credential vault: run them with the AMR flags in a
-  job that has a vault stand-in, rewrite them for the local-CLI path, or delete
-  them with the AMR surfaces. Today they fail on every run.
+- Decide what to do with the `amr-onboarding` (23) and `amr-run-failure-recovery` (8)
+  `e2e/ui` tests and the 4 vault-bound `e2e/tests/amr` specs; see the newest AMR Log entry
+  for the options and a recommendation. Today they fail on every run. The other two AMR UI
+  files pass since the `amrEnabled` worker option.
 
 Layout and UI:
 
@@ -309,6 +312,40 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-10-29 — Turn the AMR runtime on for the AMR UI specs (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** continue; the open item was what to do with the 26 AMR `e2e/ui` tests.
+- **Changed:** `e2e/lib/playwright/suite.ts` has a worker option `amrEnabled` (default false)
+  that starts the worker's stack with `OD_ENABLE_AMR=1` and `NEXT_PUBLIC_OD_ENABLE_AMR=1`; the
+  four `ui/amr-*.test.ts` files set `test.use({ amrEnabled: true })` and use the MonoField
+  strings ("Sign in to MonoField", "MonoField AMR"). Nothing else in the harness changes, so
+  the other specs still run with AMR off.
+- **Result:** `amr-login-pill` (1) and `amr-logout-requires-relogin` (1) pass. The other two
+  files still fail, for reasons that are product decisions, not drift:
+  - `amr-onboarding` (23 tests, all fail): they start from the cloud sign-in landing, which
+    MonoField no longer shows. `EntryShell.tsx` initialises `connectExpanded` and `runtime` to
+    `'local'`, nothing sets `connectExpanded` back to `null`, and the landing renders only for
+    `null`, so it is unreachable even with the AMR flags on. The first test failed at
+    `gotoOnboarding` for all of them. `package.json` `test:ui:critical` still lists this file
+    with `--grep @critical`.
+  - `amr-run-failure-recovery` (8 tests): the first fails in `setupAmrWorkspace`, because
+    saving AMR credentials through `PUT /api/app-config` needs the Desktop credential vault,
+    which the daemon reaches over the Desktop sidecar IPC and which needs the Desktop auth
+    handshake. The same blocks four `e2e/tests/amr` specs. A fix is a stand-in Desktop sidecar
+    for the harness, not a daemon backdoor.
+- **Verified:** the four files run alone, one worker, with no flags in the shell:
+  `amr-login-pill` and `amr-logout-requires-relogin` 2 of 2; `amr-onboarding` fails from the
+  first test (12 tried); `amr-run-failure-recovery` fails at the first test. `tsc -p
+  tsconfig.json --noEmit` in `e2e` is clean. Not run: the 23 `amr-onboarding` tests beyond the
+  first 12.
+- **Not done:** the decision below.
+- **Next agent:** the user decides between (a) removing `amr-onboarding` and
+  `amr-run-failure-recovery` (and the four vault-bound `e2e/tests/amr` specs) together with the
+  AMR surfaces under ADR 0002, (b) rewriting the onboarding specs for the local-first Connect
+  step and building the Desktop stand-in for the vault ones, or (c) leaving them failing.
+  Recommendation: (a) for `amr-onboarding`, because the flow it tests cannot be reached; take
+  it out of `test:ui:critical` with it.
 
 ### 2026-10-29 — Fix a reload before the run reply: pending delivery capability and the finished-row check (`ccr-8432aecf-n9xdfd`)
 

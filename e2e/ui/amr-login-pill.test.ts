@@ -17,6 +17,9 @@ import type { Page } from '@playwright/test';
 import { openSettingsDialog as openEntrySettingsDialog } from '../lib/playwright/amr.js';
 import { routeAgents } from '../lib/playwright/mock-factory.js';
 
+// MonoField ships the AMR cloud runtime off; these specs run against a stack that has it on.
+test.use({ amrEnabled: true });
+
 const STORAGE_KEY = 'open-design:config';
 const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
 
@@ -134,7 +137,7 @@ test('[P1] AMR card authorizes through daemon login status and returns to author
 
   const amrCard = dialog
     .locator('.amr-agent-card, .agent-card-installed')
-    .filter({ hasText: /Open Design AMR|AMR \(vela\)/i })
+    .filter({ hasText: /MonoField AMR|Open Design AMR|AMR \(vela\)/i })
     .first();
   await expect(amrCard).toBeVisible();
 
