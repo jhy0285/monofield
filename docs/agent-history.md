@@ -83,9 +83,8 @@ As of 2026-10-29.
   2026-10-28; 90 Playwright tests failed, every one of them also fails on the
   commit before this series except for 23 AMR tests that were not run there (see
   Known baseline failures). No regression was found. On 2026-10-29 `pnpm guard`
-  and `pnpm typecheck` passed again, and 63 of those 64 non-AMR failures were
-  fixed file by file (see the five newest Log entries), leaving 1 non-AMR (found
-  later: `real-daemon-run`, one test; see Known baseline failures) and 26 AMR.
+  and `pnpm typecheck` passed again, and all 64 of those non-AMR failures were fixed
+  file by file (see the six newest Log entries), leaving only the 26 AMR tests.
 - Layout: regions can be resized or folded in the development workspace (tools
   panel height, Design Files preview width, AI input) and the classic chat
   panel width; see the newest Log entry and `Splitter` in
@@ -193,15 +192,15 @@ but the baseline had `ENABLE_AMR_RUNTIME = false` fixed in the renderer, so the 
 screens they drive could not appear. They need the two AMR flags (see Environment
 notes), which the harness does not set.
 
-On 2026-10-29, 63 of the 64 were fixed and each file re-run alone:
+On 2026-10-29, all 64 were fixed and each file re-run alone:
 `settings-memory-routines` (16 of 16 pass), `project-management-flows` (37 of 37),
 `visual-entry` (11 of 11), `settings-api-protocol` (12 of 12),
 `design-systems-manager` (3 of 3), `settings-design-systems` (3 of 3),
 `critique-theater` (4 pass, 3 are `test.fixme`), `settings-media-providers` (3 of 3),
 `document-review` (2 of 2), `chat-todo-autoscroll` (2 of 2), `change-plan`,
 `app-restoration` (Browser Inspiration, see below), `chat-design-system-switch`,
-`composer-toolbar-alignment`, `app` (the one failing test), `real-daemon-run` (12 of
-13 pass, see below), `critical-smoke`, `app-manual-edit` and
+`composer-toolbar-alignment`, `app` (the one failing test), `real-daemon-run` (13 of
+13 pass in one run), `critical-smoke`, `app-manual-edit` and
 `new-project-ds-picker-clipping`. Causes were spec drift (the
 Memory page moved its add and import flows into a modal; the navigation rail,
 settings menu and hand-off controls changed; onboarding opens on the local coding
@@ -219,21 +218,11 @@ the composer; media provider keys are kept out of browser storage),
 a hydration race in the shared
 `ensureRailOpen` helper, and cold `next dev` compiles; two were product bugs (the
 design system dropdown clipped inside the New Project panel, and the "Memory created"
-confirmation vanished with the modal). Still failing, as of the last run that
-included them (a partial re-run of this list under load, so each needs its own
-re-run before being believed), one non-AMR test:
-
-- `real-daemon-run` `survives reload before the create response reaches the browser`
-  (line 219). It was hidden for as long as the file's earlier test failed, because the
-  file runs in `serial` mode and skips the rest after a failure: the five tests after
-  it were never run before 2026-10-29, and four of them pass. This one fails with and
-  without the changes of that day. The reload leaves the message without a run id; the
-  daemon then ends the run and marks the message `succeeded` with its text but no
-  produced files, and the reattach scan skips it (a terminal message with content is not
-  replayed), so the artifact is never delivered. Fixing it needs the scan to check the
-  run's delivery status for the latest terminal message.
-- Not investigated one by one. Several look like the same drift as the specs
-  fixed; that is a guess, not a finding.
+confirmation vanished with the modal), and four were reload bugs and a prompt-matching
+bug in the run and delivery path (see the newest Log entries). None of the 64 is known
+to fail now; the 26 AMR tests below still do. Caution: `real-daemon-run` runs in `serial`
+mode, so a failure there hid the five tests after it, which were never run before
+2026-10-29 (one of them failed for the reload bug above and one for the plugin prompt).
 
 `e2e/specs` and `e2e/tests`: 10 of 207 tests failed on the first run. One was
 stale (`specs/namespace`, fixed); two (`tests/dialog/*`) pass alone once the
@@ -248,10 +237,11 @@ Newest first within each group. Remove an item when it is done.
 
 End-to-end tests:
 
-- Fix the remaining non-AMR `e2e/ui` failure listed under Known baseline failures
-  (`real-daemon-run` line 219). Fix
-  the spec or the product, whichever is wrong, one file at a time, and re-run each
-  file alone on a quiet machine (no second Playwright run).
+- Run `e2e/ui` as a whole once on a quiet machine (one worker, `OD_PLAYWRIGHT_TIMEOUT=100000`,
+  `.tmp/e2e/playwright-*` cleaned between batches) to confirm the non-AMR failures are gone
+  together; each file was run alone, and the run and delivery changes of 2026-10-29 were
+  re-checked only on `app`, `app-restoration`, `chat-*`, `document-review` and
+  `real-daemon-run` (see the newest Log entry).
 - Decide what to do with the 26 AMR `e2e/ui` tests and the 4 `e2e/tests/amr`
   specs that need the Desktop credential vault: run them with the AMR flags in a
   job that has a vault stand-in, rewrite them for the local-CLI path, or delete
@@ -319,6 +309,36 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-10-29 — Fix a reload before the run reply: pending delivery capability and the finished-row check (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** continue with the last baseline `e2e/ui` failure, `real-daemon-run` line 219
+  ("survives reload before the create response reaches the browser").
+- **Changed (product, `ProjectView.tsx`):** (1) The reattach scan now checks the run of
+  the latest assistant message when it is `succeeded` with a run id and no produced
+  files: if the run requires delivery and has no acknowledgment, it replays and delivers
+  (the daemon can finish a row itself while no page is attached, writing the text and
+  the status but no file, and the row alone cannot tell). The status it fetches is reused.
+  (2) `rememberPendingArtifactDeliveryCapability` / `claimPendingArtifactDeliveryCapability`:
+  the delivery capability is also filed under the assistant message when a turn is sent,
+  and claimed under the run id when the reply (or, after a reload, the reattach scan)
+  names it. Before, a reload before the reply lost the run-keyed capability, and recovery
+  failed closed with "The document delivery capability was not available after
+  reconnecting".
+- **Why:** both gaps meant that a reload in the first moments of a document run, or while
+  no page was attached, lost the artifact for good.
+- **Verified:** red then green: two new `ProjectView.reattach-restore` tests (the finished
+  row, and the claimed capability; the second fails without the claim). `tsc -p tsconfig.json
+  --noEmit` in `apps/web` is clean and the nine `tests/components/ProjectView*` files pass
+  (170 tests). `e2e/ui/real-daemon-run` 13 of 13 in one run, line 219 included.
+- **Not done:** the regression batch of `app`, `app-restoration`, `chat-design-system-switch`,
+  `chat-todo-autoscroll` and `document-review` (59 tests) was still running when this was
+  committed, so it is not recorded as passing; root `pnpm typecheck` and the whole web
+  unit suite after this change (the suite last ran before it, with one timing flake in
+  `BrandsTab.refresh` that passes alone); the daemon unit suite; the Vitest e2e suites.
+- **Next agent:** `ProjectView.tsx` is the place for delivery and reattach rules, and
+  `providers/daemon.ts` for the stream; keep the two guards of `isPageHiding` and the
+  delivery recovery for active runs (previous entry) in mind before changing either.
 
 ### 2026-10-29 — Fix reload during a run, folder-relative delivery names, and the last small specs (`ccr-8432aecf-n9xdfd`)
 

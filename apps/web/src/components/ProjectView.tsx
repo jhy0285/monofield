@@ -430,6 +430,44 @@ export function readArtifactDeliveryCapability(runId: string): string | null {
   }
 }
 
+const ARTIFACT_DELIVERY_PENDING_CAPABILITY_PREFIX = 'od:artifact-delivery-capability:v1:pending:';
+
+/**
+ * Held from the moment a turn is sent until the daemon's reply names its run, keyed
+ * by the assistant message. A reload in that window loses the reply, and with it the
+ * run id the capability is otherwise filed under, so the reloaded page claims it
+ * again from the message the daemon mapped the run to.
+ */
+export function rememberPendingArtifactDeliveryCapability(
+  messageId: string,
+  clientRequestId: string,
+): void {
+  if (typeof window === 'undefined' || !messageId || !clientRequestId) return;
+  try {
+    window.sessionStorage.setItem(
+      `${ARTIFACT_DELIVERY_PENDING_CAPABILITY_PREFIX}${messageId}`,
+      clientRequestId,
+    );
+  } catch {
+    // Without it a reload before the reply only loses the recovery; delivery
+    // stays fail-closed.
+  }
+}
+
+/** File the pending capability of a message under its run, then drop the pending copy. */
+export function claimPendingArtifactDeliveryCapability(messageId: string, runId: string): void {
+  if (typeof window === 'undefined' || !messageId || !runId) return;
+  try {
+    const key = `${ARTIFACT_DELIVERY_PENDING_CAPABILITY_PREFIX}${messageId}`;
+    const pending = window.sessionStorage.getItem(key);
+    if (!pending) return;
+    if (!readArtifactDeliveryCapability(runId)) rememberArtifactDeliveryCapability(runId, pending);
+    window.sessionStorage.removeItem(key);
+  } catch {
+    // Best-effort, as for the run-keyed capability.
+  }
+}
+
 export function forgetArtifactDeliveryCapability(runId: string): void {
   if (typeof window === 'undefined' || !runId) return;
   try {
@@ -3378,12 +3416,31 @@ export function ProjectView({
           .map((run) => [run.assistantMessageId!, run]),
       );
 
+      const lastAssistantId = [...messages].reverse().find((m) => m.role === 'assistant')?.id;
       for (const message of messages) {
         if (cancelled) return;
         if (message.role !== 'assistant') continue;
 
-        const needsFullReplay =
+        let needsFullReplay =
           isActiveRunStatus(message.runStatus) || shouldReplayTerminalRunMessage(message);
+        // With no page attached the daemon can finish a row itself: the text is
+        // saved and the status says succeeded, yet the artifact was never written,
+        // because the browser owns that delivery. The row cannot tell, so ask the
+        // run, for the latest message only.
+        let ownedDeliveryStatus: ChatRunStatusResponse | null = null;
+        if (
+          !needsFullReplay
+          && message.id === lastAssistantId
+          && message.runId
+          && message.runStatus === 'succeeded'
+          && !message.producedFiles?.length
+        ) {
+          ownedDeliveryStatus = await fetchChatRunStatus(message.runId);
+          if (cancelled) return;
+          needsFullReplay = ownedDeliveryStatus?.status === 'succeeded'
+            && ownedDeliveryStatus.artifactDeliveryRequired === true
+            && !ownedDeliveryStatus.artifactDelivery;
+        }
         if (!needsFullReplay) continue;
         const fallbackRun = !message.runId
           ? activeByMessage.get(message.id) ?? historicalByMessage.get(message.id) ?? null
@@ -3413,6 +3470,7 @@ export function ProjectView({
         }
         if (reattachControllersRef.current.has(runId)) continue;
         if (completedReattachRunsRef.current.has(runId)) continue;
+        claimPendingArtifactDeliveryCapability(message.id, runId);
 
         if (fallbackRun && !message.runId) {
           updateMessageById(
@@ -3422,7 +3480,7 @@ export function ProjectView({
           );
         }
 
-        const status = fallbackRun ?? await fetchChatRunStatus(runId);
+        const status = fallbackRun ?? ownedDeliveryStatus ?? await fetchChatRunStatus(runId);
         if (cancelled) return;
         if (!status) {
           updateMessageById(
@@ -5553,6 +5611,9 @@ export function ProjectView({
           project.metadata.development?.autoVerify !== false
             ? getActiveBrowserVerification(project.id)
             : undefined;
+        if (artifactDeliveryExpected) {
+          rememberPendingArtifactDeliveryCapability(assistantId, daemonClientRequestId!);
+        }
         void streamViaDaemon({
           agentId: config.agentId,
           history: nextHistory,
@@ -5585,6 +5646,7 @@ export function ProjectView({
             daemonRunId = runId;
             if (artifactDeliveryExpected) {
               rememberArtifactDeliveryCapability(runId, daemonClientRequestId!);
+              claimPendingArtifactDeliveryCapability(assistantId, runId);
             }
             const pinnedAssistant = {
               ...latestAssistantMsg,
