@@ -1,4 +1,5 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Dialog, DialogDescription, DialogFooter, DialogTitle } from '@open-design/components';
 import { createTabToTracking } from '@open-design/contracts/analytics';
 import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
@@ -21,6 +22,7 @@ import type {
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { fetchPromptTemplate, openFolderDialog } from '../providers/registry';
+import { placePopover, type PopoverPlacement } from '../utils/popoverPlacement';
 import { isStoredMediaProviderEntryPresent } from '../state/config';
 import { isMediaProviderPickerReady } from '../media/provider-readiness';
 import type {
@@ -2062,7 +2064,11 @@ function DesignSystemPicker({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [placement, setPlacement] = useState<PopoverPlacement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const flyoutRef = useRef<HTMLElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
 
   // Upgrade the popover's thin list to the rich Brand Kit card whenever the
@@ -2122,7 +2128,11 @@ function DesignSystemPicker({
   useEffect(() => {
     if (!open) return;
     function onPointer(e: MouseEvent) {
-      if (wrapRef.current?.contains(e.target as Node)) return;
+      const target = e.target as Node;
+      if (wrapRef.current?.contains(target)) return;
+      // The popover and the brand flyout are portalled out of the picker.
+      if (popoverRef.current?.contains(target)) return;
+      if (flyoutRef.current?.contains(target)) return;
       setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
@@ -2140,6 +2150,34 @@ function DesignSystemPicker({
       window.clearTimeout(t);
       document.removeEventListener('mousedown', onPointer);
       document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  // The popover is portalled to <body> and placed against the window: the modal
+  // body it used to sit in scrolls and clips it, so on a short window the lower
+  // options were cut off (#4303). See utils/popoverPlacement.ts.
+  useLayoutEffect(() => {
+    if (!open) {
+      setPlacement(null);
+      return undefined;
+    }
+    function updatePlacement() {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      setPlacement(
+        placePopover(
+          { top: rect.top, bottom: rect.bottom, left: rect.left, width: rect.width },
+          { width: window.innerWidth, height: window.innerHeight },
+        ),
+      );
+    }
+    updatePlacement();
+    window.addEventListener('resize', updatePlacement);
+    window.addEventListener('scroll', updatePlacement, true);
+    return () => {
+      window.removeEventListener('resize', updatePlacement);
+      window.removeEventListener('scroll', updatePlacement, true);
     };
   }, [open]);
 
@@ -2192,6 +2230,7 @@ function DesignSystemPicker({
     >
       <label className="newproj-label">{t('newproj.designSystem')}</label>
       <button
+        ref={triggerRef}
         type="button"
         data-testid="design-system-trigger"
         className={`ds-picker-trigger${open ? ' open' : ''}${primary ? '' : ' empty'}`}
@@ -2222,8 +2261,21 @@ function DesignSystemPicker({
           style={{ transform: open ? 'rotate(180deg)' : undefined }}
         />
       </button>
-      {open ? (
-        <div className="ds-picker-popover" role="listbox">
+      {open && placement && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              ref={popoverRef}
+              className="ds-picker-popover ds-picker-popover--floating"
+              role="listbox"
+              data-placement={placement.placement}
+              style={{
+                top: placement.top,
+                bottom: placement.bottom,
+                left: placement.left,
+                width: placement.width,
+                maxHeight: placement.maxHeight,
+              }}
+            >
           <div className="ds-picker-head">
             <input
               ref={searchRef}
@@ -2317,17 +2369,29 @@ function DesignSystemPicker({
               </button>
             </div>
           ) : null}
-        </div>
-      ) : null}
-      {open && previewBrand ? (
-        <aside
-          className="ds-picker-brand-flyout"
-          data-testid="new-project-ds-brand-flyout"
-          aria-label={t('brandDetail.identity')}
-        >
-          <BrandPreviewCard variant="compact" summary={previewBrand} />
-        </aside>
-      ) : null}
+            </div>,
+            document.body,
+          )
+        : null}
+      {open && placement && previewBrand && typeof document !== 'undefined'
+        ? createPortal(
+            <aside
+              ref={flyoutRef}
+              className="ds-picker-brand-flyout ds-picker-brand-flyout--floating"
+              data-testid="new-project-ds-brand-flyout"
+              aria-label={t('brandDetail.identity')}
+              style={{
+                top: placement.top,
+                bottom: placement.bottom,
+                left: placement.left + placement.width + 8,
+                maxHeight: placement.maxHeight,
+              }}
+            >
+              <BrandPreviewCard variant="compact" summary={previewBrand} />
+            </aside>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

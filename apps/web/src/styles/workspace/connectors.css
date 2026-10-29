@@ -156,6 +156,28 @@
   box-shadow: var(--shadow-lg);
   animation: ds-pop-in 140ms cubic-bezier(0.2, 0, 0.2, 1);
 }
+/* The design system popover and its brand flyout are portalled to <body> and
+   positioned against the window (NewProjectPanel.tsx, utils/popoverPlacement.ts),
+   so the scrolling modal body cannot clip them. Their top/bottom/left/width and
+   max-height come from inline style; the list scrolls inside whatever height the
+   window leaves. */
+.ds-picker-popover--floating {
+  position: fixed;
+  top: auto;
+  right: auto;
+  z-index: 140;
+}
+.ds-picker-popover--floating .ds-picker-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+}
+.ds-picker-brand-flyout--floating {
+  position: fixed;
+  top: auto;
+  right: auto;
+  z-index: 141;
+}
 .ds-picker-head {
   display: flex;
   align-items: center;
