@@ -4,11 +4,15 @@ import { ensureRailOpen } from '@/playwright/rail';
 import { routeAgents } from '@/playwright/mock-factory';
 import type { Page } from '@playwright/test';
 import { openSettingsDialog } from '../lib/playwright/amr.js';
+import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
 const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
 
-test.describe.configure({ timeout: 30_000 });
+// The first test in a worker waits for a cold `next dev` compile of the entry page,
+// which takes longer than 30 s here; a failed test then restarts the worker and the
+// next one is cold again. `2 * T.xlong` is what other specs use for the same reason.
+test.describe.configure({ timeout: 2 * T.xlong });
 
 function baseConfig(): Record<string, unknown> {
   return {
