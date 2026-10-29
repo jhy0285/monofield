@@ -331,11 +331,14 @@ Code health:
   row, and the claimed capability; the second fails without the claim). `tsc -p tsconfig.json
   --noEmit` in `apps/web` is clean and the nine `tests/components/ProjectView*` files pass
   (170 tests). `e2e/ui/real-daemon-run` 13 of 13 in one run, line 219 included.
-- **Not done:** the regression batch of `app`, `app-restoration`, `chat-design-system-switch`,
-  `chat-todo-autoscroll` and `document-review` (59 tests) was still running when this was
-  committed, so it is not recorded as passing; root `pnpm typecheck` and the whole web
-  unit suite after this change (the suite last ran before it, with one timing flake in
-  `BrandsTab.refresh` that passes alone); the daemon unit suite; the Vitest e2e suites.
+  Afterwards: `e2e/ui/app`, `app-restoration`, `chat-design-system-switch`,
+  `chat-todo-autoscroll` and `document-review` together, one worker: 59 of 59 pass
+  (11 minutes). Root `pnpm guard` and `pnpm typecheck` pass. `pnpm --filter
+  @open-design/web test`: 403 of 404 files pass; the one failure was
+  `ProductTutorial` (it passes 3 of 3 alone), and the run before that failed
+  `BrandsTab.refresh` (also passes alone): both are timing-sensitive under load.
+- **Not done:** the daemon unit suite and the Vitest e2e suites after these changes;
+  `e2e/ui` as a whole.
 - **Next agent:** `ProjectView.tsx` is the place for delivery and reattach rules, and
   `providers/daemon.ts` for the stream; keep the two guards of `isPageHiding` and the
   delivery recovery for active runs (previous entry) in mind before changing either.
