@@ -338,7 +338,12 @@ Code health:
   `amr-login-pill` and `amr-logout-requires-relogin` 2 of 2; `amr-onboarding` fails from the
   first test (12 tried); `amr-run-failure-recovery` fails at the first test. `tsc -p
   tsconfig.json --noEmit` in `e2e` is clean. Not run: the 23 `amr-onboarding` tests beyond the
-  first 12.
+  first 12. The Vitest e2e suites (`pnpm exec vitest run -c vitest.config.ts tests specs` in
+  `e2e`, after all the run and delivery changes of the day): 177 passed, 9 failed, 21
+  skipped; the 9 are exactly the known set: the four vault-bound `tests/amr` specs, the three
+  `relogin-required` specs (they pass with the AMR flags set, which that command did not
+  set), and the two `tests/dialog` specs (they need the Playwright browser build their version
+  expects). No new failure.
 - **Not done:** the decision below.
 - **Next agent:** the user decides between (a) removing `amr-onboarding` and
   `amr-run-failure-recovery` (and the four vault-bound `e2e/tests/amr` specs) together with the
