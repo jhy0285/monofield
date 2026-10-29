@@ -83,8 +83,8 @@ As of 2026-10-29.
   2026-10-28; 90 Playwright tests failed, every one of them also fails on the
   commit before this series except for 23 AMR tests that were not run there (see
   Known baseline failures). No regression was found. On 2026-10-29 `pnpm guard`
-  and `pnpm typecheck` passed again, and 49 of those 64 non-AMR failures were
-  fixed file by file (see the three newest Log entries), leaving 15 non-AMR and 26
+  and `pnpm typecheck` passed again, and 60 of those 64 non-AMR failures were
+  fixed file by file (see the four newest Log entries), leaving 4 non-AMR and 26
   AMR.
 - Layout: regions can be resized or folded in the development workspace (tools
   panel height, Design Files preview width, AI input) and the classic chat
@@ -188,11 +188,13 @@ but the baseline had `ENABLE_AMR_RUNTIME = false` fixed in the renderer, so the 
 screens they drive could not appear. They need the two AMR flags (see Environment
 notes), which the harness does not set.
 
-On 2026-10-29, 49 of the 64 were fixed and each file re-run alone:
+On 2026-10-29, 60 of the 64 were fixed and each file re-run alone:
 `settings-memory-routines` (16 of 16 pass), `project-management-flows` (37 of 37),
 `visual-entry` (11 of 11), `settings-api-protocol` (12 of 12),
 `design-systems-manager` (3 of 3), `settings-design-systems` (3 of 3),
-`critique-theater` (4 pass, 3 are `test.fixme`), `critical-smoke`,
+`critique-theater` (4 pass, 3 are `test.fixme`), `settings-media-providers` (3 of 3),
+`document-review` (2 of 2), `chat-todo-autoscroll` (2 of 2), `change-plan`,
+`app-restoration` (Browser Inspiration, see below), `critical-smoke`,
 `app-manual-edit` and `new-project-ds-picker-clipping`. Causes were spec drift (the
 Memory page moved its add and import flows into a modal; the navigation rail,
 settings menu and hand-off controls changed; onboarding opens on the local coding
@@ -200,18 +202,21 @@ agent and the plugin gallery moved from Home to the Library view; saved BYOK key
 to the credential vault instead of local storage; "Design systems" is "Document
 Styles" in Settings and "Design Jury" is "HTML Design Review (Experimental)" in
 English; Brand & styles became a list with a detail panel; a first-run privacy notice
-covers the bottom right of the window unless the config sets `privacyDecisionAt`),
+covers the bottom right of the window unless the config sets `privacyDecisionAt`;
+the document dependency panel (and the change plan inside it) is collapsed until
+its summary is opened; the to-do card is inline in the chat log, not pinned above
+the composer; media provider keys are kept out of browser storage),
 a hydration race in the shared
 `ensureRailOpen` helper, and cold `next dev` compiles; two were product bugs (the
 design system dropdown clipped inside the New Project panel, and the "Memory created"
 confirmation vanished with the modal). Still failing, as of the last run that
 included them (a partial re-run of this list under load, so each needs its own
-re-run before being believed), 15 non-AMR tests:
+re-run before being believed), 4 non-AMR tests, each a different cause not yet fixed:
 
-- `app-restoration` 4 (Browser Inspiration actions), `settings-media-providers` 2,
-  `document-review` 2, `chat-todo-autoscroll` 2 (no pinned to-do), and one each in
-  `app`, `change-plan`, `chat-design-system-switch`, `composer-toolbar-alignment` and
-  `real-daemon-run`.
+- `app` (`question-form-submit-persistence`: no "Send answers" button in the form),
+  `chat-design-system-switch` (no "Open CLI and model settings" control),
+  `composer-toolbar-alignment` (3 composer footer controls found, 4 expected), and
+  `real-daemon-run` (the real daemon run never writes the expected file).
 - Not investigated one by one. Several look like the same drift as the specs
   fixed; that is a guess, not a finding.
 
@@ -228,8 +233,8 @@ Newest first within each group. Remove an item when it is done.
 
 End-to-end tests:
 
-- Triage the 15 remaining non-AMR `e2e/ui` failures listed under Known baseline
-  failures, starting with `app-restoration` (4). Fix
+- Triage the 4 remaining non-AMR `e2e/ui` failures listed under Known baseline
+  failures. Fix
   the spec or the product, whichever is wrong, one file at a time, and re-run each
   file alone on a quiet machine (no second Playwright run).
 - Decide what to do with the 26 AMR `e2e/ui` tests and the 4 `e2e/tests/amr`
@@ -299,6 +304,35 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-10-29 — Fix `app-restoration`, `chat-todo-autoscroll`, `settings-media-providers`, `document-review` and `change-plan` specs (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** continue with the remaining baseline `e2e/ui` failures.
+- **Changed:** `app-restoration`: the four Browser Inspiration tests are replaced by
+  one (see Why). `chat-todo-autoscroll`:
+  grows the inline to-do card in the chat log (`growInlineTodo`) and checks the log's
+  `scrollHeight` instead of the pinned slot's effect on `clientHeight`.
+  `settings-media-providers`: a stateful daemon stand-in (`statefulMediaDaemon`); local
+  storage must hold `apiKeyConfigured` and no key, the daemon holds the key, and a
+  fresh load shows an empty field with "Saved · ••••-key". `document-review` and
+  `change-plan`: open the collapsed "Screen, API and database dependencies" panel
+  before using it (and again after the Korean reload in `change-plan`).
+- **Why:** Browser Inspiration works only in the desktop app: read-only inspection and
+  the `page_info` / `navigate` actions need the Electron webview and an approved
+  automation session (`resolveBrowserAccessPolicy` in `apps/web/src/runtime/browser-access.ts`),
+  which a plain browser cannot provide, so the new test asserts "Read-only inspection is
+  unavailable." and no action list. **The prompt contracts the four old tests checked
+  (`@agent-browser`, `Operation: page_info`, `navigate`) now have no automated coverage
+  at all**; they need a desktop harness. The rest is spec drift.
+- **Verified:** each file run alone, one worker: `app-restoration` Browser Inspiration
+  1 of 1 (the other tests of that file were not re-run), `chat-todo-autoscroll` 2 of 2
+  (the product keeps a bottom-pinned user pinned as the inline card grows),
+  `settings-media-providers` 3 of 3, `document-review` 2 of 2, `change-plan` 1 of 1;
+  `tsc -p tsconfig.json --noEmit` in `e2e` clean. Not run: `pnpm guard` and
+  `pnpm typecheck` after this change (spec-only edits), the web unit suite.
+- **Not done:** the 4 failures in Known baseline failures.
+- **Next agent:** `app` fails only `question-form-submit-persistence` (16 of 17 pass
+  alone), so triage that test, not the file.
 
 ### 2026-10-29 — Fix `design-systems-manager`, `settings-design-systems` and `critique-theater` specs (`ccr-8432aecf-n9xdfd`)
 

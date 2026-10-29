@@ -146,17 +146,59 @@ async function openNewProjectImageModelPicker(page: Page) {
   return page.locator('.ds-picker-group').filter({ has: page.getByText('OpenAI', { exact: true }) });
 }
 
+/**
+ * Provider keys never stay in browser storage: local storage keeps only that a key
+ * is configured and its last four characters, and the key itself goes to the
+ * daemon with the config write. This stands in for the daemon: a PUT stores the
+ * key, a GET reports it back as configured with its tail, as the real one does.
+ */
+function statefulMediaDaemon() {
+  const stored: Record<string, { apiKey: string; baseUrl: string }> = {};
+  const writes: Array<Record<string, unknown>> = [];
+  return {
+    stored,
+    writes,
+    mediaConfigPut: async (route: Route) => {
+      const payload = route.request().postDataJSON() as {
+        providers?: Record<string, { apiKey?: string; baseUrl?: string }>;
+      };
+      writes.push(payload as Record<string, unknown>);
+      for (const [id, entry] of Object.entries(payload.providers ?? {})) {
+        const previous = stored[id] ?? { apiKey: '', baseUrl: '' };
+        stored[id] = {
+          apiKey: entry.apiKey || previous.apiKey,
+          baseUrl: entry.baseUrl ?? previous.baseUrl,
+        };
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
+    },
+    mediaConfigGet: async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          providers: Object.fromEntries(
+            Object.entries(stored).map(([id, entry]) => [
+              id,
+              {
+                configured: Boolean(entry.apiKey),
+                apiKeyTail: entry.apiKey.slice(-4),
+                baseUrl: entry.baseUrl,
+              },
+            ]),
+          ),
+        }),
+      });
+    },
+  };
+}
+
 test.describe('Settings media providers flows', () => {
   test('[P1] autosaves media provider edits and restores them after closing and reopening settings', async ({ page }) => {
     await seedSettingsBase(page);
 
-    const mediaConfigWrites: Array<Record<string, unknown>> = [];
-    await routeBootstrapApis(page, {
-      mediaConfigPut: async (route) => {
-        mediaConfigWrites.push(route.request().postDataJSON() as Record<string, unknown>);
-        await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
-      },
-    });
+    const daemon = statefulMediaDaemon();
+    await routeBootstrapApis(page, daemon);
 
     let dialog = await openMediaSettings(page);
 
@@ -168,19 +210,30 @@ test.describe('Settings media providers flows', () => {
         const raw = window.localStorage.getItem(key);
         if (!raw) return false;
         const parsed = JSON.parse(raw);
-        return parsed.mediaProviders?.fishaudio?.apiKey === 'fish-key'
-          && parsed.mediaProviders?.fishaudio?.baseUrl === 'https://fish.example.com';
+        const fish = parsed.mediaProviders?.fishaudio;
+        // Local storage keeps no key, only that one is configured.
+        return fish?.apiKey === ''
+          && fish?.apiKeyConfigured === true
+          && fish?.baseUrl === 'https://fish.example.com';
       },
       { key: STORAGE_KEY },
     );
 
     await expect(dialog.getByText('All changes saved')).toBeVisible();
-    expect(mediaConfigWrites.length).toBeGreaterThan(0);
+    expect(daemon.stored.fishaudio).toEqual({ apiKey: 'fish-key', baseUrl: 'https://fish.example.com' });
 
     await dialog.getByRole('button', { name: 'Close', exact: true }).click();
 
     dialog = await openMediaSettingsFromCurrentPage(page);
     await expect(dialog.getByLabel('FishAudio API key')).toHaveValue('fish-key');
+    await expect(dialog.getByLabel('FishAudio Base URL')).toHaveValue('https://fish.example.com');
+    await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+
+    // After a fresh load the key is gone from the browser: the field is empty and
+    // says that one is saved on the daemon.
+    dialog = await openMediaSettings(page);
+    await expect(dialog.getByLabel('FishAudio API key')).toHaveValue('');
+    await expect(dialog.getByText('Saved · ••••-key')).toBeVisible();
     await expect(dialog.getByLabel('FishAudio Base URL')).toHaveValue('https://fish.example.com');
   });
 
@@ -226,7 +279,7 @@ test.describe('Settings media providers flows', () => {
 
   test('[P1] saved media provider config is consumed by the new-project media picker across pages', async ({ page }) => {
     await seedSettingsBase(page);
-    await routeBootstrapApis(page);
+    await routeBootstrapApis(page, statefulMediaDaemon());
 
     const dialog = await openMediaSettings(page);
     await dialog.getByLabel('OpenAI API key').fill('sk-openai-cross-page');
@@ -236,7 +289,7 @@ test.describe('Settings media providers flows', () => {
         const raw = window.localStorage.getItem(key);
         if (!raw) return false;
         const parsed = JSON.parse(raw);
-        return parsed.mediaProviders?.openai?.apiKey === 'sk-openai-cross-page';
+        return parsed.mediaProviders?.openai?.apiKeyConfigured === true;
       },
       { key: STORAGE_KEY },
     );

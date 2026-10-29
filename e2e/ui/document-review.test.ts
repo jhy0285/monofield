@@ -51,6 +51,8 @@ test(`[P1] reviews Git impact and saves evidence from a ${proposalFormat} propos
   await expect(page.getByRole('heading', { name: 'Document change review' })).toBeVisible({ timeout: 60_000 });
   const dependencies = page.getByRole('region', { name: 'Screen, API and database dependencies' });
   await expect(dependencies).toBeVisible();
+  // The panel is collapsed until its summary is opened.
+  await dependencies.getByText('Screen, API and database dependencies').click();
   await dependencies.getByRole('button', { name: 'Analyze dependencies' }).click();
   await expect(dependencies).toContainText('2 documents · 2 affected items · 0 items without dependencies');
   await expect(dependencies).toContainText('orders.ts → Orders → Orders screen');
