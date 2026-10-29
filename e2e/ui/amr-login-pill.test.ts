@@ -6,7 +6,7 @@
 // This test mocks those endpoints directly via `page.route` instead of
 // booting a real daemon — the daemon-side wiring is covered separately by
 // `apps/daemon/tests/integrations/vela.routes.test.ts` (HTTP routes) and
-// `e2e/tests/amr/turn.test.ts` (full tools-dev chat run). Here we focus
+// `apps/daemon/tests/amr-acp-integration.test.ts` (the ACP run). Here we focus
 // on the front-end transitions a regression would otherwise only surface
 // during manual demos: "Sign in" → "Signed in" → hover-only "Sign out"
 // label flip → "Sign in" again on logout.

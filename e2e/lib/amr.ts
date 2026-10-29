@@ -1,5 +1,5 @@
-import { chmod, mkdir, rm, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { chmod, mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 
 export type FakeVelaOptions = {
   assistantText?: string;
@@ -35,51 +35,6 @@ export async function writeFakeVelaBin(root: string, options: FakeVelaOptions = 
   await writeFile(bin, renderFakeVelaScript(options), 'utf8');
   await chmod(bin, 0o755);
   return bin;
-}
-
-export async function seedVelaLoginConfig(
-  homeDir: string,
-  options: {
-    endpoints?: VelaEndpoints;
-    profile?: string;
-    email?: string;
-    runtimeKey?: string;
-    controlKey?: string;
-  } = {},
-): Promise<string> {
-  const profile = options.profile ?? 'local';
-  const endpoints = options.endpoints ?? defaultVelaEndpoints();
-  const configDir = join(homeDir, '.amr');
-  const file = join(configDir, 'config.json');
-  await mkdir(configDir, { recursive: true });
-  await writeFile(
-    file,
-    JSON.stringify(
-      {
-        profiles: {
-          [profile]: {
-            runtimeKey: options.runtimeKey ?? 'fake-runtime-key',
-            controlKey: options.controlKey ?? 'fake-control-key',
-            apiUrl: endpoints.apiUrl,
-            linkUrl: endpoints.linkUrl,
-            user: {
-              id: 'fake-user-id',
-              email: options.email ?? 'e2e@example.com',
-              plan: 'free',
-            },
-          },
-        },
-      },
-      null,
-      2,
-    ),
-    'utf8',
-  );
-  return file;
-}
-
-export async function clearVelaLoginConfig(homeDir: string): Promise<void> {
-  await rm(join(homeDir, '.amr', 'config.json'), { force: true });
 }
 
 function renderFakeVelaScript(options: FakeVelaOptions): string {

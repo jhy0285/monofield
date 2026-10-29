@@ -84,9 +84,9 @@ As of 2026-10-29.
   commit before this series except for 23 AMR tests that were not run there (see
   Known baseline failures). No regression was found. On 2026-10-29 `pnpm guard`
   and `pnpm typecheck` passed again, and all 64 of those non-AMR failures were fixed
-  file by file (see the newest Log entries), leaving the AMR tests; two of the four AMR UI
-  files pass since the `amrEnabled` worker option, `amr-onboarding` and
-  `amr-run-failure-recovery` still fail (a decision is open).
+  file by file (see the newest Log entries), and the AMR tests were settled: the two AMR UI files that
+  cover reachable surfaces pass with the `amrEnabled` worker option, and the AMR specs that
+  could not pass were removed at the user's request (see the newest Log entry).
 - Layout: regions can be resized or folded in the development workspace (tools
   panel height, Design Files preview width, AI input) and the classic chat
   panel width; see the newest Log entry and `Splitter` in
@@ -222,8 +222,10 @@ a hydration race in the shared
 design system dropdown clipped inside the New Project panel, and the "Memory created"
 confirmation vanished with the modal), and four were reload bugs and a prompt-matching
 bug in the run and delivery path (see the newest Log entries). None of the 64 is known
-to fail now; the AMR tests of `amr-onboarding` and `amr-run-failure-recovery` still do
-(the 26 counted on 2026-10-28 were those four files' failures). Caution: `real-daemon-run` runs in `serial`
+to fail now. The AMR failures counted on 2026-10-28 are gone too: `amr-login-pill` and
+`amr-logout-requires-relogin` pass with the `amrEnabled` worker option, and
+`amr-onboarding`, `amr-run-failure-recovery` and `e2e/tests/amr` were removed on
+2026-10-29. Caution: `real-daemon-run` runs in `serial`
 mode, so a failure there hid the five tests after it, which were never run before
 2026-10-29 (one of them failed for the reload bug above and one for the plugin prompt).
 
@@ -245,10 +247,11 @@ End-to-end tests:
   together; each file was run alone, and the run and delivery changes of 2026-10-29 were
   re-checked only on `app`, `app-restoration`, `chat-*`, `document-review` and
   `real-daemon-run` (see the newest Log entry).
-- Decide what to do with the `amr-onboarding` (23) and `amr-run-failure-recovery` (8)
-  `e2e/ui` tests and the 4 vault-bound `e2e/tests/amr` specs; see the newest AMR Log entry
-  for the options and a recommendation. Today they fail on every run. The other two AMR UI
-  files pass since the `amrEnabled` worker option.
+- The AMR product surfaces (sign-in, model polling, the AMR agent, the cloud landing in
+  `EntryShell.tsx`, which nothing can reach) still ship behind `OD_ENABLE_AMR` /
+  `NEXT_PUBLIC_OD_ENABLE_AMR`. Removing them is ADR 0002 work; when it happens, remove
+  `amr-login-pill`, `amr-logout-requires-relogin`, the `amrEnabled` worker option in
+  `e2e/lib/playwright/suite.ts` and `e2e/lib/amr.ts` with them.
 
 Layout and UI:
 
@@ -312,6 +315,26 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-10-29 — Remove the AMR specs that cannot pass (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** the user chose to remove the AMR tests (the recommendation in the previous
+  entry).
+- **Changed:** deleted `e2e/ui/amr-onboarding.test.ts` (23 tests, the unreachable cloud
+  landing), `e2e/ui/amr-run-failure-recovery.test.ts` (8, the Desktop credential vault) and
+  `e2e/tests/amr/` (5 files: 4 vault-bound, and `relogin-required`, which only passes with the
+  AMR flags that the Vitest harness does not set), plus the orphaned `e2e/lib/vitest/amr.ts`
+  and the two unused helpers `seedVelaLoginConfig` / `clearVelaLoginConfig` in
+  `e2e/lib/amr.ts`. Removed the two files from `e2e/lib/playwright/suites.ts` (UI P0 groups and
+  coverage list), from `test:ui:critical` in `e2e/package.json`, and `amr-onboarding` from the
+  `playwright_critical` group `a` file list in `.github/workflows/ci.yml`. Kept
+  `amr-login-pill` and `amr-logout-requires-relogin`: they pass and cover AMR code that still
+  ships behind the flag. Product code is unchanged.
+- **Verified:** `pnpm guard` (it checks the UI P0 suite topology against the coverage list)
+  passes; `tsc -p tsconfig.json --noEmit` in `e2e` is clean.
+- **Not done:** the AMR product surfaces themselves (Open items).
+- **Next agent:** `docs/testing/launch-review-e2e-regressions.zh-CN.md` still names
+  `amr-onboarding.test.ts`; it is a dated review record and was left as written.
 
 ### 2026-10-29 — Turn the AMR runtime on for the AMR UI specs (`ccr-8432aecf-n9xdfd`)
 
