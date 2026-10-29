@@ -83,8 +83,8 @@ As of 2026-10-29.
   2026-10-28; 90 Playwright tests failed, every one of them also fails on the
   commit before this series except for 23 AMR tests that were not run there (see
   Known baseline failures). No regression was found. On 2026-10-29 `pnpm guard`
-  and `pnpm typecheck` passed again, and 40 of those 64 non-AMR failures were
-  fixed file by file (see the two newest Log entries), leaving 24 non-AMR and 26
+  and `pnpm typecheck` passed again, and 49 of those 64 non-AMR failures were
+  fixed file by file (see the three newest Log entries), leaving 15 non-AMR and 26
   AMR.
 - Layout: regions can be resized or folded in the development workspace (tools
   panel height, Design Files preview width, AI input) and the classic chat
@@ -160,6 +160,9 @@ machine. Check before relying on them.
   A killed Playwright run leaves its daemon and web sidecars running with parent 1;
   find them by `--od-stamp-namespace=playwright-...` and stop them by PID, or the
   next run competes with them for CPU.
+- A spec whose config omits `privacyDecisionAt` gets the first-run privacy notice
+  over the bottom right of the window, which can cover buttons it needs. The other
+  specs set `privacyDecisionAt: 1`.
 - A spec that saves a BYOK API key needs a stand-in for the Desktop credential
   vault: the web app PUTs the key to `/api/byok/credentials` first, and without the
   vault that call fails and the whole settings save is skipped (nothing reaches local
@@ -185,25 +188,30 @@ but the baseline had `ENABLE_AMR_RUNTIME = false` fixed in the renderer, so the 
 screens they drive could not appear. They need the two AMR flags (see Environment
 notes), which the harness does not set.
 
-On 2026-10-29, 40 of the 64 were fixed and each file re-run alone:
+On 2026-10-29, 49 of the 64 were fixed and each file re-run alone:
 `settings-memory-routines` (16 of 16 pass), `project-management-flows` (37 of 37),
-`visual-entry` (11 of 11), `settings-api-protocol` (12 of 12), `critical-smoke`,
+`visual-entry` (11 of 11), `settings-api-protocol` (12 of 12),
+`design-systems-manager` (3 of 3), `settings-design-systems` (3 of 3),
+`critique-theater` (4 pass, 3 are `test.fixme`), `critical-smoke`,
 `app-manual-edit` and `new-project-ds-picker-clipping`. Causes were spec drift (the
 Memory page moved its add and import flows into a modal; the navigation rail,
 settings menu and hand-off controls changed; onboarding opens on the local coding
 agent and the plugin gallery moved from Home to the Library view; saved BYOK keys go
-to the credential vault instead of local storage), a hydration race in the shared
+to the credential vault instead of local storage; "Design systems" is "Document
+Styles" in Settings and "Design Jury" is "HTML Design Review (Experimental)" in
+English; Brand & styles became a list with a detail panel; a first-run privacy notice
+covers the bottom right of the window unless the config sets `privacyDecisionAt`),
+a hydration race in the shared
 `ensureRailOpen` helper, and cold `next dev` compiles; two were product bugs (the
 design system dropdown clipped inside the New Project panel, and the "Memory created"
 confirmation vanished with the modal). Still failing, as of the last run that
 included them (a partial re-run of this list under load, so each needs its own
-re-run before being believed), 24 non-AMR tests:
+re-run before being believed), 15 non-AMR tests:
 
-- `app-restoration` 4 (Browser Inspiration actions), `critique-theater` 3 (no
-  "Design Jury" region), `design-systems-manager` 3, `settings-design-systems` 3,
-  `settings-media-providers` 2, `document-review` 2, `chat-todo-autoscroll` 2 (no
-  pinned to-do), and one each in `app`, `change-plan`, `chat-design-system-switch`,
-  `composer-toolbar-alignment` and `real-daemon-run`.
+- `app-restoration` 4 (Browser Inspiration actions), `settings-media-providers` 2,
+  `document-review` 2, `chat-todo-autoscroll` 2 (no pinned to-do), and one each in
+  `app`, `change-plan`, `chat-design-system-switch`, `composer-toolbar-alignment` and
+  `real-daemon-run`.
 - Not investigated one by one. Several look like the same drift as the specs
   fixed; that is a guess, not a finding.
 
@@ -220,9 +228,8 @@ Newest first within each group. Remove an item when it is done.
 
 End-to-end tests:
 
-- Triage the 24 remaining non-AMR `e2e/ui` failures listed under Known baseline
-  failures, starting with `app-restoration` (4), `critique-theater` (3),
-  `design-systems-manager` (3) and `settings-design-systems` (3). Fix
+- Triage the 15 remaining non-AMR `e2e/ui` failures listed under Known baseline
+  failures, starting with `app-restoration` (4). Fix
   the spec or the product, whichever is wrong, one file at a time, and re-run each
   file alone on a quiet machine (no second Playwright run).
 - Decide what to do with the 26 AMR `e2e/ui` tests and the 4 `e2e/tests/amr`
@@ -292,6 +299,31 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-10-29 — Fix `design-systems-manager`, `settings-design-systems` and `critique-theater` specs (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** continue with the remaining baseline `e2e/ui` failures.
+- **Changed:** `critique-theater`: the live stage is named by
+  `critiqueTheater.userFacingName`, now "HTML Design Review (Experimental)" in
+  English. `settings-design-systems`: the Settings section and its buttons say
+  "Document Styles" / "Add document style" / "View imported document style", and the
+  config sets `privacyDecisionAt: 1` so the privacy notice does not cover the Import
+  button. `design-systems-manager`: rewritten for Brand & styles as a list
+  (`design-system-card-<id>`) with a detail panel (`design-system-detail-<id>`): the
+  status toggle, the "More actions" menu for Delete and "Default for new chats", the
+  default badge, and the search box (`design-systems-search`). The draft/published
+  filter dropdown is gone from the product (its `dsManager.filter*` strings are
+  unused), so that test now checks the status dots and the search instead.
+- **Why:** spec drift after the redesigns and renames, plus the privacy notice.
+- **Verified:** each file run alone, one worker, `OD_PLAYWRIGHT_TIMEOUT=60000`:
+  `critique-theater` 4 passed (3 skipped by `test.fixme`), `settings-design-systems`
+  3 of 3, `design-systems-manager` 3 of 3; `tsc -p tsconfig.json --noEmit` in `e2e`
+  is clean. Not run: `pnpm guard` and `pnpm typecheck` after this change (spec-only
+  edits), the web unit suite.
+- **Not done:** the 15 remaining failures in Known baseline failures; the unused
+  `dsManager.filter*` strings were left in place.
+- **Next agent:** the same drift probably explains the rest: check current labels in
+  `apps/web/src/i18n/locales/en.ts` and current test ids before suspecting the product.
 
 ### 2026-10-29 — Fix `visual-entry` and `settings-api-protocol` specs (`ccr-8432aecf-n9xdfd`)
 
