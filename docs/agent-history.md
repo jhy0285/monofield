@@ -57,7 +57,7 @@ Entry template:
 
 ## Current state
 
-As of 2026-10-28.
+As of 2026-10-29.
 
 - Product: MonoField, a local Windows workbench that takes Codex or Claude Code
   CLI work to Korean SI deliverables (interface-spec XLSX, screen-spec PPTX,
@@ -79,10 +79,12 @@ As of 2026-10-28.
   full: `@open-design/web` 402 files / 3891 tests (13 skipped),
   `@open-design/daemon` 459 files / 5530 tests, `@open-design/components`
   2 files / 18 tests. The whole Playwright suite (`e2e/ui`, 367 tests) and the
-  Vitest e2e suites (`e2e/specs`, `e2e/tests`, 37 files) were run once; 90
-  Playwright tests fail, every one of them also fails on the commit before this
-  series except for 23 AMR tests that were not run there (see Known baseline
-  failures). No regression was found.
+  Vitest e2e suites (`e2e/specs`, `e2e/tests`, 37 files) were run once on
+  2026-10-28; 90 Playwright tests failed, every one of them also fails on the
+  commit before this series except for 23 AMR tests that were not run there (see
+  Known baseline failures). No regression was found. On 2026-10-29 `pnpm guard`
+  and `pnpm typecheck` passed again, and 26 of those 64 non-AMR failures were
+  fixed file by file (see the newest Log entry), leaving 38 non-AMR and 26 AMR.
 - Layout: regions can be resized or folded in the development workspace (tools
   panel height, Design Files preview width, AI input) and the classic chat
   panel width; see the newest Log entry and `Splitter` in
@@ -151,6 +153,16 @@ machine. Check before relying on them.
   `node_modules`; a git worktree of the older commit with `apps/daemon/node_modules`
   symlinked to the main checkout's worked for the baseline comparison.
 
+- Playwright workers now warm the web server before the first test
+  (`e2e/lib/playwright/suite.ts`, `warmUpWeb`); a cold `next dev` compile of the
+  entry page takes 30 to 45 seconds and used to fail the first test of every worker.
+  A killed Playwright run leaves its daemon and web sidecars running with parent 1;
+  find them by `--od-stamp-namespace=playwright-...` and stop them by PID, or the
+  next run competes with them for CPU.
+- Mocks that flip state "on the nth request" (for example the connector status in
+  `settings-memory-routines`) break when the UI reads that endpoint more or less
+  often. Flip them on a test-controlled flag instead.
+
 ### Known baseline failures
 
 Web unit and daemon unit suites: none. On 2026-10-27, on the commit before this
@@ -159,31 +171,33 @@ daemon suite 90 (23 files); all were investigated and resolved (see the Log). Th
 daemon failure set was compared test by test against that commit before it was
 changed, and the two sets were identical.
 
-`e2e/ui`: 90 of 367 tests fail on the head of the branch when run alone, in 26
-AMR tests and 64 others. For the 64 others, each one was also run on the commit
-before this series, under the same conditions, and fails there too, so none comes
-from this series. For the AMR tests, three were run on that commit and fail
-there; the other 23 were not, but the baseline had `ENABLE_AMR_RUNTIME = false`
-fixed in the renderer, so the AMR screens they drive could not appear. They need
-the two AMR flags (see Environment notes), which the harness does not set.
+`e2e/ui`: 90 of 367 tests failed on 2026-10-28 when run alone, 26 AMR tests and 64
+others. For the 64 others, each one was also run on the commit before this series,
+under the same conditions, and failed there too, so none came from this series. For
+the AMR tests, three were run on that commit and fail there; the other 23 were not,
+but the baseline had `ENABLE_AMR_RUNTIME = false` fixed in the renderer, so the AMR
+screens they drive could not appear. They need the two AMR flags (see Environment
+notes), which the harness does not set.
 
-The 64 others, by file (cause known only where stated):
+On 2026-10-29, 26 of the 64 were fixed and each file re-run alone: `settings-memory-routines`
+(16 of 16 pass), `project-management-flows` (37 of 37), `critical-smoke`,
+`app-manual-edit` and `new-project-ds-picker-clipping`. Causes were spec drift
+(the Memory page moved its add and import flows into a modal; the navigation rail,
+settings menu and hand-off controls changed), a hydration race in the shared
+`ensureRailOpen` helper, and cold `next dev` compiles; one was a product bug (the
+design system dropdown clipped inside the New Project panel). Still failing, as of
+the last run that included them (a partial re-run of this list under load, so each
+needs its own re-run before being believed), 38 non-AMR tests:
 
-- `settings-memory-routines` 14 (30 s test timeout; the "New memory" dialog
-  button is never found), `project-management-flows` 8 (the navigation rail,
-  hand-off trigger and avatar menu are not found), `settings-api-protocol` 7
-  (config `toMatchObject` mismatches), `visual-entry` 7 (it looks for the
-  "Sign in to Open Design" heading and the plugin catalog section),
-  `app-restoration` 4 (Browser Inspiration actions), `critique-theater` 3 (no
-  "Design Jury" region), `design-systems-manager` 3, `settings-design-systems` 3,
-  `chat-todo-autoscroll` 2 (no pinned to-do), `new-project-ds-picker-clipping` 2
-  (`page.goto` receives an invalid URL, so the spec builds no base URL),
-  `settings-media-providers` 2, and one each in `app-manual-edit`, `app`,
-  `change-plan`, `chat-design-system-switch`, `composer-toolbar-alignment`,
-  `critical-smoke`, `document-review` and `real-daemon-run`.
+- `visual-entry` 7 (it looks for the "Sign in to Open Design" heading and the
+  plugin catalog section), `settings-api-protocol` 7 (config `toMatchObject`
+  mismatches), `app-restoration` 4 (Browser Inspiration actions), `critique-theater`
+  3 (no "Design Jury" region), `design-systems-manager` 3, `settings-design-systems`
+  3, `settings-media-providers` 2, `document-review` 2, `chat-todo-autoscroll` 2
+  (no pinned to-do), and one each in `app`, `change-plan`, `chat-design-system-switch`,
+  `composer-toolbar-alignment` and `real-daemon-run`.
 - Not investigated one by one. Several look like the same drift as the specs
-  fixed in this series (rebrand copy, the verified-delivery receipt that a mocked
-  `/api/runs` cannot give); that is a guess, not a finding.
+  fixed; that is a guess, not a finding.
 
 `e2e/specs` and `e2e/tests`: 10 of 207 tests failed on the first run. One was
 stale (`specs/namespace`, fixed); two (`tests/dialog/*`) pass alone once the
@@ -198,17 +212,14 @@ Newest first within each group. Remove an item when it is done.
 
 End-to-end tests:
 
-- Triage the 64 persistent non-AMR `e2e/ui` failures listed under Known baseline
-  failures. Start with `settings-memory-routines` (14) and
-  `project-management-flows` (8): they are the largest and look like one shared
-  cause each. Fix the spec or the product, whichever is wrong, one file at a time,
-  and re-run each file alone.
+- Triage the 38 remaining non-AMR `e2e/ui` failures listed under Known baseline
+  failures, starting with `visual-entry` (7) and `settings-api-protocol` (7). Fix
+  the spec or the product, whichever is wrong, one file at a time, and re-run each
+  file alone on a quiet machine (no second Playwright run).
 - Decide what to do with the 26 AMR `e2e/ui` tests and the 4 `e2e/tests/amr`
   specs that need the Desktop credential vault: run them with the AMR flags in a
   job that has a vault stand-in, rewrite them for the local-CLI path, or delete
   them with the AMR surfaces. Today they fail on every run.
-- `e2e/ui/new-project-ds-picker-clipping.test.ts` calls `page.goto` with an
-  invalid URL; check how it gets its base URL.
 
 Layout and UI:
 
@@ -272,6 +283,38 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-10-29 — Fix baseline e2e failures: navigation, Memory, popover clipping (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** keep going on the pre-existing `e2e/ui` failures, one file at a time,
+  fixing the spec or the product, whichever is wrong.
+- **Changed:** `e2e/lib/playwright/rail.ts` `ensureRailOpen` waits for the shell and
+  for the toggle or the open rail before deciding (it raced hydration);
+  `e2e/lib/playwright/suite.ts` warms the web server per worker;
+  `project-management-flows`, `critical-smoke`, `app-manual-edit` and
+  `new-project-ds-picker-clipping` follow the current UI; `settings-memory-routines`
+  is rewritten for the Memory page (helpers `openAddMemoryModal`,
+  `openImportFromApps`, `openAdvancedMemoryModal`; "Learn from chats" is a hook on the
+  "How it works" tab; connector status follows an `githubAuthorized` flag).
+  Product fixes: the New Project design system dropdown and brand flyout are portalled
+  and placed inside the window (`apps/web/src/utils/popoverPlacement.ts`,
+  `NewProjectPanel.tsx`, `styles/workspace/connectors.css`), and the "Memory
+  created" confirmation now shows on the Memory page, because it used to render inside
+  the Add modal that saving closes (`MemorySection.tsx`).
+- **Why:** the 64 non-AMR failures came from spec drift after the UI redesigns, a
+  hydration race, cold compiles, and two real bugs above.
+- **Verified:** each file run alone with one worker and `OD_PLAYWRIGHT_TIMEOUT=100000`:
+  `settings-memory-routines` 16 of 16 pass (two runs; the first had two failures
+  from the status-read-count mock, fixed), `project-management-flows` 37 of 37, the
+  other three files pass. Web unit: `popoverPlacement` 6 specs; `MemorySection` 28
+  specs, and the create test fails without the `MemorySection.tsx` change and passes
+  with it. `pnpm guard` and `pnpm typecheck` pass. Not run: `pnpm --filter
+  @open-design/web test` in full after the last change (only the `MemorySection` file),
+  `e2e/ui` as a whole, and the 38 remaining failures after these fixes.
+- **Not done:** the 38 failures in Known baseline failures; the AMR decision.
+- **Next agent:** do not run two Playwright runs at once; load alone made tests that
+  pass fail. After a killed run, look for orphaned sidecars. `next dev` rewrites
+  `apps/web/next-env.d.ts`; restore it with `git checkout` before committing.
 
 ### 2026-10-28 — Full e2e regression run (`ccr-8432aecf-n9xdfd`)
 
