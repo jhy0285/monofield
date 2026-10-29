@@ -83,8 +83,9 @@ As of 2026-10-29.
   2026-10-28; 90 Playwright tests failed, every one of them also fails on the
   commit before this series except for 23 AMR tests that were not run there (see
   Known baseline failures). No regression was found. On 2026-10-29 `pnpm guard`
-  and `pnpm typecheck` passed again, and 26 of those 64 non-AMR failures were
-  fixed file by file (see the newest Log entry), leaving 38 non-AMR and 26 AMR.
+  and `pnpm typecheck` passed again, and 40 of those 64 non-AMR failures were
+  fixed file by file (see the two newest Log entries), leaving 24 non-AMR and 26
+  AMR.
 - Layout: regions can be resized or folded in the development workspace (tools
   panel height, Design Files preview width, AI input) and the classic chat
   panel width; see the newest Log entry and `Splitter` in
@@ -159,6 +160,11 @@ machine. Check before relying on them.
   A killed Playwright run leaves its daemon and web sidecars running with parent 1;
   find them by `--od-stamp-namespace=playwright-...` and stop them by PID, or the
   next run competes with them for CPU.
+- A spec that saves a BYOK API key needs a stand-in for the Desktop credential
+  vault: the web app PUTs the key to `/api/byok/credentials` first, and without the
+  vault that call fails and the whole settings save is skipped (nothing reaches local
+  storage). `routeByokVault` in `e2e/ui/settings-api-protocol.test.ts` is one;
+  afterwards local storage holds `STORED_BYOK_API_KEY`, not the key.
 - Mocks that flip state "on the nth request" (for example the connector status in
   `settings-memory-routines`) break when the UI reads that endpoint more or less
   often. Flip them on a test-controlled flag instead.
@@ -179,22 +185,24 @@ but the baseline had `ENABLE_AMR_RUNTIME = false` fixed in the renderer, so the 
 screens they drive could not appear. They need the two AMR flags (see Environment
 notes), which the harness does not set.
 
-On 2026-10-29, 26 of the 64 were fixed and each file re-run alone: `settings-memory-routines`
-(16 of 16 pass), `project-management-flows` (37 of 37), `critical-smoke`,
-`app-manual-edit` and `new-project-ds-picker-clipping`. Causes were spec drift
-(the Memory page moved its add and import flows into a modal; the navigation rail,
-settings menu and hand-off controls changed), a hydration race in the shared
-`ensureRailOpen` helper, and cold `next dev` compiles; one was a product bug (the
-design system dropdown clipped inside the New Project panel). Still failing, as of
-the last run that included them (a partial re-run of this list under load, so each
-needs its own re-run before being believed), 38 non-AMR tests:
+On 2026-10-29, 40 of the 64 were fixed and each file re-run alone:
+`settings-memory-routines` (16 of 16 pass), `project-management-flows` (37 of 37),
+`visual-entry` (11 of 11), `settings-api-protocol` (12 of 12), `critical-smoke`,
+`app-manual-edit` and `new-project-ds-picker-clipping`. Causes were spec drift (the
+Memory page moved its add and import flows into a modal; the navigation rail,
+settings menu and hand-off controls changed; onboarding opens on the local coding
+agent and the plugin gallery moved from Home to the Library view; saved BYOK keys go
+to the credential vault instead of local storage), a hydration race in the shared
+`ensureRailOpen` helper, and cold `next dev` compiles; two were product bugs (the
+design system dropdown clipped inside the New Project panel, and the "Memory created"
+confirmation vanished with the modal). Still failing, as of the last run that
+included them (a partial re-run of this list under load, so each needs its own
+re-run before being believed), 24 non-AMR tests:
 
-- `visual-entry` 7 (it looks for the "Sign in to Open Design" heading and the
-  plugin catalog section), `settings-api-protocol` 7 (config `toMatchObject`
-  mismatches), `app-restoration` 4 (Browser Inspiration actions), `critique-theater`
-  3 (no "Design Jury" region), `design-systems-manager` 3, `settings-design-systems`
-  3, `settings-media-providers` 2, `document-review` 2, `chat-todo-autoscroll` 2
-  (no pinned to-do), and one each in `app`, `change-plan`, `chat-design-system-switch`,
+- `app-restoration` 4 (Browser Inspiration actions), `critique-theater` 3 (no
+  "Design Jury" region), `design-systems-manager` 3, `settings-design-systems` 3,
+  `settings-media-providers` 2, `document-review` 2, `chat-todo-autoscroll` 2 (no
+  pinned to-do), and one each in `app`, `change-plan`, `chat-design-system-switch`,
   `composer-toolbar-alignment` and `real-daemon-run`.
 - Not investigated one by one. Several look like the same drift as the specs
   fixed; that is a guess, not a finding.
@@ -212,8 +220,9 @@ Newest first within each group. Remove an item when it is done.
 
 End-to-end tests:
 
-- Triage the 38 remaining non-AMR `e2e/ui` failures listed under Known baseline
-  failures, starting with `visual-entry` (7) and `settings-api-protocol` (7). Fix
+- Triage the 24 remaining non-AMR `e2e/ui` failures listed under Known baseline
+  failures, starting with `app-restoration` (4), `critique-theater` (3),
+  `design-systems-manager` (3) and `settings-design-systems` (3). Fix
   the spec or the product, whichever is wrong, one file at a time, and re-run each
   file alone on a quiet machine (no second Playwright run).
 - Decide what to do with the 26 AMR `e2e/ui` tests and the 4 `e2e/tests/amr`
@@ -283,6 +292,33 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-10-29 — Fix `visual-entry` and `settings-api-protocol` specs (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** continue with the remaining baseline `e2e/ui` failures.
+- **Changed:** `e2e/ui/visual-entry.test.ts`: the onboarding capture follows the
+  local coding agent step (no cloud sign-in), and the plugin gallery tests open the
+  Library view first (`openLibrary`), since Home keeps only the recent projects
+  strip. `e2e/ui/settings-api-protocol.test.ts`: added `routeByokVault`, a stand-in
+  for the Desktop credential vault, used by both open helpers and the autosave
+  recovery test; saved config now holds `STORED_BYOK_API_KEY` and the vault holds the
+  key; a reopened Settings dialog shows an empty key field; the cache test now
+  expects a second model request carrying the stored-key marker.
+- **Why:** with no vault, saving a BYOK key failed before local storage was written,
+  so every persistence assertion read the old config. Two earlier "passes" in the
+  file (clearing the key, model fetch failure) had only passed because nothing was
+  saved; with saving working, clearing the key moves the model off the account-only
+  one to the first suggested model, so the test now asserts that, not `gpt-4o`.
+- **Verified:** each file run alone, one worker, `OD_PLAYWRIGHT_TIMEOUT=60000`:
+  `visual-entry` 11 of 11, `settings-api-protocol` 12 of 12. `pnpm guard` and
+  `pnpm typecheck` pass after the change. Not run: the web unit suite (no source
+  change in this entry).
+- **Not done:** the model list cache is keyed by the key, so a reopened dialog (which
+  holds the marker) fetches the list again; harmless, not changed. The 24 remaining
+  failures.
+- **Next agent:** the capture names in `visual-entry` changed
+  (`visual-onboarding-connect`, `visual-library-catalog`,
+  `visual-library-plugin-filter`); nothing in the repository reads them.
 
 ### 2026-10-29 — Fix baseline e2e failures: navigation, Memory, popover clipping (`ccr-8432aecf-n9xdfd`)
 

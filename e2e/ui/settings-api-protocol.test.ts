@@ -4,6 +4,7 @@ import type { Locator, Page } from '@playwright/test';
 import { openSettingsDialog } from '../lib/playwright/amr.js';
 import { APP_CONFIG_URL, routeAgents } from '../lib/playwright/mock-factory.js';
 import { T } from '@/timeouts';
+import { STORED_BYOK_API_KEY } from '@open-design/contracts';
 
 const STORAGE_KEY = 'open-design:config';
 const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定|Account & settings/i;
@@ -22,6 +23,42 @@ async function openSettingsDialogFromEntry(page: Page) {
   return openSettingsDialog(page);
 }
 
+/**
+ * BYOK keys are saved to the daemon's credential vault, which exists only while
+ * MonoField Desktop runs. In a plain browser run that save fails, and it takes
+ * the whole settings save with it, so nothing reaches local storage. This stands
+ * in for the vault: a PUT stores the keys, a GET reports them as configured. It
+ * returns the keys it holds, by protocol.
+ */
+async function routeByokVault(page: Page): Promise<Record<string, string>> {
+  const vault: Record<string, string> = {};
+  await page.route('**/api/byok/credentials', async (route) => {
+    if (route.request().method() === 'PUT') {
+      const { credentials } = route.request().postDataJSON() as {
+        credentials: Record<string, string>;
+      };
+      for (const [protocol, value] of Object.entries(credentials)) {
+        if (value === STORED_BYOK_API_KEY) continue;
+        if (value) vault[protocol] = value;
+        else delete vault[protocol];
+      }
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        credentials: Object.fromEntries(
+          Object.entries(vault).map(([protocol, key]) => [
+            protocol,
+            { configured: true, apiKeyTail: key.slice(-4) },
+          ]),
+        ),
+      }),
+    });
+  });
+  return vault;
+}
+
 async function openExecutionSettings(
   page: Page,
   config: Record<string, unknown>,
@@ -36,9 +73,11 @@ async function openExecutionSettings(
   await page.route('**/api/health', async (route) => {
     await route.fulfill({ status: 503, body: 'offline' });
   });
+  const vault = await routeByokVault(page);
 
   await gotoEntryHome(page);
   await openSettingsDialogFromEntry(page);
+  return vault;
 }
 
 async function readSavedConfig(page: Page) {
@@ -98,9 +137,11 @@ async function openExecutionSettingsWithAgents(
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
   });
   await routeAgents(page, agents);
+  const vault = await routeByokVault(page);
 
   await gotoEntryHome(page);
   await openSettingsDialogFromEntry(page);
+  return vault;
 }
 
 test('[P1] legacy known OpenAI provider switches to the matching Anthropic preset', async ({ page }) => {
@@ -174,7 +215,7 @@ test('[P1] legacy custom provider preserves custom baseUrl and model when switch
 });
 
 test('[P0] @critical BYOK quick fill provider updates fields and saved settings persist after closing and reopening', async ({ page }) => {
-  await openExecutionSettings(page, {
+  const vault = await openExecutionSettings(page, {
     mode: 'api',
     apiKey: '',
     apiProtocol: 'openai',
@@ -209,7 +250,7 @@ test('[P0] @critical BYOK quick fill provider updates fields and saved settings 
     .toMatchObject({
       mode: 'api',
       apiProtocol: 'openai',
-      apiKey: 'sk-openai-test',
+      apiKey: STORED_BYOK_API_KEY,
       baseUrl: 'https://api.deepseek.com',
       model: 'deepseek-chat',
       apiProviderBaseUrl: 'https://api.deepseek.com',
@@ -222,11 +263,13 @@ test('[P0] @critical BYOK quick fill provider updates fields and saved settings 
   expect(savedConfig).toMatchObject({
     mode: 'api',
     apiProtocol: 'openai',
-    apiKey: 'sk-openai-test',
+    apiKey: STORED_BYOK_API_KEY,
     baseUrl: 'https://api.deepseek.com',
     model: 'deepseek-chat',
     apiProviderBaseUrl: 'https://api.deepseek.com',
   });
+  // The key itself went to the vault, not to local storage.
+  expect(vault).toEqual({ openai: 'sk-openai-test' });
 
   await openSettingsDialogFromEntry(page);
   const reopenedDialog = page.getByRole('dialog');
@@ -234,7 +277,8 @@ test('[P0] @critical BYOK quick fill provider updates fields and saved settings 
   await expect(providerPresetCombobox(reopenedDialog)).toContainText(/DeepSeek — OpenAI/i);
   await expectModelComboboxText(reopenedDialog, /deepseek-chat/i);
   await expect(reopenedDialog.getByLabel('Base URL')).toHaveValue('https://api.deepseek.com');
-  await expect(reopenedDialog.getByLabel('API key')).toHaveValue('sk-openai-test');
+  // The key is not shown again: it lives in the vault, and the field is empty.
+  await expect(reopenedDialog.getByLabel('API key')).toHaveValue('');
 });
 
 test('[P0] BYOK save stays disabled until required fields are valid', async ({ page }) => {
@@ -260,7 +304,7 @@ test('[P0] BYOK save stays disabled until required fields are valid', async ({ p
   await expect(closeButton).toBeEnabled();
 
   await dialog.getByLabel('API key').fill('sk-openai-test');
-  await expect.poll(async () => readSavedConfig(page)).toMatchObject({ apiKey: 'sk-openai-test' });
+  await expect.poll(async () => readSavedConfig(page)).toMatchObject({ apiKey: STORED_BYOK_API_KEY });
 
   const baseUrlInput = dialog.getByLabel('Base URL');
   await baseUrlInput.fill('http://10.0.0.5:11434/v1');
@@ -268,12 +312,12 @@ test('[P0] BYOK save stays disabled until required fields are valid', async ({ p
 
   await baseUrlInput.fill('http://localhost:11434/v1');
   await expect.poll(async () => readSavedConfig(page)).toMatchObject({
-    apiKey: 'sk-openai-test',
+    apiKey: STORED_BYOK_API_KEY,
     baseUrl: 'http://localhost:11434/v1',
   });
 });
 
-test('[P0] BYOK auto-loads provider models and reuses cached results for the same config', async ({ page }) => {
+test('[P0] BYOK auto-loads provider models and asks again with the stored key after reopening', async ({ page }) => {
   const providerModelRequests: Array<Record<string, unknown>> = [];
   await page.route('**/api/provider/models', async (route) => {
     const payload = route.request().postDataJSON() as Record<string, unknown>;
@@ -349,7 +393,15 @@ test('[P0] BYOK auto-loads provider models and reuses cached results for the sam
   await modelCombobox(reopenedDialog).click();
   await expect(page.locator(MODEL_POPOVER_SELECTOR).last().getByRole('option', { name: 'AA Prerelease Model (aa-prerelease-model)' })).toHaveCount(1);
   await page.keyboard.press('Escape');
-  await expect.poll(() => providerModelRequests.length).toBe(1);
+  // The model cache is keyed by the key, and a reopened dialog holds the
+  // stored-key marker instead of it, so the list is requested once more and the
+  // daemon resolves the key from the vault.
+  await expect.poll(() => providerModelRequests.length).toBe(2);
+  expect(providerModelRequests[1]).toMatchObject({
+    protocol: 'openai',
+    baseUrl: 'https://api.openai.com/v1',
+    apiKey: STORED_BYOK_API_KEY,
+  });
 });
 
 test('[P0] @critical BYOK clearing the API key restores the suggested OpenAI model list', async ({ page }) => {
@@ -406,10 +458,10 @@ test('[P0] @critical BYOK clearing the API key restores the suggested OpenAI mod
   await expect(apiKeyInput).toBeVisible();
   await apiKeyInput.fill('');
   await apiKeyInput.blur();
-  await expect.poll(async () => readSavedConfig(page)).toMatchObject({
-    apiKey: '',
-    model: 'gpt-4o',
-  });
+  await expect.poll(async () => readSavedConfig(page)).toMatchObject({ apiKey: '' });
+  // The account-only model came from the fetched list; it must not stay selected
+  // once that list is gone.
+  expect((await readSavedConfig(page)).model).not.toBe('account-only-model');
 
   await modelSelect.click();
   const popover = page.locator(MODEL_POPOVER_SELECTOR).last();
@@ -634,6 +686,7 @@ test('[P1] Settings autosave recovers after a later successful daemon sync', asy
   await page.route('**/api/health', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
   });
+  await routeByokVault(page);
   await page.route(APP_CONFIG_URL, async (route) => {
     if (route.request().method() === 'GET') {
       await route.fulfill({ json: { config } });
