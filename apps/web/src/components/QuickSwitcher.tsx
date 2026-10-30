@@ -46,7 +46,13 @@ export function QuickSwitcher({
 
   const matches = useMemo<QuickSwitcherResult[]>(() => {
     const q = query.trim().toLowerCase();
-    const searchableTabs = workspaceContexts.filter((item) => item.tabId);
+    // A file that is open in a tab is already a project file here, and choosing
+    // its file row focuses that tab, so its tab entry would only repeat it. Other
+    // tabs (browser, terminal, side chat) have no file row and stay listed.
+    const fileNames = new Set(files.map((file) => file.name));
+    const searchableTabs = workspaceContexts.filter(
+      (item) => item.tabId && !(item.kind === 'file' && item.path && fileNames.has(item.path)),
+    );
     if (q) {
       const tabResults: QuickSwitcherResult[] = searchableTabs
         .map((context) => ({ kind: 'tab' as const, context, score: scoreWorkspaceContextMatch(context, q) }))

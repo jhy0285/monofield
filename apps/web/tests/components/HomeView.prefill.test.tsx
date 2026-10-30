@@ -283,9 +283,9 @@ const LIVE_ARTIFACT_IMAGE_TEMPLATE_PLUGIN = {
 };
 
 const AUTHORING_DEFAULT_SCENARIO_INPUTS = {
-  artifactKind: 'Open Design plugin',
-  audience: 'Open Design plugin authors',
-  topic: 'packaging a reusable workflow as an Open Design plugin',
+  artifactKind: 'MonoField plugin',
+  audience: 'MonoField plugin authors',
+  topic: 'packaging a reusable workflow as a MonoField plugin',
 };
 
 const REFLY_DESIGN_SYSTEM = {
@@ -681,9 +681,9 @@ describe('HomeView prompt handoff', () => {
     ));
     expect(JSON.parse(String((applyCall?.[1] as RequestInit).body))).toMatchObject({
       inputs: {
-        artifactKind: 'Open Design plugin',
-        audience: 'Open Design plugin authors',
-        topic: 'packaging a reusable workflow as an Open Design plugin',
+        artifactKind: 'MonoField plugin',
+        audience: 'MonoField plugin authors',
+        topic: 'packaging a reusable workflow as a MonoField plugin',
       },
     });
     await waitFor(() => {
@@ -698,9 +698,9 @@ describe('HomeView prompt handoff', () => {
       pluginId: 'od-new-generation',
       appliedPluginSnapshotId: 'snap-default',
       pluginInputs: {
-        artifactKind: 'Open Design plugin',
-        audience: 'Open Design plugin authors',
-        topic: 'packaging a reusable workflow as an Open Design plugin',
+        artifactKind: 'MonoField plugin',
+        audience: 'MonoField plugin authors',
+        topic: 'packaging a reusable workflow as a MonoField plugin',
       },
       projectKind: 'other',
     }));
@@ -847,7 +847,7 @@ describe('HomeView prompt handoff', () => {
     });
     expect(
       screen.getByTestId('home-hero-design-system-trigger').textContent,
-    ).toContain('No design system');
+    ).toContain('No document style');
 
     await setPromptAndSettle('Build a pricing-page prototype.');
     fireEvent.click(screen.getByTestId('home-hero-submit'));
@@ -860,7 +860,7 @@ describe('HomeView prompt handoff', () => {
       typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')
     ));
     const protoApplyInputs = JSON.parse(String((applyCall?.[1] as RequestInit).body)).inputs;
-    expect(protoApplyInputs).toMatchObject({ designSystem: 'No design system' });
+    expect(protoApplyInputs).toMatchObject({ designSystem: 'No document style' });
     await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
       pluginId: 'example-web-prototype',
       projectKind: 'prototype',
@@ -911,15 +911,15 @@ describe('HomeView prompt handoff', () => {
     });
 
     // Open the shared design-system picker popover and pick the explicit
-    // "No design system" row.
+    // "No document style" row.
     fireEvent.click(screen.getByTestId('home-hero-design-system-trigger'));
     const popover = await screen.findByTestId('project-ds-picker-popover');
-    const noneOption = await within(popover).findByText('No design system');
+    const noneOption = await within(popover).findByText('No document style');
     fireEvent.mouseDown(noneOption);
     await waitFor(() => {
       expect(
         screen.getByTestId('home-hero-design-system-trigger').textContent,
-      ).toContain('No design system');
+      ).toContain('No document style');
     });
 
     await setPromptAndSettle('Build a pricing-page prototype.');

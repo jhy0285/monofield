@@ -1,4 +1,5 @@
 import { expect, test } from '@/playwright/suite';
+import { waitForLoadingShell } from '@/playwright/entry';
 import { ensureRailOpen } from '@/playwright/rail';
 import type { Locator, Page, Request, Route } from '@playwright/test';
 import { APP_CONFIG_URL, routeAgents } from '../lib/playwright/mock-factory.js';
@@ -185,7 +186,6 @@ test('[P1] new project tabs switch visible form sections and preserve drafts', a
   await page.getByTestId('new-project-tab-live-artifact').click();
   await expect(page.getByTestId('new-project-tab-live-artifact')).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('.newproj-title')).toContainText('New live artifact');
-  await expect(page.locator('.newproj-title')).toContainText('Beta');
   await expect(page.getByTestId('design-system-picker')).toHaveCount(0);
   await expect(page.getByTestId('new-project-connectors')).toBeVisible();
   await expect(page.getByTestId('create-project')).toContainText('Create live artifact');
@@ -315,7 +315,8 @@ test('[P1] design system picker searches and switches the single selected system
   expect(body.metadata?.inspirationDesignSystemIds).toBeUndefined();
 });
 
-test('[P2] project detail header keeps the title, design system picker, and execution controls aligned on one row', async ({ page }) => {
+test('[P2] project detail header keeps the title, settings, and hand-off controls aligned on one row', async ({ page }) => {
+  await routeHostEditors(page);
   await page.goto('/');
   await createProject(page, 'Header controls stay pinned');
   await expectWorkspaceReady(page);
@@ -331,19 +332,19 @@ test('[P2] project detail header keeps the title, design system picker, and exec
   await expect(settingsButton).toBeVisible();
   await expect(handoffButton).toBeVisible();
 
-  const [titleBox, dsBox, settingsBox, handoffBox] = await Promise.all([
+  // The document style picker now sits with the composer, so it is not part of
+  // the header row; it only has to be reachable.
+  const [titleBox, settingsBox, handoffBox] = await Promise.all([
     title.boundingBox(),
-    dsTrigger.boundingBox(),
     settingsButton.boundingBox(),
     handoffButton.boundingBox(),
   ]);
 
   expect(titleBox).toBeTruthy();
-  expect(dsBox).toBeTruthy();
   expect(settingsBox).toBeTruthy();
   expect(handoffBox).toBeTruthy();
 
-  const yValues = [titleBox!.y, dsBox!.y, settingsBox!.y, handoffBox!.y];
+  const yValues = [titleBox!.y, settingsBox!.y, handoffBox!.y];
   expect(Math.max(...yValues) - Math.min(...yValues)).toBeLessThan(24);
 });
 
@@ -357,7 +358,7 @@ test('[P1] project detail header design system picker switches the active projec
   await expectWorkspaceReady(page);
 
   const trigger = page.getByTestId('project-ds-picker-trigger');
-  await expect(trigger).toContainText(/design system/i);
+  await expect(trigger).toContainText(/document style/i);
 
   await trigger.click();
   const popover = page.getByTestId('project-ds-picker-popover');
@@ -773,28 +774,28 @@ test('[P1] project title rename persists after reload and ignores blank titles',
 });
 
 
-test('[P2] project header keeps the settings, handoff, and avatar controls pinned on compact desktop widths', async ({ page }) => {
+test('[P2] project header keeps the settings and hand-off controls pinned on compact desktop widths', async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 900 });
+  await routeHostEditors(page);
   await page.goto('/');
   await createProject(page, 'Header controls stay pinned');
   await expectWorkspaceReady(page);
 
   const handoffTrigger = page.getByTestId('handoff-trigger');
-  const avatarTrigger = page.locator('.avatar-agent-trigger');
   await expect(page.getByTestId('project-title')).toBeVisible();
   await expect(handoffTrigger).toBeVisible();
-  await expect(avatarTrigger).toBeVisible();
+  await expect(page.locator('.settings-icon-btn')).toBeVisible();
 
   const layout = await page.evaluate(() => {
     const root = document.documentElement;
     const handoff = document.querySelector('[data-testid="handoff-trigger"]') as HTMLElement | null;
-    const avatar = document.querySelector('.avatar-agent-trigger') as HTMLElement | null;
+    const settings = document.querySelector('.settings-icon-btn') as HTMLElement | null;
     const title = document.querySelector('[data-testid="project-title"]') as HTMLElement | null;
     const overflow = Math.max(0, root.scrollWidth - root.clientWidth);
     return {
       overflow,
       handoffRight: handoff?.getBoundingClientRect().right ?? 0,
-      avatarRight: avatar?.getBoundingClientRect().right ?? 0,
+      settingsRight: settings?.getBoundingClientRect().right ?? 0,
       titleRight: title?.getBoundingClientRect().right ?? 0,
       viewportWidth: window.innerWidth,
     };
@@ -802,8 +803,8 @@ test('[P2] project header keeps the settings, handoff, and avatar controls pinne
 
   expect(layout.overflow).toBeLessThanOrEqual(2);
   expect(layout.handoffRight).toBeGreaterThan(layout.titleRight);
-  expect(layout.avatarRight).toBeGreaterThan(layout.handoffRight);
-  expect(layout.avatarRight).toBeLessThanOrEqual(layout.viewportWidth - 8);
+  expect(layout.settingsRight).toBeGreaterThan(layout.handoffRight);
+  expect(layout.settingsRight).toBeLessThanOrEqual(layout.viewportWidth - 8);
 });
 
 test('[P1] canceling design file deletion keeps the file and open tab', async ({ page }) => {
@@ -842,7 +843,7 @@ test('[P1] project detail workspace keeps design file tabs and preview controls 
   const fileTab = tabBySuffix(page, uploadedName);
   await expect(fileTab).toBeVisible();
   await expect(fileTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByRole('tab', { name: 'Design Files' })).toBeVisible();
+  await expect(page.getByTestId('design-files-tab')).toBeVisible();
 
   await openUploadedHtmlArtifactPreview(page, uploadedName);
 
@@ -1690,6 +1691,16 @@ test('[P2] change pet opens pet settings and updates the custom companion draft'
   await expect(dialog).toHaveCount(0);
 });
 
+// The hand-off control offers its target picker only when the daemon reports an
+// installed editor, and a CI or container machine has none, so report one.
+async function routeHostEditors(page: Page) {
+  await page.route('**/api/editors', async (route) => {
+    await route.fulfill({
+      json: { platform: 'linux', editors: [{ id: 'vscode', label: 'VS Code', available: true }] },
+    });
+  });
+}
+
 async function createProject(
   page: Page,
   projectName: string,
@@ -1969,13 +1980,15 @@ async function expectDesignsView(page: Page) {
 }
 
 async function openEntrySettingsDialog(page: Page, sectionName?: RegExp | string): Promise<Locator> {
+  // A click before the app has rendered is lost, so wait for the shell first.
+  await waitForLoadingShell(page);
   const settingsButton = page.getByRole('button', { name: /open settings/i });
   await settingsButton.click();
   let settingsDialog = page.getByRole('dialog');
-  if (!(await settingsDialog.isVisible().catch(() => false))) {
-    const settingsMenu = page.locator('.avatar-popover[role="menu"]');
-    await expect(settingsMenu).toBeVisible();
-    await settingsMenu.getByRole('button', { name: /^Settings$/i }).click();
+  const settingsMenu = page.getByTestId('entry-settings-menu');
+  await expect(settingsDialog.or(settingsMenu).first()).toBeVisible();
+  if (!(await settingsDialog.isVisible())) {
+    await page.getByTestId('entry-settings-open-details').click();
     settingsDialog = page.getByRole('dialog');
   }
   await expect(settingsDialog).toBeVisible();

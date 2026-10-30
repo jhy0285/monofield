@@ -93,7 +93,7 @@ describe('resolveDaemonResourceRoot', () => {
     const configured = path.resolve(import.meta.dirname, '..', 'fixtures-other', 'resources');
 
     expect(() => resolveDaemonResourceRoot({ configured, safeBases: [safeBase] })).toThrow(
-      /OD_RESOURCE_ROOT must be under/,
+      /MONOFIELD_RESOURCE_ROOT must be under/,
     );
   });
 });

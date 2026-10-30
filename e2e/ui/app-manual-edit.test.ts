@@ -464,10 +464,7 @@ test('[P0] @critical edited HTML file restores selected tab, source, and preview
   await openDesignFile(page, 'secondary-preview.html');
   await expect(tabBySuffix(page, 'secondary-preview.html')).toHaveAttribute('aria-selected', 'true');
 
-  await page
-    .getByRole('tablist', { name: 'Design Files' })
-    .getByRole('tab', { name: /^Design Files$/ })
-    .click();
+  await page.getByTestId('design-files-tab').click();
   await openDesignFile(page, 'restore-edit.html');
 
   const restoreTab = tabBySuffix(page, 'restore-edit.html');

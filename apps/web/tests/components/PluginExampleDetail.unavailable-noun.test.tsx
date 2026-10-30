@@ -76,7 +76,7 @@ describe('PluginExampleDetail unavailable-state noun', () => {
     expect(copy).not.toMatch(/\bskill\b/i);
   });
 
-  it('reads as "template" when a deck-mode plugin ships no preview', async () => {
+  it('reads as "preset" when a deck-mode plugin ships no preview', async () => {
     render(
       <PluginExampleDetail
         record={make({ id: 'replit-deck', title: 'Replit Deck', mode: 'deck' })}
@@ -91,7 +91,7 @@ describe('PluginExampleDetail unavailable-state noun', () => {
     // Decks are surfaced as design templates in Home → Community, so the
     // copy should track that vocabulary instead of saying "plugin" or
     // "skill".
-    expect(copy).toMatch(/template/i);
+    expect(copy).toMatch(/preset/i);
     expect(copy).not.toMatch(/\bskill\b/i);
   });
 });

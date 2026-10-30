@@ -10,6 +10,7 @@
  *                 non-zero (tail appended to the error message).
  */
 import type { AgentEvent, ChatCommentAttachment, ChatMessage } from '../types';
+import { isPageHiding } from '../runtime/page-lifecycle';
 import type { AmrEntryAttribution } from '../analytics/amr-attribution';
 import type {
   ChatAnalyticsHints,
@@ -694,6 +695,9 @@ export async function streamViaDaemon({
     });
   } catch (err) {
     if ((err as Error).name === 'AbortError') return;
+    // A reload cuts the stream with a network error; the run carries on in the
+    // daemon and the next load reattaches to it, so it has not failed.
+    if (isPageHiding()) return;
     emitRunStatus('failed');
     handlers.onError(err instanceof Error ? err : new Error(String(err)));
   }
@@ -1313,6 +1317,8 @@ async function consumeDaemonRun({
         if (status.resumable === true) endResumable = true;
         onRunStatus?.(endStatus);
       } else {
+        // The status lookup is cut with the stream when the page reloads.
+        if (isPageHiding()) return;
         onRunStatus?.('failed');
         handlers.onError(new Error('daemon stream disconnected before run completed'));
         return;

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
 import { ensureRailOpen } from '@/playwright/rail';
 import { APP_CONFIG_URL, routeAgents } from '../lib/playwright/mock-factory.js';
@@ -140,7 +140,9 @@ test('[P1] design system dropdown is not clipped by the modal body', async ({ pa
 test('[P1] design system dropdown stays within a very short viewport (both sides tight)', async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 1280, height: 360 });
+  // 300px, not 360: the modal has grown taller since this was written, and at 360 the
+  // trigger has room for a 219px list above it, so neither side is cramped.
+  await page.setViewportSize({ width: 1280, height: 300 });
   await page.goto('/');
   await openNewProjectPanel(page);
   await page.getByTestId('new-project-tab-prototype').click();

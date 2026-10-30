@@ -207,6 +207,19 @@ async function scanDevelopmentProjects(root: string): Promise<DevelopmentWorkspa
   const projects = new Map<string, DevelopmentWorkspaceProject>();
   const deadline = Date.now() + MAX_DISCOVERY_TIME_MS;
 
+  // A folder of projects keeps each multi-module project's modules inside that
+  // project, so the workspace root's manifest never names them. A manifest at
+  // any depth declares its own members; they count as explicit modules, which
+  // also lets them through the nested-Git-root boundary below.
+  const queueDeclaredMembers = (parentRelative: string, members: Set<string>) => {
+    for (const member of members) {
+      const relative = path.posix.join(parentRelative, member);
+      if (explicit.has(relative)) continue;
+      explicit.add(relative);
+      queue.push({ directory: path.resolve(root, relative), depth: MAX_DISCOVERY_DEPTH });
+    }
+  };
+
   while (queue.length > 0 && visited.size < MAX_SCANNED_DIRECTORIES && Date.now() < deadline) {
     const batch: Array<{ absolute: string; depth: number; relative: string }> = [];
     while (queue.length > 0 && batch.length < 16 && visited.size < MAX_SCANNED_DIRECTORIES) {
@@ -242,6 +255,7 @@ async function scanDevelopmentProjects(root: string): Promise<DevelopmentWorkspa
           label: current.relative === '.' ? path.basename(root) : path.basename(current.absolute),
           markers: current.markers,
         });
+        if (current.relative !== '.') queueDeclaredMembers(current.relative, await explicitWorkspacePaths(current.absolute));
       }
       // A nested Git root is an IntelliJ-style module boundary. Its internal
       // package folders belong to that module unless a workspace manifest

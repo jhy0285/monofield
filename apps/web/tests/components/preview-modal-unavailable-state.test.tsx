@@ -126,7 +126,7 @@ describe('PreviewModal unavailable state', () => {
     expect(screen.getByRole('menuitem', { name: /LinkedIn/i })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /Instagram/i })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /小红书/i })).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: /Copy template link/i })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Copy preset link/i })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /Export as PDF/i })).toBeTruthy();
     expect(xShare.getAttribute('href')).toContain(
       'https://twitter.com/intent/tweet?',
@@ -248,7 +248,7 @@ describe('PreviewModal unavailable state', () => {
       );
 
       fireEvent.click(screen.getByRole('button', { name: /share/i }));
-      fireEvent.click(screen.getByRole('menuitem', { name: /Copy template link/i }));
+      fireEvent.click(screen.getByRole('menuitem', { name: /Copy preset link/i }));
 
       await waitFor(() => {
         expect(screen.getByRole('menuitem', { name: /Copied/i })).toBeTruthy();
@@ -314,7 +314,7 @@ describe('PreviewModal unavailable state', () => {
         ]}
         shareTarget={{
           title: 'Media Template',
-          url: 'https://open-design.ai/plugins/media-template',
+          url: 'https://monofield.vercel.app/plugins/media-template',
         }}
         onView={() => {}}
         onClose={() => {}}
@@ -326,7 +326,7 @@ describe('PreviewModal unavailable state', () => {
     fireEvent.click(share);
 
     expect(screen.getByRole('menuitem', { name: /X \/ Twitter/i })).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: /Copy template link/i })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Copy preset link/i })).toBeTruthy();
     expect(screen.queryByRole('menuitem', { name: /Export as PDF/i })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: /Download as \.zip/i })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: /Export as standalone HTML/i })).toBeNull();
@@ -355,7 +355,7 @@ describe('PreviewModal unavailable state', () => {
     fireEvent.click(screen.getByRole('button', { name: /share/i }));
 
     expect(screen.queryByRole('menuitem', { name: /X \/ Twitter/i })).toBeNull();
-    expect(screen.queryByRole('menuitem', { name: /Copy template link/i })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Copy preset link/i })).toBeNull();
     expect(screen.getByRole('menuitem', { name: /Export as PDF/i })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /Download as \.zip/i })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /Export as standalone HTML/i })).toBeTruthy();
@@ -380,7 +380,7 @@ describe('PreviewModal unavailable state', () => {
     fireEvent.click(screen.getByRole('button', { name: /share/i }));
 
     expect(screen.queryByRole('menuitem', { name: /X \/ Twitter/i })).toBeNull();
-    expect(screen.queryByRole('menuitem', { name: /Copy template link/i })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Copy preset link/i })).toBeNull();
     expect(screen.getByRole('menuitem', { name: /Export as PDF/i })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /Download as \.zip/i })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /Export as standalone HTML/i })).toBeTruthy();

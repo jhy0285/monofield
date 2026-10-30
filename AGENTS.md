@@ -9,6 +9,7 @@ This file is the single source of truth for agents entering this repository. Rea
 - Architecture and protocols: `docs/spec.md`, `docs/architecture.md`, `docs/skills-protocol.md`, `docs/agent-adapters.md`, `docs/modes.md`.
 - Roadmap and references: `docs/roadmap.md`, `docs/references.md`, `docs/code-review-guidelines.md`, `specs/current/maintainability-roadmap.md`.
 - Directory-level agent guidance: `.github/AGENTS.md`, `apps/AGENTS.md`, `packages/AGENTS.md`, `tools/AGENTS.md`, `e2e/AGENTS.md`.
+- Agent handoff history: `docs/agent-history.md`. Read it right after this file, and update it before finishing any task (see **Agent history handoff**).
 - Packaged auto-update architecture and high-confidence local harness: read `tools/pack/AGENTS.md` section "Packaged auto-update architecture and harness" before touching packaged updater code, release-channel identity, installer behavior, or updater UI.
 
 ## Workspace directories
@@ -32,6 +33,15 @@ This file is the single source of truth for agents entering this repository. Rea
 - Local runtime data, `.tmp/`, Playwright reports, and agent scratch directories must stay out of git. For daemon-managed data paths, read and follow **Daemon data directory contract** below; do not restate or improvise path conventions elsewhere.
 
 # Development workflow
+
+## Agent history handoff
+
+`docs/agent-history.md` is the repository's handoff record, so any AI agent (Claude Code, Codex, or another) can continue where the previous one stopped. It holds the current state, the open items, and a newest-first log of finished work.
+
+- Read it after this file and before starting work. Do not redo work an entry records as done.
+- Before finishing any task that changes the repository, or an investigation whose findings the next agent would otherwise have to rediscover, update it in the same commit as the work: add a Log entry at the top, refresh **Current state**, and update **Open items**. A task without that update is not finished.
+- Record only what you verified: the exact commands you ran and their results, and a baseline comparison before calling a failure pre-existing. Mark what you did not run as not run.
+- Follow the file's own **Update protocol** for the entry template and content rules (repository-relative paths, no secrets, no daemon data directory examples). Keep module details in the layer's `AGENTS.md`, not in the history.
 
 ## Environment baseline
 
@@ -245,7 +255,7 @@ root `pnpm tools-pr` script without a new explicit maintainer decision.
 
 ## Web component reuse
 
-- New `apps/web` UI should reuse shared primitives from `@open-design/components` when one exists instead of styling plain HTML elements directly. For example, use `Button` for app buttons and `VisuallyHidden` for screen-reader-only text/status content.
+- New `apps/web` UI should reuse shared primitives from `@open-design/components` when one exists instead of styling plain HTML elements directly. For example, use `Button` for app buttons and `VisuallyHidden` for screen-reader-only text/status content. Use `Splitter` for a draggable divider between resizable panes, with `usePersistentSize` (`apps/web/src/hooks/`) to remember a size a person chose.
 - Do not add new raw primitive classes such as `primary`, `primary-ghost`, `ghost`, `subtle`, `icon-btn`, or `sr-only` for new UI. Those classes are legacy compatibility surface for existing markup until it is migrated.
 - If a needed primitive is missing, prefer adding a small focused primitive to `packages/components` with colocated CSS Modules, then consume it from the app. Keep product-specific layout and workflow styling in the app, not in `packages/components`.
 - Keep semantic plain HTML when it is content markup or a specialized control that the shared package does not model yet; do not force a migration that would hide native behavior or make a custom widget harder to reason about.
@@ -253,7 +263,7 @@ root `pnpm tools-pr` script without a new explicit maintainer decision.
 
 ## i18n keys
 
-- `apps/web/src/i18n/types.ts` is the typed `Dict`; every key must be defined in all 18 locale files under `apps/web/src/i18n/locales/*.ts` (`ar`, `de`, `en`, `es-ES`, `fa`, `fr`, `hu`, `id`, `ja`, `ko`, `pl`, `pt-BR`, `ru`, `th`, `tr`, `uk`, `zh-CN`, `zh-TW`). Add the key to `types.ts` first; missing translations produce a typecheck error.
+- `apps/web/src/i18n/types.ts` is the typed `Dict`; every key must be defined in all 19 locale files under `apps/web/src/i18n/locales/*.ts` (`ar`, `de`, `en`, `es-ES`, `fa`, `fr`, `hu`, `id`, `it`, `ja`, `ko`, `pl`, `pt-BR`, `ru`, `th`, `tr`, `uk`, `zh-CN`, `zh-TW`). Add the key to `types.ts` first; missing translations produce a typecheck error.
 
 ## UI animation philosophy
 

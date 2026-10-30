@@ -41,6 +41,9 @@ import type { Page, Route } from '@playwright/test';
 import { routeAgents } from '@/playwright/mock-factory';
 
 const STORAGE_KEY = 'open-design:config';
+// The stage's accessible name is `critiqueTheater.userFacingName`, which MonoField
+// renamed from "Design Jury" in English.
+const STAGE_NAME = 'HTML Design Review (Experimental)';
 
 interface CritiqueFrame {
   event: string;
@@ -208,7 +211,7 @@ test.describe('Critique Theater e2e (Phase 11)', () => {
     await stubProjectEvents(page, LIVE_PREFIX);
     const projectId = await seedProject(page, 'live-stage');
     await page.goto(`/projects/${projectId}`);
-    await expect(page.getByRole('region', { name: 'Design Jury' })).toBeVisible({
+    await expect(page.getByRole('region', { name: STAGE_NAME })).toBeVisible({
       timeout: 5_000,
     });
     for (const role of ['Designer', 'Critic', 'Brand', 'Accessibility', 'Copy']) {
@@ -234,9 +237,9 @@ test.describe('Critique Theater e2e (Phase 11)', () => {
     await stubProjectEvents(page, LIVE_PREFIX);
     const projectId = await seedProject(page, 'interrupt');
     await page.goto(`/projects/${projectId}`);
-    await expect(page.getByRole('region', { name: 'Design Jury' })).toBeVisible();
+    await expect(page.getByRole('region', { name: STAGE_NAME })).toBeVisible();
     const interruptBtn = page
-      .getByRole('region', { name: 'Design Jury' })
+      .getByRole('region', { name: STAGE_NAME })
       .getByRole('button', { name: 'Interrupt', exact: true });
     await expect(interruptBtn).toBeVisible();
     await interruptBtn.focus();
@@ -249,7 +252,7 @@ test.describe('Critique Theater e2e (Phase 11)', () => {
     await stubProjectEvents(page, LIVE_PREFIX);
     const projectId = await seedProject(page, 'a11y');
     await page.goto(`/projects/${projectId}`);
-    const stage = page.getByRole('region', { name: 'Design Jury' });
+    const stage = page.getByRole('region', { name: STAGE_NAME });
     await expect(stage).toBeVisible();
     for (const role of ['Designer', 'Critic', 'Brand', 'Accessibility', 'Copy']) {
       await expect(stage.getByRole('group', { name: role })).toBeVisible();

@@ -160,7 +160,9 @@ describe('readTokensFile', () => {
     }
   });
 
-  it.skipIf(!isPosix)('rethrows non-ENOENT read errors', async () => {
+  // root can read a mode-000 file, so EACCES cannot be provoked there.
+  const isRoot = typeof process.getuid === 'function' && process.getuid() === 0;
+  it.skipIf(!isPosix || isRoot)('rethrows non-ENOENT read errors', async () => {
     const dir = await mkdtemp(path.join(tmpdir(), 'od-xai-perm-'));
     const file = path.join(dir, 'xai-tokens.json');
     try {

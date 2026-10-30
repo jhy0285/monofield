@@ -1367,9 +1367,10 @@
   }
   .example-card { grid-template-columns: 1fr; }
   .example-preview { height: 240px; }
-  /* Note: home-redesign breakpoints (entry-nav-rail, entry-main__inner,
-     home-hero__title) live in the per-component files under
-     `src/styles/home/` to keep upstream `index.css` rebases narrow. */
+  /* Note: home-redesign breakpoints (entry-nav-rail, entry-main__inner) live
+     in the per-component files under `src/styles/home/`, and the hero
+     headline's in `components/home-hero/HeroBrand.module.css`, to keep
+     upstream `index.css` rebases narrow. */
 }
 
 /* ============================================================

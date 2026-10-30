@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Splitter } from '@open-design/components';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useAnalytics } from '../analytics/provider';
 import { trackFileManagerClick } from '../analytics/events';
+import { usePersistentSize } from '../hooks/usePersistentSize';
 import { useT } from '../i18n';
 import { LIBRARY_UI_VISIBLE } from '../features/libraryUi';
 import type { Dict } from '../i18n/types';
@@ -14,6 +16,11 @@ import {
 } from '../utils/fileSystemErrors';
 import { isVisualStabilityMode } from '../utils/visualStability';
 import { selectInitialDesignPreviewFile } from './design-files/designArtifacts';
+import {
+  DF_PREVIEW_WIDTH_STORAGE_KEY,
+  designFilesPreviewBounds,
+  resolvePreviewWidth,
+} from './design-files/previewSize';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { getPluginFolderCandidates } from './design-files/pluginFolders';
 import { Icon } from './Icon';
@@ -70,6 +77,8 @@ interface Props {
   onClearUploadError?: () => void;
   preferredPreviewFile?: string | null;
   autoPreviewDesignArtifacts?: boolean;
+  /** Folder of the module a development workspace is acting on, relative to the project root. */
+  activeModulePath?: string | null;
   onPluginFolderAgentAction?: (
     relativePath: string,
     action: PluginFolderAgentAction,
@@ -293,6 +302,7 @@ export function DesignFilesPanel({
   onClearUploadError,
   preferredPreviewFile = null,
   autoPreviewDesignArtifacts = false,
+  activeModulePath = null,
   onCurrentDirChange,
   onPluginFolderAgentAction,
   activePluginActionPaths = new Set(),
@@ -309,6 +319,21 @@ export function DesignFilesPanel({
   const MENU_ESTIMATED_HEIGHT = 145;
   const MENU_SAFE_PADDING = 8;
   const [preview, setPreview] = useState<string | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const [panelWidth, setPanelWidth] = useState(0);
+  const previewSize = usePersistentSize(DF_PREVIEW_WIDTH_STORAGE_KEY);
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return undefined;
+    setPanelWidth(panel.getBoundingClientRect().width);
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width;
+      if (typeof width === 'number') setPanelWidth(width);
+    });
+    observer.observe(panel);
+    return () => observer.disconnect();
+  }, []);
   const autoPreviewAppliedRef = useRef(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const lastKeyPress = useRef<Map<string, number>>(new Map());
@@ -758,8 +783,15 @@ export function DesignFilesPanel({
   function renderDirRow(dirName: string) {
     const fullPath = currentDir === '' ? dirName : `${currentDir}/${dirName}`;
     const count = descendantCountByDir.get(dirName) ?? 0;
+    const isActiveModule = activeModulePath != null && activeModulePath !== '.' && fullPath === activeModulePath;
     return (
-      <div key={`dir:${fullPath}`} className="df-row df-dir-row" onClick={() => navigateToDirectory(fullPath)}>
+      <div
+        key={`dir:${fullPath}`}
+        className="df-row df-dir-row"
+        data-active-module={isActiveModule ? 'true' : undefined}
+        aria-current={isActiveModule ? 'true' : undefined}
+        onClick={() => navigateToDirectory(fullPath)}
+      >
         <span className="df-row-check" aria-hidden />
         <span className="df-row-icon" data-kind="folder" aria-hidden>
           <Icon name="folder" size={14} />
@@ -936,9 +968,15 @@ export function DesignFilesPanel({
 
   const visibleUploadError = uploadError ?? dropReadError;
   const hasSelection = selected.size > 0;
+  const previewBounds = designFilesPreviewBounds(panelWidth);
+  const previewWidth = resolvePreviewWidth(previewBounds, previewSize.stored);
 
   return (
-    <div className={`df-panel ${previewFile ? '' : 'no-preview'} ${hasSelection ? 'has-selection' : ''}`}>
+    <div
+      ref={panelRef}
+      className={`df-panel ${previewFile ? '' : 'no-preview'} ${hasSelection ? 'has-selection' : ''}`}
+      style={previewFile ? ({ '--df-preview-width': `${previewWidth}px` } as CSSProperties) : undefined}
+    >
       {reloading ? (
         <div className="df-reloading-overlay" data-testid="design-files-reloading">
           <span className="loading-spinner">
@@ -1281,6 +1319,24 @@ export function DesignFilesPanel({
           onClose={() => setPreview(null)}
         />
       ) : null}
+      {preview && previewFile ? (
+        <Splitter
+          className="df-preview-splitter"
+          orientation="vertical"
+          resizes="after"
+          label={t('designFiles.resizePreview')}
+          value={previewWidth}
+          min={previewBounds.min}
+          max={previewBounds.max}
+          defaultValue={previewBounds.defaultWidth}
+          data-testid="design-files-preview-resizer"
+          onChange={previewSize.preview}
+          onCommit={(next) => {
+            if (next === previewBounds.defaultWidth) previewSize.reset();
+            else previewSize.commit(next);
+          }}
+        />
+      ) : null}
       {menuPos ? (
         <div
           data-testid="design-file-menu-popover"
@@ -1371,65 +1427,67 @@ function DfPreview({
       >
         <Icon name="close" size={13} />
       </button>
-      <div className={`df-preview-thumb${thumbCanOpen ? ' is-openable' : ''}`}>
-        {rendersSketchJson ? (
-          <SketchPreview projectId={projectId} file={file} />
-        ) : file.kind === 'image' || file.kind === 'sketch' ? (
-          <img src={`${url}?v=${Math.round(file.mtime)}`} alt={file.name} />
-        ) : file.kind === 'html' ? (
-          <HtmlPreviewThumbnail projectId={projectId} file={file} />
-        ) : file.kind === 'video' ? (
-          <video
-            src={`${url}?v=${Math.round(file.mtime)}`}
-            controls
-            playsInline
-            preload="metadata"
-          />
-        ) : file.kind === 'audio' ? (
-          <audio src={`${url}?v=${Math.round(file.mtime)}`} controls preload="metadata" />
-        ) : (
-          <div
-            style={{
-              width: '100%',
-              height: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--text-faint)',
-              fontSize: 38,
-            }}
-          >
-            {categoryGlyph(fileCategory(file))}
-          </div>
-        )}
-        {thumbCanOpen ? (
-          <button
-            type="button"
-            className="df-preview-thumb-open"
-            onClick={onOpen}
-            title={openPreviewLabel}
-            aria-label={openPreviewLabel}
-          />
-        ) : null}
-      </div>
-      <div className="df-preview-meta" data-testid="design-file-preview">
-        <button type="button" className="df-preview-open-cta" onClick={onOpen}>
-          <Icon name="eye" size={14} />
-          <span>{t('designFiles.previewOpen')}</span>
-        </button>
-        <div className="df-preview-name">{file.name}</div>
-        <div className="df-preview-kind">{categoryLabel(fileCategory(file), t)}</div>
-        <div className="df-preview-stats">
-          {t('designFiles.modifiedExt', {
-            time: relativeTime(file.mtime, t),
-            size: humanBytes(file.size),
-            ext: fileExtensionLabel(file.name),
-          })}
+      <div className="df-preview-scroll">
+        <div className={`df-preview-thumb${thumbCanOpen ? ' is-openable' : ''}`}>
+          {rendersSketchJson ? (
+            <SketchPreview projectId={projectId} file={file} />
+          ) : file.kind === 'image' || file.kind === 'sketch' ? (
+            <img src={`${url}?v=${Math.round(file.mtime)}`} alt={file.name} />
+          ) : file.kind === 'html' ? (
+            <HtmlPreviewThumbnail projectId={projectId} file={file} />
+          ) : file.kind === 'video' ? (
+            <video
+              src={`${url}?v=${Math.round(file.mtime)}`}
+              controls
+              playsInline
+              preload="metadata"
+            />
+          ) : file.kind === 'audio' ? (
+            <audio src={`${url}?v=${Math.round(file.mtime)}`} controls preload="metadata" />
+          ) : (
+            <div
+              style={{
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--text-faint)',
+                fontSize: 38,
+              }}
+            >
+              {categoryGlyph(fileCategory(file))}
+            </div>
+          )}
+          {thumbCanOpen ? (
+            <button
+              type="button"
+              className="df-preview-thumb-open"
+              onClick={onOpen}
+              title={openPreviewLabel}
+              aria-label={openPreviewLabel}
+            />
+          ) : null}
         </div>
-        <a className="df-preview-download" href={url} download={file.name}>
-          <Icon name="download" size={13} />
-          <span>{t('designFiles.download')}</span>
-        </a>
+        <div className="df-preview-meta" data-testid="design-file-preview">
+          <button type="button" className="df-preview-open-cta" onClick={onOpen}>
+            <Icon name="eye" size={14} />
+            <span>{t('designFiles.previewOpen')}</span>
+          </button>
+          <div className="df-preview-name">{file.name}</div>
+          <div className="df-preview-kind">{categoryLabel(fileCategory(file), t)}</div>
+          <div className="df-preview-stats">
+            {t('designFiles.modifiedExt', {
+              time: relativeTime(file.mtime, t),
+              size: humanBytes(file.size),
+              ext: fileExtensionLabel(file.name),
+            })}
+          </div>
+          <a className="df-preview-download" href={url} download={file.name}>
+            <Icon name="download" size={13} />
+            <span>{t('designFiles.download')}</span>
+          </a>
+        </div>
       </div>
     </aside>
   );

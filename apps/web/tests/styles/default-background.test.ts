@@ -11,18 +11,20 @@ function cssBlock(selector: string): string {
 }
 
 describe('default app background colors', () => {
-  it('uses the release light background color by default', () => {
+  it('uses the MonoField light background color by default', () => {
     const root = cssBlock(':root');
 
-    expect(root).toContain('--bg: #faf9f7;');
-    expect(root).toContain('--bg-app: #faf9f7;');
+    expect(root).toContain('--bg: #f7f7f5;');
+    expect(root).toContain('--bg-app: #f7f7f5;');
   });
 
-  it('keeps the dark theme background unchanged', () => {
-    const dark = cssBlock('[data-theme="dark"]');
+  it('uses the MonoField dark background color', () => {
+    // The dark palette is shared with the cyberpunk theme: one rule block whose
+    // selector list ends in the cyberpunk attribute.
+    const dark = cssBlock('[data-theme="dark"],\n[data-theme="cyberpunk"]');
 
-    expect(dark).toContain('--bg: #1a1917;');
-    expect(dark).toContain('--bg-app: #1a1917;');
+    expect(dark).toContain('--bg: #0b0b0c;');
+    expect(dark).toContain('--bg-app: #0b0b0c;');
   });
 
   it('prefers platform UI fonts over optional local app fonts', () => {

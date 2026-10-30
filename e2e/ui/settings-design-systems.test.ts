@@ -29,6 +29,7 @@ function baseConfig(): Record<string, unknown> {
     skillId: null,
     designSystemId: null,
     onboardingCompleted: true,
+    privacyDecisionAt: 1,
     mediaProviders: {},
     agentModels: {},
     agentCliEnv: {},
@@ -171,8 +172,8 @@ async function routeBootstrapApis(
 async function openDesignSystemsSettings(page: Page) {
   await gotoEntryHome(page);
   const dialog = await openSettingsDialog(page);
-  await dialog.getByRole('button', { name: /Design systems|设计系统|設計系統/i }).click();
-  await expect(dialog.getByRole('heading', { name: /Design systems|设计系统|設計系統/i })).toBeVisible();
+  await dialog.getByRole('button', { name: /Document styles|Design systems|设计系统|設計系統/i }).click();
+  await expect(dialog.getByRole('heading', { name: /Document styles|Design systems|设计系统|設計系統/i })).toBeVisible();
   return dialog;
 }
 
@@ -203,12 +204,12 @@ test.describe('Settings design systems flows', () => {
     });
 
     const dialog = await openDesignSystemsSettings(page);
-    await dialog.getByRole('button', { name: /Add design system|添加设计系统|新增設計系統/i }).click();
+    await dialog.getByRole('button', { name: /Add document style|Add design system|添加设计系统|新增設計系統/i }).click();
     await dialog.getByPlaceholder('/path/to/project').fill('/tmp/acme-design-system');
     await dialog.getByRole('button', { name: /Import from project|从项目导入|從專案匯入/i }).click();
 
     await expect(dialog.getByText('Imported Acme Core')).toBeVisible();
-    await dialog.getByRole('button', { name: /View imported design system|查看导入的设计系统|查看匯入的設計系統/i }).click();
+    await dialog.getByRole('button', { name: /View imported document style|View imported design system|查看导入的设计系统|查看匯入的設計系統/i }).click();
     await expect(dialog.locator('.library-ds-title-text', { hasText: 'Acme Core' })).toBeVisible();
     await expect(dialog.getByText('Imported Acme product design system.')).toBeVisible();
   });
@@ -276,7 +277,7 @@ test.describe('Settings design systems flows', () => {
     });
 
     const dialog = await openDesignSystemsSettings(page);
-    await dialog.getByRole('button', { name: /Add design system|添加设计系统|新增設計系統/i }).click();
+    await dialog.getByRole('button', { name: /Add document style|Add design system|添加设计系统|新增設計系統/i }).click();
     await dialog.getByPlaceholder('/path/to/project').fill('/tmp/broken-design-system.zip');
     await dialog.getByRole('button', { name: /Import from project|从项目导入|從專案匯入/i }).click();
 

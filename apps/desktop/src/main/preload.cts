@@ -385,6 +385,15 @@ const hostBridge = {
     setVisible: (visible: boolean): void =>
       ipcRenderer.send('desktop-pet:set-visible', Boolean(visible)),
   },
+  elevation: {
+    relaunchAsAdministrator: async (): Promise<OpenDesignHostActionResult> => {
+      try {
+        return await ipcRenderer.invoke('od:elevation:relaunch');
+      } catch (error) {
+        return actionFailure(reasonFromError(error));
+      }
+    },
+  },
   updater,
 } satisfies OpenDesignHostBridge;
 

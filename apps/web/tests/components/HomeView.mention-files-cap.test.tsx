@@ -89,7 +89,7 @@ describe('HomeView design-files mention picker', () => {
 
     // The "Design files" tab badge must report the true number staged (7),
     // not the truncated preview (6).
-    const filesTab = await screen.findByRole('tab', { name: /design files/i });
+    const filesTab = await screen.findByRole('tab', { name: /docs files/i });
     expect(filesTab.textContent).toContain('7');
 
     // Switching to the dedicated Design files tab must surface every match,

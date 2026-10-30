@@ -115,6 +115,7 @@ import type { TodoItem } from '../runtime/todos';
 import { appendErrorStatusEvent } from '../runtime/chat-events';
 import { getActiveBrowserVerification } from '../runtime/browser-verification';
 import { RESUME_CONTINUE_PROMPT } from '../runtime/resume';
+import { isPageHiding } from '../runtime/page-lifecycle';
 import { cancelBrandExtraction, extractBrandFromHtml, finalizeBrandProject } from '../runtime/brands';
 import { getBrandBrowser, BRAND_BROWSER_TAB_ID } from '../runtime/brand-browser-bridge';
 import {
@@ -212,6 +213,7 @@ import {
 import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
 import { isDesignSystemProject, resolveProjectDesignSystemId } from './design-system-project';
 import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
+import { shouldAutoPreviewDesignArtifacts } from './design-files/designArtifacts';
 import { DESIGN_SYSTEM_TAB, FileWorkspace } from './FileWorkspace';
 import {
   type PluginFolderAgentAction,
@@ -425,6 +427,44 @@ export function readArtifactDeliveryCapability(runId: string): string | null {
     return window.sessionStorage.getItem(`${ARTIFACT_DELIVERY_CAPABILITY_PREFIX}${runId}`);
   } catch {
     return null;
+  }
+}
+
+const ARTIFACT_DELIVERY_PENDING_CAPABILITY_PREFIX = 'od:artifact-delivery-capability:v1:pending:';
+
+/**
+ * Held from the moment a turn is sent until the daemon's reply names its run, keyed
+ * by the assistant message. A reload in that window loses the reply, and with it the
+ * run id the capability is otherwise filed under, so the reloaded page claims it
+ * again from the message the daemon mapped the run to.
+ */
+export function rememberPendingArtifactDeliveryCapability(
+  messageId: string,
+  clientRequestId: string,
+): void {
+  if (typeof window === 'undefined' || !messageId || !clientRequestId) return;
+  try {
+    window.sessionStorage.setItem(
+      `${ARTIFACT_DELIVERY_PENDING_CAPABILITY_PREFIX}${messageId}`,
+      clientRequestId,
+    );
+  } catch {
+    // Without it a reload before the reply only loses the recovery; delivery
+    // stays fail-closed.
+  }
+}
+
+/** File the pending capability of a message under its run, then drop the pending copy. */
+export function claimPendingArtifactDeliveryCapability(messageId: string, runId: string): void {
+  if (typeof window === 'undefined' || !messageId || !runId) return;
+  try {
+    const key = `${ARTIFACT_DELIVERY_PENDING_CAPABILITY_PREFIX}${messageId}`;
+    const pending = window.sessionStorage.getItem(key);
+    if (!pending) return;
+    if (!readArtifactDeliveryCapability(runId)) rememberArtifactDeliveryCapability(runId, pending);
+    window.sessionStorage.removeItem(key);
+  } catch {
+    // Best-effort, as for the run-keyed capability.
   }
 }
 
@@ -3376,12 +3416,31 @@ export function ProjectView({
           .map((run) => [run.assistantMessageId!, run]),
       );
 
+      const lastAssistantId = [...messages].reverse().find((m) => m.role === 'assistant')?.id;
       for (const message of messages) {
         if (cancelled) return;
         if (message.role !== 'assistant') continue;
 
-        const needsFullReplay =
+        let needsFullReplay =
           isActiveRunStatus(message.runStatus) || shouldReplayTerminalRunMessage(message);
+        // With no page attached the daemon can finish a row itself: the text is
+        // saved and the status says succeeded, yet the artifact was never written,
+        // because the browser owns that delivery. The row cannot tell, so ask the
+        // run, for the latest message only.
+        let ownedDeliveryStatus: ChatRunStatusResponse | null = null;
+        if (
+          !needsFullReplay
+          && message.id === lastAssistantId
+          && message.runId
+          && message.runStatus === 'succeeded'
+          && !message.producedFiles?.length
+        ) {
+          ownedDeliveryStatus = await fetchChatRunStatus(message.runId);
+          if (cancelled) return;
+          needsFullReplay = ownedDeliveryStatus?.status === 'succeeded'
+            && ownedDeliveryStatus.artifactDeliveryRequired === true
+            && !ownedDeliveryStatus.artifactDelivery;
+        }
         if (!needsFullReplay) continue;
         const fallbackRun = !message.runId
           ? activeByMessage.get(message.id) ?? historicalByMessage.get(message.id) ?? null
@@ -3411,6 +3470,7 @@ export function ProjectView({
         }
         if (reattachControllersRef.current.has(runId)) continue;
         if (completedReattachRunsRef.current.has(runId)) continue;
+        claimPendingArtifactDeliveryCapability(message.id, runId);
 
         if (fallbackRun && !message.runId) {
           updateMessageById(
@@ -3420,7 +3480,7 @@ export function ProjectView({
           );
         }
 
-        const status = fallbackRun ?? await fetchChatRunStatus(runId);
+        const status = fallbackRun ?? ownedDeliveryStatus ?? await fetchChatRunStatus(runId);
         if (cancelled) return;
         if (!status) {
           updateMessageById(
@@ -3432,10 +3492,16 @@ export function ProjectView({
           completedReattachRunsRef.current.add(runId);
           continue;
         }
+        // Delivery is acknowledged by the browser, so a reload leaves it owed in
+        // two cases: the run finished while no page was attached, and the run is
+        // still going and will finish under this reattached page, which then owns
+        // the delivery. The stream reconciles the final status before this page's
+        // onDone runs, so without the second case it would always find delivery
+        // unacknowledged and fail the run.
         const interruptedArtifactDeliveryRecovery =
-          status.status === 'succeeded'
-          && status.artifactDeliveryRequired === true
-          && status.artifactDelivery?.status !== 'succeeded';
+          status.artifactDeliveryRequired === true
+          && status.artifactDelivery?.status !== 'succeeded'
+          && (status.status === 'succeeded' || isActiveRunStatus(status.status));
         updateMessageById(
           message.id,
           (prev) => ({
@@ -3992,6 +4058,8 @@ export function ProjectView({
               textBuffer.flush();
               textBuffer.cancel();
               unregisterTextBuffer();
+              // Same as the send path: a stream cut by a reload is not a failed run.
+              if (isPageHiding()) return;
               if (runMayFinalize) {
                 setError(err.message);
                 appendAssistantErrorEvent(message.id, err.message, errorCode);
@@ -4140,7 +4208,7 @@ export function ProjectView({
             // surface a global failure over the replacement.
             const runMayFinalize =
               !supersededRunsRef.current.has(controller);
-            if ((err as Error).name !== 'AbortError' && runMayFinalize) {
+            if ((err as Error).name !== 'AbortError' && runMayFinalize && !isPageHiding()) {
               const msg = err instanceof Error ? err.message : String(err);
               setError(msg);
               appendAssistantErrorEvent(message.id, msg);
@@ -5442,6 +5510,10 @@ export function ProjectView({
           cancelSendTextBuffer();
           deliveryController.abort();
           releaseDeliveryController();
+          // A reload or navigation cuts the event stream with a network error while the
+          // run carries on in the daemon. Leave the message as it was, so the next
+          // load reattaches to the run instead of finding it already marked failed.
+          if (isPageHiding()) return;
           if (runMayFinalize) {
             setError(err.message);
             appendAssistantErrorEvent(assistantId, err.message, errorCode);
@@ -5539,6 +5611,9 @@ export function ProjectView({
           project.metadata.development?.autoVerify !== false
             ? getActiveBrowserVerification(project.id)
             : undefined;
+        if (artifactDeliveryExpected) {
+          rememberPendingArtifactDeliveryCapability(assistantId, daemonClientRequestId!);
+        }
         void streamViaDaemon({
           agentId: config.agentId,
           history: nextHistory,
@@ -5571,6 +5646,7 @@ export function ProjectView({
             daemonRunId = runId;
             if (artifactDeliveryExpected) {
               rememberArtifactDeliveryCapability(runId, daemonClientRequestId!);
+              claimPendingArtifactDeliveryCapability(assistantId, runId);
             }
             const pinnedAssistant = {
               ...latestAssistantMsg,
@@ -7964,7 +8040,7 @@ export function ProjectView({
           onPluginFolderAgentAction={handlePluginFolderAgentAction}
           activePluginActionPaths={activePluginActionPaths}
           preferredPreviewFile={currentProject.metadata?.entryFile ?? null}
-          autoPreviewDesignArtifacts={currentProject.metadata?.importedFrom === 'folder'}
+          autoPreviewDesignArtifacts={shouldAutoPreviewDesignArtifacts(currentProject.metadata)}
           focusMode={workspaceFocused}
           onFocusModeChange={setWorkspaceFocused}
           designSystemProject={designSystemProject}
@@ -8230,16 +8306,28 @@ function normalizeDeliveryFileName(name: string): string {
   return name.replace(/\\/g, '/').replace(/^\.\//, '').toLowerCase();
 }
 
+/**
+ * A request can name a file relative to a folder it also asks for ("produce a
+ * folder named generated-plugin with SKILL.md"), so a delivered path counts when
+ * it is the requested name or ends with it at a path-segment boundary.
+ */
+function deliveryFileMatchesDeclared(deliveredKey: string, declaredKey: string): boolean {
+  return deliveredKey === declaredKey || deliveredKey.endsWith(`/${declaredKey}`);
+}
+
 export function missingDeclaredDeliveryFiles(
   declaredNames: readonly string[],
   receiptFiles: readonly Pick<ProjectFile, 'name' | 'path'>[],
 ): string[] {
-  const receipts = new Set<string>();
+  const receipts: string[] = [];
   for (const file of receiptFiles) {
-    receipts.add(normalizeDeliveryFileName(file.name));
-    if (file.path) receipts.add(normalizeDeliveryFileName(file.path));
+    receipts.push(normalizeDeliveryFileName(file.name));
+    if (file.path) receipts.push(normalizeDeliveryFileName(file.path));
   }
-  return declaredNames.filter((name) => !receipts.has(normalizeDeliveryFileName(name)));
+  return declaredNames.filter((name) => {
+    const declaredKey = normalizeDeliveryFileName(name);
+    return !receipts.some((receipt) => deliveryFileMatchesDeclared(receipt, declaredKey));
+  });
 }
 
 function uniqueProjectFiles(files: readonly ProjectFile[]): ProjectFile[] {
@@ -8287,8 +8375,8 @@ export function selectArtifactDeliveryReceiptFiles({
   const artifactReceiptKeys = new Set(
     artifactReceiptFiles.map((file) => normalizeDeliveryFileName(file.path || file.name)),
   );
-  const declaredKeys = new Set(declaredFileNames.map(normalizeDeliveryFileName));
-  const allowUnnamedPrimary = declaredKeys.size === 0;
+  const declaredKeys = declaredFileNames.map(normalizeDeliveryFileName);
+  const allowUnnamedPrimary = declaredKeys.length === 0;
   return uniqueProjectFiles([
     ...artifactReceiptFiles,
     ...changedFiles.filter((file) => {
@@ -8297,7 +8385,7 @@ export function selectArtifactDeliveryReceiptFiles({
         .map(normalizeDeliveryFileName);
       return (
         fileKeys.some((key) => artifactReceiptKeys.has(key))
-        || fileKeys.some((key) => declaredKeys.has(key))
+        || fileKeys.some((key) => declaredKeys.some((declared) => deliveryFileMatchesDeclared(key, declared)))
         || Boolean(file.artifactManifest)
         || (allowUnnamedPrimary && isUnnamedPrimaryDeliveryFile(file))
       );

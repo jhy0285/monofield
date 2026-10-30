@@ -34,6 +34,7 @@ function baseConfig(): Record<string, unknown> {
     skillId: null,
     designSystemId: null,
     onboardingCompleted: true,
+    privacyDecisionAt: 1,
     mediaProviders: {},
     agentModels: {},
     agentCliEnv: {},
@@ -235,19 +236,27 @@ test('[P1] publishing a user design system promotes it to the default system in 
   await expect(page).toHaveURL(/\/design-systems$/);
   await page.getByRole('tab', { name: 'Your systems' }).click();
 
-  const manager = page.locator('section[aria-label="Your design systems"]');
-  const alphaRow = manager.locator('.ds-user-row').filter({ hasText: 'Brand Alpha' });
+  // The manager is a list with a detail panel: pick Brand Alpha to act on it.
+  const alphaCard = page.getByTestId('design-system-card-brand-alpha');
+  await alphaCard.click();
+  const detail = page.getByTestId('design-system-detail-brand-alpha');
+  const statusToggle = detail.getByRole('button', { name: 'Draft' });
+  await expect(statusToggle).toHaveAttribute('aria-pressed', 'false');
 
-  await expect(alphaRow.getByRole('button', { name: 'Make default' })).toHaveCount(0);
-  await alphaRow.locator('.ds-status-toggle').click();
-  await expect(alphaRow.locator('.ds-status-toggle')).toContainText('Published');
-  await expect(alphaRow.getByText('Default')).toBeVisible();
+  // A draft cannot be the default, so the menu offers no such action yet.
+  await detail.getByRole('button', { name: 'More actions' }).click();
+  await expect(page.getByRole('menuitem', { name: 'Default for new chats' })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+
+  await statusToggle.click();
+  await expect(detail.getByRole('button', { name: 'Published' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(alphaCard.getByText('Chat default')).toBeVisible();
   await expect
     .poll(() => persistedConfigs.at(-1)?.designSystemId)
     .toBe('brand-alpha');
 });
 
-test('[P1] filters user design systems by draft and published status in the manager', async ({ page }) => {
+test('[P1] shows each user design system with its status and narrows the list by search', async ({ page }) => {
   await seedEntryBase(page);
   const systems: UserSystem[] = [
     {
@@ -279,16 +288,20 @@ test('[P1] filters user design systems by draft and published status in the mana
   await expect(page).toHaveURL(/\/design-systems$/);
   await page.getByRole('tab', { name: 'Your systems' }).click();
 
-  const manager = page.locator('section[aria-label="Your design systems"]');
-  const filter = manager.getByRole('combobox', { name: 'Filter design systems' });
+  // Every row carries its status, and the search box narrows the list.
+  const alphaCard = page.getByTestId('design-system-card-brand-alpha');
+  const betaCard = page.getByTestId('design-system-card-brand-beta');
+  await expect(alphaCard.getByLabel('Draft')).toBeVisible();
+  await expect(betaCard.getByLabel('Published')).toBeVisible();
 
-  await filter.selectOption('published');
-  await expect(manager.getByText('Brand Beta')).toBeVisible();
-  await expect(manager.getByText('Brand Alpha')).toHaveCount(0);
+  const search = page.getByTestId('design-systems-search');
+  await search.fill('beta');
+  await expect(betaCard).toBeVisible();
+  await expect(alphaCard).toHaveCount(0);
 
-  await filter.selectOption('draft');
-  await expect(manager.getByText('Brand Alpha')).toBeVisible();
-  await expect(manager.getByText('Brand Beta')).toHaveCount(0);
+  await search.fill('alpha');
+  await expect(alphaCard).toBeVisible();
+  await expect(betaCard).toHaveCount(0);
 });
 
 test('[P1] deleting the active design system falls back to another user system', async ({ page }) => {
@@ -327,14 +340,16 @@ test('[P1] deleting the active design system falls back to another user system',
 
   page.once('dialog', (dialog) => dialog.accept());
 
-  const manager = page.locator('section[aria-label="Your design systems"]');
-  const alphaRow = manager.locator('.ds-user-row').filter({ hasText: 'Brand Alpha' });
-  await alphaRow.getByRole('button', { name: 'Delete Brand Alpha' }).click();
+  const alphaCard = page.getByTestId('design-system-card-brand-alpha');
+  const betaCard = page.getByTestId('design-system-card-brand-beta');
+  await alphaCard.click();
+  const detail = page.getByTestId('design-system-detail-brand-alpha');
+  await detail.getByRole('button', { name: 'More actions' }).click();
+  await page.getByRole('menuitem', { name: 'Delete Brand Alpha' }).click();
 
-  await expect(alphaRow).toHaveCount(0);
+  await expect(alphaCard).toHaveCount(0);
   await expect
     .poll(() => persistedConfigs.at(-1)?.designSystemId)
     .toBe('brand-beta');
-  const betaRow = manager.locator('.ds-user-row').filter({ hasText: 'Brand Beta' });
-  await expect(betaRow.getByText('Default')).toBeVisible();
+  await expect(betaCard.getByText('Chat default')).toBeVisible();
 });

@@ -180,7 +180,12 @@ async function waitForPidToExit(pid: number, timeoutMs = 5_000): Promise<void> {
   throw new Error(`Timed out waiting for process ${pid} to exit`);
 }
 
+// The agent-mode specs assert the standard (no custom endpoint) Claude auth
+// guidance, so they must not inherit a custom endpoint from the shell they run in.
+const AMBIENT_ANTHROPIC_BASE_URL = process.env.ANTHROPIC_BASE_URL;
+
 beforeAll(async () => {
+  delete process.env.ANTHROPIC_BASE_URL;
   const started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
   baseUrl = started.url;
   server = started.server;
@@ -191,7 +196,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
+afterAll(async () => {
+  if (AMBIENT_ANTHROPIC_BASE_URL === undefined) delete process.env.ANTHROPIC_BASE_URL;
+  else process.env.ANTHROPIC_BASE_URL = AMBIENT_ANTHROPIC_BASE_URL;
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+});
 
 describe('POST /api/provider/models', () => {
   it('lists OpenAI-compatible models from /models', async () => {
@@ -1852,7 +1861,9 @@ describe('POST /api/test/connection provider mode', () => {
     const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({});
 
     try {
-      const { close, requestInit } = proxyDispatcherRequestInit();
+      // An explicit empty env keeps the ambient proxy variables of the machine
+      // running the suite out of the result.
+      const { close, requestInit } = proxyDispatcherRequestInit({});
 
       expect(proxySpy).toHaveBeenCalledWith();
       expect(requestInit).toEqual({});

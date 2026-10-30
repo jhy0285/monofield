@@ -4,11 +4,15 @@ import { ensureRailOpen } from '@/playwright/rail';
 import { routeAgents } from '@/playwright/mock-factory';
 import type { Page } from '@playwright/test';
 import { openSettingsDialog } from '../lib/playwright/amr.js';
+import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
 const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
 
-test.describe.configure({ timeout: 30_000 });
+// The first test in a worker waits for a cold `next dev` compile of the entry page,
+// which takes longer than 30 s here; a failed test then restarts the worker and the
+// next one is cold again. `2 * T.xlong` is what other specs use for the same reason.
+test.describe.configure({ timeout: 2 * T.xlong });
 
 function baseConfig(): Record<string, unknown> {
   return {
@@ -68,8 +72,32 @@ async function openSettings(page: Page) {
 async function openMemorySettings(page: Page) {
   const dialog = await openSettings(page);
   await dialog.getByRole('button', { name: /^Memory\b/ }).click();
-  await expect(dialog.getByRole('button', { name: 'New memory' })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Add or import memories' })).toBeVisible();
   return dialog;
+}
+
+// Adding and importing memories happens in a modal portalled out of the Settings
+// dialog, so it is its own dialog on the page, not a part of the one above.
+async function openAddMemoryModal(page: Page) {
+  await page.getByRole('button', { name: 'Add or import memories' }).click();
+  const modal = page.getByRole('dialog', { name: 'Add or import memories' });
+  await expect(modal).toBeVisible();
+  return modal;
+}
+
+// Scanning connected apps is the third tab of the Add modal.
+async function openImportFromApps(page: Page) {
+  const modal = await openAddMemoryModal(page);
+  await modal.getByRole('tab', { name: /Import from apps/i }).click();
+  return modal;
+}
+
+// The memory index and tree live in the Advanced modal, next to the Add modal.
+async function openAdvancedMemoryModal(page: Page) {
+  await page.getByRole('button', { name: 'Advanced', exact: true }).click();
+  const modal = page.getByRole('dialog', { name: 'Advanced' });
+  await expect(modal).toBeVisible();
+  return modal;
 }
 
 test.describe('Settings Memory and Automations flows', () => {
@@ -212,9 +240,8 @@ test.describe('Settings Memory and Automations flows', () => {
 
     const dialog = await openMemorySettings(page);
 
-    await expect(dialog.getByRole('tab', { name: /Add manually/i })).toHaveAttribute('aria-selected', 'true');
-    await expect(dialog.getByRole('tab', { name: /Learn from chats/i })).toBeVisible();
-    await expect(dialog.getByRole('tab', { name: /Import from apps/i })).toBeVisible();
+    await expect(dialog.getByRole('tab', { name: 'Memories' })).toHaveAttribute('aria-selected', 'true');
+    await expect(dialog.getByRole('tab', { name: 'How it works' })).toBeVisible();
 
     await expect(dialog.getByText('Saved memory')).toBeVisible();
     await expect(dialog.getByText('2 saved')).toBeVisible();
@@ -225,7 +252,18 @@ test.describe('Settings Memory and Automations flows', () => {
     await expect(dialog.getByRole('button', { name: 'Clear' })).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Refresh' })).toBeVisible();
 
-    const memoryTree = dialog.locator('.memory-collapsible-card');
+    // The ways to add a memory are in their own modal.
+    const add = await openAddMemoryModal(page);
+    await expect(add.getByRole('tab', { name: 'Work profile' })).toHaveAttribute('aria-selected', 'true');
+    await expect(add.getByRole('tab', { name: 'Add manually' })).toBeVisible();
+    await expect(add.getByRole('tab', { name: 'Import from apps' })).toBeVisible();
+    await add.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(add).toHaveCount(0);
+
+    // The tree is the technical view, in the Advanced modal.
+    const advanced = await openAdvancedMemoryModal(page);
+    const memoryTree = advanced.locator('details', { hasText: 'Memory tree' });
+    await memoryTree.locator('summary').click();
     await expect(memoryTree.getByText('Memory tree')).toBeVisible();
     await expect(memoryTree.getByText('Feedback', { exact: true })).toBeVisible();
     await expect(memoryTree.getByText('/FEEDBACK', { exact: true })).toBeVisible();
@@ -314,18 +352,22 @@ test.describe('Settings Memory and Automations flows', () => {
 
     const dialog = await openMemorySettings(page);
 
-    await dialog.getByRole('button', { name: 'New memory' }).click();
-    await dialog.getByPlaceholder('e.g. UI preferences').fill('UI preferences');
-    await dialog.getByPlaceholder('One sentence — what is this memory about?').fill(
+    const add = await openAddMemoryModal(page);
+    await add.getByRole('tab', { name: 'Add manually' }).click();
+    await add.getByRole('button', { name: 'New memory' }).click();
+    await add.getByPlaceholder('e.g. UI preferences').fill('UI preferences');
+    await add.getByPlaceholder('One sentence — what is this memory about?').fill(
       'Persistent rendering preferences',
     );
-    await dialog
+    await add
       .getByPlaceholder(/- Rule one[\s\S]*When to apply: optional scope/)
       .fill('- Prefer dark mode');
-    await dialog.getByRole('button', { name: 'Create' }).click();
+    await add.getByRole('button', { name: 'Create' }).click();
 
-    await expect(dialog.getByText('UI preferences')).toBeVisible();
+    // Saving closes the modal; the confirmation shows on the Memory page behind it.
     await expect(dialog.locator('.memory-flash-pill')).toContainText('Memory created');
+    await expect(add).toHaveCount(0);
+    await expect(dialog.getByText('UI preferences')).toBeVisible();
 
     await dialog.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -452,21 +494,23 @@ test.describe('Settings Memory and Automations flows', () => {
 
     const dialog = await openMemorySettings(page);
 
-    await dialog.getByRole('tab', { name: /Learn from chats/i }).click();
-    const toggle = dialog.getByRole('checkbox', {
-      name: 'Learn from chat conversations',
-    });
+    // Chat learning is one of the memory hooks on the "How it works" tab.
+    await dialog.getByRole('tab', { name: 'How it works' }).click();
+    const toggle = dialog.getByRole('checkbox', { name: 'Learn from chats' });
 
     await expect(toggle).toBeChecked();
-    await dialog.locator('.memory-chat-learning-toggle').click();
+    await dialog
+      .getByTestId('memory-hooks-panel')
+      .locator('li', { hasText: 'Learn from chats' })
+      .locator('.toggle-switch')
+      .click();
     await expect(toggle).not.toBeChecked();
-    await expect(dialog.getByText('Off')).toBeVisible();
 
     await dialog.getByRole('button', { name: 'Close', exact: true }).click();
     const reopened = await openMemorySettings(page);
-    await reopened.getByRole('tab', { name: /Learn from chats/i }).click();
+    await reopened.getByRole('tab', { name: 'How it works' }).click();
     await expect(
-      reopened.getByRole('checkbox', { name: 'Learn from chat conversations' }),
+      reopened.getByRole('checkbox', { name: 'Learn from chats' }),
     ).not.toBeChecked();
   });
 
@@ -553,9 +597,9 @@ test.describe('Settings Memory and Automations flows', () => {
     });
 
     const dialog = await openMemorySettings(page);
-    await dialog.getByRole('tab', { name: /Import from apps/i }).click();
-    await expect(dialog.getByRole('heading', { name: 'Import from apps' })).toBeVisible();
-    await dialog.getByRole('button', { name: 'Manage' }).click();
+    const add = await openImportFromApps(page);
+    await expect(add.getByRole('heading', { name: 'Import from apps' })).toBeVisible();
+    await add.getByRole('button', { name: 'Manage' }).click();
 
     await expect(dialog.getByRole('button', { name: /^Connectors$/i })).toHaveClass(/active/);
     await expect(dialog.getByText('Composio API Key', { exact: true })).toBeVisible();
@@ -691,23 +735,23 @@ test.describe('Settings Memory and Automations flows', () => {
       });
     });
 
-    const dialog = await openMemorySettings(page);
-    await dialog.getByRole('tab', { name: /Import from apps/i }).click();
+    await openMemorySettings(page);
+    const add = await openImportFromApps(page);
 
-    await expect(dialog.getByText('Choose sources')).toBeVisible();
-    await expect(dialog.getByText('Product wiki')).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Connect GitHub' })).toBeVisible();
+    await expect(add.getByText('Choose sources')).toBeVisible();
+    await expect(add.getByText('Product wiki')).toBeVisible();
+    await expect(add.getByRole('button', { name: 'Connect GitHub' })).toBeVisible();
 
-    await dialog.locator('[data-memory-connector-id="notion"]').click();
-    const scanButton = dialog.getByRole('button', { name: /scan/i });
+    await add.locator('[data-memory-connector-id="notion"]').click();
+    const scanButton = add.getByRole('button', { name: /scan/i });
     await expect(scanButton).toBeEnabled();
     await scanButton.click();
 
-    await expect(dialog.getByText(/Found 1 suggested memory from 1 app/)).toBeVisible();
-    await expect(dialog.getByText('Last scan')).toBeVisible();
-    await expect(dialog.getByText('128 B read')).toBeVisible();
-    await expect(dialog.getByText('Suggested memories')).toBeVisible();
-    await expect(dialog.getByText('Memory context')).toBeVisible();
+    await expect(add.getByText(/Found 1 suggested memory from 1 app/)).toBeVisible();
+    await expect(add.getByText('Last scan')).toBeVisible();
+    await expect(add.getByText('128 B read')).toBeVisible();
+    await expect(add.getByText('Suggested memories')).toBeVisible();
+    await expect(add.getByText('Memory context')).toBeVisible();
     expect(suggestionBodies).toEqual([
       {
         connectorIds: ['notion'],
@@ -834,18 +878,20 @@ test.describe('Settings Memory and Automations flows', () => {
     });
 
     let dialog = await openMemorySettings(page);
-    await dialog.getByRole('tab', { name: /Import from apps/i }).click();
-    const githubRow = dialog.locator('[data-memory-connector-id="github"]');
+    let add = await openImportFromApps(page);
+    const githubRow = add.locator('[data-memory-connector-id="github"]');
     await githubRow.getByRole('button', { name: 'Connect GitHub' }).click();
 
     await expect(githubRow.getByText('Finish authorization in your browser, then return here')).toBeVisible();
     await expect(githubRow.getByRole('button', { name: 'Connect GitHub' })).toBeDisabled();
 
+    // The Add modal sits over Settings, so it has to go before the dialog can close.
+    await add.getByRole('button', { name: 'Close', exact: true }).click();
     await dialog.getByRole('button', { name: 'Close', exact: true }).click();
     dialog = await openMemorySettings(page);
-    await dialog.getByRole('tab', { name: /Import from apps/i }).click();
+    add = await openImportFromApps(page);
 
-    const reopenedGithubRow = dialog.locator('[data-memory-connector-id="github"]');
+    const reopenedGithubRow = add.locator('[data-memory-connector-id="github"]');
     await expect(reopenedGithubRow.getByText('Finish authorization in your browser, then return here')).toBeVisible();
     await expect(reopenedGithubRow.getByRole('button', { name: 'Connect GitHub' })).toBeDisabled();
   });
@@ -921,10 +967,12 @@ test.describe('Settings Memory and Automations flows', () => {
       });
     });
 
-    let statusReads = 0;
+    // GitHub turns connected only once the test finishes the OAuth round trip.
+    // Counting status reads instead depends on how many times Settings happens
+    // to read them before the Add modal opens.
+    let githubAuthorized = false;
     await page.route('**/api/connectors/status', async (route) => {
-      statusReads += 1;
-      const connected = statusReads >= 3;
+      const connected = githubAuthorized;
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -1013,15 +1061,16 @@ test.describe('Settings Memory and Automations flows', () => {
       });
     });
 
-    const dialog = await openMemorySettings(page);
-    await dialog.getByRole('tab', { name: /Import from apps/i }).click();
+    await openMemorySettings(page);
+    const add = await openImportFromApps(page);
 
-    const githubRow = dialog.locator('[data-memory-connector-id="github"]');
+    const githubRow = add.locator('[data-memory-connector-id="github"]');
     await githubRow.getByRole('button', { name: 'Connect GitHub' }).click();
 
     await expect(githubRow.getByText('Finish authorization in your browser, then return here')).toBeVisible();
     await expect(githubRow.getByRole('button', { name: 'Connect GitHub' })).toBeDisabled();
 
+    githubAuthorized = true;
     await page.evaluate(() => {
       window.dispatchEvent(new MessageEvent('message', {
         data: { type: 'open-design:connector-connected' },
@@ -1032,16 +1081,16 @@ test.describe('Settings Memory and Automations flows', () => {
     await expect(githubRow.getByText('Engineering docs')).toBeVisible();
     await expect(githubRow.getByText('Select')).toBeVisible();
     await expect(githubRow.getByText('Finish authorization in your browser, then return here')).toHaveCount(0);
-    await expect(dialog.locator('.memory-connected-summary .memory-source-badge')).toHaveText('1 connected');
+    await expect(add.locator('.memory-connected-summary .memory-source-badge')).toHaveText('1 connected');
 
     await githubRow.click();
-    const scanButton = dialog.getByRole('button', { name: /scan/i });
+    const scanButton = add.getByRole('button', { name: /scan/i });
     await expect(scanButton).toBeEnabled();
     await scanButton.click();
 
-    await expect(dialog.getByText(/Found 1 suggested memory from 1 app/)).toBeVisible();
-    await expect(dialog.getByText('Suggested memories')).toBeVisible();
-    await expect(dialog.getByText('96 B read')).toBeVisible();
+    await expect(add.getByText(/Found 1 suggested memory from 1 app/)).toBeVisible();
+    await expect(add.getByText('Suggested memories')).toBeVisible();
+    await expect(add.getByText('96 B read')).toBeVisible();
     expect(suggestionBodies).toEqual([
       {
         connectorIds: ['github'],
@@ -1138,10 +1187,11 @@ test.describe('Settings Memory and Automations flows', () => {
       });
     });
 
-    let statusReads = 0;
+    // See the authorization-callback test: connect on the OAuth callback, not
+    // on the nth status read.
+    let githubAuthorized = false;
     await page.route('**/api/connectors/status', async (route) => {
-      statusReads += 1;
-      const githubConnected = statusReads >= 3;
+      const githubConnected = githubAuthorized;
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -1244,28 +1294,29 @@ test.describe('Settings Memory and Automations flows', () => {
       });
     });
 
-    const dialog = await openMemorySettings(page);
-    await dialog.getByRole('tab', { name: /Import from apps/i }).click();
+    await openMemorySettings(page);
+    const add = await openImportFromApps(page);
 
-    const notionRow = dialog.locator('[data-memory-connector-id="notion"]');
-    const githubRow = dialog.locator('[data-memory-connector-id="github"]');
-    const slackRow = dialog.locator('[data-memory-connector-id="slack"]');
+    const notionRow = add.locator('[data-memory-connector-id="notion"]');
+    const githubRow = add.locator('[data-memory-connector-id="github"]');
+    const slackRow = add.locator('[data-memory-connector-id="slack"]');
 
-    await expect(dialog.locator('.memory-connected-summary .memory-source-badge')).toHaveText('1 connected');
-    await expect(dialog.locator('.memory-connector-picker-head .memory-source-badge')).toHaveText('0 selected');
-    await expect(dialog.getByText('Selected 0 of 1 connected app.')).toBeVisible();
+    await expect(add.locator('.memory-connected-summary .memory-source-badge')).toHaveText('1 connected');
+    await expect(add.locator('.memory-connector-picker-head .memory-source-badge')).toHaveText('0 selected');
+    await expect(add.getByText('Selected 0 of 1 connected app.')).toBeVisible();
     await expect(slackRow.getByRole('button', { name: 'Connect Slack' })).toBeVisible();
 
     await notionRow.click();
-    await expect(dialog.locator('.memory-connector-picker-head .memory-source-badge')).toHaveText('1 selected');
-    await expect(dialog.getByText('Selected 1 of 1 connected app.')).toBeVisible();
+    await expect(add.locator('.memory-connector-picker-head .memory-source-badge')).toHaveText('1 selected');
+    await expect(add.getByText('Selected 1 of 1 connected app.')).toBeVisible();
 
     await githubRow.getByRole('button', { name: 'Connect GitHub' }).click();
     await expect(githubRow.getByText('Finish authorization in your browser, then return here')).toBeVisible();
-    await expect(dialog.locator('.memory-connected-summary .memory-source-badge')).toHaveText('1 connected');
-    await expect(dialog.locator('.memory-connector-picker-head .memory-source-badge')).toHaveText('1 selected');
-    await expect(dialog.getByText('Selected 1 of 1 connected app.')).toBeVisible();
+    await expect(add.locator('.memory-connected-summary .memory-source-badge')).toHaveText('1 connected');
+    await expect(add.locator('.memory-connector-picker-head .memory-source-badge')).toHaveText('1 selected');
+    await expect(add.getByText('Selected 1 of 1 connected app.')).toBeVisible();
 
+    githubAuthorized = true;
     await page.evaluate(() => {
       window.dispatchEvent(new MessageEvent('message', {
         data: { type: 'open-design:connector-connected' },
@@ -1275,20 +1326,20 @@ test.describe('Settings Memory and Automations flows', () => {
 
     await expect(githubRow.getByText('Engineering docs')).toBeVisible();
     await expect(githubRow.getByText('Select')).toBeVisible();
-    await expect(dialog.locator('.memory-connected-summary .memory-source-badge')).toHaveText('2 connected');
-    await expect(dialog.locator('.memory-connector-picker-head .memory-source-badge')).toHaveText('1 selected');
-    await expect(dialog.getByText('Selected 1 of 2 connected apps.')).toBeVisible();
+    await expect(add.locator('.memory-connected-summary .memory-source-badge')).toHaveText('2 connected');
+    await expect(add.locator('.memory-connector-picker-head .memory-source-badge')).toHaveText('1 selected');
+    await expect(add.getByText('Selected 1 of 2 connected apps.')).toBeVisible();
 
     await githubRow.click();
-    await expect(dialog.locator('.memory-connector-picker-head .memory-source-badge')).toHaveText('2 selected');
-    await expect(dialog.getByText('Selected 2 of 2 connected apps.')).toBeVisible();
+    await expect(add.locator('.memory-connector-picker-head .memory-source-badge')).toHaveText('2 selected');
+    await expect(add.getByText('Selected 2 of 2 connected apps.')).toBeVisible();
 
-    const scanButton = dialog.getByRole('button', { name: /scan/i });
+    const scanButton = add.getByRole('button', { name: /scan/i });
     await expect(scanButton).toBeEnabled();
     await scanButton.click();
 
-    await expect(dialog.getByText(/Found 1 suggested memory from 2 apps/)).toBeVisible();
-    await expect(dialog.getByText('224 B read')).toBeVisible();
+    await expect(add.getByText(/Found 1 suggested memory from 2 apps/)).toBeVisible();
+    await expect(add.getByText('224 B read')).toBeVisible();
     expect(suggestionBodies).toEqual([
       {
         connectorIds: ['notion', 'github'],
@@ -1447,18 +1498,18 @@ test.describe('Settings Memory and Automations flows', () => {
       });
     });
 
-    const dialog = await openMemorySettings(page);
-    await dialog.getByRole('tab', { name: /Import from apps/i }).click();
+    await openMemorySettings(page);
+    const add = await openImportFromApps(page);
 
-    const notionRow = dialog.locator('[data-memory-connector-id="notion"]');
-    const githubRow = dialog.locator('[data-memory-connector-id="github"]');
+    const notionRow = add.locator('[data-memory-connector-id="notion"]');
+    const githubRow = add.locator('[data-memory-connector-id="github"]');
 
-    await expect(dialog.locator('.memory-connected-summary .memory-source-badge')).toHaveText('2 connected');
+    await expect(add.locator('.memory-connected-summary .memory-source-badge')).toHaveText('2 connected');
 
     await notionRow.click();
     await githubRow.click();
-    await expect(dialog.locator('.memory-connector-picker-head .memory-source-badge')).toHaveText('2 selected');
-    await expect(dialog.getByText('Selected 2 of 2 connected apps.')).toBeVisible();
+    await expect(add.locator('.memory-connector-picker-head .memory-source-badge')).toHaveText('2 selected');
+    await expect(add.getByText('Selected 2 of 2 connected apps.')).toBeVisible();
 
     statusPhase = 'disconnected';
     await page.evaluate(() => {
@@ -1468,9 +1519,9 @@ test.describe('Settings Memory and Automations flows', () => {
       }));
     });
 
-    await expect(dialog.locator('.memory-connected-summary .memory-source-badge')).toHaveText('1 connected');
-    await expect(dialog.locator('.memory-connector-picker-head .memory-source-badge')).toHaveText('1 selected');
-    await expect(dialog.getByText('Selected 1 of 1 connected app.')).toBeVisible();
+    await expect(add.locator('.memory-connected-summary .memory-source-badge')).toHaveText('1 connected');
+    await expect(add.locator('.memory-connector-picker-head .memory-source-badge')).toHaveText('1 selected');
+    await expect(add.getByText('Selected 1 of 1 connected app.')).toBeVisible();
     await expect(githubRow.getByText('Engineering docs (renewed)')).toBeVisible();
     await expect(notionRow.getByRole('button', { name: 'Connect Notion' })).toBeVisible();
 
@@ -1482,18 +1533,18 @@ test.describe('Settings Memory and Automations flows', () => {
       }));
     });
 
-    await expect(dialog.locator('.memory-connected-summary .memory-source-badge')).toHaveText('2 connected');
-    await expect(dialog.locator('.memory-connector-picker-head .memory-source-badge')).toHaveText('1 selected');
-    await expect(dialog.getByText('Selected 1 of 2 connected apps.')).toBeVisible();
+    await expect(add.locator('.memory-connected-summary .memory-source-badge')).toHaveText('2 connected');
+    await expect(add.locator('.memory-connector-picker-head .memory-source-badge')).toHaveText('1 selected');
+    await expect(add.getByText('Selected 1 of 2 connected apps.')).toBeVisible();
     await expect(notionRow.getByText('Product wiki (restored)')).toBeVisible();
     await expect(notionRow.getByText('Select')).toBeVisible();
     await expect(githubRow.getByText('Selected')).toBeVisible();
 
-    const scanButton = dialog.getByRole('button', { name: /scan/i });
+    const scanButton = add.getByRole('button', { name: /scan/i });
     await expect(scanButton).toBeEnabled();
     await scanButton.click();
 
-    await expect(dialog.getByText(/Found 1 suggested memory from 1 app/)).toBeVisible();
+    await expect(add.getByText(/Found 1 suggested memory from 1 app/)).toBeVisible();
     expect(suggestionBodies).toEqual([
       {
         connectorIds: ['github'],
@@ -1651,14 +1702,15 @@ test.describe('Settings Memory and Automations flows', () => {
     });
 
     const dialog = await openMemorySettings(page);
-    await dialog.getByRole('tab', { name: /Import from apps/i }).click();
-    await dialog.locator('[data-memory-connector-id="notion"]').click();
-    await dialog.getByRole('button', { name: /scan/i }).click();
+    const add = await openImportFromApps(page);
+    await add.locator('[data-memory-connector-id="notion"]').click();
+    await add.getByRole('button', { name: /scan/i }).click();
 
-    await expect(dialog.getByText('Suggested memories')).toBeVisible();
-    await dialog.getByRole('button', { name: /Save selected/i }).click();
+    await expect(add.getByText('Suggested memories')).toBeVisible();
+    await add.getByRole('button', { name: /Save selected/i }).click();
 
-    await expect(dialog.getByText(/Saved 1 memory from connected apps/)).toBeVisible();
+    await expect(add.getByText(/Saved 1 memory from connected apps/)).toBeVisible();
+    await add.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(dialog.getByText('Memory context')).toBeVisible();
     await expect(dialog.getByText('Connector-derived context')).toBeVisible();
     await expect(dialog.getByText('1 saved')).toBeVisible();
@@ -1760,17 +1812,17 @@ test.describe('Settings Memory and Automations flows', () => {
       });
     });
 
-    const dialog = await openMemorySettings(page);
-    await dialog.getByRole('tab', { name: /Import from apps/i }).click();
-    await dialog.locator('[data-memory-connector-id="notion"]').click();
-    await dialog.getByRole('button', { name: /scan/i }).click();
+    await openMemorySettings(page);
+    const add = await openImportFromApps(page);
+    await add.locator('[data-memory-connector-id="notion"]').click();
+    await add.getByRole('button', { name: /scan/i }).click();
 
-    const alert = dialog.getByRole('alert');
+    const alert = add.getByRole('alert');
     await expect(alert).toContainText("Couldn't read Notion.");
     await expect(alert).toContainText('Tool NOTION_SEARCH not found');
-    await expect(dialog.getByText('Last scan')).toBeVisible();
-    await expect(dialog.getByText('No data read')).toBeVisible();
-    await expect(dialog.getByText('Could not read Notion')).toBeVisible();
+    await expect(add.getByText('Last scan')).toBeVisible();
+    await expect(add.getByText('No data read')).toBeVisible();
+    await expect(add.getByText('Could not read Notion')).toBeVisible();
   });
 
   test('[P1] refreshes and clears extraction history from Saved memory', async ({ page }) => {
@@ -1913,17 +1965,20 @@ test.describe('Settings Memory and Automations flows', () => {
 
     const dialog = await openMemorySettings(page);
 
-    await dialog.getByRole('button', { name: 'New memory' }).click();
-    await dialog.getByPlaceholder('e.g. UI preferences').fill('UI preferences');
-    await dialog.getByPlaceholder('One sentence — what is this memory about?').fill(
+    const add = await openAddMemoryModal(page);
+    await add.getByRole('tab', { name: 'Add manually' }).click();
+    await add.getByRole('button', { name: 'New memory' }).click();
+    await add.getByPlaceholder('e.g. UI preferences').fill('UI preferences');
+    await add.getByPlaceholder('One sentence — what is this memory about?').fill(
       'Persistent rendering preferences',
     );
-    await dialog
+    await add
       .getByPlaceholder(/- Rule one[\s\S]*When to apply: optional scope/)
       .fill('- Prefer dark mode');
-    await dialog.getByRole('button', { name: 'Create' }).click();
+    await add.getByRole('button', { name: 'Create' }).click();
 
-    await expect(dialog.getByPlaceholder('e.g. UI preferences')).toHaveValue('UI preferences');
+    // A failed save keeps the modal and the draft, and confirms nothing.
+    await expect(add.getByPlaceholder('e.g. UI preferences')).toHaveValue('UI preferences');
     await expect(dialog.locator('.memory-flash-pill')).toHaveCount(0);
     await expect(dialog.getByText('No memory yet.')).toBeVisible();
   });

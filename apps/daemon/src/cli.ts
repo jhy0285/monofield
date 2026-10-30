@@ -357,6 +357,11 @@ const SUBCOMMAND_MAP = {
     const { runJevCli } = await import('./services/jev-cli.js');
     return runJevCli(args, { baseUrl: cliDaemonBaseUrl, parseFlags, positionalArgs: collectCliPositionals });
   },
+  // Settings → Execution permissions, against /api/execution-permissions.
+  permissions: async (args: string[]) => {
+    const { runPermissionsCli } = await import('./services/permissions-cli.js');
+    return runPermissionsCli(args, { baseUrl: cliDaemonBaseUrl, parseFlags, positionalArgs: collectCliPositionals });
+  },
   browser: runBrowser,
   artifacts: runArtifacts,
   media: runMedia,
@@ -8006,7 +8011,7 @@ async function runDesignSystemImportShadcn(args) {
     console.log(`Usage:
   monofield design-systems import-shadcn <reference> [--name <name>] [--import-mode <mode>] [--craft <slugs>] [--json] [--daemon-url <url>]
 
-Imports a shadcn registry item as an MonoField design system.
+Imports a shadcn registry item as a MonoField design system.
 
   <reference>            "<owner>/<repo>/<item>" (e.g. shadcn/ui/theme-zinc)
                          or an https URL to a registry-item JSON document.

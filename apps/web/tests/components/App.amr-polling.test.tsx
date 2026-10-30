@@ -17,6 +17,10 @@ import {
 import { fetchAmrModels } from '../../src/providers/daemon';
 import { listProjects, listTemplates } from '../../src/state/projects';
 
+// The AMR cloud runtime ships switched off. These tests are about what happens
+// when it is switched on, so they turn the renderer flag on.
+vi.mock('../../src/runtime/amr-flag', () => ({ ENABLE_AMR_RUNTIME: true }));
+
 vi.mock('../../src/router', () => ({
   navigate: vi.fn(),
   useRoute: () => ({ kind: 'home' as const, view: 'home' as const }),

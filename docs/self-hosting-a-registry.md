@@ -1,6 +1,6 @@
-# Self-hosting An MonoField Registry
+# Self-hosting a MonoField Registry
 
-An MonoField registry is a source of `monofield-marketplace.json` plus the
+A MonoField registry is a source of `monofield-marketplace.json` plus the
 review process that produces it. In v1 this can be a static GitHub repository,
 GitHub Enterprise, S3/R2, or any HTTPS host.
 

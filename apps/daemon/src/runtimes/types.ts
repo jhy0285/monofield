@@ -1,5 +1,5 @@
 import type { ExecFileOptions } from 'node:child_process';
-import type { AgentDiagnostic } from '@open-design/contracts';
+import type { AgentDiagnostic, ExecutionPermissionLevel } from '@open-design/contracts';
 
 export type { AgentDiagnostic } from '@open-design/contracts';
 
@@ -78,6 +78,11 @@ export type RuntimeContext = {
   // adapter should remove shell/browser/tool surfaces and start a fresh,
   // project-instruction-free session. Ordinary filesystem runs leave unset.
   disableTools?: boolean;
+  // Global execution permission level from Settings → Execution permissions
+  // (`app-config.json` `executionPermissionLevel`). Codex maps it to its
+  // sandbox mode and Claude Code to its permission mode; absent means
+  // `default`, the behavior MonoField shipped with.
+  executionPermissionLevel?: ExecutionPermissionLevel;
 };
 
 // Marker on a RuntimeAgentDef declaring that the adapter's CLI maintains

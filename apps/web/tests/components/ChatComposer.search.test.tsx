@@ -194,8 +194,11 @@ describe('ChatComposer /search command', () => {
       await Promise.all([firstUpload.promise, secondUpload.promise]);
     });
 
+    // While the run streams, the marks wait in the composer as visible cards.
     expect(onSend).not.toHaveBeenCalled();
-    expect(screen.queryByTestId('staged-comment-attachments')).toBeNull();
+    expect(screen.getByTestId('staged-comment-attachments')).toBeTruthy();
+    expect(screen.getByTestId('staged-visual-1')).toBeTruthy();
+    expect(screen.getByTestId('staged-visual-2')).toBeTruthy();
 
     rerender(
       <ChatComposer
@@ -349,15 +352,17 @@ describe('ChatComposer /search command', () => {
 
     await waitFor(() => expect(mockedUploadProjectFiles).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(composerText()).toContain('review this before sending'));
-    expect(screen.getByText('drawing.png')).toBeTruthy();
-    expect(screen.queryByText('Visual mark')).toBeNull();
+    // The mark shows once, as a card; its screenshot is not repeated as a chip.
+    expect(screen.getByTestId('staged-visual-1')).toBeTruthy();
+    expect(screen.getByText('Visual mark')).toBeTruthy();
+    expect(screen.queryByText('drawing.png')).toBeNull();
     expect(onSend).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByTestId('chat-send'));
 
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
     const [prompt, attachments, commentAttachments] = onSend.mock.calls[0]!;
-    expect(prompt).toBe('review this before sending');
+    expect(prompt).toBe('[#1] review this before sending');
     expect(attachments).toEqual([{ path: 'uploads/drawing.png', name: 'drawing.png', kind: 'image', order: 0 }]);
     expect(commentAttachments).toHaveLength(1);
     expect(commentAttachments[0]).toMatchObject({
@@ -397,8 +402,9 @@ describe('ChatComposer /search command', () => {
       },
     }));
 
-    expect(screen.queryByText('Visual mark')).toBeNull();
-    expect(screen.queryByTestId('staged-comment-attachments')).toBeNull();
+    await waitFor(() => expect(mockedUploadProjectFiles).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('Visual mark')).toBeTruthy();
+    expect(screen.getByTestId('staged-comment-attachments')).toBeTruthy();
     expect(onSend).not.toHaveBeenCalled();
 
     rerender(
@@ -414,7 +420,7 @@ describe('ChatComposer /search command', () => {
 
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
     const [prompt, attachments, commentAttachments] = onSend.mock.calls[0]!;
-    expect(prompt).toBe('tighten this area');
+    expect(prompt).toBe('[#1] tighten this area');
     expect(attachments).toEqual([{ path: 'uploads/drawing.png', name: 'drawing.png', kind: 'image', order: 0 }]);
     expect(commentAttachments).toHaveLength(1);
     expect(commentAttachments[0]).toMatchObject({
@@ -561,13 +567,13 @@ describe('ChatComposer /search command', () => {
       'Before answering, your first tool action must be the OD research command for your shell.',
     );
     expect(prompt).toContain(
-      'POSIX: "$OD_NODE_BIN" "$OD_BIN" research search --query "<search query>" --max-sources 5',
+      'POSIX: "$MONOFIELD_NODE_BIN" "$MONOFIELD_BIN" research search --query "<search query>" --max-sources 5',
     );
     expect(prompt).toContain(
-      'PowerShell: & $env:OD_NODE_BIN $env:OD_BIN research search --query "<search query>" --max-sources 5',
+      'PowerShell: & $env:MONOFIELD_NODE_BIN $env:MONOFIELD_BIN research search --query "<search query>" --max-sources 5',
     );
     expect(prompt).toContain(
-      'cmd.exe: "%OD_NODE_BIN%" "%OD_BIN%" research search --query "<search query>" --max-sources 5',
+      'cmd.exe: "%MONOFIELD_NODE_BIN%" "%MONOFIELD_BIN%" research search --query "<search query>" --max-sources 5',
     );
     expect(prompt).toContain('Canonical query:');
     expect(prompt).toContain('EV market 2025 trends');
@@ -610,7 +616,7 @@ describe('ChatComposer /search command', () => {
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
     const [prompt, , , meta] = onSend.mock.calls[0]!;
     expect(prompt).toContain(
-      'POSIX: "$OD_NODE_BIN" "$OD_BIN" research search --query "<search query>" --max-sources 5',
+      'POSIX: "$MONOFIELD_NODE_BIN" "$MONOFIELD_BIN" research search --query "<search query>" --max-sources 5',
     );
     expect(prompt).toContain('Canonical query:');
     expect(prompt).toContain(query);
@@ -747,7 +753,7 @@ describe('ChatComposer /search command', () => {
     expect(activeFileStrip.textContent).toContain('site/index.html');
     expect(screen.getByTestId('chat-composer').className).toContain('composer-active-file-mode');
 
-    expect(screen.getAllByText('Ask Open Design to change index.html...').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Ask MonoField to change index.html...').length).toBeGreaterThan(0);
     await typeAndSettle('Make the hero clearer');
     fireEvent.click(screen.getByTestId('chat-send'));
 

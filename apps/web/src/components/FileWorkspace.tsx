@@ -2453,6 +2453,7 @@ export function FileWorkspace({
             onClearUploadError={() => setUploadError(null)}
             preferredPreviewFile={preferredPreviewFile}
             autoPreviewDesignArtifacts={autoPreviewDesignArtifacts}
+            activeModulePath={projectMetadata?.workMode === 'development' ? activeDevelopmentProjectSelection.projectPath : null}
             onPluginFolderAgentAction={onPluginFolderAgentAction}
             activePluginActionPaths={activePluginActionPaths}
             hiddenPluginActionPaths={hiddenPluginActionPaths}

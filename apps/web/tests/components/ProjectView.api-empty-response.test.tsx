@@ -8,6 +8,7 @@ import {
   extractExplicitDeliverableFileNames,
   findDuplicateArtifactDeclaration,
   ProjectView,
+  missingDeclaredDeliveryFiles,
   selectArtifactDeliveryReceiptFiles,
 } from '../../src/components/ProjectView';
 import { streamMessage } from '../../src/providers/anthropic';
@@ -392,6 +393,36 @@ describe('ProjectView API empty response handling', () => {
       artifactReceiptFiles: [artifact],
       declaredFileNames: [],
     })).toEqual([artifact]);
+  });
+
+  it('accepts a requested file name given relative to the folder the agent delivered it in', () => {
+    const inFolder = (path: string) => ({
+      name: path,
+      path,
+      kind: 'text',
+      mime: 'text/plain',
+      size: 10,
+      mtime: 2,
+    }) as const;
+    const scaffold = [
+      inFolder('generated-plugin/SKILL.md'),
+      inFolder('generated-plugin/monofield.json'),
+      inFolder('generated-plugin/examples/demo.md'),
+    ];
+    const declared = ['SKILL.md', 'monofield.json', 'examples/demo.md'];
+
+    // The request names the files relative to a folder it asks for.
+    expect(selectArtifactDeliveryReceiptFiles({
+      changedFiles: scaffold,
+      artifactReceiptFiles: [],
+      declaredFileNames: declared,
+    })).toEqual(scaffold);
+    expect(missingDeclaredDeliveryFiles(declared, scaffold)).toEqual([]);
+
+    // A longer file name that merely ends the same way is not the file.
+    expect(missingDeclaredDeliveryFiles(['KILL.md'], scaffold)).toEqual(['KILL.md']);
+    // Nor is a file that was not delivered at all.
+    expect(missingDeclaredDeliveryFiles(['README.md'], scaffold)).toEqual(['README.md']);
   });
 
   it('marks an empty API completion as a soft no-output state instead of succeeded', async () => {

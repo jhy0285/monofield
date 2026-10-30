@@ -65,6 +65,7 @@ import {
   type VelaLoginStatus,
 } from './providers/daemon';
 import { AMR_LOGIN_STATUS_EVENT } from './components/amrLoginPolling';
+import { ENABLE_AMR_RUNTIME } from './runtime/amr-flag';
 import { navigate, useRoute } from './router';
 import {
   fetchDaemonConfig,
@@ -134,7 +135,6 @@ const AMR_PROFILE_ENV_KEY = 'OPEN_DESIGN_AMR_PROFILE';
 // perform a network request. Refresh at launch, on an explicit Settings scan,
 // and at most once per six hours while the app remains open.
 const AGENT_CATALOG_AUTO_REFRESH_MS = 6 * 60 * 60 * 1_000;
-const ENABLE_AMR_RUNTIME = false;
 
 export function shouldSyncMediaProvidersOnSave(
   mediaProviders: AppConfig['mediaProviders'],

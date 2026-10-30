@@ -1174,6 +1174,18 @@
    that ships in the JSX is hidden ??the label alone is the navigation
    handle; the section's own subtitle in the content area carries any
    intro copy. */
+/* Settings dialog (SettingsDialog.tsx): quiet divider that sets the sections from
+   the design side of the product apart from the ones the SI workflow uses. */
+.settings-nav-more {
+  margin: 8px 10px 2px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 .settings-nav-item {
   width: 100%;
   border: 1px solid transparent;

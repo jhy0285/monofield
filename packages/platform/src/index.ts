@@ -1133,3 +1133,109 @@ function parseVersionLikeDirName(name: string): SemverParts | null {
   if (!match) return null;
   return [Number(match[1]), Number(match[2]), Number(match[3])];
 }
+
+export type ElevationCommandRunner = (command: string, args: string[]) => Promise<string>;
+
+function runCommandForStdout(command: string, args: string[]): Promise<string> {
+  return new Promise<string>((resolveRun, rejectRun) => {
+    execFile(command, args, { encoding: "utf8", maxBuffer: 1024 * 1024, windowsHide: true }, (error, out) => {
+      if (error) rejectRun(error);
+      else resolveRun(out);
+    });
+  });
+}
+
+/**
+ * Reads the mandatory integrity label from `whoami /groups` output. Windows
+ * gives an elevated administrator token the High (`S-1-16-12288`) or System
+ * label; a normal desktop token is Medium (`S-1-16-8192`) or lower. Returns
+ * null when no label is present, so callers can tell "unknown" from "no".
+ */
+export function parseWindowsWhoamiGroupsElevation(stdout: string): boolean | null {
+  let highest: number | null = null;
+  for (const match of stdout.matchAll(/\bS-1-16-(\d+)\b/g)) {
+    const level = Number(match[1]);
+    if (Number.isSafeInteger(level) && (highest == null || level > highest)) highest = level;
+  }
+  if (highest == null) return null;
+  return highest >= 12288;
+}
+
+/**
+ * Whether the current process holds an elevated (administrator) token. Only
+ * Windows answers; every other platform, and any probe failure, returns null.
+ */
+export async function isWindowsProcessElevated(options: {
+  platform?: NodeJS.Platform;
+  run?: ElevationCommandRunner;
+} = {}): Promise<boolean | null> {
+  if ((options.platform ?? process.platform) !== "win32") return null;
+  try {
+    const stdout = await (options.run ?? runCommandForStdout)("whoami.exe", ["/groups", "/fo", "csv", "/nh"]);
+    return parseWindowsWhoamiGroupsElevation(stdout);
+  } catch {
+    return null;
+  }
+}
+
+function quoteWindowsArgument(value: string): string {
+  if (value.length > 0 && !/[\s"]/.test(value)) return value;
+  return `"${value.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, "$1$1")}"`;
+}
+
+function quotePowerShellLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+/**
+ * PowerShell arguments that start `executable` through the UAC "Run as
+ * administrator" prompt. `Start-Process -Verb RunAs` throws when the user
+ * declines, so the script exits 1 in that case and 0 once the elevated
+ * process has started. Windows PowerShell joins `-ArgumentList` elements
+ * without quoting them, so the list is passed as one pre-quoted string.
+ */
+export function buildWindowsElevatedLaunchArgs(executable: string, args: readonly string[] = []): string[] {
+  if (executable.trim().length === 0) throw new Error("elevated launch needs an executable path");
+  const argumentList = args.map(quoteWindowsArgument).join(" ");
+  const startProcess = [
+    "Start-Process",
+    "-FilePath",
+    quotePowerShellLiteral(executable),
+    ...(argumentList.length > 0 ? ["-ArgumentList", quotePowerShellLiteral(argumentList)] : []),
+    "-Verb",
+    "RunAs",
+  ].join(" ");
+  return [
+    "-NoProfile",
+    "-NonInteractive",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-Command",
+    `$ErrorActionPreference = 'Stop'; try { ${startProcess}; exit 0 } catch { exit 1 }`,
+  ];
+}
+
+export type WindowsElevatedLaunchResult =
+  | { ok: true }
+  | { ok: false; reason: "unsupported-platform" | "declined" | "failed"; detail?: string };
+
+/**
+ * Starts `executable` with administrator rights after the UAC prompt. This
+ * does not bypass UAC: Windows asks the user every time, and a declined prompt
+ * comes back as `{ ok: false, reason: "declined" }`.
+ */
+export async function launchWindowsElevated(
+  executable: string,
+  args: readonly string[] = [],
+  options: { platform?: NodeJS.Platform; run?: ElevationCommandRunner } = {},
+): Promise<WindowsElevatedLaunchResult> {
+  if ((options.platform ?? process.platform) !== "win32") return { ok: false, reason: "unsupported-platform" };
+  try {
+    await (options.run ?? runCommandForStdout)("powershell.exe", buildWindowsElevatedLaunchArgs(executable, args));
+    return { ok: true };
+  } catch (error) {
+    const exitCode = typeof error === "object" && error != null && "code" in error ? (error as { code?: unknown }).code : null;
+    if (exitCode === 1) return { ok: false, reason: "declined" };
+    return { ok: false, reason: "failed", detail: errorMessage(error) };
+  }
+}

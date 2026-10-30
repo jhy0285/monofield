@@ -727,7 +727,7 @@ exit 128
     expect(evidenceNote).toContain('Brand assets and icons');
     expect(evidenceNote).toContain('root `build/` with their original filenames');
     expect(evidenceNote).toContain('Fonts');
-    expect(evidenceNote).toContain('Claude Design-style package');
+    expect(evidenceNote).toContain('MonoField-style package');
     expect(evidenceNote).toContain('ui_kits/app/index.html` must be a browser-reviewable component entry');
     expect(evidenceNote).toContain('ui_kits/app/components/App.jsx` (or equivalent app shell) must compose source-backed role components');
     expect(evidenceNote).toContain('Claude-style UI-kit entry skeleton for direct JSX kits');
@@ -1054,7 +1054,7 @@ exit 128
       expect.objectContaining({
         code: 'skill_missing_reuse_sections',
         path: 'SKILL.md',
-        message: expect.stringContaining('reusable Claude Design skill package'),
+        message: expect.stringContaining('reusable MonoField skill package'),
       }),
     ]));
 
@@ -1178,7 +1178,7 @@ exit 128
       expect.objectContaining({
         code: 'readme_missing_package_reuse_guide',
         path: 'README.md',
-        message: expect.stringContaining('Claude Design package guide'),
+        message: expect.stringContaining('MonoField package guide'),
       }),
     ]));
 
@@ -2621,7 +2621,7 @@ printf 'font-data' > "$last/fonts/ubuntu/Ubuntu-Regular.ttf"
     expect(evidenceNote).toContain('Fonts');
     expect(evidenceNote).toContain('Binary Assets Preserved');
     expect(evidenceNote).toContain('build/icon.png');
-    expect(evidenceNote).toContain('Claude Design-style package');
+    expect(evidenceNote).toContain('MonoField-style package');
     expect(evidenceNote).toContain('context/.../files/build/icon.png` -> `build/icon.png`');
     await expect(readFile(path.join(tmpDir, 'context/github/acme-rate-limited-ui/files/src/styles.css'), 'utf8')).resolves.toContain('--color-brand');
     const iconBytes = await readFile(path.join(tmpDir, 'context/github/acme-rate-limited-ui/files/build/icon.png'));

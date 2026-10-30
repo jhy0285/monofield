@@ -163,10 +163,10 @@ describe('od templates CLI', () => {
     stub.setResponder(() => ({ status: 200, body: { ok: true } }));
   });
 
-  it('prints usage on `od templates help` and exits 0', async () => {
+  it('prints usage on `monofield templates help` and exits 0', async () => {
     const result = await runCli(['templates', 'help']);
     expect(result.code).toBe(0);
-    expect(result.stdout).toMatch(/od templates/);
+    expect(result.stdout).toMatch(/monofield templates/);
     expect(result.stdout).toMatch(/save/);
     expect(result.stdout).toMatch(/delete/);
     expect(stub.requests).toHaveLength(0);
@@ -345,10 +345,10 @@ describe('od templates CLI', () => {
     expect(result.stderr).toMatch(/<id>/);
   });
 
-  it('prints usage on `od templates` with no sub-verb and exits 2', async () => {
+  it('prints usage on `monofield templates` with no sub-verb and exits 2', async () => {
     const result = await runCli(['templates']);
     expect(result.code).toBe(2);
-    expect(result.stdout).toMatch(/od templates/);
+    expect(result.stdout).toMatch(/monofield templates/);
   });
 
   it('exits non-zero on unknown sub-verb', async () => {

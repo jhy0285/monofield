@@ -166,7 +166,7 @@ async function emitRun(promptText) {
     return;
   }
   if (
-    promptText.includes('Create an Open Design plugin for:') &&
+    /Create (?:an Open Design|a MonoField) plugin for:/.test(promptText) &&
     promptText.includes('produce a folder named generated-plugin')
   ) {
     await emitPluginAuthoringRun();
@@ -209,7 +209,7 @@ async function emitPluginAuthoringRun() {
   const folder = join(process.cwd(), 'generated-plugin');
   await mkdir(join(folder, 'examples'), { recursive: true });
   await writeFileFs(
-    join(folder, 'open-design.json'),
+    join(folder, 'monofield.json'),
     JSON.stringify({
       specVersion: 1,
       name: 'generated-plugin',
@@ -232,7 +232,7 @@ async function emitPluginAuthoringRun() {
     'utf8',
   );
   const summary = [
-    'Created generated-plugin with open-design.json, SKILL.md, and examples/demo.md.',
+    'Created generated-plugin with monofield.json, SKILL.md, and examples/demo.md.',
     'od plugin validate: passed',
     'od plugin pack: generated-plugin-0.1.0.tgz',
     'od plugin install --source: passed',

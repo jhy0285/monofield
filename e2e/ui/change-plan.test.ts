@@ -40,6 +40,8 @@ test('[P1] plans a legacy storefront change, simulates impact and invalidates re
   await page.goto(`/projects/${project.id}/files/api.json`);
   const dependencies = page.getByRole('region', { name: 'Screen, API and database dependencies' });
   await expect(dependencies).toBeVisible({ timeout: T.xlong });
+  // The change plan sits inside the dependency panel, which is collapsed until its summary is opened.
+  await dependencies.getByText('Screen, API and database dependencies').click();
   await dependencies.scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath('01-entry.png') });
   const panel = page.getByRole('region', { name: 'Change impact and verification plan' });
@@ -85,6 +87,8 @@ test('[P1] plans a legacy storefront change, simulates impact and invalidates re
   await page.evaluate(() => localStorage.setItem('open-design:locale', 'ko'));
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.reload();
+  // The reload collapsed the dependency panel again.
+  await page.getByRole('region', { name: '화면·API·DB 영향 분석' }).getByText('화면·API·DB 영향 분석').click();
   const korean = page.getByRole('region', { name: '변경 영향 · 검증 계획' });
   await korean.getByRole('button', { name: '변경 영향 · 검증 계획' }).click();
   await korean.getByLabel('개발할 변경').fill('가격이 음수가 되지 않도록 수정하고 상품 화면을 검토');

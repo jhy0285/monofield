@@ -213,6 +213,24 @@ describe('Plan §8 e2e-3 (entry slice) — headless install → project → run'
     expect(snap.query).toBe('Generate a {{topic}} brief for {{audience}}.');
     expect(snap.inputs).toEqual({ audience: 'general', topic: 'agentic design' });
 
+    // The canon block and both snapshot listings resolve through the same
+    // policy-aware lookup as the single-snapshot route above.
+    const snapshotId = encodeURIComponent(createBody.appliedPluginSnapshotId!);
+    const canonResp = await fetch(`${baseUrl}/api/applied-plugins/${snapshotId}/canon`);
+    expect(canonResp.status).toBe(200);
+    const canon = (await canonResp.json()) as { snapshotId: string; block: string };
+    expect(canon.snapshotId).toBe(createBody.appliedPluginSnapshotId);
+    expect(canon.block).toContain('agentic design');
+    for (const listUrl of [
+      `${baseUrl}/api/applied-plugins`,
+      `${baseUrl}/api/projects/${encodeURIComponent(projectId)}/applied-plugins`,
+    ]) {
+      const listResp = await fetch(listUrl);
+      expect(listResp.status, listUrl).toBe(200);
+      const listed = (await listResp.json()) as { snapshots: Array<{ snapshotId: string }> };
+      expect(listed.snapshots.map((item) => item.snapshotId)).toContain(createBody.appliedPluginSnapshotId);
+    }
+
     // Cancel the run so the test cleans up the in-memory child path.
     await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runBody.runId)}/cancel`, { method: 'POST' });
   });
@@ -248,7 +266,7 @@ describe('Plan §8 e2e-3 (entry slice) — headless install → project → run'
     expect(shareBody.sourcePluginId).toBe('sample-plugin');
     expect(shareBody.appliedPluginSnapshotId).toBeTruthy();
     expect(shareBody.stagedPath).toBe('plugin-source/sample-plugin');
-    expect(shareBody.prompt).toContain('Publish the local Open Design plugin');
+    expect(shareBody.prompt).toContain('Publish the local MonoField plugin');
     expect(shareBody.prompt).toContain('/api/projects/$OD_PROJECT_ID/plugins/publish-github');
     expect(shareBody.prompt).toContain('plugin-source/sample-plugin');
     expect(shareBody.project.pendingPrompt).toBe(shareBody.prompt);

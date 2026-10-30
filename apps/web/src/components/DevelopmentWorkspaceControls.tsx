@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Button } from '@open-design/components';
 import { createPortal } from 'react-dom';
@@ -15,6 +15,7 @@ import type {
 import { getOpenDesignHost } from '@open-design/host';
 import { useI18n } from '../i18n';
 import { Icon } from './Icon';
+import { ModulePicker, type ModuleState } from './workspace/ModulePicker';
 import {
   getActiveBrowserVerification,
   subscribeActiveBrowserVerification,
@@ -284,7 +285,6 @@ export function DevelopmentWorkspaceControls({
   const environmentTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [runSettingsOpen, setRunSettingsOpen] = useState(false);
   const [runSettingsProjectKey, setRunSettingsProjectKey] = useState<string | null>(null);
-  const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const [localLogsOpen, setLogsOpen] = useState(false);
   const logsOpen = dockLogsOpen ?? localLogsOpen;
   const [documentVisible, setDocumentVisible] = useState(() => !document.hidden);
@@ -301,9 +301,6 @@ export function DevelopmentWorkspaceControls({
   const detectionRequestRef = useRef(0);
   const loadAbortRef = useRef<AbortController | null>(null);
   const runtimeSummaryAbortRef = useRef<AbortController | null>(null);
-  const projectPickerRef = useRef<HTMLDivElement | null>(null);
-  const projectTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const projectOptionRefs = useRef(new Map<string, HTMLButtonElement>());
   const logViewportRef = useRef<HTMLPreElement | null>(null);
   const logFollowRef = useRef(true);
   const metadataRef = useRef(metadata);
@@ -576,20 +573,6 @@ export function DevelopmentWorkspaceControls({
     const timer = window.setInterval(() => { void loadRuntimeSummaries(true); }, 2_500);
     return () => window.clearInterval(timer);
   }, [documentVisible, hasActiveRuntimes, loadRuntimeSummaries]);
-  useEffect(() => {
-    if (!projectMenuOpen) return;
-    const frame = window.requestAnimationFrame(() => {
-      projectOptionRefs.current.get(activeProjectPath)?.focus();
-    });
-    const close = (event: PointerEvent) => {
-      if (!projectPickerRef.current?.contains(event.target as Node)) setProjectMenuOpen(false);
-    };
-    document.addEventListener('pointerdown', close);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      document.removeEventListener('pointerdown', close);
-    };
-  }, [activeProjectPath, projectMenuOpen]);
   useEffect(() => {
     if (!logsOpen || !logViewportRef.current || !logFollowRef.current) return;
     logViewportRef.current.scrollTop = logViewportRef.current.scrollHeight;
@@ -916,10 +899,7 @@ export function DevelopmentWorkspaceControls({
   }
 
   function selectProject(projectPath: string) {
-    if (projectPath === activeProjectPathRef.current) {
-      setProjectMenuOpen(false);
-      return;
-    }
+    if (projectPath === activeProjectPathRef.current) return;
     const previousProjectPath = activeProjectPathRef.current || '.';
     // Draft profile/arguments are intentionally not portable. Closing the
     // editor before the identity changes prevents A's unsaved values from
@@ -934,31 +914,8 @@ export function DevelopmentWorkspaceControls({
     setRuntime(runtimeByProjectPathRef.current.get(projectPath) ?? idleRuntime(projectId, projectPath));
     setError(null);
     openBrowserWhenReady.current = false;
-    setProjectMenuOpen(false);
     persistActiveProjectPath(projectPath, previousProjectPath);
     void load(false, projectPath);
-  }
-
-  function handleProjectMenuKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    const projects = detected?.projects ?? [];
-    if (projects.length === 0) return;
-    const focusedPath = [...projectOptionRefs.current.entries()]
-      .find(([, element]) => element === document.activeElement)?.[0] ?? activeProjectPath;
-    const currentIndex = Math.max(0, projects.findIndex((project) => project.path === focusedPath));
-    let nextIndex: number | null = null;
-    if (event.key === 'ArrowDown') nextIndex = (currentIndex + 1) % projects.length;
-    else if (event.key === 'ArrowUp') nextIndex = (currentIndex - 1 + projects.length) % projects.length;
-    else if (event.key === 'Home') nextIndex = 0;
-    else if (event.key === 'End') nextIndex = projects.length - 1;
-    else if (event.key === 'Escape') {
-      event.preventDefault();
-      setProjectMenuOpen(false);
-      projectTriggerRef.current?.focus();
-      return;
-    }
-    if (nextIndex == null) return;
-    event.preventDefault();
-    projectOptionRefs.current.get(projects[nextIndex]!.path)?.focus();
   }
 
   function selectDatabase(connectionId: string) {
@@ -1032,63 +989,26 @@ export function DevelopmentWorkspaceControls({
   );
   return (
     <Fragment>
-      <div className={styles.root} data-testid="development-workspace-controls">
+      <div className={styles.root} data-testid="development-workspace-controls" data-module-picker={(detected?.projects?.length ?? 0) > 1 ? 'true' : undefined}>
       <div className={styles.runGroup} data-testid="development-run-group">
         <span className={`${styles.state} ${styles[`state_${state}`] ?? ''}`} aria-label={t('development.serverStatus')}>
           <i />{state === 'ready' ? t('development.ready') : state === 'starting' ? t('development.starting') : state === 'failed' ? t('development.failed') : t('development.stopped')}
         </span>
         {(detected?.projects?.length ?? 0) > 1 ? (
-          <div className={styles.projectPicker} ref={projectPickerRef}>
-            <button
-              type="button"
-              ref={projectTriggerRef}
-              className={styles.projectSelect}
-              data-testid="development-active-project"
-              aria-label={t('workspaceTabs.project')}
-              aria-haspopup="menu"
-              aria-expanded={projectMenuOpen}
-              aria-controls={`development-project-menu-${projectId}`}
-              title={`${activeProject?.path ?? activeProjectPath} · ${runtimeStateLabel(state)}`}
-              disabled={busy === 'start' || busy === 'stop'}
-              onClick={() => setProjectMenuOpen((open) => !open)}
-            >
-              <i className={styles.projectStateDot} data-state={busy === 'detect' ? 'loading' : state} aria-hidden="true" />
-              <span>{activeProject?.label ?? activeProjectPath}</span>
-              <Icon name="chevron-down" size={12} />
-            </button>
-            {projectMenuOpen ? (
-              <div
-                id={`development-project-menu-${projectId}`}
-                className={styles.projectMenu}
-                role="menu"
-                aria-label={t('workspaceTabs.project')}
-                onKeyDown={handleProjectMenuKeyDown}
-              >
-                {detected?.projects?.map((project) => {
-                  const projectRuntime = runtimeByProjectPathRef.current.get(project.path) ?? idleRuntime(projectId, project.path);
-                  const projectState = busy === 'detect' && project.path === activeProjectPath ? 'loading' : projectRuntime.state;
-                  return (
-                    <button
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={project.path === activeProjectPath}
-                      ref={(element) => {
-                        if (element) projectOptionRefs.current.set(project.path, element);
-                        else projectOptionRefs.current.delete(project.path);
-                      }}
-                      key={project.path}
-                      data-state={projectState}
-                      onClick={() => selectProject(project.path)}
-                    >
-                      <i className={styles.projectStateDot} data-state={projectState} aria-hidden="true" />
-                      <span><strong>{project.label}</strong><small>{project.path}</small></span>
-                      <em>{projectState === 'loading' ? t('common.loading') : runtimeStateLabel(projectRuntime.state)}</em>
-                    </button>
-                  );
-                })}
-              </div>
-            ) : null}
-          </div>
+          <ModulePicker
+            projects={detected?.projects ?? []}
+            activePath={activeProjectPath}
+            triggerState={busy === 'detect' ? 'loading' : state}
+            stateOf={(path): ModuleState => (
+              busy === 'detect' && path === activeProjectPath
+                ? 'loading'
+                : (runtimeByProjectPathRef.current.get(path) ?? idleRuntime(projectId, path)).state
+            )}
+            stateLabel={(value) => (value === 'loading' ? t('common.loading') : runtimeStateLabel(value))}
+            disabled={busy === 'start' || busy === 'stop'}
+            menuId={`development-project-menu-${projectId}`}
+            onSelect={selectProject}
+          />
         ) : null}
         {runningCount > 0 ? (
           <span className={styles.runningCount} data-testid="development-running-count">

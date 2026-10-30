@@ -68,7 +68,7 @@ describe('buildUserDesignSystemArchive', () => {
 
     const skills = await zip.file('SKILLS.md')!.async('string');
     expect(skills).toContain('Acme Brand');
-    expect(skills).toContain('https://github.com/nexu-io/open-design');
+    expect(skills).toContain('https://github.com/jhy0285/monofield');
     // Palette quick reference carries the real hex values.
     expect(skills).toContain('#ff5a36');
     // Provenance source link surfaces in the guide.
@@ -136,7 +136,7 @@ describe('buildDesignSystemSkillsMarkdown', () => {
     expect(md).toContain('DESIGN.md');
     expect(md).toContain('landing pages'); // web deliverables framing
     expect(md).toContain('#ff5a36');
-    expect(md).toContain('https://github.com/nexu-io/open-design');
+    expect(md).toContain('https://github.com/jhy0285/monofield');
   });
 
   it('frames non-web surfaces with their own deliverables', () => {
@@ -148,6 +148,6 @@ describe('buildDesignSystemSkillsMarkdown', () => {
       palette,
     });
     expect(md).toContain('audio');
-    expect(md).toContain('https://github.com/nexu-io/open-design');
+    expect(md).toContain('https://github.com/jhy0285/monofield');
   });
 });

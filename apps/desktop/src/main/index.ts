@@ -40,6 +40,7 @@ import {
 } from "@open-design/sidecar";
 import { readProcessStamp } from "@open-design/platform";
 
+import { createDesktopElevation, readStartElevatedFromDaemon } from "./elevation.js";
 import { createDesktopRuntime, type DesktopRuntime } from "./runtime.js";
 import { DatabaseBroker } from "./database-broker.js";
 import { CredentialVault } from "./credential-vault.js";
@@ -764,6 +765,32 @@ export async function runDesktopMain(
     void shutdown().finally(() => process.exit(0));
   }
 
+  // Settings → Execution permissions "full" asks Windows builds to run with
+  // administrator rights. UAC asks at every launch; when it is declined this
+  // normal-rights instance keeps running and Settings shows that it is not
+  // elevated. Nothing here runs off Windows or in tools-dev.
+  const elevation = createDesktopElevation({
+    argv: process.argv,
+    execPath: options.update?.launcherLaunchPath || process.execPath,
+    packaged: app.isPackaged,
+    pid: process.pid,
+    platform: process.platform,
+  });
+  if (elevation != null) {
+    const daemonBaseUrl = resolveDaemonBaseUrl(runtime, options);
+    const wantsElevation = await elevation.shouldRelaunchAtStartup(async () =>
+      readStartElevatedFromDaemon(await daemonBaseUrl()));
+    if (wantsElevation) {
+      const relaunched = await elevation.relaunch();
+      if (relaunched.ok) {
+        console.info("[monofield desktop] handing over to the administrator instance");
+        shutdownAndExit();
+        return;
+      }
+      console.warn("[monofield desktop] administrator relaunch did not start", { reason: relaunched.reason });
+    }
+  }
+
   console.info("[monofield desktop] starting desktop IPC server", { ipc: runtime.ipc });
   ipcServer = await createJsonIpcServer({
     socketPath: runtime.ipc,
@@ -838,6 +865,7 @@ export async function runDesktopMain(
     databaseBroker,
     discoverUrl: options.discoverWebUrl ?? createWebDiscovery(runtime),
     discoverDaemonUrl: options.discoverDaemonUrl,
+    elevation,
     osLocale,
     preloadPath: options.preloadPath,
     // Round-5 (lefarcen P1, mrcfps): runtime hands this back to itself

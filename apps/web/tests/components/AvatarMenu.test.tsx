@@ -279,11 +279,12 @@ describe('AvatarMenu', () => {
     expect(url.searchParams.get('source')).toBe('open_design');
     expect(url.searchParams.get('od_origin')).toBe('open_design');
     expect(url.searchParams.get('od_entry_source')).toBe('avatar_amr_console');
-    expect(url.searchParams.get('od_device_id')).toBe('od-install-abc');
+    // MonoField never forwards a device id and never mirrors AMR attribution.
+    expect(url.searchParams.get('od_device_id')).toBeNull();
     expect(url.searchParams.get('od_entry_id')).toMatch(/^od-amr-/u);
-    expect(fetchMock).toHaveBeenCalledWith(
+    expect(fetchMock).not.toHaveBeenCalledWith(
       '/api/integrations/vela/analytics-entry',
-      expect.objectContaining({ method: 'POST' }),
+      expect.anything(),
     );
   });
 });

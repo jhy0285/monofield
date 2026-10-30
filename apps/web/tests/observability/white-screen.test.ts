@@ -2,18 +2,23 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  clearExceptionTrackingContext,
-  setExceptionTrackingContext,
-} from '../../src/analytics/error-tracking';
 import { installWhiteScreenDetector } from '../../src/observability/white-screen';
+
+// The detector reports through the exception facade, which is inert in
+// MonoField (nothing leaves the browser). Observe the hand-off to the facade
+// instead of a network call, and check separately that no request is made.
+const reportSafetyEvent = vi.hoisted(() => vi.fn());
+vi.mock('../../src/analytics/error-tracking', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/analytics/error-tracking')>()),
+  reportSafetyEvent,
+}));
 
 /**
  * The detector is allowed to be conservative on the false-negative side
  * (don't fire when the app actually rendered something) but must fire
  * when the user is really stuck on a non-app screen. The critical case —
  * called out by codex review on PR #2527 — is the dynamic-import loading
- * shell: `<div class="od-loading-shell">Loading Open Design…</div>`. That
+ * shell: `<div class="od-loading-shell">Loading MonoField…</div>`. That
  * string is well above the visible-text floor, so an earlier
  * implementation that only checked `body.innerText.length` would silently
  * treat the loading sentinel as a successful mount and cancel the timer.
@@ -24,14 +29,9 @@ const ORIGINAL_FETCH = globalThis.fetch;
 
 beforeEach(() => {
   fetchMock.mockReset();
+  reportSafetyEvent.mockReset();
   fetchMock.mockResolvedValue(new Response('', { status: 200 }));
   globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
-  // Pre-arm the transport so the buffered event flushes immediately.
-  setExceptionTrackingContext({
-    apiKey: 'phc_test',
-    host: 'https://us.i.posthog.com',
-    distinctId: 'white-screen-test',
-  });
   vi.useFakeTimers({ shouldAdvanceTime: false });
   document.body.innerHTML = '';
   document.documentElement.removeAttribute('data-od-app-mounted');
@@ -39,26 +39,24 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
-  clearExceptionTrackingContext();
   globalThis.fetch = ORIGINAL_FETCH;
   document.body.innerHTML = '';
   document.documentElement.removeAttribute('data-od-app-mounted');
 });
 
-function lastSentEvent(): { event: string; properties: Record<string, unknown> } | null {
-  const lastCall = fetchMock.mock.calls.at(-1);
+function lastReportedEvent(): { event: string; properties: Record<string, unknown> } | null {
+  const lastCall = reportSafetyEvent.mock.calls.at(-1);
   if (!lastCall) return null;
-  const init = lastCall[1] as RequestInit;
-  return JSON.parse(init.body as string) as { event: string; properties: Record<string, unknown> };
+  return { event: lastCall[0] as string, properties: lastCall[1] as Record<string, unknown> };
 }
 
 describe('observability/white-screen', () => {
   it('fires client_white_screen when only the dynamic-import loading shell is in the DOM after the timeout', () => {
     // Reproduces the codex-review reported bug: the loading shell text
-    // "Loading Open Design…" is longer than the legacy 10-char floor.
+    // "Loading MonoField…" is longer than the legacy 10-char floor.
     const shell = document.createElement('div');
     shell.className = 'od-loading-shell';
-    shell.textContent = 'Loading Open Design…';
+    shell.textContent = 'Loading MonoField…';
     document.body.appendChild(shell);
 
     installWhiteScreenDetector();
@@ -66,13 +64,14 @@ describe('observability/white-screen', () => {
     // timer-aware via vi.useFakeTimers above.
     vi.advanceTimersByTime(6000);
 
-    expect(fetchMock).toHaveBeenCalled();
-    const sent = lastSentEvent();
+    expect(reportSafetyEvent).toHaveBeenCalled();
+    const sent = lastReportedEvent();
     expect(sent?.event).toBe('client_white_screen');
     expect(sent?.properties).toMatchObject({
       reason: 'app_not_mounted_after_timeout',
       timeout_ms: 5000,
     });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('does NOT fire when the app sets the data-od-app-mounted marker before the timeout', () => {
@@ -82,20 +81,20 @@ describe('observability/white-screen', () => {
     installWhiteScreenDetector();
     vi.advanceTimersByTime(6000);
 
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(reportSafetyEvent).not.toHaveBeenCalled();
   });
 
   it('cancels the timer the moment a non-loading-shell child appears with real content', () => {
     // Start with only the loading shell.
     const shell = document.createElement('div');
     shell.className = 'od-loading-shell';
-    shell.textContent = 'Loading Open Design…';
+    shell.textContent = 'Loading MonoField…';
     document.body.appendChild(shell);
 
     installWhiteScreenDetector();
     // Wait halfway through the timeout window — still only loading shell.
     vi.advanceTimersByTime(2500);
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(reportSafetyEvent).not.toHaveBeenCalled();
 
     // Now the real App mounts — adds a meaningful child alongside the shell.
     const real = document.createElement('div');
@@ -107,7 +106,7 @@ describe('observability/white-screen', () => {
     // scheduled idle/timer queue.
     return Promise.resolve().then(() => {
       vi.advanceTimersByTime(3500);
-      expect(fetchMock).not.toHaveBeenCalled();
+      expect(reportSafetyEvent).not.toHaveBeenCalled();
     });
   });
 
@@ -119,8 +118,7 @@ describe('observability/white-screen', () => {
     installWhiteScreenDetector();
     vi.advanceTimersByTime(6000);
 
-    expect(fetchMock).toHaveBeenCalled();
-    const sent = lastSentEvent();
-    expect(sent?.event).toBe('client_white_screen');
+    expect(reportSafetyEvent).toHaveBeenCalled();
+    expect(lastReportedEvent()?.event).toBe('client_white_screen');
   });
 });

@@ -615,7 +615,7 @@ jobs:
       matrix:
         include:
           - group: a
-            files: ui/amr-onboarding.test.ts ui/app.test.ts ui/app-design-files.test.ts ui/app-manual-edit.test.ts ui/api-empty-response.test.ts
+            files: ui/app.test.ts ui/app-design-files.test.ts ui/app-manual-edit.test.ts ui/api-empty-response.test.ts
           - group: b
             files: ui/app-restoration.test.ts ui/entry-chrome-flows.test.ts ui/project-management-flows.test.ts ui/settings-api-protocol.test.ts ui/settings-local-cli-codex-fallback.test.ts ui/critical-smoke.test.ts ui/workspace-keyboard-flows.test.ts
 

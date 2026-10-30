@@ -113,17 +113,17 @@
             "description": "A development preview with REA MCP integration for legacy handover, optional local Laya decisions, Java tools and code ontology.",
             "applicationCategory": "DeveloperApplication",
             "operatingSystem": "Windows",
-            "softwareVersion": "0.11.7-preview.3",
+            "softwareVersion": "0.11.7-preview.4",
             "isAccessibleForFree": true,
-            "downloadUrl": "https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.3/MonoField-release-preview-win-setup.exe",
-            "releaseNotes": "https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.3",
+            "downloadUrl": "https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.4/MonoField-release-preview-win-setup.exe",
+            "releaseNotes": "https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.4",
             "screenshot": "https://monofield.vercel.app/monofield-preview-workspace.png",
             "offers": {
               "@type": "Offer",
               "price": "0",
               "priceCurrency": "USD",
               "availability": "https://schema.org/InStock",
-              "url": "https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.3/MonoField-release-preview-win-setup.exe"
+              "url": "https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.4/MonoField-release-preview-win-setup.exe"
             }
           },
           {
@@ -150,13 +150,24 @@
     >
     <header class="site-header">
       <a class="brand" href="#top" aria-label="MonoField"
-        ><img
-          src="/mark.svg?v=monofield-m1"
+        ><svg
+          class="brand-mark"
+          viewBox="0 0 444 444"
           width="28"
           height="28"
-          alt=""
           aria-hidden="true"
-        /><span>monofield</span></a
+          focusable="false"
+        ><rect width="444" height="444" rx="104" fill="#090909" /><path
+            class="brand-mark-stroke"
+            d="M92 312V138L222 306L352 138V312"
+            pathLength="1"
+            fill="none"
+            stroke="#FAFAF8"
+            stroke-width="40"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          /></svg
+        ><span>monofield</span></a
       >
       <nav id="primary-navigation" aria-label="Primary navigation">
         <a class="" href="#product"
@@ -212,7 +223,8 @@
     <main id="main">
       <section class="hero" id="top" aria-labelledby="hero-title">
         <div class="hero-bg" aria-hidden="true">
-          <svg class="hero-contours" data-contours viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice"></svg>
+          <span class="hero-dots"></span>
+          <span class="hero-sweep"></span>
           <span class="hero-glow"></span>
         </div>
         <div class="hero-content">
@@ -243,7 +255,7 @@
           <div class="hero-actions">
             <a
               class="button button-primary"
-              href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.3/MonoField-release-preview-win-setup.exe"
+              href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.4/MonoField-release-preview-win-setup.exe"
               ><span data-ko="Windows Preview 다운로드" data-en="Download Windows Preview"
                 >Windows Preview 다운로드</span
               ><svg
@@ -267,7 +279,7 @@
           </div>
           <a class="hero-preview-link" href="#preview">
             <span class="release-pill">NEW</span>
-            <span data-ko="0.11.7-preview.3 · 새 개발 프리뷰 살펴보기" data-en="0.11.7-preview.3 · Explore the development preview">0.11.7-preview.3 · 새 개발 프리뷰 살펴보기</span>
+            <span data-ko="0.11.7-preview.4 · 새 개발 프리뷰 살펴보기" data-en="0.11.7-preview.4 · Explore the development preview">0.11.7-preview.4 · 새 개발 프리뷰 살펴보기</span>
             <span aria-hidden="true">↗</span>
           </a>
           <p class="hero-meta">
@@ -280,13 +292,75 @@
             >
           </p>
         </div>
-        <figure class="hero-workspace" data-tilt>
-          <div class="hero-floats" aria-hidden="true">
-            <span class="float float-1"><b class="ext ext-xlsx">XLSX</b><span data-ko="인터페이스 명세서" data-en="Interface spec">인터페이스 명세서</span></span>
-            <span class="float float-2"><b class="ext ext-pptx">PPTX</b><span data-ko="화면명세서" data-en="Screen spec">화면명세서</span></span>
-            <span class="float float-3"><b class="ext ext-docx">DOCX</b><span data-ko="인수인계 문서" data-en="Handover doc">인수인계 문서</span></span>
-            <span class="float float-4"><b class="ext ext-json">JSON</b><span>OpenAPI 3.1</span></span>
+        <figure class="engine" aria-labelledby="engine-caption">
+          <div class="engine-stage" aria-hidden="true">
+            <div class="pane pane-code">
+              <div class="pane-bar">
+                <span class="pane-dots"><i></i><i></i><i></i></span>
+                <span class="pane-file">OrderController.java</span>
+                <span class="pane-diff">+2</span>
+              </div>
+              <div class="code">
+                <span class="code-scan"></span>
+                <div class="code-gutter"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span class="is-added">9</span><span class="is-added">10</span></div>
+                <ol class="code-lines">
+                  <li><span class="ln"><span class="t-ann">@RestController</span></span></li>
+                  <li><span class="ln"><span class="t-ann">@RequestMapping</span>(<span class="t-str">"/api/orders"</span>)</span></li>
+                  <li><span class="ln"><span class="t-kw">public class</span> <span class="t-type">OrderController</span> {</span></li>
+                  <li class="ind"><span class="ln"><span class="t-ann">@GetMapping</span>(<span class="t-str">"/{id}"</span>)</span></li>
+                  <li class="ind"><span class="ln"><span class="t-type">OrderDto</span> <span class="t-fn">find</span>(<span class="t-type">Long</span> id) { … }</span></li>
+                  <li class="ind"><span class="ln"><span class="t-ann">@PostMapping</span></span></li>
+                  <li class="ind"><span class="ln"><span class="t-type">OrderDto</span> <span class="t-fn">create</span>(<span class="t-type">OrderReq</span> req) { … }</span></li>
+                  <li class="ind is-added"><span class="ln"><span class="t-ann">@DeleteMapping</span>(<span class="t-str">"/{id}"</span>)<i class="cover"></i></span></li>
+                  <li class="ind is-added"><span class="ln"><span class="t-kw">void</span> <span class="t-fn">cancel</span>(<span class="t-type">Long</span> id) { … }<i class="cover"></i></span></li>
+                  <li class="code-tail"><span class="ln">}</span></li>
+                </ol>
+              </div>
+            </div>
+            <div class="engine-core">
+              <span class="wire wire-in"><span class="run run-intro"><i></i></span><span class="run run-loop"><i></i></span></span>
+              <span class="core">
+                <span class="core-orbit"><i></i></span>
+                <span class="core-pulse"></span><span class="core-pulse core-pulse-loop"></span>
+                <span class="core-tile">
+                  <span class="core-flash"></span><span class="core-flash core-flash-loop"></span>
+                  <svg viewBox="0 0 444 444" focusable="false"><path class="core-m" d="M92 312V138L222 306L352 138V312" pathLength="1" /></svg>
+                </span>
+                <span class="core-label">MonoField</span>
+              </span>
+              <span class="wire wire-out"><span class="run run-intro"><i></i></span><span class="run run-loop"><i></i></span></span>
+            </div>
+            <div class="pane pane-spec">
+              <div class="pane-bar">
+                <span class="xlsx-badge">X</span>
+                <span class="pane-file" data-ko="인터페이스 명세서.xlsx" data-en="interface-spec.xlsx">인터페이스 명세서.xlsx</span>
+                <span class="sheet-status"
+                  ><span class="sheet-sync" data-ko="코드와 동기화됨" data-en="In sync with code">코드와 동기화됨</span
+                  ><span class="sheet-diff" data-ko="+1행 · 검토 대기" data-en="+1 row · review">+1행 · 검토 대기</span></span
+                >
+              </div>
+              <div class="sheet">
+                <div class="row row-letters"><span class="rn"></span><span class="c c-id">A</span><span class="c">B</span><span class="c">C</span><span class="c">D</span></div>
+                <div class="row row-head"><span class="rn">1</span><span class="c c-id">ID</span><span class="c">Method</span><span class="c">URI</span><span class="c" data-ko="설명" data-en="Description">설명</span></div>
+                <div class="row row-gen"><span class="rn">2</span><span class="c c-id">IF-001</span><span class="c"><b class="m m-get">GET</b></span><span class="c c-uri">/api/orders/{id}</span><span class="c" data-ko="주문 조회" data-en="Get order">주문 조회</span></div>
+                <div class="row row-gen"><span class="rn">3</span><span class="c c-id">IF-002</span><span class="c"><b class="m m-post">POST</b></span><span class="c c-uri">/api/orders</span><span class="c" data-ko="주문 등록" data-en="Create order">주문 등록</span></div>
+                <div class="row row-new"><span class="rn">4</span><span class="c c-id">IF-003</span><span class="c"><b class="m m-delete">DELETE</b></span><span class="c c-uri">/api/orders/{id}</span><span class="c" data-ko="주문 취소" data-en="Cancel order">주문 취소</span></div>
+                <div class="row"><span class="rn">5</span><span class="c c-id"></span><span class="c"></span><span class="c"></span><span class="c"></span></div>
+                <div class="row"><span class="rn">6</span><span class="c c-id"></span><span class="c"></span><span class="c"></span><span class="c"></span></div>
+              </div>
+              <div class="sheet-tabs"><span class="is-active" data-ko="API 목록" data-en="API list">API 목록</span><span data-ko="화면 목록" data-en="Screens">화면 목록</span></div>
+            </div>
           </div>
+          <figcaption id="engine-caption">
+            <span class="caption-dot" aria-hidden="true"></span
+            ><span
+              data-ko="예시 · 코드에 API가 추가되면 인터페이스 명세서에 그 행이 diff로 추가됩니다"
+              data-en="Illustration · Add an API in code and the interface spec gains its row as a diff"
+              >예시 · 코드에 API가 추가되면 인터페이스 명세서에 그 행이 diff로 추가됩니다</span
+            >
+          </figcaption>
+        </figure>
+        <figure class="hero-shot">
           <button
             class="screenshot-button"
             type="button"
@@ -299,7 +373,7 @@
               src="/monofield-development.png"
               width="1600"
               height="1100"
-              fetchpriority="high"
+              loading="lazy"
               alt="실제 MonoField에서 Codex 대화와 재고관리 앱을 함께 확인하는 화면"
               data-ko-alt="실제 MonoField에서 Codex 대화와 재고관리 앱을 함께 확인하는 화면"
               data-en-alt="Actual MonoField workspace showing a Codex conversation and a running inventory app"
@@ -319,7 +393,6 @@
                 >크게 보기</span
               ></span
             >
-            <span class="scan-line" aria-hidden="true"></span>
           </button>
           <figcaption>
             <span class="caption-dot" aria-hidden="true"></span
@@ -917,23 +990,24 @@
           </div>
           <article class="preview-release" id="preview" aria-labelledby="preview-title">
             <div class="preview-release-copy">
-              <p class="eyebrow"><span class="release-pill">PREVIEW</span><span>0.11.7-preview.3</span></p>
+              <p class="eyebrow"><span class="release-pill">PREVIEW</span><span>0.11.7-preview.4</span></p>
               <h3 id="preview-title" data-ko="코드에서 명세서까지, 바뀐 것만 검토하세요." data-en="From code to spec. Review only what changed.">코드에서 명세서까지, 바뀐 것만 검토하세요.</h3>
               <p data-ko="Spring·전자정부프레임워크 코드에서 인터페이스 명세서를 만들고, 코드가 바뀌면 호환성 위험도와 함께 갱신안을 diff로 검토합니다." data-en="Generate interface specs from Spring and eGovFrame code, then review spec updates as diffs with a compatibility risk level when the code changes.">Spring·전자정부프레임워크 코드에서 인터페이스 명세서를 만들고, 코드가 바뀌면 호환성 위험도와 함께 갱신안을 diff로 검토합니다.</p>
               <ul class="preview-features">
+                <li data-ko="실행 권한 한 곳에서: 읽기 전용·기본·전체 접근(Windows 관리자 권한 포함)" data-en="One execution permission setting: read only, default or full access (with Windows administrator rights)">실행 권한 한 곳에서: 읽기 전용·기본·전체 접근(Windows 관리자 권한 포함)</li>
                 <li data-ko="Spring·전자정부·OpenAPI 스캐너와 Spring Security 기반 인증 판단" data-en="Spring, eGovFrame and OpenAPI scanners with Spring Security–based auth detection">Spring·전자정부·OpenAPI 스캐너와 Spring Security 기반 인증 판단</li>
                 <li data-ko="명세서 변경의 호환성 분류(깨짐·확인 필요·추가)와 OpenAPI 3.1 내보내기" data-en="Compatibility classification of spec changes and OpenAPI 3.1 export">명세서 변경의 호환성 분류(깨짐·확인 필요·추가)와 OpenAPI 3.1 내보내기</li>
                 <li data-ko="소개 영상이 들어 있는 앱 안 가이드" data-en="An in-app guide with the intro video">소개 영상이 들어 있는 앱 안 가이드</li>
                 <li data-ko="REA·Laya 연동과 Java 코드 탐색·검증 도구 유지" data-en="REA and Laya integration, plus Java navigation and verification tools">REA·Laya 연동과 Java 코드 탐색·검증 도구 유지</li>
               </ul>
               <div class="preview-actions">
-                <a class="button button-primary" href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.3/MonoField-release-preview-win-setup.exe"><span data-ko="Preview 설치본" data-en="Preview installer">Preview 설치본</span><span aria-hidden="true">↓</span></a>
-                <a class="inline-link" href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.3/MonoField-release-preview-win-portable.zip"><span data-ko="포터블 ZIP" data-en="Portable ZIP">포터블 ZIP</span></a>
+                <a class="button button-primary" href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.4/MonoField-release-preview-win-setup.exe"><span data-ko="Preview 설치본" data-en="Preview installer">Preview 설치본</span><span aria-hidden="true">↓</span></a>
+                <a class="inline-link" href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.4/MonoField-release-preview-win-portable.zip"><span data-ko="포터블 ZIP" data-en="Portable ZIP">포터블 ZIP</span></a>
               </div>
               <p class="preview-release-links">
-                <a class="inline-link" href="https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.3"><span data-ko="프리뷰 릴리스 안내" data-en="Preview release notes">프리뷰 릴리스 안내</span></a>
+                <a class="inline-link" href="https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.4"><span data-ko="프리뷰 릴리스 안내" data-en="Preview release notes">프리뷰 릴리스 안내</span></a>
                 <span aria-hidden="true">·</span>
-                <a class="inline-link" href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.3/SHA256SUMS.txt"><span data-ko="체크섬" data-en="Checksums">체크섬</span></a>
+                <a class="inline-link" href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.4/SHA256SUMS.txt"><span data-ko="체크섬" data-en="Checksums">체크섬</span></a>
               </p>
             </div>
             <figure class="preview-release-image">

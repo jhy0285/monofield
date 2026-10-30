@@ -38,6 +38,7 @@ import { exportArtifact as exportArtifactFromHtml } from "./artifact-export.js";
 import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf } from "./pdf-export.js";
 import type { PrintReadyPdfOptions } from "./pdf-export.js";
 import type { DesktopUpdater } from "./updater.js";
+import type { DesktopElevation } from "./elevation.js";
 import type { DatabaseBroker } from "./database-broker.js";
 import { createBrowserAutomationService, type BrowserAutomationGuest } from "./browser-automation.js";
 
@@ -354,6 +355,11 @@ export type DesktopRuntimeOptions = {
    * and the runtime falls back to `discoverUrl` for API calls too.
   */
   discoverDaemonUrl?: () => Promise<string | null>;
+  /**
+   * Administrator relaunch for Settings → Execution permissions. Null off
+   * Windows and in tools-dev; the renderer then gets `unsupported`.
+   */
+  elevation?: DesktopElevation | null;
   /**
    * BCP-47 locale string read from the OS by main process, forwarded
    * to the preload via `webPreferences.additionalArguments` so the
@@ -1590,7 +1596,7 @@ async function showDirectoryPickerForSender(
     buttonLabel: "Use as working directory",
     ...(defaultPath ? { defaultPath } : {}),
     properties: ["openDirectory", "createDirectory"],
-    title: "Select an MonoField working directory",
+    title: "Select a MonoField working directory",
   };
   return parent
     ? dialog.showOpenDialog(parent, pickerOptions)
@@ -2242,6 +2248,16 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         reason: error instanceof Error ? error.message : String(error),
       };
     }
+  });
+  ipcMain.removeHandler("od:elevation:relaunch");
+  ipcMain.handle("od:elevation:relaunch", async (event): Promise<OpenDesignHostActionResult> => {
+    requireMainWindowSender(event);
+    if (options.elevation == null) return { ok: false, reason: "unsupported" };
+    if (options.requestQuit == null) return { ok: false, reason: "desktop quit is not available" };
+    const result = await options.elevation.relaunch();
+    // The elevated copy waits for this process to exit before it boots.
+    if (result.ok) setTimeout(() => options.requestQuit?.(), 0);
+    return result;
   });
   ipcMain.handle("od:update:status", async (event) => {
     requireMainWindowSender(event);

@@ -1,4 +1,4 @@
-# Publishing An MonoField Plugin
+# Publishing a MonoField Plugin
 
 MonoField registry publishing is GitHub-backed in v1. The CLI remains the
 canonical workflow; the product UI and agent flows wrap these commands.

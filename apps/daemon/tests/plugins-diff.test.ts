@@ -77,7 +77,7 @@ describe('diffPlugins — manifest body', () => {
     const a = make('p', { taskKind: 'new-generation' });
     const b = make('p', { taskKind: 'code-migration' });
     const r = diffPlugins({ a, b });
-    const e = r.entries.find((x) => x.field === 'od.taskKind');
+    const e = r.entries.find((x) => x.field === 'monofield.taskKind');
     expect(e?.kind).toBe('changed');
     expect(e?.before).toBe('new-generation');
     expect(e?.after).toBe('code-migration');
@@ -87,7 +87,7 @@ describe('diffPlugins — manifest body', () => {
     const a = make('p', { taskKind: 'new-generation', inputs: [{ name: 'topic', type: 'string' }] });
     const b = make('p', { taskKind: 'new-generation', inputs: [{ name: 'topic', type: 'string' }, { name: 'tone', type: 'string' }] });
     const r = diffPlugins({ a, b });
-    const e = r.entries.find((x) => x.field === 'od.inputs[]');
+    const e = r.entries.find((x) => x.field === 'monofield.inputs[]');
     expect(e?.summary).toMatch(/1 added/);
     expect(e?.after).toContain('tone');
   });
@@ -107,9 +107,9 @@ describe('diffPlugins — manifest body', () => {
     });
     const r = diffPlugins({ a, b });
     // Stage-id roster differs.
-    expect(r.entries.find((e) => e.field === 'od.pipeline.stages')?.kind).toBe('changed');
+    expect(r.entries.find((e) => e.field === 'monofield.pipeline.stages')?.kind).toBe('changed');
     // Per-stage atoms diff for the surviving stage 'plan'.
-    const planAtoms = r.entries.find((e) => e.field === 'od.pipeline.stages[plan].atoms');
+    const planAtoms = r.entries.find((e) => e.field === 'monofield.pipeline.stages[plan].atoms');
     expect(planAtoms?.summary).toMatch(/1 added/);
   });
 
@@ -117,7 +117,7 @@ describe('diffPlugins — manifest body', () => {
     const a = make('p', { taskKind: 'new-generation' });
     const b = make('p', { taskKind: 'new-generation', pipeline: { stages: [{ id: 'x', atoms: ['todo-write'] }] } });
     const r = diffPlugins({ a, b });
-    const e = r.entries.find((x) => x.field === 'od.pipeline');
+    const e = r.entries.find((x) => x.field === 'monofield.pipeline');
     expect(e?.kind).toBe('added');
     expect(e?.after).toContain('x');
   });
@@ -126,7 +126,7 @@ describe('diffPlugins — manifest body', () => {
     const a = make('p', { taskKind: 'figma-migration', connectors: { required: [{ id: 'figma', tools: ['files.get'] }] } });
     const b = make('p', { taskKind: 'figma-migration', connectors: { required: [{ id: 'figma', tools: ['files.get'] }, { id: 'slack', tools: [] }] } });
     const r = diffPlugins({ a, b });
-    const e = r.entries.find((x) => x.field === 'od.connectors.required');
+    const e = r.entries.find((x) => x.field === 'monofield.connectors.required');
     expect(e?.summary).toMatch(/1 added/);
   });
 });

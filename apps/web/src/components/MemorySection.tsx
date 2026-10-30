@@ -815,6 +815,18 @@ export function MemorySection({
     [t],
   );
 
+  const flashPill =
+    flash && flash.kind !== 'pathCopied' ? (
+      <div
+        key={flash.key}
+        role="status"
+        aria-live="polite"
+        className="memory-flash-pill"
+      >
+        {flashLabel[flash.kind]}
+      </div>
+    ) : null;
+
   const onCopyPath = useCallback(async () => {
     if (!rootDir) return;
     try {
@@ -1744,6 +1756,9 @@ export function MemorySection({
         </div>
       ) : null}
 
+      {/* Saving closes the Add modal, so the confirmation has to outlive it. */}
+      {addModalOpen ? null : flashPill}
+
       {topTab === 'how' ? (
         <div className="memory-how-panel">
           <div className="memory-auto-flow">
@@ -1861,16 +1876,7 @@ export function MemorySection({
             </button>
           </div>
 
-          {flash && flash.kind !== 'pathCopied' ? (
-            <div
-              key={flash.key}
-              role="status"
-              aria-live="polite"
-              className="memory-flash-pill"
-            >
-              {flashLabel[flash.kind]}
-            </div>
-          ) : null}
+          {flashPill}
 
           {editing ? (
             <div

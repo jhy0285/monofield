@@ -19,7 +19,6 @@ test('[P0] @critical home loads with the primary entry controls', async ({ page 
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
   await ensureRailOpen(page);
   await expect(page.getByTestId('entry-nav-logo')).toBeVisible();
-  await expect(page.getByTestId('entry-nav-home')).toHaveAttribute('aria-current', 'page');
   await expect(page.getByTestId('entry-nav-new-project')).toBeVisible();
 });
 

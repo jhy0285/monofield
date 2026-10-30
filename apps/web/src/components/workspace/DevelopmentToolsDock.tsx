@@ -1,10 +1,13 @@
 'use client';
 
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { Button } from '@open-design/components';
+import { Button, Splitter } from '@open-design/components';
+import { usePersistentSize } from '../../hooks/usePersistentSize';
+import { useViewportHeight } from '../../hooks/useViewportHeight';
 import { useT } from '../../i18n';
 import { Icon } from '../Icon';
 import styles from './DevelopmentToolsDock.module.css';
+import { DEV_DOCK_HEIGHT_STORAGE_KEY, developmentDockBounds, resolveDockHeight } from './developmentDockSize';
 
 export type DevelopmentTool = 'changes' | 'terminal' | 'logs' | 'impact';
 const tools: DevelopmentTool[] = ['changes', 'terminal', 'logs', 'impact'];
@@ -21,8 +24,16 @@ export function DevelopmentToolsDock({ active, onSelect, renderPanel }: {
   const [visited, setVisited] = useState<DevelopmentTool[]>([]);
   const [expanded, setExpanded] = useState(false);
   const buttons = useRef<Array<HTMLButtonElement | null>>([]);
+  const size = usePersistentSize(DEV_DOCK_HEIGHT_STORAGE_KEY);
+  const bounds = developmentDockBounds(useViewportHeight());
+  const height = resolveDockHeight(bounds, size.stored, expanded);
   useEffect(() => { if (active) setVisited(current => current.includes(active) ? current : [...current, active]); }, [active]);
   return <section className={styles.dock} data-testid="development-tools-dock" aria-label={t('development.dock.title')}>
+    {active ? <Splitter className={styles.splitter} orientation="horizontal" resizes="after"
+      label={t('development.dock.resize')} value={height} min={bounds.min} max={bounds.max}
+      defaultValue={bounds.defaultHeight} data-testid="development-dock-resizer"
+      onChange={next => { setExpanded(false); size.preview(next); }}
+      onCommit={next => { if (next === bounds.defaultHeight) size.reset(); else size.commit(next); }} /> : null}
     <div className={styles.toolbar}>
       <div role="tablist" aria-label={t('development.dock.title')} className={styles.tabs}>
         {tools.map((tool, index) => <button key={tool} ref={element => { buttons.current[index] = element; }}
@@ -46,7 +57,7 @@ export function DevelopmentToolsDock({ active, onSelect, renderPanel }: {
       </div> : null}
     </div>
     {visited.map(tool => <div key={tool} id={`${id}-${tool}`} role="tabpanel" aria-labelledby={`${id}-${tool}-tab`}
-      hidden={active !== tool} className={`${styles.content} ${expanded ? styles.expanded : ''}`}>
+      hidden={active !== tool} className={styles.content} style={{ height }}>
       {renderPanel(tool, active === tool)}
     </div>)}
   </section>;

@@ -13,3 +13,5 @@ export { Input, Select, Textarea } from './form-controls';
 export type { InputProps, SelectProps, TextareaProps } from './form-controls';
 export { VisuallyHidden } from './visually-hidden';
 export type { VisuallyHiddenProps } from './visually-hidden';
+export { Splitter } from './splitter';
+export type { SplitterOrientation, SplitterProps } from './splitter';

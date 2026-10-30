@@ -48,6 +48,7 @@ import {
 } from './home-hero/chips';
 import { homeHeroChipLabel } from './home-hero/chip-labels';
 import { ScenarioArt } from './home-hero/ScenarioArt';
+import { HeroBrand } from './home-hero/HeroBrand';
 import { useEdgeAutoScroll, EdgeScrollZones } from './home-hero/EdgeAutoScroll';
 import {
   isSubChipParent,
@@ -1097,17 +1098,12 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
 
   return (
     <section className="home-hero" data-testid="home-hero">
-      <div className="home-hero__brand">
-        <span className="home-hero__brand-mark">
-          <img src="/app-icon.svg?v=monofield-1" alt="" draggable={false} />
-        </span>
-        <span className="home-hero__brand-name">{t('app.brand')}</span>
-      </div>
-      <h1 className="home-hero__title">{t('homeHero.title')}</h1>
-      <p className="home-hero__subtitle">
-        {t('homeHero.subtitlePrefix')}
-      </p>
-      <p className="home-hero__trust">{t('homeHero.trustLine')}</p>
+      <HeroBrand
+        brand={t('app.brand')}
+        title={t('homeHero.title')}
+        subtitle={t('homeHero.subtitlePrefix')}
+        trustLine={t('homeHero.trustLine')}
+      />
       {onOpenGuide ? (
         <button
           type="button"

@@ -5,6 +5,7 @@ import { amrHandoffDeviceId, attributedAmrUrl, recordAmrEntry } from '../analyti
 import { useAnalytics } from '../analytics/provider';
 import { useT } from '../i18n';
 import { AgentIcon } from './AgentIcon';
+import { AgentSupportTag } from './AgentSupportTag';
 import { RemixIcon } from './RemixIcon';
 import { SearchableModelSelect } from './modelOptions';
 import type { AgentInfo, AppConfig, ExecMode, ProviderModelOption } from '../types';
@@ -394,6 +395,7 @@ export function AvatarMenu({
                   >
                     <AgentIcon id={a.id} size={18} />
                     <span>{displayAgentName(a)}</span>
+                    <AgentSupportTag id={a.id} />
                     {selected ? (
                       <span className="avatar-item-meta">
                         {t('avatar.metaSelected')}

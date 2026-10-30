@@ -1,0 +1,17 @@
+.tag {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  margin-inline-start: 6px;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-muted);
+  font: 600 9px/14px var(--sans);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  white-space: nowrap;
+  cursor: help;
+}

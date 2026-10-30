@@ -103,6 +103,8 @@ import { homeHeroChipLabel } from './home-hero/chip-labels';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { Icon } from './Icon';
 import { AgentIcon } from './AgentIcon';
+import { AgentSupportTag } from './AgentSupportTag';
+import { ENABLE_AMR_RUNTIME } from '../runtime/amr-flag';
 import { LanguageMenu } from './LanguageMenu';
 import type { IntegrationTab } from './IntegrationsView';
 import { InlineModelSwitcher } from './InlineModelSwitcher';
@@ -190,8 +192,6 @@ const IntegrationsView = lazy(() => import('./IntegrationsView').then((module) =
 const PluginsView = lazy(() => import('./PluginsView').then((module) => ({ default: module.PluginsView })));
 const OpenWorkView = lazy(() => import('./OpenWorkView').then((module) => ({ default: module.OpenWorkView })));
 const TasksView = lazy(() => import('./TasksView').then((module) => ({ default: module.TasksView })));
-
-const ENABLE_AMR_RUNTIME = false;
 
 // The topbar chips (GitHub star, model switcher, Use everywhere)
 // collapse into the settings dropdown when the viewport gets
@@ -2693,7 +2693,7 @@ function OnboardingCliSetupPanel({
             >
               <AgentIcon id={agent.id} size={22} />
               <span>
-                <strong>{agent.name}</strong>
+                <strong>{agent.name}<AgentSupportTag id={agent.id} /></strong>
                 <small>{agent.version ?? t('common.installed')}</small>
               </span>
             </button>

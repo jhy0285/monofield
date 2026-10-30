@@ -298,7 +298,7 @@ describe('design system package audit helpers', () => {
       'Rewrite `SKILL.md` as a discoverable skill package',
     );
     expect(buildDesignSystemPackageAuditRepairPrompt(failingAudit)).toContain(
-      'Rewrite `README.md` as a Claude Design package guide',
+      'Rewrite `README.md` as a MonoField package guide',
     );
     expect(buildDesignSystemPackageAuditRepairPrompt(failingAudit)).toContain(
       'Add a `## Preview Manifest` section to `README.md`',
@@ -2246,7 +2246,7 @@ describe('DesignSystemCreationFlow', () => {
     expect(mocks.writeProjectTextFile).toHaveBeenCalledWith(
       project.id,
       'context/source-context.md',
-      expect.stringContaining('"$OD_NODE_BIN" "$OD_BIN" tools connectors github-design-context --repo \'https://github.com/nexu-io/open-design\' --output context/github/nexu-io-open-design.md'),
+      expect.stringContaining('"$MONOFIELD_NODE_BIN" "$MONOFIELD_BIN" tools connectors github-design-context --repo \'https://github.com/nexu-io/open-design\' --output context/github/nexu-io-open-design.md'),
     );
     expect(mocks.writeProjectTextFile).not.toHaveBeenCalledWith(
       project.id,

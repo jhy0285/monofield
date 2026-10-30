@@ -1,4 +1,19 @@
-import type { ProjectFile } from '../../types';
+import type { ProjectFile, ProjectMetadata } from '../../types';
+
+/**
+ * Whether opening a project should pre-select the best design artifact in the
+ * Design Files preview column.
+ *
+ * Only a folder imported as a design workspace qualifies. A development
+ * workspace is a code folder that can hold several independent projects, so the
+ * newest HTML or image across all of them is an arbitrary file from a module
+ * the user may not be working on; the preview there stays an explicit choice.
+ */
+export function shouldAutoPreviewDesignArtifacts(
+  metadata: Pick<ProjectMetadata, 'importedFrom' | 'workMode'> | null | undefined,
+): boolean {
+  return metadata?.importedFrom === 'folder' && metadata.workMode !== 'development';
+}
 
 export function listDesignArtifactCandidates(
   files: ProjectFile[],

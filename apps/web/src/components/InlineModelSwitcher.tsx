@@ -47,6 +47,7 @@ import {
 import type { AgentInfo, ApiProtocol, AppConfig, ExecMode } from '../types';
 import { apiProtocolLabel } from '../utils/apiProtocol';
 import { AgentIcon } from './AgentIcon';
+import { AgentSupportTag } from './AgentSupportTag';
 import { Icon } from './Icon';
 import {
   AMR_LOGIN_STATUS_EVENT,
@@ -767,6 +768,7 @@ export function InlineModelSwitcher({
                             <span className="inline-switcher__agent-name">
                               {agentName}
                             </span>
+                            <AgentSupportTag id={a.id} />
                             {a.id === 'amr' ? (
                               <span className="inline-switcher__agent-status">
                                 {amrStatusIconName ? (

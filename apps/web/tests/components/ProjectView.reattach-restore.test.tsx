@@ -11,6 +11,7 @@ import {
   findSameTurnHtmlWriteForRecoveredArtifact,
   mergeRecoveredArtifact,
   rememberArtifactDeliveryCapability,
+  rememberPendingArtifactDeliveryCapability,
   waitForArtifactWriteReceipt,
 } from '../../src/components/ProjectView';
 import { resolvePersistedArtifactHtml } from '../../src/artifacts/recover';
@@ -643,6 +644,346 @@ describe('ProjectView daemon reattach restore', () => {
           { name: 'critique.json', saved: true, readBack: true },
         ]),
       },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it('lets a page reattached to a still-running run deliver its artifact when the run finishes', async () => {
+    const startedAt = Date.now();
+    const replayed =
+      '<artifact identifier="index.html" type="text/html">' +
+      '<!doctype html><html><head><title>Dashboard</title></head><body><main>ready</main></body></html>' +
+      '</artifact>';
+    const written = new Map<string, string>();
+    const currentFiles = () => [...written.entries()].map(([name, content], index) => ({
+      name,
+      path: name,
+      size: content.length,
+      mtime: startedAt + index + 1,
+      kind: 'html',
+      mime: 'text/html',
+    }));
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'user-running-delivery',
+        role: 'user',
+        content: 'Create index.html.',
+      } satisfies ChatMessage,
+      {
+        id: 'msg-running-delivery',
+        role: 'assistant',
+        content: '',
+        events: [],
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-running-delivery',
+        runStatus: 'running',
+        preTurnFileNames: [],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockImplementation(async () => currentFiles());
+    fetchProjectFileText.mockImplementation(async (_projectId: string, name: string) => (
+      written.get(name) ?? null
+    ));
+    writeProjectTextFile.mockImplementation(async (
+      _projectId: string,
+      name: string,
+      content: string,
+    ) => {
+      written.set(name, content);
+      return currentFiles().find((file) => file.name === name) ?? null;
+    });
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    // The run is still going when the page reloads and reattaches, and the
+    // browser owes the delivery; by the time the stream ends it has succeeded.
+    fetchChatRunStatus.mockResolvedValueOnce({
+      id: 'run-running-delivery',
+      status: 'running',
+      createdAt: startedAt,
+      updatedAt: startedAt,
+      exitCode: null,
+      signal: null,
+      artifactDeliveryRequired: true,
+    });
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-running-delivery',
+      status: 'succeeded',
+      createdAt: startedAt,
+      updatedAt: startedAt + 5,
+      exitCode: 0,
+      signal: null,
+      artifactDeliveryRequired: true,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+    acknowledgeChatRunArtifactDelivery.mockResolvedValue({
+      ok: true,
+      applied: true,
+      run: {
+        id: 'run-running-delivery',
+        status: 'succeeded',
+        artifactDeliveryRequired: true,
+        artifactDelivery: {
+          status: 'succeeded',
+          acknowledgedAt: startedAt + 10,
+          files: [{ name: 'index.html', saved: true, readBack: true, previewReady: true }],
+        },
+      },
+    });
+    let allowedRecovery: boolean | undefined;
+    reattachDaemonRun.mockImplementation(async (options: any) => {
+      allowedRecovery = options.allowArtifactDeliveryRecovery;
+      options.handlers.onDelta(replayed);
+      options.onRunStatus?.('succeeded');
+      options.handlers.onDone();
+    });
+    rememberArtifactDeliveryCapability(
+      'run-running-delivery',
+      'client-running-delivery',
+    );
+
+    renderProjectView();
+
+    await waitFor(() => {
+      const restored = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .find((message) => (
+          message?.id === 'msg-running-delivery'
+          && message.runStatus === 'succeeded'
+          && message.producedFiles?.length === 1
+        ));
+      expect(restored?.producedFiles?.map((file) => file.name)).toEqual(['index.html']);
+    });
+    expect(allowedRecovery).toBe(true);
+    expect([...written.keys()]).toEqual(['index.html']);
+    expect(acknowledgeChatRunArtifactDelivery).toHaveBeenCalledWith(
+      'run-running-delivery',
+      expect.objectContaining({ clientRequestId: 'client-running-delivery', status: 'succeeded' }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it('delivers the artifact of a finished run whose row the daemon completed while no page was attached', async () => {
+    const startedAt = Date.now();
+    const replayed =
+      '<artifact identifier="index.html" type="text/html">' +
+      '<!doctype html><html><head><title>Dashboard</title></head><body><main>ready</main></body></html>' +
+      '</artifact>';
+    const written = new Map<string, string>();
+    const currentFiles = () => [...written.entries()].map(([name, content], index) => ({
+      name,
+      path: name,
+      size: content.length,
+      mtime: startedAt + index + 1,
+      kind: 'html',
+      mime: 'text/html',
+    }));
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    // With no page attached, the daemon finished the row itself: the text is
+    // there and the status says succeeded, but nothing was written to a file.
+    listMessages.mockResolvedValue([
+      {
+        id: 'user-daemon-finished',
+        role: 'user',
+        content: 'Create index.html.',
+      } satisfies ChatMessage,
+      {
+        id: 'msg-daemon-finished',
+        role: 'assistant',
+        content: replayed,
+        events: [{ kind: 'text', text: replayed }],
+        createdAt: startedAt,
+        startedAt,
+        endedAt: startedAt + 5,
+        runId: 'run-daemon-finished',
+        runStatus: 'succeeded',
+        preTurnFileNames: [],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockImplementation(async () => currentFiles());
+    fetchProjectFileText.mockImplementation(async (_projectId: string, name: string) => (
+      written.get(name) ?? null
+    ));
+    writeProjectTextFile.mockImplementation(async (
+      _projectId: string,
+      name: string,
+      content: string,
+    ) => {
+      written.set(name, content);
+      return currentFiles().find((file) => file.name === name) ?? null;
+    });
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-daemon-finished',
+      status: 'succeeded',
+      createdAt: startedAt,
+      updatedAt: startedAt + 5,
+      exitCode: 0,
+      signal: null,
+      artifactDeliveryRequired: true,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+    acknowledgeChatRunArtifactDelivery.mockResolvedValue({
+      ok: true,
+      applied: true,
+      run: {
+        id: 'run-daemon-finished',
+        status: 'succeeded',
+        artifactDeliveryRequired: true,
+        artifactDelivery: {
+          status: 'succeeded',
+          acknowledgedAt: startedAt + 10,
+          files: [{ name: 'index.html', saved: true, readBack: true, previewReady: true }],
+        },
+      },
+    });
+    reattachDaemonRun.mockImplementation(async (options: any) => {
+      options.handlers.onDelta(replayed);
+      options.onRunStatus?.('succeeded');
+      options.handlers.onDone();
+    });
+    rememberArtifactDeliveryCapability(
+      'run-daemon-finished',
+      'client-daemon-finished',
+    );
+
+    renderProjectView();
+
+    await waitFor(() => {
+      const restored = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .find((message) => (
+          message?.id === 'msg-daemon-finished'
+          && message.runStatus === 'succeeded'
+          && message.producedFiles?.length === 1
+        ));
+      expect(restored?.producedFiles?.map((file) => file.name)).toEqual(['index.html']);
+    });
+    expect([...written.keys()]).toEqual(['index.html']);
+    expect(acknowledgeChatRunArtifactDelivery).toHaveBeenCalledWith(
+      'run-daemon-finished',
+      expect.objectContaining({ clientRequestId: 'client-daemon-finished', status: 'succeeded' }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it('claims the capability a page filed before it ever learned the run id', async () => {
+    const startedAt = Date.now();
+    const replayed =
+      '<artifact identifier="index.html" type="text/html">' +
+      '<!doctype html><html><head><title>Dashboard</title></head><body><main>ready</main></body></html>' +
+      '</artifact>';
+    const written = new Map<string, string>();
+    const currentFiles = () => [...written.entries()].map(([name, content], index) => ({
+      name,
+      path: name,
+      size: content.length,
+      mtime: startedAt + index + 1,
+      kind: 'html',
+      mime: 'text/html',
+    }));
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    // With no page attached, the daemon finished the row itself: the text is
+    // there and the status says succeeded, but nothing was written to a file.
+    listMessages.mockResolvedValue([
+      {
+        id: 'user-pending-capability',
+        role: 'user',
+        content: 'Create index.html.',
+      } satisfies ChatMessage,
+      {
+        id: 'msg-pending-capability',
+        role: 'assistant',
+        content: replayed,
+        events: [{ kind: 'text', text: replayed }],
+        createdAt: startedAt,
+        startedAt,
+        endedAt: startedAt + 5,
+        runId: 'run-pending-capability',
+        runStatus: 'succeeded',
+        preTurnFileNames: [],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockImplementation(async () => currentFiles());
+    fetchProjectFileText.mockImplementation(async (_projectId: string, name: string) => (
+      written.get(name) ?? null
+    ));
+    writeProjectTextFile.mockImplementation(async (
+      _projectId: string,
+      name: string,
+      content: string,
+    ) => {
+      written.set(name, content);
+      return currentFiles().find((file) => file.name === name) ?? null;
+    });
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-pending-capability',
+      status: 'succeeded',
+      createdAt: startedAt,
+      updatedAt: startedAt + 5,
+      exitCode: 0,
+      signal: null,
+      artifactDeliveryRequired: true,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+    acknowledgeChatRunArtifactDelivery.mockResolvedValue({
+      ok: true,
+      applied: true,
+      run: {
+        id: 'run-pending-capability',
+        status: 'succeeded',
+        artifactDeliveryRequired: true,
+        artifactDelivery: {
+          status: 'succeeded',
+          acknowledgedAt: startedAt + 10,
+          files: [{ name: 'index.html', saved: true, readBack: true, previewReady: true }],
+        },
+      },
+    });
+    reattachDaemonRun.mockImplementation(async (options: any) => {
+      options.handlers.onDelta(replayed);
+      options.onRunStatus?.('succeeded');
+      options.handlers.onDone();
+    });
+    // The page that sent the turn reloaded before the daemon's reply named the
+    // run, so the capability was only ever filed under the message.
+    rememberPendingArtifactDeliveryCapability(
+      'msg-pending-capability',
+      'client-pending-capability',
+    );
+
+    renderProjectView();
+
+    await waitFor(() => {
+      const restored = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .find((message) => (
+          message?.id === 'msg-pending-capability'
+          && message.runStatus === 'succeeded'
+          && message.producedFiles?.length === 1
+        ));
+      expect(restored?.producedFiles?.map((file) => file.name)).toEqual(['index.html']);
+    });
+    expect([...written.keys()]).toEqual(['index.html']);
+    expect(acknowledgeChatRunArtifactDelivery).toHaveBeenCalledWith(
+      'run-pending-capability',
+      expect.objectContaining({ clientRequestId: 'client-pending-capability', status: 'succeeded' }),
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });

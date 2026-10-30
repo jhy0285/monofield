@@ -305,7 +305,7 @@ describe('project design system route gates', () => {
     expect(names).toContain('SKILLS.md');
 
     const skills = await zip.file('SKILLS.md')!.async('string');
-    expect(skills).toContain('https://github.com/nexu-io/open-design');
+    expect(skills).toContain('https://github.com/jhy0285/monofield');
   });
 
   it('returns 404 when downloading a non-user design system archive', async () => {

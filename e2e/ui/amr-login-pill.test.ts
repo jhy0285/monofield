@@ -6,7 +6,7 @@
 // This test mocks those endpoints directly via `page.route` instead of
 // booting a real daemon — the daemon-side wiring is covered separately by
 // `apps/daemon/tests/integrations/vela.routes.test.ts` (HTTP routes) and
-// `e2e/tests/amr/turn.test.ts` (full tools-dev chat run). Here we focus
+// `apps/daemon/tests/amr-acp-integration.test.ts` (the ACP run). Here we focus
 // on the front-end transitions a regression would otherwise only surface
 // during manual demos: "Sign in" → "Signed in" → hover-only "Sign out"
 // label flip → "Sign in" again on logout.
@@ -16,6 +16,9 @@ import { waitForLoadingShell } from '@/playwright/entry';
 import type { Page } from '@playwright/test';
 import { openSettingsDialog as openEntrySettingsDialog } from '../lib/playwright/amr.js';
 import { routeAgents } from '../lib/playwright/mock-factory.js';
+
+// MonoField ships the AMR cloud runtime off; these specs run against a stack that has it on.
+test.use({ amrEnabled: true });
 
 const STORAGE_KEY = 'open-design:config';
 const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
@@ -134,7 +137,7 @@ test('[P1] AMR card authorizes through daemon login status and returns to author
 
   const amrCard = dialog
     .locator('.amr-agent-card, .agent-card-installed')
-    .filter({ hasText: /Open Design AMR|AMR \(vela\)/i })
+    .filter({ hasText: /MonoField AMR|Open Design AMR|AMR \(vela\)/i })
     .first();
   await expect(amrCard).toBeVisible();
 

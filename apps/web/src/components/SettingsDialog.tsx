@@ -46,6 +46,7 @@ import { LOCALE_LABEL, LOCALES, useI18n } from '../i18n';
 import type { Locale } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { AgentIcon } from './AgentIcon';
+import { AgentSupportTag } from './AgentSupportTag';
 import { AgentDiagnosticRow } from './AgentDiagnosticRow';
 import { AmrLoginPill } from './AmrLoginPill';
 import {
@@ -61,6 +62,7 @@ import { amrProfileBadgeLabel } from '../runtime/amr-guidance';
 import { ExportDiagnosticsRow } from './ExportDiagnosticsButton';
 import { Icon } from './Icon';
 import { DictionaryLibrarySection } from './DictionaryLibrarySection';
+import { ExecutionPermissionsSection } from './ExecutionPermissionsSection';
 import {
   EntryFeatureGuide,
   shouldOpenEntryFeatureGuide,
@@ -187,6 +189,7 @@ import {
 
 export type SettingsSection =
   | 'execution'
+  | 'permissions'
   | 'instructions'
   | 'media'
   | 'composio'
@@ -2930,6 +2933,7 @@ export function SettingsDialog({
     privacy: { title: t('settings.privacy'), subtitle: t('settings.privacyHint') },
     database: { title: t('settings.databaseTitle'), subtitle: t('settings.databaseSubtitle') },
     dictionaries: { title: t('settings.dictionaryLibraryTitle'), subtitle: t('settings.dictionaryLibrarySubtitle') },
+    permissions: { title: t('executionPermissions.navTitle'), subtitle: t('executionPermissions.subtitle') },
     pet: { title: t('pet.title'), subtitle: t('pet.subtitle') },
     skills: { title: t('settings.skills'), subtitle: t('settings.skillsHint') },
     designSystems: {
@@ -3324,6 +3328,18 @@ export function SettingsDialog({
             </button>
             <button
               type="button"
+              className={`settings-nav-item${activeSection === 'permissions' ? ' active' : ''}`}
+              onClick={() => setActiveSection('permissions')}
+              data-testid="settings-nav-permissions"
+            >
+              <Icon name="shield" size={18} />
+              <span>
+                <strong>{t('executionPermissions.navTitle')}</strong>
+                <small>{t('executionPermissions.navHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
               className={`settings-nav-item${activeSection === 'instructions' ? ' active' : ''}`}
               onClick={() => setActiveSection('instructions')}
             >
@@ -3342,17 +3358,6 @@ export function SettingsDialog({
               <span>
                 <strong>{t('settings.memory')}</strong>
                 <small>{t('settings.memoryHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'media' ? ' active' : ''}`}
-              onClick={(event) => selectSettingsSection('media', event.detail > 0)}
-            >
-              <Icon name="image" size={18} />
-              <span>
-                <strong>{t('settings.mediaProviders')}</strong>
-                <small>Image / video / audio</small>
               </span>
             </button>
             <button
@@ -3379,17 +3384,6 @@ export function SettingsDialog({
             </button>
             <button
               type="button"
-              className={`settings-nav-item${activeSection === 'composio' ? ' active' : ''}`}
-              onClick={() => setActiveSection('composio')}
-            >
-              <Icon name="sliders" size={18} />
-              <span>
-                <strong>{t('connectors.title')}</strong>
-                <small>{t('settings.connectorsNavHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
               className={`settings-nav-item${activeSection === 'integrations' ? ' active' : ''}`}
               onClick={() => setActiveSection('integrations')}
             >
@@ -3397,94 +3391,6 @@ export function SettingsDialog({
               <span>
                 <strong>{t('settings.mcpServerTitle')}</strong>
                 <small>{t('settings.mcpServerHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'language' ? ' active' : ''}`}
-              onClick={() => setActiveSection('language')}
-            >
-              <Icon name="languages" size={18} />
-              <span>
-                <strong>{t('settings.language')}</strong>
-                <small>{t('settings.languageHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'appearance' ? ' active' : ''}`}
-              onClick={() => setActiveSection('appearance')}
-            >
-              <Icon name="sun-moon" size={18} />
-              <span>
-                <strong>{t('settings.appearance')}</strong>
-                <small>{t('settings.appearanceHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'critiqueTheater' ? ' active' : ''}`}
-              onClick={(event) => selectSettingsSection('critiqueTheater', event.detail > 0)}
-            >
-              <Icon name="comment" size={18} />
-              <span>
-                <strong>{t('critiqueTheater.settingsNav')}</strong>
-                <small>{t('critiqueTheater.settingsNavHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'notifications' ? ' active' : ''}`}
-              onClick={() => setActiveSection('notifications')}
-            >
-              <Icon name="bell" size={18} />
-              <span>
-                <strong>{t('settings.notifications')}</strong>
-                <small>{t('settings.notificationsHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'pet' ? ' active' : ''}`}
-              onClick={(event) => selectSettingsSection('pet', event.detail > 0)}
-            >
-              <Icon name="sparkles" size={18} />
-              <span>
-                <strong>{t('pet.navTitle')}</strong>
-                <small>{t('pet.navHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'designSystems' ? ' active' : ''}`}
-              onClick={() => setActiveSection('designSystems')}
-            >
-              <Icon name="draw" size={18} />
-              <span>
-                <strong>{t('settings.designSystems')}</strong>
-                <small>{t('settings.designSystemsHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'projectLocations' ? ' active' : ''}`}
-              onClick={() => setActiveSection('projectLocations')}
-            >
-              <Icon name="folder" size={18} />
-              <span>
-                <strong>{t('settings.projectLocations')}</strong>
-                <small>{t('settings.projectLocationsHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'privacy' ? ' active' : ''}`}
-              onClick={() => setActiveSection('privacy')}
-            >
-              <Icon name="eye" size={18} />
-              <span>
-                <strong>{t('settings.privacy')}</strong>
-                <small>{t('settings.privacyHint')}</small>
               </span>
             </button>
             <button
@@ -3511,6 +3417,61 @@ export function SettingsDialog({
             </button>
             <button
               type="button"
+              className={`settings-nav-item${activeSection === 'projectLocations' ? ' active' : ''}`}
+              onClick={() => setActiveSection('projectLocations')}
+            >
+              <Icon name="folder" size={18} />
+              <span>
+                <strong>{t('settings.projectLocations')}</strong>
+                <small>{t('settings.projectLocationsHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'language' ? ' active' : ''}`}
+              onClick={() => setActiveSection('language')}
+            >
+              <Icon name="languages" size={18} />
+              <span>
+                <strong>{t('settings.language')}</strong>
+                <small>{t('settings.languageHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'appearance' ? ' active' : ''}`}
+              onClick={() => setActiveSection('appearance')}
+            >
+              <Icon name="sun-moon" size={18} />
+              <span>
+                <strong>{t('settings.appearance')}</strong>
+                <small>{t('settings.appearanceHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'notifications' ? ' active' : ''}`}
+              onClick={() => setActiveSection('notifications')}
+            >
+              <Icon name="bell" size={18} />
+              <span>
+                <strong>{t('settings.notifications')}</strong>
+                <small>{t('settings.notificationsHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'privacy' ? ' active' : ''}`}
+              onClick={() => setActiveSection('privacy')}
+            >
+              <Icon name="eye" size={18} />
+              <span>
+                <strong>{t('settings.privacy')}</strong>
+                <small>{t('settings.privacyHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
               className={`settings-nav-item${activeSection === 'about' ? ' active' : ''}`}
               onClick={() => setActiveSection('about')}
             >
@@ -3518,6 +3479,64 @@ export function SettingsDialog({
               <span>
                 <strong>{t('settings.about')}</strong>
                 <small>{t('settings.aboutHint')}</small>
+              </span>
+            </button>
+            <div className="settings-nav-more" role="presentation">
+              {t('settings.moreSections')}
+            </div>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'media' ? ' active' : ''}`}
+              onClick={(event) => selectSettingsSection('media', event.detail > 0)}
+            >
+              <Icon name="image" size={18} />
+              <span>
+                <strong>{t('settings.mediaProviders')}</strong>
+                <small>Image / video / audio</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'composio' ? ' active' : ''}`}
+              onClick={() => setActiveSection('composio')}
+            >
+              <Icon name="sliders" size={18} />
+              <span>
+                <strong>{t('connectors.title')}</strong>
+                <small>{t('settings.connectorsNavHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'designSystems' ? ' active' : ''}`}
+              onClick={() => setActiveSection('designSystems')}
+            >
+              <Icon name="draw" size={18} />
+              <span>
+                <strong>{t('settings.designSystems')}</strong>
+                <small>{t('settings.designSystemsHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'critiqueTheater' ? ' active' : ''}`}
+              onClick={(event) => selectSettingsSection('critiqueTheater', event.detail > 0)}
+            >
+              <Icon name="comment" size={18} />
+              <span>
+                <strong>{t('critiqueTheater.settingsNav')}</strong>
+                <small>{t('critiqueTheater.settingsNavHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'pet' ? ' active' : ''}`}
+              onClick={(event) => selectSettingsSection('pet', event.detail > 0)}
+            >
+              <Icon name="sparkles" size={18} />
+              <span>
+                <strong>{t('pet.navTitle')}</strong>
+                <small>{t('pet.navHint')}</small>
               </span>
             </button>
           </aside>
@@ -3812,6 +3831,7 @@ export function SettingsDialog({
                                         <span className="agent-card-title">
                                           {agentName}
                                         </span>
+                                        <AgentSupportTag id={a.id} />
                                         {isAmrAgent ? (
                                           <span
                                             className="agent-card-benefits"
@@ -4125,6 +4145,7 @@ export function SettingsDialog({
                                 <div className="agent-card-body">
                                   <div className="agent-card-name">
                                     {agentName}
+                                    <AgentSupportTag id={a.id} />
                                   </div>
                                   {description ? (
                                     <div className="agent-card-description">
@@ -4940,6 +4961,8 @@ export function SettingsDialog({
               />
             </div>
           ) : null}
+
+          {activeSection === 'permissions' ? <ExecutionPermissionsSection /> : null}
 
           {activeSection === 'privacy' ? (
             <PrivacySection cfg={cfg} setCfg={setCfg} />

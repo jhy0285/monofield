@@ -207,6 +207,10 @@ describe('MemorySection', () => {
     await waitFor(() => {
       expect(screen.getByText('UI preferences')).toBeTruthy();
     });
+    // Saving closes the Add modal, so the confirmation has to be on the page
+    // behind it, not inside the modal that just unmounted.
+    expect(screen.queryByRole('dialog', { name: 'Add or import memories' })).toBeNull();
+    expect(screen.getByRole('status').textContent).toMatch(/Memory created/);
     expect(createBodies).toEqual([
       {
         name: 'UI preferences',
