@@ -88,10 +88,10 @@ As of 2026-10-30.
   cover reachable surfaces pass with the `amrEnabled` worker option, and the AMR specs that
   could not pass were removed at the user's request (see the newest Log entry).
 - Marketing site (`apps/monofield-site`, buildless static site for monofield.vercel.app):
-  the hero was redesigned on 2026-10-30 and is **handed off unfinished**: the code is in
-  place and checked in browser screenshots, but a performance trace, a few viewports and the
-  real-app screenshot below the scene still need a pass (see the newest Log entry and **Open items**,
-  "Marketing site").
+  the hero redesigned on 2026-10-30 is finished on this branch. Traces show no Layout and no
+  Paint during its loop and nothing of it running once it is scrolled away, and it was viewed
+  from 1440 px to 390 px in both languages and with reduced motion (see the two newest Log
+  entries). It is not live: the site deploys from `main`, and this branch is not merged.
 - Layout: regions can be resized or folded in the development workspace (tools
   panel height, Design Files preview width, AI input) and the classic chat
   panel width; see the newest Log entry and `Splitter` in
@@ -260,22 +260,18 @@ End-to-end tests:
 
 Marketing site (`apps/monofield-site`, see the newest Log entry):
 
-- Measure the new hero. A 5 s Chromium trace (`Tracing.start`, `devtools.timeline`; compare
-  UpdateLayoutTree / Layout / Paint counts on `CrRendererMain`) was **not run** on the new
-  scene. Targets: no Layout during the loop, paints near the motion-off baseline, nothing
-  running once the hero is scrolled away. Before the redesign the old hero ran 25 animations
-  and about 419 paints per 5 s; the page also had ~742 paints per 5 s scrolled past the hero,
-  which comes from other sections' animations (marquee, reveals, etc.) and was never looked at.
-- Not viewed yet: the real-app screenshot that now sits below the scene (`.hero-shot`,
-  `monofield-development.png`, lazy-loaded, revealed on scroll); the 390 px and 560-800 px
-  layouts after the last CSS edits (the stacked scene was checked at 390 px and 700 px before
-  the deferred-start change, which does not affect layout); reduced motion at 390 px (the 1440 px
-  frame shows the finished picture); the footer brand and the header's inline mark.
 - Decide whether the scene should loop forever. It is finite on purpose: the change cycle
   runs 3.6 times (about 34 s) and ends on the finished picture, as the app Home hero does.
-- The 403 "rate limit exceeded" console error seen once in a Playwright run came from the
-  sandbox proxy on an external resource, not from the site; the run that loaded fine had no
-  errors. Not investigated further.
+- The intro (first ~5 s) still costs 229 UpdateLayoutTree, 29 Layout and 367 Paint per 5 s,
+  once: the `rise-in` blur (`filter`) and the 12 spec `cell-in` animations run on the main
+  thread, plus the two "M" stroke draws and the header colour transition. Dropping the blur
+  from `rise-in` is the cheapest cut if the intro has to be lighter. Left as is.
+- Over the dark hero the header's inline mark shows only its white "M"; the `#090909` tile is
+  nearly invisible there (it shows on the light header and in the footer). Left as is.
+- At 520 px and below the spec hides column A (ID), so its letter row starts at B.
+- The 403 "rate limit exceeded" console error in Playwright runs is most likely `script.js`'s
+  request to `api.github.com/repos/jhy0285/monofield/releases/latest`, rate-limited as seen from
+  the sandbox; the page keeps its static links when it fails. The request URL was not confirmed.
 - The structured data still lists `monofield-development.png` as the screenshot and the file
   is unchanged; keep it in `apps/monofield-site/` or update the JSON-LD and `tests/seo.test.ts`.
 
@@ -341,6 +337,32 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-10-30 — monofield.vercel.app hero: measured, two paint/restyle sources fixed, viewed (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** finish the hero handed off below: 5 s trace, the unviewed layouts, then site test, typecheck and guard.
+- **Measured before:** 5 s traces (`Tracing.start`, `devtools.timeline`, counts on `CrRendererMain`, 1440x900, page
+  served by `python3 -m http.server`). Change loop: UpdateLayoutTree 298, Layout 0, Paint 416; reduced motion 0/0/0;
+  scrolled past the hero 300/0/416 with no hero animation running. Mapping `Paint` events' `args.data.nodeId` with
+  `DOM.describeNode` split them between `button.intro-play` and the document layer it sits in (209 each): the
+  button's `ring` animated `box-shadow` forever, on screen or not. The hero itself painted nothing in the loop.
+  The per-frame restyle was `.sheet-sync`, which ran two opacity animations, so neither went to the compositor
+  (`compositeFailed` 64 in the trace's `Animation` events).
+- **Changed (`apps/monofield-site/styles.css`):** the ring is a disc (`.intro-play::before`) that scales and fades; the
+  one-off fade-in moved to the badge slot `.sheet-status`; hero captions flow as text (`text-wrap: balance`,
+  `word-break: keep-all`), because at 390 px a wrapped caption left its dot alone at the left edge and Korean broke
+  inside a word ("인터페 / 이스").
+- **Verified after:** loop 27/0/0 (12 ms of style per 5 s); 390x844 with the stacked scene in view 33/0/0; scrolled
+  past 27/0/0 with no hero animation running; after the loop 26/1/2; no compositor failure in the loop window. Screenshots
+  at 1440 (11 s and 36 s), 1000, 800, 768, 700, 640, 560 and 390 px, EN and KO: no horizontal overflow; `.hero-shot`
+  shows at every width; reduced motion at 390 and 1440 px is the finished picture with 0 running animations; the KO→EN
+  click swaps copy, alt and labels, and a reload keeps `monofield-language`; header mark and footer brand (`/mark.svg`)
+  render. `pnpm --filter monofield-site test` 8 pass, `pnpm --filter monofield-site typecheck` exit 0, `pnpm guard`
+  67 pass (Node 24.22.2, pnpm 10.33.2).
+- **Not done:** the live site (not run; it deploys from `main`); the intro's one-off cost and the other open items below.
+- **Next agent:** judge from natural playback or reduced motion. Calling `finish()` on every animation blanked the spec's
+  ID column in screenshots, a `fullPage` capture taken during `scroll-behavior: smooth` drew the fixed header mid-page,
+  and an element screenshot of `.engine` dropped the caption's second line; none of these happen on the real page.
 
 ### 2026-10-30 — monofield.vercel.app hero: code → MonoField → spec scene (`ccr-8432aecf-n9xdfd`)
 
