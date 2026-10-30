@@ -13,6 +13,10 @@
   --hero-cycle: 6000ms;
   --hero-loop-start: 1600ms;
   --hero-step-gap: 1800ms;
+  /* The ambient loops play a few times, then the hero rests: Home is often left
+     open, and a loop that never ends keeps the compositor (and the battery)
+     busy for nothing. */
+  --hero-loops: 4;
   position: relative;
   isolation: isolate;
   width: 100%;
@@ -83,7 +87,7 @@
     transparent
   );
   transform: translateX(-120%);
-  animation: sweep 9s var(--hero-ease-loop) 700ms infinite;
+  animation: sweep 9s var(--hero-ease-loop) 700ms 3;
 }
 
 /* Two rings leave the mark once when the page opens. */
@@ -236,15 +240,43 @@
 }
 
 .step {
+  position: relative;
+  isolation: isolate;
   padding: 2px 9px;
   border: 1px solid transparent;
   border-radius: 999px;
-  animation:
-    rise 480ms var(--hero-ease) backwards,
-    step-lit var(--hero-cycle) linear infinite;
-  animation-delay:
-    calc(760ms + var(--hero-order) * 140ms),
-    calc(var(--hero-loop-start) + var(--hero-order) * var(--hero-step-gap));
+  white-space: nowrap;
+  animation: rise 480ms var(--hero-ease) backwards;
+  animation-delay: calc(760ms + var(--hero-order) * 140ms);
+}
+
+/* The lit state is two layers that only fade, the pill behind and a strong copy
+   of the label on top, so the loop runs on the compositor. Animating the step's
+   own color and background repainted it every frame, for as long as Home was
+   open. */
+.step::before,
+.step::after {
+  position: absolute;
+  inset: -1px;
+  border: 1px solid transparent;
+  border-radius: inherit;
+  opacity: 0;
+  pointer-events: none;
+  animation: step-lit var(--hero-cycle) linear var(--hero-loops);
+  animation-delay: calc(var(--hero-loop-start) + var(--hero-order) * var(--hero-step-gap));
+}
+
+.step::before {
+  content: "";
+  z-index: -1;
+  background: var(--bg-subtle);
+  border-color: var(--border);
+}
+
+.step::after {
+  content: attr(data-label);
+  padding: inherit;
+  color: var(--text-strong);
 }
 
 .link {
@@ -305,7 +337,9 @@
   background: var(--text-strong);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-strong) 12%, transparent);
   opacity: 0;
-  animation: pulse-travel var(--hero-cycle) var(--hero-ease-loop) infinite;
+  animation: pulse-travel var(--hero-cycle) var(--hero-ease-loop) var(--hero-loops);
+  /* Fixed distances: a var() inside transform keyframes keeps the animation off
+     the compositor. */
   animation-delay: calc(
     var(--hero-loop-start) + 300ms + (var(--hero-order) - 1) * var(--hero-step-gap)
   );
@@ -333,6 +367,10 @@
 @media (max-width: 560px) {
   .link {
     --link: 24px;
+  }
+
+  .pulse {
+    animation-name: pulse-travel-short;
   }
 }
 
@@ -459,15 +497,11 @@
   0%,
   22%,
   100% {
-    color: var(--text-muted);
-    background-color: transparent;
-    border-color: transparent;
+    opacity: 0;
   }
   4%,
   15% {
-    color: var(--text-strong);
-    background-color: var(--bg-subtle);
-    border-color: var(--border);
+    opacity: 1;
   }
 }
 
@@ -482,11 +516,32 @@
   }
   25% {
     opacity: 1;
-    transform: translateX(calc(var(--link) - 9px)) scale(1);
+    transform: translateX(31px) scale(1);
   }
   29%,
   100% {
     opacity: 0;
-    transform: translateX(calc(var(--link) - 9px)) scale(0.6);
+    transform: translateX(31px) scale(0.6);
   }
 }
+
+@keyframes pulse-travel-short {
+  0% {
+    opacity: 0;
+    transform: translateX(0) scale(0.6);
+  }
+  3% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  25% {
+    opacity: 1;
+    transform: translateX(15px) scale(1);
+  }
+  29%,
+  100% {
+    opacity: 0;
+    transform: translateX(15px) scale(0.6);
+  }
+}
+

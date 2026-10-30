@@ -316,6 +316,28 @@ Code health:
 
 ## Log
 
+### 2026-10-30 — Home hero motion: measured and made cheap (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** is the Home hero motion fine for performance?
+- **Measured:** 5 s Chromium traces of the idle Home screen on a local stack (renderer main
+  thread). Before: style recalculation 60.8 ms vs 10.8 ms with the hero motion off, paint
+  56.5 ms / 314 paints vs 28.1 ms / 147, main-thread tasks 446 ms vs 331 ms, and it never
+  stopped. The step highlight animated `color`, `background-color` and `border-color` (repaint
+  every frame), and the pulse's `transform` keyframes used `var(--link)`.
+- **Changed (`HeroBrand.module.css`, `HeroBrand.tsx`):** the lit state is two pseudo-element
+  layers that only fade (`::before` pill, `::after` strong copy of the label from `data-label`);
+  the pulse keyframes use fixed distances (a `pulse-travel-short` variant at 560 px and below);
+  the ambient loops are finite: the pipeline plays 4 cycles (24 s, `--hero-loops`) and the field
+  sweep 3 passes (27 s), then the hero rests.
+- **Verified:** after: paints 143 vs 147 with the motion off, style 23.5 ms vs 8.2 ms, main-thread
+  tasks equal within run-to-run noise; with the finite animations finished, the only running
+  animation on Home is the composer caret, as with the motion off. Inactive entry views are
+  `hidden` (display: none), so the hero does not animate behind another destination. Frames of
+  the lit step in light, dark and at 390 px look as before. `tsc` clean; hero unit specs (73)
+  pass.
+- **Next agent:** keep hero loops on `opacity`/`transform` with literal values; measure with a
+  trace (`Tracing.start` with `devtools.timeline`) before adding another loop.
+
 ### 2026-10-30 — Home hero brand: motion graphic (`ccr-8432aecf-n9xdfd`)
 
 - **Request:** make the branding screen look better, using motion graphics.

@@ -111,7 +111,13 @@ export function HeroBrand({
         <VisuallyHidden>{subtitle}</VisuallyHidden>
         {steps.map((step, index) => {
           const stepNode = (
-            <span className={styles.step} style={order(index)} data-step={index} aria-hidden>
+            <span
+              className={styles.step}
+              style={order(index)}
+              data-step={index}
+              data-label={step}
+              aria-hidden
+            >
               {step}
             </span>
           );
