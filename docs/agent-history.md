@@ -366,6 +366,20 @@ Code health:
 
 ## Log
 
+### 2026-10-30 — e2e: wait for the loading shell by class, not by the old brand text (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** PR 12's CI "E2E Vitest" failed in `tests/dialog/send-now-interrupt` and
+  `tests/dialog/artifact-consistency` (the same two failed on PR 11's head).
+- **Changed:** the two specs, `e2e/lib/playwright/amr.ts` and `e2e/lib/playwright/visual.ts` waited for
+  the text "Loading Open Design…", which the app no longer shows ("Loading MonoField…"), so the wait
+  never waited and the 5 s composer check raced a cold `next dev` compile. They now wait for
+  `.od-loading-shell` (the dialog specs for `T.long`).
+- **Verified:** each spec alone with `pnpm exec vitest run -c vitest.config.ts tests/dialog/<name>.test.ts`:
+  1/1 pass each; `e2e` `tsc --noEmit` exit 0. Run together they crashed Chromium because the disk
+  allowance was full (21 GB under `.tmp/e2e`); deleting that folder fixed it.
+- **Next agent:** run the e2e harness through `pnpm exec`, not `npx`; under `npx` the tools-dev launch
+  goes through npm and fails.
+
 ### 2026-10-30 — Settings → Execution permissions, one Codex-style level (`ccr-8432aecf-n9xdfd`)
 
 - **Request:** a "실행 권한" Settings section covering the Codex sandbox, the Claude permission mode

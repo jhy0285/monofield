@@ -151,8 +151,10 @@ async function expectWorkspaceReady(page: Page) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  const loading = page.getByText('Loading Open Design…');
-  await loading.waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {});
+  // The dynamic-import shell (`.od-loading-shell`) covers a cold `next dev`
+  // compile; match it by class so a product rename cannot turn this into a no-op.
+  const loading = page.locator('.od-loading-shell');
+  await loading.waitFor({ state: 'detached', timeout: T.long }).catch(() => {});
 }
 
 // Send a turn that starts a run immediately (conversation idle). Returns the runId.
