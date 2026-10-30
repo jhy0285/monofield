@@ -64,8 +64,8 @@ As of 2026-10-30.
   reviewed spec diffs). It is an independent fork of the Apache-2.0 Open Design
   project; see `docs/adr/0002-upstream-maintenance.md` (status: Proposed, only
   phase A done).
-- Version: `0.11.7-preview.4` (root `package.json`), prepared on 2026-10-30 for the execution
-  permissions release; `0.11.7-preview.3` is the previous published preview. Workspace packages are
+- Version: `0.11.7-preview.4` (root `package.json`), published on 2026-10-30 as a GitHub prerelease
+  (preview channel, unsigned) from `6ecaca6`; stable `latest` is still `v0.11.6`. Workspace packages are
   still named `@open-design/*`; env vars still use the `OD_*` prefix.
 - Shape: pnpm monorepo. `apps/daemon` (Express + SQLite, `monofield` CLI) and
   `apps/web` (Next.js 16) hold most of the code (roughly 320k and 410k lines of
@@ -73,8 +73,8 @@ As of 2026-10-30.
   `apps/daemon/src/server.ts`, `apps/daemon/src/cli.ts`,
   `apps/web/src/components/ProjectView.tsx`, `SettingsDialog.tsx` (each 8k–11k
   lines).
-- Working branch for agent sessions: `ccr-8432aecf-n9xdfd`. No pull request has
-  been opened from it.
+- Working branch for agent sessions: `ccr-8432aecf-n9xdfd`. Pull request 12 merges it into
+  `main` (opened 2026-10-30).
 - Local verification status (run on 2026-10-28 at the head of the branch):
   `pnpm guard`, `pnpm typecheck` and `pnpm i18n:check` pass. Unit suites pass in
   full: `@open-design/web` 402 files / 3891 tests (13 skipped),
@@ -365,6 +365,23 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-10-30 — 0.11.7-preview.4 published; site and README point at it (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** release the app after the execution permissions work and merge to `main`.
+- **Changed:** `chore(release): prepare 0.11.7-preview.4` bumped the five release package versions;
+  `release-windows.yml` was dispatched on the branch (preview, unsigned allowed, publish) and run
+  41045923491 built, verified and published `v0.11.7-preview.4` (setup EXE, portable ZIP, payload,
+  `latest.yml`, `SHA256SUMS.txt`). Afterwards `docs/releases/0.11.7-preview.4.md` was added (with the
+  source commit and run link), and `README.md`, `apps/monofield-site/index.html` (preview card, hero
+  link, JSON-LD, one new feature line) and `apps/monofield-site/README.md` moved from preview.3 to
+  preview.4.
+- **Why:** same flow as preview.3: the notes file lands on `main` only after the tag exists, because
+  the `sync_release_notes` job fails for a tag that is not published yet.
+- **Verified:** run 41045923491 success (build, publish); the release API lists the five assets; the
+  three download URLs answer 302 to GitHub's asset store (the sandbox proxy returns 401 on that
+  host, as it does for preview.3). `pnpm --filter monofield-site test` 8 pass.
+- **Not done:** installing the preview on Windows (not run here).
 
 ### 2026-10-30 — e2e: wait for the loading shell by class, not by the old brand text (`ccr-8432aecf-n9xdfd`)
 
