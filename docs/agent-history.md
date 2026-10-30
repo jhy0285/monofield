@@ -57,7 +57,7 @@ Entry template:
 
 ## Current state
 
-As of 2026-10-29.
+As of 2026-10-30.
 
 - Product: MonoField, a local Windows workbench that takes Codex or Claude Code
   CLI work to Korean SI deliverables (interface-spec XLSX, screen-spec PPTX,
@@ -87,6 +87,11 @@ As of 2026-10-29.
   file by file (see the newest Log entries), and the AMR tests were settled: the two AMR UI files that
   cover reachable surfaces pass with the `amrEnabled` worker option, and the AMR specs that
   could not pass were removed at the user's request (see the newest Log entry).
+- Marketing site (`apps/monofield-site`, buildless static site for monofield.vercel.app):
+  the hero was redesigned on 2026-10-30 and is **handed off unfinished**: the code is in
+  place and checked in browser screenshots, but a performance trace, a few viewports and the
+  real-app screenshot below the scene still need a pass (see the newest Log entry and **Open items**,
+  "Marketing site").
 - Layout: regions can be resized or folded in the development workspace (tools
   panel height, Design Files preview width, AI input) and the classic chat
   panel width; see the newest Log entry and `Splitter` in
@@ -253,6 +258,27 @@ End-to-end tests:
   `amr-login-pill`, `amr-logout-requires-relogin`, the `amrEnabled` worker option in
   `e2e/lib/playwright/suite.ts` and `e2e/lib/amr.ts` with them.
 
+Marketing site (`apps/monofield-site`, see the newest Log entry):
+
+- Measure the new hero. A 5 s Chromium trace (`Tracing.start`, `devtools.timeline`; compare
+  UpdateLayoutTree / Layout / Paint counts on `CrRendererMain`) was **not run** on the new
+  scene. Targets: no Layout during the loop, paints near the motion-off baseline, nothing
+  running once the hero is scrolled away. Before the redesign the old hero ran 25 animations
+  and about 419 paints per 5 s; the page also had ~742 paints per 5 s scrolled past the hero,
+  which comes from other sections' animations (marquee, reveals, etc.) and was never looked at.
+- Not viewed yet: the real-app screenshot that now sits below the scene (`.hero-shot`,
+  `monofield-development.png`, lazy-loaded, revealed on scroll); the 390 px and 560-800 px
+  layouts after the last CSS edits (the stacked scene was checked at 390 px and 700 px before
+  the deferred-start change, which does not affect layout); reduced motion at 390 px (the 1440 px
+  frame shows the finished picture); the footer brand and the header's inline mark.
+- Decide whether the scene should loop forever. It is finite on purpose: the change cycle
+  runs 3.6 times (about 34 s) and ends on the finished picture, as the app Home hero does.
+- The 403 "rate limit exceeded" console error seen once in a Playwright run came from the
+  sandbox proxy on an external resource, not from the site; the run that loaded fine had no
+  errors. Not investigated further.
+- The structured data still lists `monofield-development.png` as the screenshot and the file
+  is unchanged; keep it in `apps/monofield-site/` or update the JSON-LD and `tests/seo.test.ts`.
+
 Layout and UI:
 
 - The AI input under the workspace in the development layout can be folded but
@@ -315,6 +341,54 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-10-30 — monofield.vercel.app hero: code → MonoField → spec scene (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** add motion graphics to the vercel.app site, then: do not keep the old site hero's
+  form, redesign it as you see fit (clean, classy). The user then asked to stop here and leave
+  the rest to another agent, so this entry is a handoff of **unfinished** work.
+- **Changed (`apps/monofield-site/`):**
+  - `index.html`: the hero's contour SVG, floating file chips, tilted screenshot, scan line and
+    border beam are gone. New background (`.hero-dots`, `.hero-sweep`, `.hero-glow`) and a new
+    figure `.engine`: a code pane (an `OrderController.java` with `@RestController` endpoints),
+    a MonoField "M" core between two wires, and an interface-spec spreadsheet pane
+    (`interface-spec.xlsx`, rows `IF-001..003`). All of it is `aria-hidden` with a caption that
+    says it is an illustration; bilingual labels use the existing `data-ko`/`data-en` swap.
+    The real app capture moved into `figure.hero-shot` below the scene and is now `loading="lazy"`
+    (it is no longer the LCP image). The header brand uses an inline SVG mark whose "M" stroke
+    draws in (`.brand-mark-stroke`); the footer still uses `/mark.svg`.
+  - `styles.css`: the hero section is rewritten. Resting styles are the finished picture (the
+    two new code lines typed, the `IF-003 DELETE` row added), so reduced motion and no-animation
+    visitors see a complete, static scene (`@media (prefers-reduced-motion: reduce)` sets
+    `animation: none` on the hero background and scene). Timeline: intro once (code lines in,
+    scan, packet through the core, first rows written, ~4.4 s), then a change cycle of 8 s,
+    3.6 iterations, from 5.6 s: two lines typed (a `.cover` stepped with `steps()`), a packet
+    carries the change through the core, the spec gains its row with a "+1 row" diff mark, then
+    it winds back; it ends mid-hold on the finished picture. Everything animates `transform` /
+    `opacity` (one short stroke draw for the "M"); no `var()` inside transform keyframes. Under
+    800 px the scene stacks vertically with the wires running downward. The status-dot pulse ring
+    is now an `::after` fading and scaling (it used to animate `box-shadow`).
+  - `motion.js`: the contour drawing, chip fly-out and tilt code are removed. What remains: the
+    header on-dark toggle, a pointer glow that moves with `translate`, an IntersectionObserver
+    that sets `.is-offscreen` on the hero (CSS pauses all animation) and one that sets
+    `.engine.is-live` when 35 % of the scene is visible (until then the scene is held on its first
+    frame, so a visitor who scrolls to it sees it start from the beginning), and the unchanged
+    reveal/video code. `.hero-shot` was added to the reveal targets.
+- **Verified:** `pnpm --filter monofield-site test` (8 pass), `pnpm --filter monofield-site
+  typecheck`, `pnpm guard`: all pass. Playwright screenshots at 1440x900 (EN and KO, frames from
+  0.7 s to 10.2 s), 1366x700 with the scene scrolled in late (it did not start until visible),
+  1000 px, 700 px stacked (KO), 390 px, and 1440 px with reduced motion; no page errors.
+- **Not done:** a performance trace of the new hero (**not run**); a visual check of the lower real
+  screenshot (`.hero-shot`); a second look at 390 px / reduced motion at 390 px after the last
+  CSS edits; the commit does not touch the sections below the hero.
+- **Next agent:** serve the folder with a static server (`python3 -m http.server` in
+  `apps/monofield-site`) and look with Playwright. Language is stored in `localStorage` key
+  `monofield-language`. The SEO test requires exactly one `<h1>`, `/motion.js` loaded with
+  `defer`, no inline script, a `prefers-reduced-motion` block in `styles.css` and
+  `motion.js`; keep the hero copy and `data-ko`/`data-en` pairs. Timing constants in the scene are
+  mirrored between the CSS custom properties and the keyframe percentages (8000 ms cycle): if you
+  change the cycle length, recompute the percentages. Do not reintroduce inline scripts (CSP is
+  `script-src 'self'`).
 
 ### 2026-10-30 — Home hero motion: measured and made cheap (`ccr-8432aecf-n9xdfd`)
 

@@ -30,91 +30,53 @@
     window.addEventListener("resize", updateHeader);
   }
 
-  /* Hero contour field: a topographic drawing that sketches itself in. */
-  const contours = document.querySelector("[data-contours]");
-  if (contours) {
-    const NS = "http://www.w3.org/2000/svg";
-    const paths = [];
-    for (let i = 0; i < 16; i += 1) {
-      const phase = i * 0.5;
-      const base = 40 + i * 58;
-      let d = "";
-      for (let x = -20; x <= 1460; x += 20) {
-        const y =
-          base +
-          Math.sin(x / 230 + phase) * 52 +
-          Math.sin(x / 100 + phase * 1.7) * 15 -
-          x * 0.12;
-        d += `${d ? "L" : "M"}${x} ${y.toFixed(1)}`;
-      }
-      const path = document.createElementNS(NS, "path");
-      path.setAttribute("d", d);
-      path.setAttribute("stroke-width", i % 4 === 0 ? "1.6" : "1");
-      contours.appendChild(path);
-      paths.push(path);
-    }
-    if (reduced || !paths[0].animate) {
-      contours.classList.add("is-drawn");
-    } else {
-      let finished = 0;
-      paths.forEach((path, index) => {
-        const length = path.getTotalLength();
-        path.style.strokeDasharray = String(length);
-        const draw = path.animate(
-          [{ strokeDashoffset: length }, { strokeDashoffset: 0 }],
-          {
-            delay: 120 + index * 70,
-            duration: 2400,
-            easing: "cubic-bezier(0.3, 0, 0.1, 1)",
-            fill: "backwards",
-          },
-        );
-        draw.onfinish = () => {
-          path.style.strokeDasharray = "none";
-          finished += 1;
-          if (finished === paths.length) contours.classList.add("is-drawn");
-        };
-      });
-    }
-  }
-
-  /* Pointer parallax: the glow follows, floating deliverables drift, the app tilts. */
-  const workspace = document.querySelector(".hero-workspace");
-  const shot = workspace?.querySelector(".screenshot-button");
-  if (hero && finePointer && !reduced) {
+  /* Pointer glow: the light behind the hero drifts toward the pointer. It moves
+     with `translate`, so following the pointer never touches layout. */
+  const glow = hero?.querySelector(".hero-glow");
+  if (hero && glow && finePointer && !reduced) {
     let frame = 0;
     hero.addEventListener("pointermove", (event) => {
       if (frame) return;
       frame = requestAnimationFrame(() => {
         frame = 0;
         const box = hero.getBoundingClientRect();
-        const nx = (event.clientX - box.left) / box.width;
-        const ny = (event.clientY - box.top) / box.height;
-        hero.style.setProperty("--gx", `${(nx * 100).toFixed(1)}%`);
-        hero.style.setProperty("--gy", `${(ny * 100).toFixed(1)}%`);
-        if (workspace) {
-          workspace.style.setProperty("--px", ((nx - 0.5) * 2).toFixed(3));
-          workspace.style.setProperty("--py", ((ny - 0.5) * 2).toFixed(3));
-        }
-        if (shot && workspace) {
-          const wb = workspace.getBoundingClientRect();
-          const tx = Math.max(-1, Math.min(1, ((event.clientX - wb.left) / wb.width - 0.5) * 2));
-          const ty = Math.max(-1, Math.min(1, ((event.clientY - wb.top) / wb.height - 0.5) * 2));
-          shot.style.setProperty("--ry", `${(tx * 4).toFixed(2)}deg`);
-          shot.style.setProperty("--rx", `${(-ty * 3).toFixed(2)}deg`);
-        }
+        const dx = event.clientX - box.left - box.width * 0.62;
+        const dy = event.clientY - box.top - box.height * 0.18;
+        glow.style.translate = `${dx.toFixed(0)}px ${dy.toFixed(0)}px`;
       });
     });
-    hero.addEventListener("pointerleave", () => {
-      shot?.style.setProperty("--rx", "0deg");
-      shot?.style.setProperty("--ry", "0deg");
-    });
+  }
+
+  /* The code-to-spec scene plays once a good part of it is on screen. */
+  const engine = document.querySelector(".engine");
+  if (engine) {
+    if ("IntersectionObserver" in window) {
+      const watcher = new IntersectionObserver(
+        ([entry]) => {
+          if (!entry.isIntersecting) return;
+          engine.classList.add("is-live");
+          watcher.disconnect();
+        },
+        { threshold: 0.35 },
+      );
+      watcher.observe(engine);
+    } else {
+      engine.classList.add("is-live");
+    }
+  }
+
+  /* A hero that has scrolled away stops animating (the CSS rule pauses it). */
+  if (hero && "IntersectionObserver" in window) {
+    new IntersectionObserver(
+      ([entry]) => hero.classList.toggle("is-offscreen", !entry.isIntersecting),
+      { threshold: 0 },
+    ).observe(hero);
   }
 
   /* Reveal on scroll. Content is visible by default; the class below only exists when JS runs. */
   const revealTargets = Array.from(
     document.querySelectorAll(
-      ".intro-copy, .intro-player, .section-heading, .product-tabs, .product-panel:not([hidden]) > *, .workflow-steps li, .guide-copy, .guide-cover, .download-heading, .preview-release, .stable-release-heading, .download-card, .handover-story, .faq-section > *",
+      ".hero-shot, .intro-copy, .intro-player, .section-heading, .product-tabs, .product-panel:not([hidden]) > *, .workflow-steps li, .guide-copy, .guide-cover, .download-heading, .preview-release, .stable-release-heading, .download-card, .handover-story, .faq-section > *",
     ),
   );
   if (!reduced && "IntersectionObserver" in window && revealTargets.length) {
