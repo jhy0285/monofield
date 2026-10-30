@@ -73,8 +73,8 @@ As of 2026-10-30.
   `apps/daemon/src/server.ts`, `apps/daemon/src/cli.ts`,
   `apps/web/src/components/ProjectView.tsx`, `SettingsDialog.tsx` (each 8k–11k
   lines).
-- Working branch for agent sessions: `ccr-8432aecf-n9xdfd`. Pull request 12 merges it into
-  `main` (opened 2026-10-30).
+- Working branch for agent sessions: `ccr-8432aecf-n9xdfd`. Pull request 12 merged it into `main`
+  on 2026-10-30 (merge commit `80cf9aa`); follow-up work restarts the branch from `main`.
 - Local verification status (run on 2026-10-28 at the head of the branch):
   `pnpm guard`, `pnpm typecheck` and `pnpm i18n:check` pass. Unit suites pass in
   full: `@open-design/web` 402 files / 3891 tests (13 skipped),
@@ -91,8 +91,8 @@ As of 2026-10-30.
 - Marketing site (`apps/monofield-site`, buildless static site for monofield.vercel.app):
   the hero redesigned on 2026-10-30 is finished on this branch. Traces show no Layout and no
   Paint during its loop and nothing of it running once it is scrolled away, and it was viewed
-  from 1440 px to 390 px in both languages and with reduced motion (see the two newest Log
-  entries). It is not live: the site deploys from `main`, and this branch is not merged.
+  from 1440 px to 390 px in both languages and with reduced motion. It is live on
+  monofield.vercel.app since pull request 12 merged (checked 2026-10-30, see the newest Log entry).
 - Layout: regions can be resized or folded in the development workspace (tools
   panel height, Design Files preview width, AI input) and the classic chat
   panel width; see the newest Log entry and `Splitter` in
@@ -365,6 +365,20 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-10-30 — pull request 12 merged; live site and release notes checked (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** merge to `main` and apply the site motion graphics.
+- **Changed:** nothing in code. Pull request 12 merged with all CI checks green on its head
+  `a109f8f` (E2E Vitest, UI P0, Playwright visual, web and workspace tests, Nix, Docker, Windows
+  tools-pack). Merge commit `80cf9aa`.
+- **Verified:** `Sync published release notes` succeeded on `main`, and the `v0.11.7-preview.4` release
+  body is now `docs/releases/0.11.7-preview.4.md`. monofield.vercel.app served preview.4 after the
+  Vercel deploy. Playwright against the live site at 1440 px (KO, EN) and 390 px (KO), 11 s after load:
+  one `h1`, `.engine` present, 25 running animations at 1440 px and 5 at 390 px, the hero link and
+  preview card name `0.11.7-preview.4` with the execution permissions line first, no horizontal
+  overflow, no console errors.
+- **Not done:** this entry is on the branch only; it reaches `main` with the next pull request.
 
 ### 2026-10-30 — 0.11.7-preview.4 published; site and README point at it (`ccr-8432aecf-n9xdfd`)
 
