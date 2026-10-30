@@ -48,17 +48,7 @@
    Home hero
    ================================================================ */
 
-.home-hero__brand {
-  animation: od-fade-slide-up 350ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
-
-.home-hero__title {
-  animation: od-fade-slide-up 400ms cubic-bezier(0.23, 1, 0.32, 1) 40ms both;
-}
-
-.home-hero__subtitle {
-  animation: od-fade-slide-up 400ms cubic-bezier(0.23, 1, 0.32, 1) 80ms both;
-}
+/* The brand, headline and pipeline animate in components/home-hero/HeroBrand.module.css. */
 
 .home-hero__input-card {
   animation: od-fade-slide-up 350ms cubic-bezier(0.23, 1, 0.32, 1) 100ms both;

@@ -316,6 +316,42 @@ Code health:
 
 ## Log
 
+### 2026-10-30 — Home hero brand: motion graphic (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** make the branding screen look better, using motion graphics.
+- **Changed:** the Home hero's brand block (mark, name, headline, "code / interface spec /
+  screen spec", trust line) is now `components/home-hero/HeroBrand.tsx` with
+  `HeroBrand.module.css`, replacing the `.home-hero__brand|title|subtitle|trust` rules in
+  `styles/home/home-hero.css` and `styles/entrance.css`. Motion, all CSS: the mark's "M" is
+  drawn as an SVG stroke with a glint across the tile, two rings leave the mark once, the name
+  types in letter by letter, the headline words rise out of a blur one after another, and the
+  subtitle is drawn as a pipeline whose three steps light up in turn while a dot travels the
+  dashed link between them (6 s loop). A dot grid behind the block is lit by a slow band of
+  light. Hover on the mark tilts it and replays the glint.
+- **Design rules kept:** the product ease; every animation settles on the element's own static
+  style (`backwards` fill), so the page is finished when animations are off; `prefers-reduced-
+  motion` turns all of it off; light and dark follow the theme tokens; the headline and
+  subtitle are exposed to assistive technology as plain text (`VisuallyHidden`), the animated
+  copies are `aria-hidden`.
+- **Locale handling:** the pipeline steps come from splitting the existing
+  `homeHero.subtitlePrefix` on `/` (all 19 locales use it); right-to-left text (Arabic,
+  Persian) stays in one box and the brand name stays left to right, because separate word boxes
+  scramble mixed runs ("من Codex وClaude Code"); words stay inline boxes offset with `top`, so
+  line breaks match plain text; a link and the step it leads to wrap together on a narrow
+  screen. No i18n keys were added.
+- **Verified:** looked at frames in light and dark at 1280 px, Korean, Arabic and Persian, 390 px,
+  and with reduced motion, on a local stack. `tests/components/home-hero/HeroBrand.test.tsx`
+  (10 specs) and the 32 `HomeHero`/`home-hero`/`styles`/`EntryView` unit files (146 tests) pass;
+  `tsc` in `apps/web` is clean. `e2e/ui` `visual-entry`, `critical-smoke` and
+  `entry-chrome-flows` pass (49 of 49 in one batch run, except one `entry-chrome-flows` test
+  that timed out on a card overlapping a button and did not reproduce in 3 reruns, or when the
+  whole file ran (35 of 35)).
+- **Not done:** no e2e spec asserts the new hero DOM (only the unit spec); the looping
+  animations are not checked by a visual baseline (`captureVisual` turns animations off);
+  `apps/web/public/app-icon.svg` is unchanged, the hero mark inlines its path.
+- **Next agent:** keep the hero strings and the `/` separators in step; a locale whose subtitle
+  has no `/` shows one lit step and no links.
+
 ### 2026-10-29 — Remove the AMR specs that cannot pass (`ccr-8432aecf-n9xdfd`)
 
 - **Request:** the user chose to remove the AMR tests (the recommendation in the previous

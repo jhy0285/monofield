@@ -1,0 +1,492 @@
+/* Home hero brand: the mark, the name, the headline, the code-to-spec pipeline
+   and the trust line, over a monochrome dot field.
+
+   Motion rules: entrances use the product curve and settle on the element's
+   own static style (fill-mode backwards), so the page looks finished when
+   animations are disabled (visual tests, reduced motion). The decorative
+   layers (ripple, glint, pulse, sweep) rest at opacity 0 or off-stage for the
+   same reason. Every delay is derived from --hero-order, set inline per item. */
+
+.stage {
+  --hero-ease: var(--ease-out);
+  --hero-ease-loop: cubic-bezier(0.45, 0, 0.2, 1);
+  --hero-cycle: 6000ms;
+  --hero-loop-start: 1600ms;
+  --hero-step-gap: 1800ms;
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand,
+.title,
+.pipeline,
+.trust {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---------------------------------------------------------------- field */
+
+.field {
+  position: absolute;
+  inset: -36px 0 -20px;
+  z-index: 0;
+  pointer-events: none;
+  -webkit-mask-image: radial-gradient(58% 62% at 50% 36%, #000 0%, rgb(0 0 0 / 0.55) 48%, transparent 100%);
+  mask-image: radial-gradient(58% 62% at 50% 36%, #000 0%, rgb(0 0 0 / 0.55) 48%, transparent 100%);
+  animation: field-in 900ms var(--hero-ease) backwards;
+}
+
+.dots {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--text-strong) 20%, transparent) 1px,
+    transparent 1.5px
+  );
+  background-size: 20px 20px;
+  background-position: center top;
+  opacity: 0.6;
+}
+
+/* A soft band of light crosses the field and lights the dots it passes. The
+   layer is masked to the same dot pattern, so only dots brighten. */
+.sweep {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  -webkit-mask-image: radial-gradient(circle, #000 1.2px, transparent 1.7px);
+  mask-image: radial-gradient(circle, #000 1.2px, transparent 1.7px);
+  -webkit-mask-size: 20px 20px;
+  mask-size: 20px 20px;
+  -webkit-mask-position: center top;
+  mask-position: center top;
+}
+
+.sweep::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 42%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--text-strong) 75%, transparent),
+    transparent
+  );
+  transform: translateX(-120%);
+  animation: sweep 9s var(--hero-ease-loop) 700ms infinite;
+}
+
+/* Two rings leave the mark once when the page opens. */
+.ripple {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  width: 132px;
+  height: 132px;
+  margin: -66px 0 0 -66px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--text-strong) 28%, transparent);
+  opacity: 0;
+  animation: ripple 1700ms var(--hero-ease) 120ms both;
+}
+
+.rippleLate {
+  animation-delay: 380ms;
+}
+
+/* ---------------------------------------------------------------- brand */
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--text-strong);
+}
+
+.mark {
+  position: relative;
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--text-strong) 14%, transparent),
+    0 8px 22px -12px rgb(0 0 0 / 0.55);
+  animation: mark-in 560ms var(--hero-ease) backwards;
+  transition: transform 200ms var(--hero-ease);
+}
+
+.mark svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.markTile {
+  fill: #0a0a0a;
+}
+
+.markStroke {
+  fill: none;
+  stroke: #fafaf8;
+  stroke-width: 40;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: draw 860ms cubic-bezier(0.65, 0, 0.35, 1) 160ms backwards;
+}
+
+.glint {
+  position: absolute;
+  inset: -30%;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 40%,
+    rgb(255 255 255 / 0.42) 50%,
+    transparent 60%
+  );
+  opacity: 0;
+  transform: translateX(-70%);
+  animation: glint 900ms var(--hero-ease) 980ms both;
+}
+
+.brand:hover .mark {
+  transform: translateY(-1px) rotate(-4deg);
+}
+
+.brand:hover .glint {
+  animation: glint-again 760ms var(--hero-ease) both;
+}
+
+.name {
+  font-family: var(--sans);
+  font-weight: 760;
+  font-size: 17px;
+  letter-spacing: -0.035em;
+  color: var(--text-strong);
+}
+
+.letter {
+  position: relative;
+  animation: rise-inline 460ms var(--hero-ease) backwards;
+  animation-delay: calc(280ms + var(--hero-order) * 28ms);
+}
+
+/* ---------------------------------------------------------------- title */
+
+.title {
+  margin: 8px 0 0;
+  max-width: 820px;
+  font-family: var(--sans);
+  font-weight: 720;
+  font-size: clamp(28px, 3.1vw, 42px);
+  line-height: 1.12;
+  letter-spacing: -0.055em;
+  color: var(--text-strong);
+  text-align: center;
+  text-wrap: balance;
+}
+
+/* Words stay inline boxes, offset with `top`, so lines break and balance
+   exactly as plain text would; a transformable inline-block measures its own
+   width and moved the break. */
+.word {
+  position: relative;
+  animation: word-in 780ms var(--hero-ease) backwards;
+  animation-delay: calc(360ms + var(--hero-order) * 60ms);
+}
+
+/* ---------------------------------------------------------------- pipeline */
+
+.pipeline {
+  margin: 4px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 8px;
+  max-width: 680px;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 560;
+  letter-spacing: 0.06em;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.step {
+  padding: 2px 9px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  animation:
+    rise 480ms var(--hero-ease) backwards,
+    step-lit var(--hero-cycle) linear infinite;
+  animation-delay:
+    calc(760ms + var(--hero-order) * 140ms),
+    calc(var(--hero-loop-start) + var(--hero-order) * var(--hero-step-gap));
+}
+
+.link {
+  --link: 40px;
+  position: relative;
+  width: var(--link);
+  height: 8px;
+  flex: none;
+  transform-origin: left center;
+  animation: link-in 480ms var(--hero-ease) backwards;
+  animation-delay: calc(690ms + var(--hero-order) * 140ms);
+}
+
+.track {
+  position: absolute;
+  inset: 0;
+}
+
+/* The pipeline reads the other way in a right-to-left layout. */
+.track:dir(rtl) {
+  transform: scaleX(-1);
+}
+
+.track::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 3px;
+  height: 1px;
+  background-image: linear-gradient(90deg, var(--text-faint) 50%, transparent 0);
+  background-size: 5px 1px;
+}
+
+.track::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 1px;
+  width: 5px;
+  height: 5px;
+  margin-top: -2px;
+  border-top: 1px solid var(--text-faint);
+  border-right: 1px solid var(--text-faint);
+  transform: rotate(45deg);
+}
+
+/* The pulse leaves a step just after it lights and reaches the next one as
+   that one lights, so the light reads as travelling down the pipeline. */
+.pulse {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  margin-top: -2.5px;
+  border-radius: 50%;
+  background: var(--text-strong);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-strong) 12%, transparent);
+  opacity: 0;
+  animation: pulse-travel var(--hero-cycle) var(--hero-ease-loop) infinite;
+  animation-delay: calc(
+    var(--hero-loop-start) + 300ms + (var(--hero-order) - 1) * var(--hero-step-gap)
+  );
+}
+
+/* ---------------------------------------------------------------- trust */
+
+.trust {
+  margin: 0 0 8px;
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 520;
+  letter-spacing: 0.025em;
+  line-height: 1.5;
+  text-align: center;
+  animation: rise 520ms var(--hero-ease) 1100ms backwards;
+}
+
+@media (max-width: 900px) {
+  .title {
+    font-size: 30px;
+  }
+}
+
+@media (max-width: 560px) {
+  .link {
+    --link: 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage *,
+  .stage *::before,
+  .stage *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ---------------------------------------------------------------- keyframes */
+
+@keyframes field-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes sweep {
+  0% {
+    transform: translateX(-120%);
+  }
+  55%,
+  100% {
+    transform: translateX(340%);
+  }
+}
+
+@keyframes ripple {
+  0% {
+    opacity: 0.6;
+    transform: scale(0.4);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.6);
+  }
+}
+
+@keyframes mark-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.9);
+  }
+}
+
+@keyframes draw {
+  0% {
+    stroke-dashoffset: 1;
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+
+@keyframes glint {
+  0% {
+    opacity: 1;
+    transform: translateX(-70%);
+  }
+  99% {
+    opacity: 1;
+    transform: translateX(70%);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(70%);
+  }
+}
+
+/* Same motion under another name, so hovering restarts it. */
+@keyframes glint-again {
+  0% {
+    opacity: 1;
+    transform: translateX(-70%);
+  }
+  99% {
+    opacity: 1;
+    transform: translateX(70%);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(70%);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes word-in {
+  from {
+    opacity: 0;
+    top: 0.4em;
+    filter: blur(8px);
+  }
+}
+
+@keyframes rise-inline {
+  from {
+    opacity: 0;
+    top: 6px;
+  }
+}
+
+@keyframes link-in {
+  from {
+    opacity: 0;
+    transform: scaleX(0.4);
+  }
+}
+
+@keyframes step-lit {
+  0%,
+  22%,
+  100% {
+    color: var(--text-muted);
+    background-color: transparent;
+    border-color: transparent;
+  }
+  4%,
+  15% {
+    color: var(--text-strong);
+    background-color: var(--bg-subtle);
+    border-color: var(--border);
+  }
+}
+
+@keyframes pulse-travel {
+  0% {
+    opacity: 0;
+    transform: translateX(0) scale(0.6);
+  }
+  3% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  25% {
+    opacity: 1;
+    transform: translateX(calc(var(--link) - 9px)) scale(1);
+  }
+  29%,
+  100% {
+    opacity: 0;
+    transform: translateX(calc(var(--link) - 9px)) scale(0.6);
+  }
+}
