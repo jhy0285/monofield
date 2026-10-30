@@ -1,3 +1,5 @@
+import type { ExecutionPermissionLevel } from './execution-permissions.js';
+
 export interface AgentModelPrefs {
   model?: string;
   reasoning?: string;
@@ -93,6 +95,12 @@ export interface AppConfigPrefs {
   recentLinkedDirs?: string[];
   /** Desktop companion selection. Sprite data is bounded and validated by the daemon. */
   pet?: PetConfigPrefs;
+  /**
+   * Global execution permission level for the local coding agents (see
+   * `api/execution-permissions.ts`). Absent means `default`. Written through
+   * `PUT /api/execution-permissions`.
+   */
+  executionPermissionLevel?: ExecutionPermissionLevel;
 }
 
 export interface AppConfigResponse {

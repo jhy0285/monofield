@@ -52,7 +52,7 @@ describe('SettingsDialog navigation', () => {
     const more = labels.indexOf('More');
     expect(more).toBeGreaterThan(0);
     const above = labels.slice(0, more).join('|');
-    for (const wanted of ['Execution mode', 'Database connections', 'Dictionary library', 'Project locations', 'About']) {
+    for (const wanted of ['Execution mode', 'Execution permissions', 'Database connections', 'Dictionary library', 'Project locations', 'About']) {
       expect(above, wanted).toContain(wanted);
     }
     expect(above).not.toContain('Media providers');
@@ -65,6 +65,15 @@ describe('SettingsDialog navigation', () => {
     expect(below).toContain('Media providers');
     fireEvent.click(screen.getByRole('button', { name: /Media providers/ }));
     expect(screen.getByLabelText('Settings sections').querySelector('.settings-nav-item.active')?.textContent).toContain('Media providers');
+  });
+
+  it('puts Execution permissions right after Execution mode and opens it', () => {
+    renderDialog();
+    const labels = navLabels();
+    expect(labels.indexOf('Execution permissions')).toBe(labels.indexOf('Execution mode') + 1);
+    fireEvent.click(screen.getByTestId('settings-nav-permissions'));
+    expect(screen.getByTestId('execution-permissions-section')).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 2 }).textContent).toBe('Execution permissions');
   });
 
   it('opens straight to a section below the divider when asked', () => {

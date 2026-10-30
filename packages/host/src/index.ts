@@ -375,6 +375,15 @@ export type OpenDesignHostBridge = {
   capture: {
     page(options?: OpenDesignHostCaptureOptions): Promise<OpenDesignHostCaptureResult>;
   };
+  /**
+   * Windows desktop builds that can restart MonoField with administrator
+   * rights (Settings → Execution permissions). Absent on older hosts and in
+   * the browser; a host without the ability answers `unsupported`. UAC asks
+   * the user every time; a declined prompt answers `declined`.
+   */
+  elevation?: {
+    relaunchAsAdministrator(): Promise<OpenDesignHostActionResult>;
+  };
   database?: {
     list(): Promise<OpenDesignHostDatabaseConnection[]>;
     /** Privileged Desktop-only read path; database credentials never enter the renderer. */

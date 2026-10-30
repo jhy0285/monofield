@@ -23,7 +23,9 @@ import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
 import {
   STORED_AGENT_CLI_CREDENTIAL,
+  isExecutionPermissionLevel,
   isStoredAgentCliCredential as isBaseStoredAgentCliCredential,
+  type ExecutionPermissionLevel,
 } from '@open-design/contracts';
 import { expandHomePrefix } from './home-expansion.js';
 import {
@@ -170,6 +172,9 @@ export interface AppConfigPrefs {
   // import). Stored most-recent-first; capped at RECENT_LINKED_DIRS_MAX.
   recentLinkedDirs?: string[];
   pet?: PetConfigPrefs;
+  // Global execution permission level for Codex / Claude Code (and, on
+  // Windows, whether MonoField starts elevated). Absent means `default`.
+  executionPermissionLevel?: ExecutionPermissionLevel;
 }
 
 // Cap on how many recent working directories we remember. Keeps the picker's
@@ -195,6 +200,7 @@ const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'defaultProjectLocationId',
   'recentLinkedDirs',
   'pet',
+  'executionPermissionLevel',
 ] as const);
 
 function configFile(dataDir: string): string {
@@ -780,6 +786,14 @@ function applyConfigValue(
         if (cleaned.length >= RECENT_LINKED_DIRS_MAX) break;
       }
       target[key] = cleaned;
+    } else {
+      delete target[key];
+    }
+    return;
+  }
+  if (key === 'executionPermissionLevel') {
+    if (isExecutionPermissionLevel(value)) {
+      target[key] = value;
     } else {
       delete target[key];
     }

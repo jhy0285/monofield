@@ -1,3 +1,9 @@
+import {
+  normalizeExecutionPermissionLevel,
+  resolveExecutionPermissions,
+  type CodexSandboxMode,
+  type ExecutionPermissionLevel,
+} from '@open-design/contracts';
 import { DEFAULT_MODEL_OPTION, clampCodexReasoning } from './shared.js';
 import type { RuntimeModelOption } from '../types.js';
 import type { RuntimeAgentDef } from '../types.js';
@@ -44,16 +50,37 @@ export function parseCodexDebugModels(stdout: string): RuntimeModelOption[] | nu
   return out.length > 1 ? out : null;
 }
 
+export function codexFullAccessFromEnv(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.OD_CODEX_SANDBOX?.trim() === 'danger-full-access';
+}
+
+/**
+ * The Codex sandbox for a run. The user's execution permission level decides
+ * it; `OD_CODEX_SANDBOX=danger-full-access` is an administrator override that
+ * can only widen it.
+ */
+export function codexSandboxMode(
+  level: ExecutionPermissionLevel | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): CodexSandboxMode {
+  return resolveExecutionPermissions(normalizeExecutionPermissionLevel(level), {
+    codexFullAccessFromEnv: codexFullAccessFromEnv(env),
+  }).codexSandbox;
+}
+
 export function codexNeedsDangerFullAccessSandbox(
   _platform: NodeJS.Platform = process.platform,
   env: NodeJS.ProcessEnv = process.env,
+  level?: ExecutionPermissionLevel,
 ): boolean {
   // Fail closed on every platform. A working folder is a task root, not a
-  // license to write anywhere on the machine. Older native Windows Codex
-  // builds may reject shell commands in workspace-write mode; administrators
-  // can explicitly opt into the compatibility mode below, but MonoField must
-  // never silently broaden access merely because it runs on Windows or WSL.
-  return env.OD_CODEX_SANDBOX?.trim() === 'danger-full-access';
+  // license to write anywhere on the machine. Full access happens only when
+  // the user picks the "full" execution permission level in Settings or the
+  // CLI, or an administrator sets the OD_CODEX_SANDBOX compatibility override
+  // (older native Windows Codex builds may reject shell commands in
+  // workspace-write mode). MonoField must never silently broaden access merely
+  // because it runs on Windows or WSL.
+  return codexSandboxMode(level, env) === 'danger-full-access';
 }
 
 export function codexShouldDisableExternalPlugins(
@@ -138,10 +165,12 @@ export const codexAgentDef = {
       runtimeContext = {},
     ) => {
       const resumeSessionId = runtimeContext.resumeSessionId?.trim() || null;
-      // Workspace-write is the secure default on every platform. The only
-      // escape hatch is the explicit administrator-controlled
-      // OD_CODEX_SANDBOX=danger-full-access compatibility setting above.
-      const needsDangerFullAccess = codexNeedsDangerFullAccessSandbox();
+      // Workspace-write is the secure default on every platform. The user's
+      // execution permission level can narrow it to read-only or widen it to
+      // danger-full-access; see codexSandboxMode above.
+      const sandboxMode = codexSandboxMode(runtimeContext.executionPermissionLevel);
+      const needsDangerFullAccess = sandboxMode === 'danger-full-access';
+      const readOnly = sandboxMode === 'read-only';
       const args = resumeSessionId
         ? [
             'exec',
@@ -150,28 +179,32 @@ export const codexAgentDef = {
             '--skip-git-repo-check',
             ...(needsDangerFullAccess
               ? ['--dangerously-bypass-approvals-and-sandbox']
-              : [
-                  '-c',
-                  'sandbox_mode="workspace-write"',
-                  '-c',
-                  'sandbox_workspace_write.network_access=true',
-                ]),
+              : readOnly
+                ? ['-c', 'sandbox_mode="read-only"']
+                : [
+                    '-c',
+                    'sandbox_mode="workspace-write"',
+                    '-c',
+                    'sandbox_workspace_write.network_access=true',
+                  ]),
           ]
         : needsDangerFullAccess
           ? ['exec', '--json', '--skip-git-repo-check', '--sandbox', 'danger-full-access']
-          : [
-            'exec',
-            '--json',
-            '--skip-git-repo-check',
-            '--sandbox',
-            'workspace-write',
-            '-c',
-            'sandbox_workspace_write.network_access=true',
-          ];
+          : readOnly
+            ? ['exec', '--json', '--skip-git-repo-check', '--sandbox', 'read-only']
+            : [
+              'exec',
+              '--json',
+              '--skip-git-repo-check',
+              '--sandbox',
+              'workspace-write',
+              '-c',
+              'sandbox_workspace_write.network_access=true',
+            ];
       const dirs = (extraAllowedDirs || []).filter(
         (d) => typeof d === 'string' && d.length > 0,
       );
-      if (resumeSessionId && !needsDangerFullAccess && dirs.length > 0) {
+      if (resumeSessionId && sandboxMode === 'workspace-write' && dirs.length > 0) {
         // exec resume has no --add-dir option. Carry the same explicitly
         // granted roots through its supported sandbox config instead, so a
         // module switch does not silently revoke sibling-module access.
@@ -247,7 +280,9 @@ export const codexAgentDef = {
       if (!resumeSessionId && runtimeContext.cwd) {
         args.push('-C', runtimeContext.cwd);
       }
-      for (const d of resumeSessionId ? [] : dirs) {
+      // `--add-dir` grants extra writable roots, which a read-only sandbox
+      // must not have; it can already read them.
+      for (const d of resumeSessionId || readOnly ? [] : dirs) {
         args.push('--add-dir', d);
       }
       if (options.model && options.model !== 'default') {

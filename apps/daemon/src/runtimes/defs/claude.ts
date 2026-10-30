@@ -1,3 +1,7 @@
+import {
+  normalizeExecutionPermissionLevel,
+  resolveExecutionPermissions,
+} from '@open-design/contracts';
 import { agentCapabilities } from '../capabilities.js';
 import { DEFAULT_MODEL_OPTION } from './shared.js';
 import { loadMmdRouteModels } from '../mmd-routes.js';
@@ -112,7 +116,16 @@ export const claudeAgentDef = {
       } else if (typeof runtimeContext.newSessionId === 'string' && runtimeContext.newSessionId) {
         args.push('--session-id', runtimeContext.newSessionId);
       }
-      args.push('--permission-mode', 'bypassPermissions');
+      // MonoField runs Claude headless, so no approval prompt can reach the
+      // user: the execution permission level picks between letting every tool
+      // run (`bypassPermissions`, the default) and planning only (`plan`, the
+      // read-only level).
+      args.push(
+        '--permission-mode',
+        resolveExecutionPermissions(
+          normalizeExecutionPermissionLevel(runtimeContext.executionPermissionLevel),
+        ).claudePermissionMode,
+      );
       return args;
     },
     promptViaStdin: true,

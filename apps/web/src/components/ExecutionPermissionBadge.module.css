@@ -1,0 +1,48 @@
+/* Header pill shown while the execution permission level is `full`. */
+.badge {
+  display: inline-flex;
+  align-self: center;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  margin-right: 6px;
+  padding: 0 10px 0 8px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--red);
+  background: var(--red-bg);
+  border: 1px solid color-mix(in srgb, var(--red) 35%, transparent);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  animation: badge-in var(--dur-enter) var(--ease-out);
+  transition: background var(--dur-quick, 120ms) var(--ease-out), border-color var(--dur-quick, 120ms) var(--ease-out);
+}
+
+.badge:hover {
+  background: color-mix(in srgb, var(--red) 16%, var(--red-bg));
+  border-color: var(--red);
+}
+
+.badge:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+@keyframes badge-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .badge {
+    animation: none;
+  }
+}

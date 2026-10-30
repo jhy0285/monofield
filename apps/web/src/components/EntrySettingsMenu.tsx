@@ -16,6 +16,7 @@ import {
   trackSettingsPopoverSurfaceView,
 } from '../analytics/events';
 import type { AppConfig, AppTheme } from '../types';
+import { ExecutionPermissionBadge } from './ExecutionPermissionBadge';
 import { Icon } from './Icon';
 import {
   GITHUB_PROBLEM_REPORT_URL,
@@ -37,7 +38,8 @@ export type EntrySettingsSection =
   | 'library'
   | 'about'
   | 'memory'
-  | 'designSystems';
+  | 'designSystems'
+  | 'permissions';
 
 const ENTRY_THEME_OPTIONS: Array<{
   value: AppTheme;
@@ -128,6 +130,7 @@ export function EntrySettingsMenu({
 
   return (
     <div className="entry-settings-menu" ref={wrapRef}>
+      <ExecutionPermissionBadge onOpen={() => onOpenSettings('permissions')} />
       <button
         ref={triggerRef}
         type="button"

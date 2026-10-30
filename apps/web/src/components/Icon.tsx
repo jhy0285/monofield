@@ -74,6 +74,7 @@ export type IconName =
   | 'share'
   | 'screen-spec'
   | 'interface-spec'
+  | 'shield'
   | 'sliders'
   | 'smartphone'
   | 'spinner'
@@ -237,6 +238,13 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
         <svg {...common}>
           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
           <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+        </svg>
+      );
+    case 'shield':
+      return (
+        <svg {...common}>
+          <path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.1 7.5 9.5 4.3-1.4 7.5-4.9 7.5-9.5V6L12 3Z" />
+          <path d="m9 12 2 2 4-4" />
         </svg>
       );
     case 'eye':

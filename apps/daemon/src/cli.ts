@@ -357,6 +357,11 @@ const SUBCOMMAND_MAP = {
     const { runJevCli } = await import('./services/jev-cli.js');
     return runJevCli(args, { baseUrl: cliDaemonBaseUrl, parseFlags, positionalArgs: collectCliPositionals });
   },
+  // Settings → Execution permissions, against /api/execution-permissions.
+  permissions: async (args: string[]) => {
+    const { runPermissionsCli } = await import('./services/permissions-cli.js');
+    return runPermissionsCli(args, { baseUrl: cliDaemonBaseUrl, parseFlags, positionalArgs: collectCliPositionals });
+  },
   browser: runBrowser,
   artifacts: runArtifacts,
   media: runMedia,

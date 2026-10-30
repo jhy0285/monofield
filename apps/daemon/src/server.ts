@@ -25,6 +25,7 @@ import {
   executionProfileFromStreamFormat,
   isInterfaceSpecGenerationRequest,
   isStructuredSpecificationArtifactRequest,
+  normalizeExecutionPermissionLevel,
   normalizeProviderTokenUsage,
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
 } from '@open-design/contracts';
@@ -629,6 +630,7 @@ import { registerLiveArtifactRoutes } from './routes/live-artifact.js';
 import { registerDesignSystemToolRoutes } from './routes/design-system-tool.js';
 import { registerDeployRoutes, registerDeploymentCheckRoutes } from './routes/deploy.js';
 import { registerMediaRoutes } from './routes/media.js';
+import { registerExecutionPermissionsRoutes } from './routes/execution-permissions.js';
 import { registerProjectRoutes, registerProjectArtifactRoutes, registerProjectFileRoutes, registerProjectUploadRoutes } from './routes/project/index.js';
 import { registerVelaRoutes } from './routes/vela.js';
 import { registerFinalizeRoutes, registerImportRoutes, registerProjectExportRoutes } from './import-export-routes.js';
@@ -4970,6 +4972,8 @@ export async function startServer({
     research: researchDeps,
   });
 
+  registerExecutionPermissionsRoutes(app, { http: httpDeps, paths: pathDeps });
+
   registerVelaRoutes(app, {
     paths: { RUNTIME_DATA_DIR },
     appConfig: { readAppConfig },
@@ -6950,9 +6954,13 @@ export async function startServer({
       promptBuildEndAt: Date.now(),
     };
     let configuredAgentEnv = {};
+    // Settings → Execution permissions. An unreadable config keeps the
+    // shipped default rather than widening anything.
+    let executionPermissionLevel = normalizeExecutionPermissionLevel(undefined);
     try {
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
       configuredAgentEnv = agentCliEnvForAgent(appConfig.agentCliEnv, def.id);
+      executionPermissionLevel = normalizeExecutionPermissionLevel(appConfig.executionPermissionLevel);
     } catch {
       configuredAgentEnv = {};
     }
@@ -7763,6 +7771,7 @@ export async function startServer({
           ignoreProjectInstructions:
             hostOwnedArtifactFallback || (cwd != null && projectBaseDir == null),
           disableTools: hostOwnedArtifactFallback,
+          executionPermissionLevel,
         },
       );
     } catch (err) {
@@ -8079,7 +8088,11 @@ export async function startServer({
     )
       ? currentCodexWindowsSandboxCircuit({
           environmentFingerprint: codexWindowsSandboxFingerprint,
-          dangerFullAccessExplicitlyEnabled: codexNeedsDangerFullAccessSandbox(),
+          dangerFullAccessExplicitlyEnabled: codexNeedsDangerFullAccessSandbox(
+            process.platform,
+            process.env,
+            executionPermissionLevel,
+          ),
         })
       : null;
     if (

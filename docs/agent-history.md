@@ -96,6 +96,14 @@ As of 2026-10-30.
   panel height, Design Files preview width, AI input) and the classic chat
   panel width; see the newest Log entry and `Splitter` in
   `packages/components/src/splitter.tsx`.
+- Execution permissions (2026-10-30): one global level, `read-only` / `default` / `full`,
+  stored as `executionPermissionLevel` in app config and served by
+  `GET/PUT /api/execution-permissions` (`packages/contracts/src/api/execution-permissions.ts`).
+  It sets the Codex sandbox and the Claude Code permission mode for runs that start after a
+  change, and on Windows `full` makes MonoField Desktop restart with administrator rights (UAC
+  at every launch). Surfaces: Settings → Execution permissions, a red "Full access" pill beside
+  the settings cog, and `monofield permissions [show|set <level>] [--json]`. `default` keeps the
+  shipped behavior. The Windows elevation path has unit tests only; it was not run on Windows.
 
 ### Environment notes
 
@@ -185,6 +193,10 @@ machine. Check before relying on them.
 
 ### Known baseline failures
 
+`@open-design/desktop` unit suite in this sandbox (2026-10-30): 8 files fail on the base commit and
+after the execution-permissions change alike, 7 because the Electron binary is not installed
+("Electron failed to install correctly") and `development-process-broker` (4 tests).
+
 Web unit and daemon unit suites: none. On 2026-10-27, on the commit before this
 series (the merge of pull request 11), the web suite had 95 failing tests and the
 daemon suite 90 (23 files); all were investigated and resolved (see the Log). The
@@ -244,6 +256,21 @@ exercise is unchanged by it.
 ## Open items
 
 Newest first within each group. Remove an item when it is done.
+
+Execution permissions (see the newest Log entry):
+
+- Run the Windows elevation path on a real packaged Windows build: choosing Full access →
+  UAC "Yes" → the old window quits and the elevated copy starts (after-quit handshake in
+  `apps/desktop/src/main/elevation.ts`); UAC "No" keeps the normal-rights window and
+  Settings says so; a launch with `full` saved relaunches elevated; going back to `default`
+  drops the rights after the app is reopened. Check that Explorer drag-and-drop is refused
+  while elevated (UIPI) and that the file picker still works. None of this was run.
+- Files the elevated app or its agents create may be owned by the Administrators group;
+  whether that trips Git's `safe.directory` check in a later normal-rights run was not
+  checked.
+- The level covers Codex and Claude Code only. Other adapters (Gemini, OpenCode and so on)
+  keep their own flags, and Codex image generation (`apps/daemon/src/media/index.ts`) still
+  uses workspace-write unless `OD_CODEX_SANDBOX` is set; the Settings footnote says so.
 
 End-to-end tests:
 
@@ -337,6 +364,50 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-10-30 — Settings → Execution permissions, one Codex-style level (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** a "실행 권한" Settings section covering the Codex sandbox, the Claude permission mode
+  and running as administrator, with UI and CLI in the same change, DTOs in contracts and all 19
+  locales; after review the user asked for a single Codex-like setting for MonoField, Codex and
+  Claude together, a polished UI, tests, a merge to `main` and an app release.
+- **Changed:** contracts `api/execution-permissions.ts` (levels, `resolveExecutionPermissions`,
+  `executionPermissionsNeedRestart`) and `AppConfigPrefs.executionPermissionLevel`; daemon
+  app-config validation, `execution-permissions.ts`, `routes/execution-permissions.ts`,
+  `RuntimeContext.executionPermissionLevel` passed from `server.ts`; `codex.ts` maps
+  read-only/default/full to `--sandbox read-only` / workspace-write + network /
+  danger-full-access (resume: `sandbox_mode="read-only"` / unchanged /
+  `--dangerously-bypass-approvals-and-sandbox`; no `--add-dir` in read-only), and
+  `OD_CODEX_SANDBOX=danger-full-access` still widens every level; `claude.ts` passes `plan` for
+  read-only, `bypassPermissions` otherwise; CLI `monofield permissions` in
+  `services/permissions-cli.ts`. `packages/platform`: `isWindowsProcessElevated` (integrity label
+  from `whoami /groups`) and `launchWindowsElevated` (`Start-Process -Verb RunAs`, declined →
+  `declined`). Desktop `elevation.ts`: packaged Windows only, relaunch with the launcher after-quit
+  args, startup relaunch when the daemon reports `startElevated`, IPC `od:elevation:relaunch`,
+  host bridge `elevation.relaunchAsAdministrator`. Web: `ExecutionPermissionsSection` (three
+  radio cards, status panel, confirm dialog portaled to `<body>`, Escape closes only the
+  confirm), `ExecutionPermissionBadge` beside the settings cog, `providers/execution-permissions.ts`,
+  `Icon` `shield`, 42 `executionPermissions.*` keys in 19 locales. Tests in each package and
+  `e2e/ui/settings-execution-permissions.test.ts`.
+- **Why:** MonoField hard-coded workspace-write for Codex and bypassPermissions for Claude; widening
+  needed an environment variable and narrowing was impossible.
+- **Verified:** Node 24.22.2, pnpm 10.33.2. `pnpm guard` 67 pass; `pnpm typecheck` exit 0;
+  `pnpm i18n:check` pass. `pnpm --filter` tests: contracts 263 pass; platform 69 pass (1 skipped);
+  components 18 pass; daemon 5545 pass, 1 fail (`run-failure-telemetry-smoke` 20 s timeout under
+  load, passes alone, 2/2); web 3927 pass, 1 fail (`SettingsDialog.execution` found two
+  `/Claude Code/` buttons because the new nav hint named the agents; hint reworded, the file and
+  the new specs then pass 136/136); monofield-site 8 pass; desktop 4 failed / 191 passed in 8
+  files, the same 8 files and 4 tests that fail on the base commit (Electron binary missing in
+  this sandbox, development-process-broker), compared in a worktree of the base commit.
+  `e2e/ui/settings-execution-permissions.test.ts` 2 pass. Live check against `tools-dev` (namespace
+  `perm-ui`): API read/write/400, CLI output, and screenshots in Korean and English at 1280 and
+  820 px (cards stack by container width), the confirm dialog, the header pill; Windows-only
+  states were viewed with a routed Windows-shaped API answer.
+- **Not done:** the Windows UAC/relaunch path on Windows (not run, see Open items); dark theme
+  was not viewed.
+- **Next agent:** `od:elevation:relaunch` must stay outside the slice between the `od:update:install`
+  and `od:update:quit` handlers (`tests/main/updater-host-boundary.test.ts`). A nested `Dialog` inside
+  Settings needs a portal; without it the backdrop covers only the section.
 
 ### 2026-10-30 — monofield.vercel.app hero: measured, two paint/restyle sources fixed, viewed (`ccr-8432aecf-n9xdfd`)
 

@@ -62,6 +62,7 @@ import { amrProfileBadgeLabel } from '../runtime/amr-guidance';
 import { ExportDiagnosticsRow } from './ExportDiagnosticsButton';
 import { Icon } from './Icon';
 import { DictionaryLibrarySection } from './DictionaryLibrarySection';
+import { ExecutionPermissionsSection } from './ExecutionPermissionsSection';
 import {
   EntryFeatureGuide,
   shouldOpenEntryFeatureGuide,
@@ -188,6 +189,7 @@ import {
 
 export type SettingsSection =
   | 'execution'
+  | 'permissions'
   | 'instructions'
   | 'media'
   | 'composio'
@@ -2931,6 +2933,7 @@ export function SettingsDialog({
     privacy: { title: t('settings.privacy'), subtitle: t('settings.privacyHint') },
     database: { title: t('settings.databaseTitle'), subtitle: t('settings.databaseSubtitle') },
     dictionaries: { title: t('settings.dictionaryLibraryTitle'), subtitle: t('settings.dictionaryLibrarySubtitle') },
+    permissions: { title: t('executionPermissions.navTitle'), subtitle: t('executionPermissions.subtitle') },
     pet: { title: t('pet.title'), subtitle: t('pet.subtitle') },
     skills: { title: t('settings.skills'), subtitle: t('settings.skillsHint') },
     designSystems: {
@@ -3321,6 +3324,18 @@ export function SettingsDialog({
               <span>
                 <strong>{t('settings.envConfigure')}</strong>
                 <small>{`${t('settings.localCli')} / ${t('settings.modeApiMeta')}`}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'permissions' ? ' active' : ''}`}
+              onClick={() => setActiveSection('permissions')}
+              data-testid="settings-nav-permissions"
+            >
+              <Icon name="shield" size={18} />
+              <span>
+                <strong>{t('executionPermissions.navTitle')}</strong>
+                <small>{t('executionPermissions.navHint')}</small>
               </span>
             </button>
             <button
@@ -4946,6 +4961,8 @@ export function SettingsDialog({
               />
             </div>
           ) : null}
+
+          {activeSection === 'permissions' ? <ExecutionPermissionsSection /> : null}
 
           {activeSection === 'privacy' ? (
             <PrivacySection cfg={cfg} setCfg={setCfg} />
