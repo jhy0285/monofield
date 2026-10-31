@@ -13,8 +13,8 @@
 
 <p align="center">
   <a href="https://monofield.vercel.app">Website</a> ·
-  <a href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.4/MonoField-release-preview-win-setup.exe">Windows preview · SI workbench</a> ·
-  <a href="https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.4">0.11.7-preview.4 release</a> ·
+  <a href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.5/MonoField-release-preview-win-setup.exe">Windows preview · SI workbench</a> ·
+  <a href="https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.5">0.11.7-preview.5 release</a> ·
   <a href="docs/open-source-compliance.md">Open-source notices</a>
 </p>
 
@@ -72,7 +72,7 @@ in structured deliverables that must stay in sync with the code.
 The three-minute walkthrough of the full loop is in
 [docs/demo/spring-interface-spec-demo.md](docs/demo/spring-interface-spec-demo.md).
 
-**Current development release: [0.11.7-preview.4](https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.4)** — adds **Settings → Execution permissions**, one level (read-only, default, full) for what Codex and Claude Code may do, also as `monofield permissions` — on top of the SI-deliverables workbench: Spring / eGovFrame / OpenAPI interface-spec scanners with Spring Security–based auth detection, compatibility classification of spec changes, OpenAPI 3.1 export, and an in-app Guide Center with an intro video, on top of the Java/ontology workspace, optional **REA MCP integration**, the legacy-system handover skill and **Laya local typed-decision integration**. [Download the Windows preview](https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.4/MonoField-release-preview-win-setup.exe). It installs alongside stable and is unsigned (verify `SHA256SUMS.txt`). Oracle/Tibero live connections are not supported yet. REA is downloaded on first enabled use; Node/npm, Chromium, Laya model weights and its server are separate prerequisites.
+**Current development release: [0.11.7-preview.5](https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.5)** — **Settings → Execution permissions**, one level (read-only, default, full) for what your coding agents may do, also as `monofield permissions`; Read only now also covers Gemini CLI, Qwen Code, CodeBuddy and Copilot, refuses agents without a read-only mode, and applies to Codex image generation — on top of the SI-deliverables workbench: Spring / eGovFrame / OpenAPI interface-spec scanners with Spring Security–based auth detection, compatibility classification of spec changes, OpenAPI 3.1 export, and an in-app Guide Center with an intro video, on top of the Java/ontology workspace, optional **REA MCP integration**, the legacy-system handover skill and **Laya local typed-decision integration**. [Download the Windows preview](https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.5/MonoField-release-preview-win-setup.exe). It installs alongside stable and is unsigned (verify `SHA256SUMS.txt`). Oracle/Tibero live connections are not supported yet. REA is downloaded on first enabled use; Node/npm, Chromium, Laya model weights and its server are separate prerequisites.
 
 **한국어** — REA로 기존 시스템의 화면·API·SQLite 근거를 조사하고 MonoField의 인터페이스 Excel·화면명세 PPTX로 정리할 수 있습니다. Laya는 선택적으로 근거 검토와 검증 후보 선택을 보조합니다. [설정·SI 인수인계 흐름](docs/rea-laya-handover.md) · [실제 합성 샘플 실행 결과](docs/testing/rea-handover-2026-10-22.md).
 
@@ -153,16 +153,16 @@ tooling boundary.
 
 ## Install
 
-- [Windows REA/Laya preview installer](https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.4/MonoField-release-preview-win-setup.exe)
-- [Preview portable package](https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.4/MonoField-release-preview-win-portable.zip)
-- [Preview release notes and checksums](https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.4)
+- [Windows REA/Laya preview installer](https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.5/MonoField-release-preview-win-setup.exe)
+- [Preview portable package](https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.5/MonoField-release-preview-win-portable.zip)
+- [Preview release notes and checksums](https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.5)
 - [Stable Windows installer](https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-setup.exe)
 - [Stable portable package](https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-portable.zip)
 - [Stable release notes and checksums](https://github.com/jhy0285/monofield/releases/latest)
 - Microsoft Store — shown on the [MonoField website](https://monofield.vercel.app)
   after the public listing is certified
 
-Preview downloads are pinned to the REA/Laya `0.11.7-preview.4` release;
+Preview downloads are pinned to the REA/Laya `0.11.7-preview.5` release;
 stable links follow the latest stable GitHub Release.
 The current public Desktop build targets Windows 10/11. Direct-download builds
 are unsigned, so Windows can show an unrecognized-publisher warning; verify the

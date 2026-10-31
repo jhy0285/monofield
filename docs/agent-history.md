@@ -64,9 +64,8 @@ As of 2026-10-30.
   reviewed spec diffs). It is an independent fork of the Apache-2.0 Open Design
   project; see `docs/adr/0002-upstream-maintenance.md` (status: Proposed, only
   phase A done).
-- Version: `0.11.7-preview.5` (root `package.json`), prepared on 2026-10-31 for the execution
-  permissions follow-up release; `0.11.7-preview.4` (2026-10-30, from `6ecaca6`) is the previous
-  published preview; stable `latest` is still `v0.11.6`. Workspace packages are
+- Version: `0.11.7-preview.5` (root `package.json`), published on 2026-10-31 as a GitHub prerelease
+  (preview channel, unsigned) from `0deb4f6`; stable `latest` is still `v0.11.6`. Workspace packages are
   still named `@open-design/*`; env vars still use the `OD_*` prefix.
 - Shape: pnpm monorepo. `apps/daemon` (Express + SQLite, `monofield` CLI) and
   `apps/web` (Next.js 16) hold most of the code (roughly 320k and 410k lines of
@@ -407,6 +406,24 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-10-31 — pull request 13 merged; 0.11.7-preview.5 published (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** steps 2 and 3 of "real Windows test → merge → preview.5".
+- **Done:** pull request 13 (execution permissions follow-ups, Read only for more agents, real Windows test) passed
+  all 18 CI jobs on its head and was merged into `main` (merge commit `94a41a3`). The branch was restarted from
+  `main`; "chore(release): prepare 0.11.7-preview.5" (`0deb4f6`) bumped the five release packages.
+  `release-windows.yml` dispatched with `ref=0deb4f6…`, `release_channel=preview`, `signed=false`,
+  `allow_unsigned=true`, `publish=true` (run 41199091754): build, install and runtime smoke passed, and
+  `v0.11.7-preview.5` was published as a prerelease targeting `0deb4f6` with setup.exe, portable ZIP, payload 7z,
+  `latest.yml` and `SHA256SUMS.txt`; `releases/latest` still answers `v0.11.6`.
+- **Changed here:** `docs/releases/0.11.7-preview.5.md` (Korean notes, Source, run link); README, the site's preview
+  card, structured data and the site README point at preview.5; the card lists the six Read only agents.
+- **Verified:** ranged GETs of the installer and ZIP answer 206 and `SHA256SUMS.txt` lists all four files (HEAD
+  requests answer 401 through this sandbox's proxy, GET works); `node --test tests/seo.test.ts` in
+  `apps/monofield-site` 8 pass; the preview card viewed at 1440 px and 390 px (6 items, no horizontal overflow).
+- **Next agent:** the release-notes sync runs on the push of `docs/releases/*.md` to `main`; check that the GitHub
+  release body matches the file after the merge.
 
 ### 2026-10-31 — real Windows runner result for the administrator relaunch (`ccr-8432aecf-n9xdfd`)
 
