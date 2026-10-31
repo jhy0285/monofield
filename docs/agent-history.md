@@ -421,12 +421,18 @@ Code health:
   between the page's fetch and the watcher becoming ready, or while the stream reconnected, was never reported.
 - **Changed:** `apps/web/src/providers/project-events.ts` drops the project's cached listings
   (`invalidateProjectListings`, now exported) on every `file-changed` and `ready`, and reports `ready` to the consumer
-  as `{ type: 'file-watch-ready' }`; `ProjectView.tsx` refetches the file list on it.
+  as `{ type: 'file-watch-ready' }`; `ProjectView.tsx` refetches the listing on it with `refreshWorkspaceItems`, not
+  by bumping `filesRefresh`. The first version bumped `filesRefresh`, which FileViewer reads as "files changed" and
+  reloads every open preview; CI then failed `e2e/ui/app-manual-edit.test.ts:453` (preview frame navigated during an
+  `evaluate` after reload), reproduced locally 1 of 3 and 2 of 3 against 0 of 4 on the base files. With the listing-only
+  refetch it passed 4 of 4.
 - **Verified:** two new specs in `apps/web/tests/providers/project-events.test.ts` failed before the change (cached
   list served after a reported change; `ready` not reported) and pass after (15 pass); web typecheck clean. The P0 test
   locally (Node 24, one worker): with only the `ready` part of the change it still failed 6 of 7 runs at the file row
-  (the cache was the main cause); with the whole change 4 of 4 passed, each `file-changed` now followed by a file
-  list request. Without any change it failed in CI 2 of 2 on pull request 14 and on the first try in both runs of
+  (the cache was the main cause); with the whole change 4 of 4 passed twice (before and after the listing-only
+  refetch), each `file-changed` now followed by a file list request. Web unit suite: 3933 pass, 1 fail
+  (`tests/components/BrandsTab.refresh.test.tsx`, a polling count that also failed 1 of 3 on the base files while the
+  machine was loaded; untouched by this change). `project-events` and `ProjectView` unit tests 185 pass. Without any change it failed in CI 2 of 2 on pull request 14 and on the first try in both runs of
   pull request 13; it was not run locally without the change.
 
 ### 2026-10-31 — pull request 13 merged; 0.11.7-preview.5 published (`ccr-8432aecf-n9xdfd`)

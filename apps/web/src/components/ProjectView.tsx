@@ -2432,10 +2432,13 @@ export function ProjectView({
       return;
     }
     if (evt.type === 'file-watch-ready') {
-      // Files written before the watcher was ready were never reported;
-      // refetch so the list matches the disk. Changed files get new mtimes,
-      // which reload their previews through the ?v= cache-bust.
-      coalescedFileChangedRefresh();
+      // Files written before the watcher was ready were never reported, so
+      // resync the listing. This is not a change notice: bumping filesRefresh
+      // would reload every open preview on each connect. A file whose mtime
+      // did move reloads its own preview through file.mtime.
+      void refreshWorkspaceItems().catch(() => {
+        // The next file-changed event or remount refetches.
+      });
       return;
     }
     if (evt.type === 'conversation-created') {
@@ -2483,7 +2486,7 @@ export function ProjectView({
     // Live artifact events come from chat-turn-emitted artifacts; they
     // also imply the conversation transcript changed.
     setDesignMdRefreshKey((n) => n + 1);
-  }, [coalescedFileChangedRefresh, iframeKeepAlivePool, onProjectsRefresh, refreshLiveArtifacts, project.id]);
+  }, [coalescedFileChangedRefresh, iframeKeepAlivePool, onProjectsRefresh, refreshLiveArtifacts, refreshWorkspaceItems, project.id]);
   useProjectFileEvents(project.id, daemonLive, handleProjectEvent);
 
   const activePromptContextSignature = useMemo(() => {
