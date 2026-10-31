@@ -4347,4 +4347,5 @@ export const th: Dict = {
   'executionPermissions.notAdminAccount': 'บัญชี Windows นี้ไม่ใช่ผู้ดูแลระบบ Windows จะขอรหัสผ่านของบัญชีอื่นและเปิด MonoField ด้วยบัญชีนั้น ซึ่งมีการตั้งค่าและโปรเจกต์ต่างออกไป MonoField จึงไม่เริ่มใหม่ด้วยสิทธิ์ผู้ดูแลระบบ ส่วน Codex และ Claude Code ยังทำงานด้วยการเข้าถึงเต็มรูปแบบ',
   'executionPermissions.confirmNotAdmin': 'บัญชี Windows นี้ไม่ใช่ผู้ดูแลระบบ MonoField จึงไม่เริ่มใหม่ จะเปลี่ยนเฉพาะ Codex และ Claude Code',
   'executionPermissions.readOnlyNote': 'ในโหมดอ่านอย่างเดียว Codex และ Claude Code เขียนไฟล์ไม่ได้ จึงไม่สร้างสเปก เอกสาร หรือผลงานอื่น และปฏิเสธการสร้างภาพ เลือก "ค่าเริ่มต้น" เพื่อสร้างไฟล์',
+  'executionPermissions.readOnlyAgents': 'โหมดอ่านอย่างเดียวใช้ได้กับ Codex, Claude Code, Gemini CLI, Qwen Code, CodeBuddy และ Copilot เอเจนต์อื่นจะไม่ถูกเริ่มที่ระดับนี้',
 };

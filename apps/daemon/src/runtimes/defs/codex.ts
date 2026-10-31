@@ -298,6 +298,7 @@ export const codexAgentDef = {
       return args;
     },
     promptViaStdin: true,
+    readOnlySupport: true,
     streamFormat: 'json-event-stream',
     eventParser: 'codex',
     resumesSessionViaCli: true,

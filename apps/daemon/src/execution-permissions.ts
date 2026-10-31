@@ -66,6 +66,15 @@ export async function readExecutionPermissions(
   );
 }
 
+/** The saved level; an unreadable config keeps the shipped default instead of widening anything. */
+export async function readExecutionPermissionLevel(dataDir: string): Promise<ExecutionPermissionLevel> {
+  try {
+    return normalizeExecutionPermissionLevel((await readAppConfig(dataDir)).executionPermissionLevel);
+  } catch {
+    return normalizeExecutionPermissionLevel(undefined);
+  }
+}
+
 export async function writeExecutionPermissionLevel(
   dataDir: string,
   level: ExecutionPermissionLevel,

@@ -4347,4 +4347,5 @@ export const ar: Dict = {
   'executionPermissions.notAdminAccount': 'حساب Windows هذا ليس مسؤولًا. سيطلب Windows كلمة مرور حساب آخر ويفتح MonoField بذلك الحساب بإعدادات ومشاريع مختلفة، لذلك لا يعيد MonoField التشغيل كمسؤول. يظل Codex وClaude Code يعملان بوصول كامل.',
   'executionPermissions.confirmNotAdmin': 'حساب Windows هذا ليس مسؤولًا، لذا لن تتم إعادة تشغيل MonoField. يتغير Codex وClaude Code فقط.',
   'executionPermissions.readOnlyNote': 'في وضع القراءة فقط لا يستطيع Codex وClaude Code كتابة الملفات: لا تُنشأ المواصفات والمستندات وسائر المخرجات، ويُرفض توليد الصور. اختر "افتراضي" لإنتاج الملفات.',
+  'executionPermissions.readOnlyAgents': 'وضع القراءة فقط يعمل مع Codex وClaude Code وGemini CLI وQwen Code وCodeBuddy وCopilot. لا يتم تشغيل الوكلاء الآخرين على هذا المستوى.',
 };

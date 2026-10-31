@@ -4347,4 +4347,5 @@ export const tr: Dict = {
   'executionPermissions.notAdminAccount': 'Bu Windows hesabı yönetici değil. Windows başka bir hesabın parolasını isteyip MonoField\'ı o hesapla, farklı ayarlar ve projelerle açardı; bu yüzden MonoField yönetici olarak yeniden başlamaz. Codex ve Claude Code yine de tam erişimle çalışır.',
   'executionPermissions.confirmNotAdmin': 'Bu Windows hesabı yönetici olmadığı için MonoField yeniden başlatılmaz. Yalnızca Codex ve Claude Code değişir.',
   'executionPermissions.readOnlyNote': '"Salt okunur" düzeyinde Codex ve Claude Code dosya yazamaz: spesifikasyonlar, belgeler ve diğer çıktılar oluşturulmaz, görsel üretimi reddedilir. Dosya üretmek için "Varsayılan"ı seçin.',
+  'executionPermissions.readOnlyAgents': '"Salt okunur" düzeyi Codex, Claude Code, Gemini CLI, Qwen Code, CodeBuddy ve Copilot ile çalışır. Diğer ajanlar bu düzeyde başlatılmaz.',
 };

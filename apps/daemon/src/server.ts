@@ -631,6 +631,8 @@ import { registerDesignSystemToolRoutes } from './routes/design-system-tool.js';
 import { registerDeployRoutes, registerDeploymentCheckRoutes } from './routes/deploy.js';
 import { registerMediaRoutes } from './routes/media.js';
 import { registerExecutionPermissionsRoutes } from './routes/execution-permissions.js';
+import { readExecutionPermissionLevel } from './execution-permissions.js';
+import { readOnlyUnsupportedMessage } from './runtimes/read-only.js';
 import { registerProjectRoutes, registerProjectArtifactRoutes, registerProjectFileRoutes, registerProjectUploadRoutes } from './routes/project/index.js';
 import { registerVelaRoutes } from './routes/vela.js';
 import { registerFinalizeRoutes, registerImportRoutes, registerProjectExportRoutes } from './import-export-routes.js';
@@ -6117,6 +6119,16 @@ export async function startServer({
       );
     if (!def.bin)
       return design.runs.fail(run, 'AGENT_UNAVAILABLE', 'agent has no binary');
+    // Settings → Execution permissions "Read only": start only agents whose CLI
+    // has a read-only mode MonoField maps (`readOnlySupport`). Checked before any
+    // setup so nothing is written for a run that will not start.
+    const readOnlyRefusal = readOnlyUnsupportedMessage(
+      def,
+      await readExecutionPermissionLevel(RUNTIME_DATA_DIR),
+    );
+    if (readOnlyRefusal) {
+      return design.runs.fail(run, 'AGENT_READ_ONLY_UNSUPPORTED', readOnlyRefusal);
+    }
     // Validate the checked-in `inactivityTimeoutMs` hint immediately
     // after the runtime def is selected and before any side-effectful
     // setup (auto-memory extract, `.mcp.json` write/unlink,

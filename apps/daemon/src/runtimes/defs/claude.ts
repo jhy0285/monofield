@@ -128,6 +128,7 @@ export const claudeAgentDef = {
       );
       return args;
     },
+    readOnlySupport: true,
     promptViaStdin: true,
     promptInputFormat: 'stream-json',
     streamFormat: 'claude-stream-json',

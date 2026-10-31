@@ -4348,4 +4348,5 @@ export const zhTW: Dict = {
   'executionPermissions.notAdminAccount': '此 Windows 帳戶不是系統管理員。Windows 會要求輸入另一個帳戶的密碼，並以該帳戶開啟 MonoField，設定和專案都會不同，因此 MonoField 不會以系統管理員身分重新啟動。Codex 和 Claude Code 仍以完整存取執行。',
   'executionPermissions.confirmNotAdmin': '此 Windows 帳戶不是系統管理員，因此不會重新啟動 MonoField。只會改變 Codex 和 Claude Code。',
   'executionPermissions.readOnlyNote': '在「唯讀」下，Codex 和 Claude Code 無法寫入檔案：不會產生規格書、文件等交付成果，圖像生成也會被拒絕。要產生檔案，請選擇「預設」。',
+  'executionPermissions.readOnlyAgents': '「唯讀」適用於 Codex、Claude Code、Gemini CLI、Qwen Code、CodeBuddy 和 Copilot。其他代理在此級別下不會啟動。',
 };

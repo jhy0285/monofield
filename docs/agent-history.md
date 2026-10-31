@@ -107,7 +107,9 @@ As of 2026-10-30.
   shipped behavior. Codex image generation (`apps/daemon/src/media/index.ts`) follows the level too
   (`full` widens it, `read-only` refuses it). On Windows the response carries `canElevate`: a
   standard (non-administrator) account is never restarted elevated, because UAC would open the app as
-  another user. The Windows elevation path has unit tests only; it was not run on Windows.
+  another user. Read only starts only agents marked `readOnlySupport` (Codex, Claude Code, Gemini CLI,
+  Qwen Code, CodeBuddy, Copilot); others are refused. The Windows elevation path was exercised on a fake
+  Windows host with a real PowerShell, not on Windows.
 
 ### Environment notes
 
@@ -195,6 +197,13 @@ machine. Check before relying on them.
   `settings-memory-routines`) break when the UI reads that endpoint more or less
   often. Flip them on a test-controlled flag instead.
 
+- A fake Windows host and real third-party CLIs can be had without Windows: PowerShell 7 comes from the
+  GitHub release tarball (check it against `hashes.sha256`), and Codex, Gemini, Qwen, Copilot, CodeBuddy,
+  Amp and Qoder CLIs install from npm into a scratch folder. `apps/desktop/tests/main/elevation-fake-windows.test.ts`
+  uses a `pwsh` on `PATH` or `MONOFIELD_TEST_PWSH` and skips without one (GitHub's Ubuntu runners have it).
+- Node processes report their `comm` as `MainThread`, so `ps -eo comm` filters miss them; match the arguments
+  and kill by PID (never `pkill -f`, which also matches the shell that runs it).
+
 ### Known baseline failures
 
 `apps/daemon/tests/run-retry-runtime.test.ts` is time-sensitive: run alone in this sandbox it failed
@@ -275,19 +284,31 @@ Execution permissions (see the newest Log entry):
   drops the rights after the app is reopened. Check that Explorer drag-and-drop is refused
   while elevated (UIPI) and that the file picker still works. Also try a standard (non-admin)
   Windows account: Settings should say the account is not an administrator and nothing should
-  restart. `canElevate` comes from the `S-1-5-32-544` row of `whoami /groups`; whether a
-  domain account that is an administrator only through a nested domain group shows that row was
-  not checked. None of this was run.
+  restart. Done on a fake Windows host (see the newest Log entry): the token reads, the
+  generated PowerShell command, the exit-code mapping and the daemon/CLI/Settings chain. Still
+  not run: real UAC, Windows PowerShell 5.1 (the fake host uses PowerShell 7), the Electron IPC
+  hop (`preload.cts` → `od:elevation:relaunch` in `runtime.ts`; Electron is not installed in
+  this sandbox), and a domain account that is an administrator only through a nested group
+  (`canElevate` reads the `S-1-5-32-544` row of `whoami /groups`).
 - Files the elevated app or its agents create may be owned by the Administrators group;
   whether that trips Git's `safe.directory` check in a later normal-rights run was not
   checked.
-- The level covers Codex and Claude Code only. Other adapters (Gemini, OpenCode and so on)
-  keep their own flags; the Settings footnote says so. Mapping the level onto their approval
-  flags was not attempted because none could be run here.
+- Read only runs only on adapters with `readOnlySupport` (Codex, Claude Code, Gemini CLI,
+  Qwen Code, CodeBuddy, Copilot); every other adapter is refused with `AGENT_READ_ONLY_UNSUPPORTED`.
+  amp, cursor-agent, devin, qoder and trae-cli run with an approve-everything flag and no read-only
+  mode could be confirmed (qoder's `--permission-mode` has no plan choice; amp has permission rules
+  via `amp permissions`, not explored; cursor-agent, devin and trae-cli were not installed). The
+  ACP client (`apps/daemon/src/acp.ts` `choosePermissionOutcome`) always picks an allow option, so
+  ACP adapters cannot be narrowed on the host side today; rejecting non-read tool kinds at Read only
+  would be a way, but it only helps agents that ask before acting. At Default and Full the other
+  adapters keep their own flags, which are usually broader than Codex's workspace-write; the
+  Settings footnote says so.
 - At `read-only` Claude Code still writes its own plan file under its config folder
   (`~/.claude/plans`), outside the project; the project stays untouched (checked with the real CLI).
-  Codex `read-only` was not run against a real Codex (not installed in this sandbox); only its
-  arguments are tested.
+  The Gemini, Qwen, CodeBuddy and Copilot read-only flags come from each CLI's `--help` and were
+  accepted by the real parsers, but no model run was possible (no login), so their behavior at
+  Read only is not observed. Codex was run for real only as far as arguments, the Linux sandbox
+  (`codex sandbox`) and the prompt it renders; no model turn.
 
 End-to-end tests:
 
@@ -381,6 +402,46 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-10-31 — fake Windows host, real third-party CLIs, Read only for other agents (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** try the Windows path on a fake Windows host instead of leaving it unrun, and test other AI CLIs.
+- **Fake Windows host:** `whoami.exe` and `powershell.exe` are scripts on `PATH`, so `execFile` in
+  `packages/platform` runs for real; `powershell.exe` hands MonoField's generated command to a real PowerShell 7.4.6
+  with only `Start-Process` replaced by a stand-in that records its arguments and can throw like a refused UAC.
+  Results: admin, standard, elevated, Korean-localized and broken `whoami` outputs read as expected; the command
+  parses, a path with an apostrophe survives, the argument string decodes (documented CommandLineToArgvW rules,
+  implemented in the test) to the exact argv including the after-quit flags, a refused prompt maps to `declined`,
+  a missing `powershell.exe` to `failed`; `createDesktopElevation` relaunches an administrator account, refuses a
+  standard one (`not-administrator`, UAC never asked) and an elevated one. A daemon started with
+  `process.platform` spoofed to `win32` answered `canElevate` true/false and `restartRequired` correctly over HTTP
+  and the CLI, and Settings (real daemon, not a routed mock) showed the matching dialog and status text. Kept as
+  `apps/desktop/tests/main/elevation-fake-windows.test.ts`. This does not prove real UAC.
+- **Real CLIs:** Codex 0.166.0 accepted all six argument sets MonoField builds (new and resume, three levels) and
+  rejected invalid values (controls); `codex sandbox -P :read-only` blocked writes inside and outside the project,
+  `:workspace` allowed only the project; `codex debug prompt-input` showed network restricted with
+  `sandbox_mode="read-only"` or workspace-write alone, enabled with `sandbox_workspace_write.network_access=true`
+  and with danger-full-access. Gemini 0.66.0 (`--approval-mode plan`, "read-only mode"), Qwen Code 0.26.4
+  (`--approval-mode plan`), CodeBuddy 2.179.0 (`--permission-mode plan`) and Copilot 1.0.105 (denials win over
+  `--allow-all-tools`) accepted the exact arguments built by the daemon's defs at Read only and Default. No model
+  turn was possible without logins. Claude Code plan mode was run for real (see the entry below).
+- **Changed:** `readOnlySupport` on `RuntimeAgentDef` (set for Codex, Claude Code, Gemini, Qwen, CodeBuddy, Copilot);
+  those adapters map Read only to their CLI's plan mode or deny rules (Gemini fails closed on a build without
+  `--approval-mode`); `server.ts` refuses a run for any other adapter at Read only with
+  `AGENT_READ_ONLY_UNSUPPORTED` (422) before any setup (`runtimes/read-only.ts`); Settings lists which agents
+  work at Read only (`executionPermissions.readOnlyAgents`, 19 locales); the CLI prints one consistent
+  "Start as administrator" line for a standard account.
+- **Verified:** `pnpm guard` 67 pass; `pnpm typecheck` exit 0; `pnpm i18n:check` pass; contracts 269, platform 71
+  (1 skipped), web 3932, daemon 5564 (all pass this run), `e2e` workflow test 11, desktop 196 passed and the same 8
+  files / 4 tests failing as on the base commit (Electron missing). New daemon tests: per-adapter arguments, an
+  invariant that no adapter with `readOnlySupport` passes an approve-everything flag at Read only, the refusal table
+  over every adapter, and a real-server run test.
+- **Not done:** real Windows (UAC, PowerShell 5.1, the Electron IPC hop); behavior of the Gemini, Qwen, CodeBuddy and
+  Copilot read-only modes with a model; read-only modes for amp, cursor-agent, devin, qoder, trae-cli and the ACP
+  adapters; narrowing other adapters at Default.
+- **Next agent:** `codex sandbox` needs `-P <profile>` in 0.166 (`:read-only`, `:workspace`); its profiles ignore the
+  legacy `sandbox_workspace_write.network_access` key, so use `codex debug prompt-input` to see how a `-c` setting is
+  read. Next dev allows one server per folder.
 
 ### 2026-10-31 — execution permissions follow-ups: image generation, standard Windows accounts, notes, visual-baseline (`ccr-8432aecf-n9xdfd`)
 

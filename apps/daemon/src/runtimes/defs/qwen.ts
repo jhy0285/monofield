@@ -1,4 +1,4 @@
-import { DEFAULT_MODEL_OPTION } from './shared.js';
+import { DEFAULT_MODEL_OPTION, isReadOnlyRun } from './shared.js';
 import type { RuntimeAgentDef } from '../types.js';
 
 export const qwenAgentDef = {
@@ -16,14 +16,18 @@ export const qwenAgentDef = {
     // Gemini-CLI fork and supports the same `--yolo` non-interactive mode.
     // Qwen Code reads from piped stdin when no positional prompt is supplied.
     // Current Qwen treats/rejects a bare `-` rather than needing it as a stdin sentinel.
-    buildArgs: (_prompt, _imagePaths, _extra, options = {}) => {
-      const args = ['--yolo'];
+    buildArgs: (_prompt, _imagePaths, _extra, options = {}, runtimeContext = {}) => {
+      // `--approval-mode plan` is Qwen Code's analyze-only mode ("do not modify
+      // files or execute commands"); a build without the flag exits with an
+      // option error, which fails closed.
+      const args = isReadOnlyRun(runtimeContext) ? ['--approval-mode', 'plan'] : ['--yolo'];
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
       }
    
       return args;
     },
+    readOnlySupport: true,
     promptViaStdin: true,
     streamFormat: 'plain',
 } satisfies RuntimeAgentDef;

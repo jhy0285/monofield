@@ -4347,4 +4347,5 @@ export const ja: Dict = {
   'executionPermissions.notAdminAccount': 'この Windows アカウントは管理者ではありません。Windows は別のアカウントのパスワードを求め、そのアカウントで MonoField を開くため、設定とプロジェクトが変わってしまいます。そのため MonoField は管理者として再起動しません。Codex と Claude Code はフルアクセスで実行されます。',
   'executionPermissions.confirmNotAdmin': 'この Windows アカウントは管理者ではないため、MonoField は再起動されません。変わるのは Codex と Claude Code だけです。',
   'executionPermissions.readOnlyNote': '読み取り専用では Codex と Claude Code がファイルを書き込めません。仕様書や文書などの成果物は作成されず、画像生成も拒否されます。ファイルを作るには「標準」を選んでください。',
+  'executionPermissions.readOnlyAgents': '読み取り専用は Codex、Claude Code、Gemini CLI、Qwen Code、CodeBuddy、Copilot で使えます。ほかのエージェントはこのレベルでは起動しません。',
 };

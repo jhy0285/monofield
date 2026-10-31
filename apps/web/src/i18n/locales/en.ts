@@ -4364,4 +4364,5 @@ export const en: Dict = {
   'executionPermissions.notAdminAccount': 'This Windows account is not an administrator. Windows would ask for another account\'s password and open MonoField as that account, with different settings and projects, so MonoField does not restart as administrator. Codex and Claude Code still run with full access.',
   'executionPermissions.confirmNotAdmin': 'This Windows account is not an administrator, so MonoField is not restarted. Only Codex and Claude Code change.',
   'executionPermissions.readOnlyNote': 'In Read only, Codex and Claude Code cannot write files: specs, documents and other deliverables are not created, and image generation is refused. Choose Default to produce files.',
+  'executionPermissions.readOnlyAgents': 'Read only works with Codex, Claude Code, Gemini CLI, Qwen Code, CodeBuddy and Copilot. Other agents are not started at this level.',
 };

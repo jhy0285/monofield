@@ -4347,4 +4347,5 @@ export const id: Dict = {
   'executionPermissions.notAdminAccount': 'Akun Windows ini bukan administrator. Windows akan meminta kata sandi akun lain dan membuka MonoField dengan akun itu, dengan pengaturan dan proyek yang berbeda, sehingga MonoField tidak dimulai ulang sebagai administrator. Codex dan Claude Code tetap berjalan dengan akses penuh.',
   'executionPermissions.confirmNotAdmin': 'Akun Windows ini bukan administrator, jadi MonoField tidak dimulai ulang. Hanya Codex dan Claude Code yang berubah.',
   'executionPermissions.readOnlyNote': 'Pada "Hanya baca", Codex dan Claude Code tidak dapat menulis file: spesifikasi, dokumen, dan hasil lain tidak dibuat, dan pembuatan gambar ditolak. Pilih "Bawaan" untuk menghasilkan file.',
+  'executionPermissions.readOnlyAgents': '"Hanya baca" berfungsi dengan Codex, Claude Code, Gemini CLI, Qwen Code, CodeBuddy, dan Copilot. Agen lain tidak dijalankan pada tingkat ini.',
 };

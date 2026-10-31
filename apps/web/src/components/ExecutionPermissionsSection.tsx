@@ -315,7 +315,9 @@ function PermissionsStatus({
 }) {
   const wantsElevation = permissions.effective.startElevated;
   const notes: string[] = [];
-  if (permissions.level === 'read-only') notes.push(t('executionPermissions.readOnlyNote'));
+  if (permissions.level === 'read-only') {
+    notes.push(t('executionPermissions.readOnlyNote'), t('executionPermissions.readOnlyAgents'));
+  }
   if (permissions.codexSandboxLockedByEnv) notes.push(t('executionPermissions.lockedByEnv'));
   if (permissions.platform === 'win32' && permissions.level === 'full') {
     notes.push(

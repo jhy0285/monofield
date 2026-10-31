@@ -4347,4 +4347,5 @@ export const de: Dict = {
   'executionPermissions.notAdminAccount': 'Dieses Windows-Konto ist kein Administrator. Windows würde das Passwort eines anderen Kontos verlangen und MonoField mit diesem Konto öffnen – mit anderen Einstellungen und Projekten. Deshalb startet MonoField nicht als Administrator neu. Codex und Claude Code laufen trotzdem mit Vollzugriff.',
   'executionPermissions.confirmNotAdmin': 'Dieses Windows-Konto ist kein Administrator, daher wird MonoField nicht neu gestartet. Nur Codex und Claude Code ändern sich.',
   'executionPermissions.readOnlyNote': 'Im Modus „Nur lesen“ können Codex und Claude Code keine Dateien schreiben: Spezifikationen, Dokumente und andere Ergebnisse werden nicht erstellt, und die Bilderzeugung wird abgelehnt. Wählen Sie „Standard“, um Dateien zu erzeugen.',
+  'executionPermissions.readOnlyAgents': '„Nur lesen“ funktioniert mit Codex, Claude Code, Gemini CLI, Qwen Code, CodeBuddy und Copilot. Andere Agenten werden auf dieser Stufe nicht gestartet.',
 };

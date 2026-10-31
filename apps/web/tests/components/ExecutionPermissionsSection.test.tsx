@@ -168,6 +168,8 @@ describe('Settings → Execution permissions', () => {
     render(<ExecutionPermissionsSection />);
     expect(await screen.findByText(/cannot write files: specs, documents and other deliverables are not created/)).toBeTruthy();
     expect(screen.getByText(/image generation is refused/)).toBeTruthy();
+    // And which agents can run at this level at all.
+    expect(screen.getByText(/Read only works with Codex, Claude Code, Gemini CLI, Qwen Code, CodeBuddy and Copilot/)).toBeTruthy();
   });
 
   it('shows no Read only warning at the default level', async () => {
@@ -176,6 +178,7 @@ describe('Settings → Execution permissions', () => {
     await waitFor(() => expect(calls.length).toBeGreaterThan(0));
     await screen.findByRole('radio', { name: /Default/ });
     expect(screen.queryByText(/cannot write files/)).toBeNull();
+    expect(screen.queryByText(/Read only works with/)).toBeNull();
   });
 
   it('explains that leaving full access drops administrator rights only after reopening', async () => {

@@ -4516,4 +4516,5 @@ export interface Dict {
   'executionPermissions.notAdminAccount': string;
   'executionPermissions.confirmNotAdmin': string;
   'executionPermissions.readOnlyNote': string;
+  'executionPermissions.readOnlyAgents': string;
 }
