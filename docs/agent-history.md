@@ -109,7 +109,8 @@ As of 2026-10-30.
   standard (non-administrator) account is never restarted elevated, because UAC would open the app as
   another user. Read only starts only agents marked `readOnlySupport` (Codex, Claude Code, Gemini CLI,
   Qwen Code, CodeBuddy, Copilot); others are refused. The Windows elevation path was exercised on a fake
-  Windows host with a real PowerShell, not on Windows.
+  Windows host with a real PowerShell and on a real (already elevated) Windows CI runner with Windows
+  PowerShell 5.1; the UAC prompt itself has not been seen.
 
 ### Environment notes
 
@@ -284,9 +285,11 @@ Execution permissions (see the newest Log entry):
   drops the rights after the app is reopened. Check that Explorer drag-and-drop is refused
   while elevated (UIPI) and that the file picker still works. Also try a standard (non-admin)
   Windows account: Settings should say the account is not an administrator and nothing should
-  restart. Done on a fake Windows host (see the newest Log entry): the token reads, the
-  generated PowerShell command, the exit-code mapping and the daemon/CLI/Settings chain. Still
-  not run: real UAC, Windows PowerShell 5.1 (the fake host uses PowerShell 7), the Electron IPC
+  restart. Done on a fake Windows host: the token reads, the generated PowerShell command, the
+  exit-code mapping and the daemon/CLI/Settings chain. Done on a real Windows runner (CI job
+  "Windows tools-pack payload tests", Windows PowerShell 5.1): real `whoami`, a real
+  `Start-Process -Verb RunAs` with every argument intact, a missing executable. Still not run:
+  the UAC prompt itself (the runner is already elevated), a declined prompt, the Electron IPC
   hop (`preload.cts` → `od:elevation:relaunch` in `runtime.ts`; Electron is not installed in
   this sandbox), and a domain account that is an administrator only through a nested group
   (`canElevate` reads the `S-1-5-32-544` row of `whoami /groups`).
@@ -402,6 +405,22 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-10-31 — real Windows runner result for the administrator relaunch (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** record the outcome of step 1 (real Windows test) before the merge.
+- **Verified:** `ci.yml` dispatched with `ci_mode=hot` on the branch head "test(desktop): run the administrator
+  relaunch on a real Windows runner" (run 41197887276). Job "Windows tools-pack payload tests" (`windows-latest`)
+  passed: launcher payload 5 passed / 1 skipped; `tests/main/elevation.test.ts` 7 passed;
+  `tests/main/elevation-real-windows.test.ts` 4 passed. The runner reported Windows PowerShell 5.1.26100.33648 and
+  token `{"elevated":true,"administratorAccount":true}`; `whoami /groups` gave the rows `BUILTIN\Administrators`
+  (`S-1-5-32-544`, enabled, group owner) and `Mandatory Label\High Mandatory Level` (`S-1-16-12288`). A real
+  `Start-Process -Verb RunAs` started a copy of `node.exe` from `Mono'Field App\MonoField.exe` and every argument
+  (spaces, embedded quotes, an empty string, trailing and doubled backslashes, the after-quit flags) arrived intact;
+  a missing executable mapped to `failed`; the desktop left the already elevated process alone.
+- **Not done:** the runner is already elevated and has no UAC prompt, so the prompt, a declined prompt, a
+  non-elevated administrator and a standard account on real Windows are still unrun, as are the Electron IPC hop
+  and UIPI drag-and-drop.
 
 ### 2026-10-31 — real Windows runner test for the administrator relaunch (`ccr-8432aecf-n9xdfd`)
 
