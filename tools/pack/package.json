@@ -1,6 +1,6 @@
 {
   "name": "@open-design/tools-pack",
-  "version": "0.11.7-preview.4",
+  "version": "0.11.7-preview.5",
   "private": true,
   "type": "module",
   "bin": {

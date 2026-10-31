@@ -64,8 +64,9 @@ As of 2026-10-30.
   reviewed spec diffs). It is an independent fork of the Apache-2.0 Open Design
   project; see `docs/adr/0002-upstream-maintenance.md` (status: Proposed, only
   phase A done).
-- Version: `0.11.7-preview.4` (root `package.json`), published on 2026-10-30 as a GitHub prerelease
-  (preview channel, unsigned) from `6ecaca6`; stable `latest` is still `v0.11.6`. Workspace packages are
+- Version: `0.11.7-preview.5` (root `package.json`), prepared on 2026-10-31 for the execution
+  permissions follow-up release; `0.11.7-preview.4` (2026-10-30, from `6ecaca6`) is the previous
+  published preview; stable `latest` is still `v0.11.6`. Workspace packages are
   still named `@open-design/*`; env vars still use the `OD_*` prefix.
 - Shape: pnpm monorepo. `apps/daemon` (Express + SQLite, `monofield` CLI) and
   `apps/web` (Next.js 16) hold most of the code (roughly 320k and 410k lines of
@@ -73,8 +74,9 @@ As of 2026-10-30.
   `apps/daemon/src/server.ts`, `apps/daemon/src/cli.ts`,
   `apps/web/src/components/ProjectView.tsx`, `SettingsDialog.tsx` (each 8k–11k
   lines).
-- Working branch for agent sessions: `ccr-8432aecf-n9xdfd`. Pull request 12 merged it into `main`
-  on 2026-10-30 (merge commit `80cf9aa`); follow-up work restarts the branch from `main`.
+- Working branch for agent sessions: `ccr-8432aecf-n9xdfd`. Pull request 13 merged it into `main`
+  on 2026-10-31 (merge commit `94a41a3`, after pull request 12 on 2026-10-30); follow-up work
+  restarts the branch from `main`.
 - Local verification status (run on 2026-10-28 at the head of the branch):
   `pnpm guard`, `pnpm typecheck` and `pnpm i18n:check` pass. Unit suites pass in
   full: `@open-design/web` 402 files / 3891 tests (13 skipped),
