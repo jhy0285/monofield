@@ -104,7 +104,10 @@ As of 2026-10-30.
   change, and on Windows `full` makes MonoField Desktop restart with administrator rights (UAC
   at every launch). Surfaces: Settings → Execution permissions, a red "Full access" pill beside
   the settings cog, and `monofield permissions [show|set <level>] [--json]`. `default` keeps the
-  shipped behavior. The Windows elevation path has unit tests only; it was not run on Windows.
+  shipped behavior. Codex image generation (`apps/daemon/src/media/index.ts`) follows the level too
+  (`full` widens it, `read-only` refuses it). On Windows the response carries `canElevate`: a
+  standard (non-administrator) account is never restarted elevated, because UAC would open the app as
+  another user. The Windows elevation path has unit tests only; it was not run on Windows.
 
 ### Environment notes
 
@@ -194,6 +197,11 @@ machine. Check before relying on them.
 
 ### Known baseline failures
 
+`apps/daemon/tests/run-retry-runtime.test.ts` is time-sensitive: run alone in this sandbox it failed
+(one of its two tests, either one) in 3 of 6 runs on `f71335b` (before pull request 12), 3 of 5 on
+`80cf9aa` (main) and 3 of 5 on the follow-up branch, and also failed once in a full daemon run. It
+passed in CI. Rerun it alone a few times before reading a failure there as a regression.
+
 `@open-design/desktop` unit suite in this sandbox (2026-10-30): 8 files fail on the base commit and
 after the execution-permissions change alike, 7 because the Electron binary is not installed
 ("Electron failed to install correctly") and `development-process-broker` (4 tests).
@@ -265,13 +273,21 @@ Execution permissions (see the newest Log entry):
   `apps/desktop/src/main/elevation.ts`); UAC "No" keeps the normal-rights window and
   Settings says so; a launch with `full` saved relaunches elevated; going back to `default`
   drops the rights after the app is reopened. Check that Explorer drag-and-drop is refused
-  while elevated (UIPI) and that the file picker still works. None of this was run.
+  while elevated (UIPI) and that the file picker still works. Also try a standard (non-admin)
+  Windows account: Settings should say the account is not an administrator and nothing should
+  restart. `canElevate` comes from the `S-1-5-32-544` row of `whoami /groups`; whether a
+  domain account that is an administrator only through a nested domain group shows that row was
+  not checked. None of this was run.
 - Files the elevated app or its agents create may be owned by the Administrators group;
   whether that trips Git's `safe.directory` check in a later normal-rights run was not
   checked.
 - The level covers Codex and Claude Code only. Other adapters (Gemini, OpenCode and so on)
-  keep their own flags, and Codex image generation (`apps/daemon/src/media/index.ts`) still
-  uses workspace-write unless `OD_CODEX_SANDBOX` is set; the Settings footnote says so.
+  keep their own flags; the Settings footnote says so. Mapping the level onto their approval
+  flags was not attempted because none could be run here.
+- At `read-only` Claude Code still writes its own plan file under its config folder
+  (`~/.claude/plans`), outside the project; the project stays untouched (checked with the real CLI).
+  Codex `read-only` was not run against a real Codex (not installed in this sandbox); only its
+  arguments are tested.
 
 End-to-end tests:
 
@@ -365,6 +381,39 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-10-31 — execution permissions follow-ups: image generation, standard Windows accounts, notes, visual-baseline (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** fix the holes and issues listed after the 0.11.7-preview.4 release, as far as possible.
+- **Changed:**
+  - Codex image generation now follows the level: `media/config.ts` `resolveExecutionPermissionLevelForMedia`,
+    `media/index.ts` `codexImagegenSandboxArgs` (`full` or the `OD_CODEX_SANDBOX` override →
+    danger-full-access, `default` → workspace-write with network, `read-only` → an error before Codex starts,
+    because the run writes the image).
+  - Standard Windows accounts: `packages/platform` `readWindowsTokenInfo` (one `whoami /groups` read gives
+    `elevated` and `administratorAccount`), contracts `canElevate` and `executionPermissionsNeedRestart`
+    (false when `canElevate === false`), daemon response, CLI line, desktop `elevation.ts` (refuses with
+    `not-administrator`, no startup relaunch), web section (no restart promise, dialog and status wording).
+  - Read only now says in Settings that files, deliverables and image generation will not be produced
+    (`executionPermissions.readOnlyNote`); 3 new keys in 19 locales; danger button and filled red parts use
+    `--red-contrast` (white-on-salmon was low contrast in dark).
+  - `.github/workflows/visual-baseline.yml`: a "Check R2 configuration" step (same resolution order as
+    `r2ConfigFromEnv` in `e2e/scripts/visual-report.ts`) gates the R2 upload; capture and the debug artifact
+    still run. Reason: every run on `main` failed at the upload with "Missing R2 configuration".
+- **Verified:** Node 24.22.1. `pnpm guard` 67 pass; `pnpm typecheck` exit 0; `pnpm i18n:check` pass.
+  contracts 269 pass; platform 71 pass (1 skipped); components 18 pass; monofield-site 8 pass;
+  `e2e` `tests/packaged-smoke-workflow.test.ts` 11 pass (includes the new R2 gate assertions); web 3932 pass,
+  406 files; daemon 5554 pass, 1 fail (`run-retry-runtime`, flaky on the base commits too, see Known baseline
+  failures); desktop 4 failed / 192 passed in the same 8 files as the base commit. The workflow file parses
+  as YAML; it was not run on GitHub. Real Claude CLI (`claude -p --permission-mode plan`, empty folder, asked
+  to create `hello.txt`): the file was not created, the run ended `success`, the model said plan mode blocked it.
+  Dark theme viewed in a local stack (default, read only, a Windows-shaped standard-account answer, the
+  confirm dialog) in Korean.
+- **Not done:** the Windows path on Windows (see Open items); Codex `read-only` against a real Codex; Gemini,
+  OpenCode and other adapters; Oracle/Tibero; signing. The `visual-baseline` change only takes effect once it
+  is on `main`.
+- **Next agent:** the old scratchpad directory is gone; scratch files for this work lived under `.tmp/agent-work/`
+  (git-ignored). Run the daemon test files that spawn servers one at a time when the disk is tight.
 
 ### 2026-10-30 — pull request 12 merged; live site and release notes checked (`ccr-8432aecf-n9xdfd`)
 

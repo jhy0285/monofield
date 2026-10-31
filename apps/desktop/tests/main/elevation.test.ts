@@ -9,6 +9,9 @@ import {
   readStartElevatedFromDaemon,
 } from "../../src/main/elevation.js";
 
+const ADMIN_NOT_ELEVATED = { elevated: false, administratorAccount: true } as const;
+const STANDARD_ACCOUNT = { elevated: false, administratorAccount: false } as const;
+
 const BASE = {
   argv: ["C:\\Program Files\\MonoField\\MonoField.exe", "monofield://app/"],
   execPath: "C:\\Program Files\\MonoField\\MonoField.exe",
@@ -40,7 +43,7 @@ describe("desktop administrator relaunch", () => {
     let answer: "accept" | "decline" = "accept";
     const elevation = createDesktopElevation({
       ...BASE,
-      isElevated: async () => false,
+      readToken: async () => ADMIN_NOT_ELEVATED,
       launchElevated: async (executable, args) => {
         launches.push({ executable, args });
         return answer === "accept" ? { ok: true } : { ok: false, reason: "declined" };
@@ -53,11 +56,26 @@ describe("desktop administrator relaunch", () => {
     expect(await elevation?.relaunch()).toEqual({ ok: false, reason: "declined" });
   });
 
+  it("refuses a standard account instead of letting UAC open the app as another user", async () => {
+    let launched = false;
+    const elevation = createDesktopElevation({
+      ...BASE,
+      readToken: async () => STANDARD_ACCOUNT,
+      launchElevated: async () => {
+        launched = true;
+        return { ok: true };
+      },
+    });
+    expect(await elevation?.relaunch()).toEqual({ ok: false, reason: "not-administrator" });
+    expect(await elevation?.shouldRelaunchAtStartup(async () => true)).toBe(false);
+    expect(launched).toBe(false);
+  });
+
   it("does not relaunch an instance that is already elevated", async () => {
     let launched = false;
     const elevation = createDesktopElevation({
       ...BASE,
-      isElevated: async () => true,
+      readToken: async () => ({ elevated: true, administratorAccount: true }),
       launchElevated: async () => {
         launched = true;
         return { ok: true };
@@ -69,13 +87,13 @@ describe("desktop administrator relaunch", () => {
   });
 
   it("relaunches at startup only when Settings asks for it and the probe says not elevated", async () => {
-    const notElevated = createDesktopElevation({ ...BASE, isElevated: async () => false });
+    const notElevated = createDesktopElevation({ ...BASE, readToken: async () => ADMIN_NOT_ELEVATED });
     expect(await notElevated?.shouldRelaunchAtStartup(async () => true)).toBe(true);
     expect(await notElevated?.shouldRelaunchAtStartup(async () => false)).toBe(false);
     expect(await notElevated?.shouldRelaunchAtStartup(async () => {
       throw new Error("daemon down");
     })).toBe(false);
-    const unknown = createDesktopElevation({ ...BASE, isElevated: async () => null });
+    const unknown = createDesktopElevation({ ...BASE, readToken: async () => ({ elevated: null, administratorAccount: null }) });
     expect(await unknown?.shouldRelaunchAtStartup(async () => true)).toBe(false);
   });
 

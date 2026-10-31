@@ -4344,4 +4344,7 @@ export const pl: Dict = {
   'executionPermissions.badge': 'Pełny dostęp',
   'executionPermissions.badgeTooltip': 'Codex i Claude Code działają z pełnym dostępem. Kliknij, aby zmienić.',
   'executionPermissions.otherAgentsNote': 'Pozostałe CLI agentów zachowują własne ustawienia uprawnień.',
+  'executionPermissions.notAdminAccount': 'To konto Windows nie jest administratorem. Windows zapytałby o hasło innego konta i otworzył MonoField jako to konto, z innymi ustawieniami i projektami, dlatego MonoField nie uruchamia się ponownie jako administrator. Codex i Claude Code nadal działają z pełnym dostępem.',
+  'executionPermissions.confirmNotAdmin': 'To konto Windows nie jest administratorem, więc MonoField nie zostanie uruchomiony ponownie. Zmienią się tylko Codex i Claude Code.',
+  'executionPermissions.readOnlyNote': 'W trybie „Tylko odczyt” Codex i Claude Code nie mogą zapisywać plików: specyfikacje, dokumenty i inne wyniki nie powstają, a generowanie obrazów jest odrzucane. Wybierz „Domyślny”, aby tworzyć pliki.',
 };

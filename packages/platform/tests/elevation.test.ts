@@ -4,7 +4,9 @@ import {
   buildWindowsElevatedLaunchArgs,
   isWindowsProcessElevated,
   launchWindowsElevated,
+  parseWindowsWhoamiGroupsAdministrator,
   parseWindowsWhoamiGroupsElevation,
+  readWindowsTokenInfo,
 } from "../src/index.js";
 
 const MEDIUM_GROUPS = [
@@ -49,6 +51,50 @@ describe("Windows elevation probe", () => {
         throw new Error("whoami missing");
       },
     })).toBeNull();
+  });
+});
+
+const STANDARD_GROUPS = [
+  '"Everyone","Well-known group","S-1-1-0","Mandatory group, Enabled by default, Enabled group"',
+  '"BUILTIN\\Users","Alias","S-1-5-32-545","Mandatory group, Enabled by default, Enabled group"',
+  '"Mandatory Label\\Medium Mandatory Level","Label","S-1-16-8192",""',
+].join("\r\n");
+
+describe("Windows administrator account probe", () => {
+  it("tells an administrator account (even with a filtered token) from a standard account", () => {
+    expect(parseWindowsWhoamiGroupsAdministrator(MEDIUM_GROUPS)).toBe(true);
+    expect(parseWindowsWhoamiGroupsAdministrator(HIGH_GROUPS)).toBe(true);
+    expect(parseWindowsWhoamiGroupsAdministrator(STANDARD_GROUPS)).toBe(false);
+    expect(parseWindowsWhoamiGroupsAdministrator("")).toBeNull();
+    expect(parseWindowsWhoamiGroupsAdministrator("  \r\n")).toBeNull();
+  });
+
+  it("answers both questions from one whoami read and nulls elsewhere", async () => {
+    let calls = 0;
+    const run = (out: string) => async () => {
+      calls += 1;
+      return out;
+    };
+    expect(await readWindowsTokenInfo({ platform: "win32", run: run(MEDIUM_GROUPS) })).toEqual({
+      elevated: false,
+      administratorAccount: true,
+    });
+    expect(await readWindowsTokenInfo({ platform: "win32", run: run(STANDARD_GROUPS) })).toEqual({
+      elevated: false,
+      administratorAccount: false,
+    });
+    expect(calls).toBe(2);
+    expect(await readWindowsTokenInfo({ platform: "darwin", run: run(HIGH_GROUPS) })).toEqual({
+      elevated: null,
+      administratorAccount: null,
+    });
+    expect(calls).toBe(2);
+    expect(await readWindowsTokenInfo({
+      platform: "win32",
+      run: async () => {
+        throw new Error("whoami missing");
+      },
+    })).toEqual({ elevated: null, administratorAccount: null });
   });
 });
 

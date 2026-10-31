@@ -9,7 +9,12 @@ import { startServer, type StartServerResult } from '../src/server.js';
 
 const execute = promisify(execFile);
 
-function response(level: ExecutionPermissionsResponse['level'], elevated: boolean | null, platform = 'win32'): ExecutionPermissionsResponse {
+function response(
+  level: ExecutionPermissionsResponse['level'],
+  elevated: boolean | null,
+  platform = 'win32',
+  canElevate?: boolean | null,
+): ExecutionPermissionsResponse {
   return {
     level,
     effective: {
@@ -21,6 +26,7 @@ function response(level: ExecutionPermissionsResponse['level'], elevated: boolea
     codexSandboxLockedByEnv: false,
     elevated,
     platform,
+    ...(canElevate === undefined ? {} : { canElevate }),
   };
 }
 
@@ -66,6 +72,16 @@ describe('monofield permissions (unit)', () => {
     const out: string[] = [];
     await runPermissionsCli(['show', '--json'], helpers(response('full', null, 'darwin'), [], out));
     expect(JSON.parse(out.join(''))).toMatchObject({ restartRequired: false, effective: { startElevated: false } });
+  });
+
+  it('says a standard Windows account will not restart as administrator and asks for no restart', async () => {
+    const out: string[] = [];
+    await runPermissionsCli(['set', 'full'], helpers(response('full', false, 'win32', false), [], out));
+    expect(out.join('')).toContain('not an administrator');
+    expect(out.join('')).not.toContain('Restart MonoField Desktop');
+    const jsonOut: string[] = [];
+    await runPermissionsCli(['show', '--json'], helpers(response('full', false, 'win32', false), [], jsonOut));
+    expect(JSON.parse(jsonOut.join(''))).toMatchObject({ canElevate: false, restartRequired: false });
   });
 
   it('rejects an unknown level before calling the daemon', async () => {

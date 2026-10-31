@@ -70,10 +70,12 @@ import { normalizeCodexConfigFile } from '../codex-config-normalize.js';
 import {
   resolveCodexImagegenEnv,
   resolveCodexSubscriptionStatus,
+  resolveExecutionPermissionLevelForMedia,
   resolveModelAlias,
   resolveProviderConfig,
 } from './config.js';
-import { codexNeedsDangerFullAccessSandbox } from '../runtimes/defs/codex.js';
+import { codexNeedsDangerFullAccessSandbox, codexSandboxMode } from '../runtimes/defs/codex.js';
+import type { ExecutionPermissionLevel } from '@open-design/contracts';
 import {
   ensureProject,
   kindFor,
@@ -972,10 +974,33 @@ function codexImagePrompt(ctx: MediaContext): string {
   return `${prefix} ${prompt}${aspect}`;
 }
 
-function codexImagegenArgs(ctx: MediaContext, generatedRoot: string, env: NodeJS.ProcessEnv): string[] {
-  const sandbox = codexNeedsDangerFullAccessSandbox()
+/**
+ * Image generation has to write the image, so the "Read only" execution
+ * permission level cannot run it. Refuse before starting Codex instead of
+ * letting a read-only sandbox fail in the middle of the run.
+ */
+export function codexImagegenSandboxArgs(
+  level: ExecutionPermissionLevel,
+  env: NodeJS.ProcessEnv = process.env,
+): string[] {
+  if (codexSandboxMode(level, env) === 'read-only') {
+    throw new Error(
+      'Image generation writes a file, which the "Read only" execution permission level does not allow. '
+      + 'Change the level in Settings → Execution permissions (or run `monofield permissions set default`).',
+    );
+  }
+  return codexNeedsDangerFullAccessSandbox(process.platform, env, level)
     ? ['--sandbox', 'danger-full-access']
     : ['--sandbox', 'workspace-write', '-c', 'sandbox_workspace_write.network_access=true'];
+}
+
+function codexImagegenArgs(
+  ctx: MediaContext,
+  generatedRoot: string,
+  env: NodeJS.ProcessEnv,
+  level: ExecutionPermissionLevel,
+): string[] {
+  const sandbox = codexImagegenSandboxArgs(level);
   const model = env.OD_CODEX_IMAGEGEN_MODEL?.trim() || CODEX_IMAGE_ORCHESTRATOR_MODEL;
   const args = [
     'exec',
@@ -1030,11 +1055,12 @@ async function runCodexImagegen(
   ctx: MediaContext,
   generatedRoot: string,
   env: NodeJS.ProcessEnv,
+  level: ExecutionPermissionLevel,
 ): Promise<{ stderr: string; stdout: string }> {
   const codexBin = env.CODEX_BIN?.trim() || 'codex';
   const invocation = createCommandInvocation({
     command: codexBin,
-    args: codexImagegenArgs(ctx, generatedRoot, env),
+    args: codexImagegenArgs(ctx, generatedRoot, env, level),
     env,
   });
   const child = spawn(invocation.command, invocation.args, {
@@ -1069,11 +1095,14 @@ async function runCodexImagegen(
 }
 
 async function renderCodexImage(ctx: MediaContext): Promise<RenderResult> {
+  const level = await resolveExecutionPermissionLevelForMedia(ctx.projectRoot);
+  // Validate the level before touching Codex's config or the output folder.
+  codexImagegenSandboxArgs(level);
   const env = await resolveCodexImagegenEnv(ctx.projectRoot);
   await normalizeCodexConfigFile(env);
   const generatedRoot = codexGeneratedImagesRoot(env);
   await mkdir(generatedRoot, { recursive: true });
-  const { stdout } = await runCodexImagegen(ctx, generatedRoot, env);
+  const { stdout } = await runCodexImagegen(ctx, generatedRoot, env, level);
   const threadId = parseCodexThreadId(stdout);
   const bytes = await readCodexGeneratedImage(generatedRoot, threadId);
   const imageModel = codexImageModelLabel(ctx.model);

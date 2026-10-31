@@ -51,6 +51,31 @@ describe("packaged smoke workflow", () => {
     }
   });
 
+  it("[P2] uploads visual baselines only when R2 is configured instead of failing the run", async () => {
+    const workflow = await readFile(join(workflowsRoot, "visual-baseline.yml"), "utf8");
+    const check = sectionBetween(
+      workflow,
+      "      - name: Check R2 configuration",
+      "      - name: Upload baseline screenshots to R2",
+    );
+    const upload = sectionBetween(
+      workflow,
+      "      - name: Upload baseline screenshots to R2",
+      "      - name: Upload baseline debug artifact",
+    );
+
+    // Same resolution order as r2ConfigFromEnv in e2e/scripts/visual-report.ts.
+    for (const name of ["R2_BUCKET", "R2_PUBLIC_ORIGIN", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"]) {
+      expect(check).toContain(name);
+    }
+    expect(check).toContain("configured=true");
+    expect(check).toContain("configured=false");
+    expect(upload).toContain("if: ${{ steps.r2.outputs.configured == 'true' }}");
+    // The capture itself and the debug artifact still run without R2.
+    expect(workflow).toContain("playwright test -c playwright.visual.config.ts");
+    expect(workflow).toContain("if: ${{ always() }}");
+  });
+
   it("[P2] follows the current MonoField workflow inventory", async () => {
     const workflowNames = (await readdir(workflowsRoot))
       .filter((name) => name.endsWith(".yml"))

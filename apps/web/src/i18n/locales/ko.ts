@@ -4361,4 +4361,7 @@ export const ko: Dict = {
   'executionPermissions.badge': '전체 접근',
   'executionPermissions.badgeTooltip': 'Codex와 Claude Code가 전체 접근으로 실행됩니다. 눌러서 바꾸기',
   'executionPermissions.otherAgentsNote': '다른 에이전트 CLI는 각자의 권한 설정을 따릅니다.',
+  'executionPermissions.notAdminAccount': '이 Windows 계정은 관리자가 아닙니다. 다시 시작하면 Windows가 다른 계정의 비밀번호를 물어보고, 그 계정으로 MonoField가 열려 설정과 프로젝트가 달라집니다. 그래서 관리자 권한으로 다시 시작하지 않습니다. Codex와 Claude Code는 전체 접근으로 실행됩니다.',
+  'executionPermissions.confirmNotAdmin': '이 Windows 계정은 관리자가 아니어서 MonoField는 다시 시작되지 않습니다. Codex와 Claude Code만 바뀝니다.',
+  'executionPermissions.readOnlyNote': '읽기 전용에서는 Codex와 Claude Code가 파일을 쓸 수 없습니다. 명세서·문서 같은 산출물이 만들어지지 않고 이미지 생성도 거부됩니다. 파일을 만들려면 \'기본\'을 선택하세요.',
 };

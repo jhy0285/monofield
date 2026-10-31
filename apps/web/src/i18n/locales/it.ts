@@ -4344,4 +4344,7 @@ export const it: Dict = {
   'executionPermissions.badge': 'Accesso completo',
   'executionPermissions.badgeTooltip': 'Codex e Claude Code hanno accesso completo. Fai clic per cambiare.',
   'executionPermissions.otherAgentsNote': 'Le altre CLI di agenti mantengono le proprie impostazioni di permesso.',
+  'executionPermissions.notAdminAccount': 'Questo account Windows non è amministratore. Windows chiederebbe la password di un altro account e aprirebbe MonoField con quell\'account, con altre impostazioni e altri progetti, quindi MonoField non si riavvia come amministratore. Codex e Claude Code restano in accesso completo.',
+  'executionPermissions.confirmNotAdmin': 'Questo account Windows non è amministratore, quindi MonoField non viene riavviato. Cambiano solo Codex e Claude Code.',
+  'executionPermissions.readOnlyNote': 'In «Sola lettura» Codex e Claude Code non possono scrivere file: specifiche, documenti e altri deliverable non vengono creati e la generazione di immagini è rifiutata. Scegli «Predefinito» per produrre file.',
 };

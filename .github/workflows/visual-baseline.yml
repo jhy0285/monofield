@@ -49,7 +49,38 @@ jobs:
           pnpm -C e2e exec tsx scripts/playwright.ts clean
           pnpm -C e2e exec playwright test -c playwright.visual.config.ts
 
+      # The upload needs a Cloudflare R2 bucket. Repositories without those
+      # secrets (forks, this one) used to fail the whole run on the last step.
+      # Mirror the resolution order of `r2ConfigFromEnv` in
+      # e2e/scripts/visual-report.ts so both agree on "configured".
+      - name: Check R2 configuration
+        id: r2
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_PUBLIC_ORIGIN: ${{ vars.R2_PUBLIC_ORIGIN }}
+          CLOUDFLARE_R2_RELEASES_AK: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          CLOUDFLARE_R2_RELEASES_SK: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          CLOUDFLARE_R2_RELEASES_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          CLOUDFLARE_R2_RELEASES_URL: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+        run: |
+          bucket="${R2_BUCKET:-$CLOUDFLARE_R2_RELEASES_BUCKET}"
+          origin="${R2_PUBLIC_ORIGIN:-$CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN}"
+          key="${R2_ACCESS_KEY_ID:-$CLOUDFLARE_R2_RELEASES_AK}"
+          secret="${R2_SECRET_ACCESS_KEY:-$CLOUDFLARE_R2_RELEASES_SK}"
+          endpoint="${CLOUDFLARE_R2_RELEASES_URL:-$R2_ACCOUNT_ID}"
+          if [ -n "$bucket" ] && [ -n "$origin" ] && [ -n "$key" ] && [ -n "$secret" ] && [ -n "$endpoint" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=visual-baseline::R2 is not configured for this repository; baseline screenshots stay in the debug artifact and are not uploaded."
+          fi
+
       - name: Upload baseline screenshots to R2
+        if: ${{ steps.r2.outputs.configured == 'true' }}
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}

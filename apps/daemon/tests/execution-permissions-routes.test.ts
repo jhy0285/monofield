@@ -15,7 +15,7 @@ import { startServer } from '../src/server.js';
 
 describe('execution permissions module', () => {
   it('describes each level for Codex, Claude Code and Windows elevation', () => {
-    expect(buildExecutionPermissionsResponse('default', { env: {}, platform: 'win32', elevated: false })).toEqual({
+    expect(buildExecutionPermissionsResponse('default', { env: {}, platform: 'win32', elevated: false, canElevate: true })).toEqual({
       level: 'default',
       effective: {
         codexSandbox: 'workspace-write',
@@ -25,6 +25,7 @@ describe('execution permissions module', () => {
       },
       codexSandboxLockedByEnv: false,
       elevated: false,
+      canElevate: true,
       platform: 'win32',
     });
     expect(buildExecutionPermissionsResponse('read-only', { env: {}, platform: 'linux' }).effective).toEqual({
@@ -48,12 +49,39 @@ describe('execution permissions module', () => {
     expect(locked.effective.claudePermissionMode).toBe('plan');
   });
 
+  it('reports whether the Windows account can elevate as itself', async () => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), 'od-exec-perm-token-'));
+    try {
+      const standard = await readExecutionPermissions(dataDir, {
+        token: async () => ({ elevated: false, administratorAccount: false }),
+        platform: 'win32',
+        env: {},
+      });
+      expect(standard).toMatchObject({ elevated: false, canElevate: false, platform: 'win32' });
+      const admin = await readExecutionPermissions(dataDir, {
+        token: async () => ({ elevated: false, administratorAccount: true }),
+        platform: 'win32',
+        env: {},
+      });
+      expect(admin.canElevate).toBe(true);
+      // Off Windows the probe answers nulls, and the body says so.
+      const mac = await readExecutionPermissions(dataDir, {
+        token: async () => ({ elevated: null, administratorAccount: null }),
+        platform: 'darwin',
+        env: {},
+      });
+      expect(mac).toMatchObject({ elevated: null, canElevate: null });
+    } finally {
+      rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+
   it('persists the level in app-config and defaults to "default"', async () => {
     const dataDir = mkdtempSync(path.join(tmpdir(), 'od-exec-perm-'));
     try {
-      const elevation = async () => null;
-      expect((await readExecutionPermissions(dataDir, { elevation })).level).toBe('default');
-      const written = await writeExecutionPermissionLevel(dataDir, 'full', { elevation, platform: 'win32', env: {} });
+      const token = async () => ({ elevated: null, administratorAccount: null });
+      expect((await readExecutionPermissions(dataDir, { token })).level).toBe('default');
+      const written = await writeExecutionPermissionLevel(dataDir, 'full', { token, platform: 'win32', env: {} });
       expect(written.level).toBe('full');
       expect(written.effective.codexSandbox).toBe('danger-full-access');
       expect((await readAppConfig(dataDir)).executionPermissionLevel).toBe('full');

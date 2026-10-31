@@ -4344,4 +4344,7 @@ export const id: Dict = {
   'executionPermissions.badge': 'Akses penuh',
   'executionPermissions.badgeTooltip': 'Codex dan Claude Code berjalan dengan akses penuh. Klik untuk mengubah.',
   'executionPermissions.otherAgentsNote': 'CLI agen lain tetap memakai pengaturan izinnya sendiri.',
+  'executionPermissions.notAdminAccount': 'Akun Windows ini bukan administrator. Windows akan meminta kata sandi akun lain dan membuka MonoField dengan akun itu, dengan pengaturan dan proyek yang berbeda, sehingga MonoField tidak dimulai ulang sebagai administrator. Codex dan Claude Code tetap berjalan dengan akses penuh.',
+  'executionPermissions.confirmNotAdmin': 'Akun Windows ini bukan administrator, jadi MonoField tidak dimulai ulang. Hanya Codex dan Claude Code yang berubah.',
+  'executionPermissions.readOnlyNote': 'Pada "Hanya baca", Codex dan Claude Code tidak dapat menulis file: spesifikasi, dokumen, dan hasil lain tidak dibuat, dan pembuatan gambar ditolak. Pilih "Bawaan" untuk menghasilkan file.',
 };

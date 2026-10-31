@@ -42,6 +42,14 @@ export interface ExecutionPermissionsResponse {
    * it does not apply or could not be determined (macOS, Linux, a failed probe).
    */
   elevated: boolean | null;
+  /**
+   * Whether the signed-in Windows account is an administrator account, so that
+   * "Run as administrator" asks only for consent and the elevated copy runs as
+   * the same user. `false` means a standard account: UAC would ask for another
+   * account's credentials and open MonoField as that other user, so MonoField
+   * does not restart elevated. `null` where it does not apply or is unknown.
+   */
+  canElevate?: boolean | null;
   /** `process.platform` of the daemon, so clients can explain platform-only parts. */
   platform: string;
 }
@@ -85,11 +93,13 @@ export function resolveExecutionPermissions(
  * Whether MonoField Desktop has to restart for its administrator rights to
  * match the level: the level asks for elevation and the process lacks it, or
  * the process is elevated and the level no longer asks for it. False when the
- * elevation is unknown or does not apply.
+ * elevation is unknown or does not apply, and when the account cannot elevate
+ * as itself (`canElevate === false`), because a restart could not get there.
  */
 export function executionPermissionsNeedRestart(
-  permissions: Pick<ExecutionPermissionsResponse, 'effective' | 'elevated'>,
+  permissions: Pick<ExecutionPermissionsResponse, 'effective' | 'elevated'> & { canElevate?: boolean | null },
 ): boolean {
   if (permissions.elevated == null) return false;
+  if (permissions.canElevate === false && permissions.effective.startElevated) return false;
   return permissions.effective.startElevated !== permissions.elevated;
 }

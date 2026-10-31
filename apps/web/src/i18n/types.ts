@@ -4513,4 +4513,7 @@ export interface Dict {
   'executionPermissions.badge': string;
   'executionPermissions.badgeTooltip': string;
   'executionPermissions.otherAgentsNote': string;
+  'executionPermissions.notAdminAccount': string;
+  'executionPermissions.confirmNotAdmin': string;
+  'executionPermissions.readOnlyNote': string;
 }

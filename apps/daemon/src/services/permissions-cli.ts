@@ -42,6 +42,9 @@ function describe(output: PermissionsCliOutput): string {
     `  Start as administrator: ${output.platform === 'win32' ? (effective.startElevated ? 'yes' : 'no') : 'n/a (Windows only)'}`,
     `  Running elevated:       ${elevated}`,
   ];
+  if (output.platform === 'win32' && output.canElevate === false) {
+    lines.push('  This Windows account is not an administrator: MonoField will not restart as administrator.');
+  }
   if (output.restartRequired) {
     lines.push(effective.startElevated
       ? '  Restart MonoField Desktop to start it with administrator rights.'

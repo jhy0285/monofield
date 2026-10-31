@@ -4339,4 +4339,7 @@ export const fa: Dict = {
   'executionPermissions.badge': 'دسترسی کامل',
   'executionPermissions.badgeTooltip': 'Codex و Claude Code با دسترسی کامل اجرا می‌شوند. برای تغییر کلیک کنید.',
   'executionPermissions.otherAgentsNote': 'CLIهای عامل‌های دیگر تنظیمات مجوز خودشان را دنبال می‌کنند.',
+  'executionPermissions.notAdminAccount': 'این حساب Windows مدیر نیست. Windows گذرواژهٔ حساب دیگری را می‌خواهد و MonoField را با آن حساب و با تنظیمات و پروژه‌های متفاوت باز می‌کند؛ بنابراین MonoField با دسترسی مدیر دوباره راه‌اندازی نمی‌شود. Codex و Claude Code همچنان با دسترسی کامل اجرا می‌شوند.',
+  'executionPermissions.confirmNotAdmin': 'این حساب Windows مدیر نیست، پس MonoField دوباره راه‌اندازی نمی‌شود. فقط Codex و Claude Code تغییر می‌کنند.',
+  'executionPermissions.readOnlyNote': 'در حالت فقط خواندنی، Codex و Claude Code نمی‌توانند فایل بنویسند: مشخصات، سندها و دیگر خروجی‌ها ساخته نمی‌شوند و تولید تصویر رد می‌شود. برای ساخت فایل «پیش‌فرض» را انتخاب کنید.',
 };

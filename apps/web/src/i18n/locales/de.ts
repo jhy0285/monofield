@@ -4344,4 +4344,7 @@ export const de: Dict = {
   'executionPermissions.badge': 'Vollzugriff',
   'executionPermissions.badgeTooltip': 'Codex und Claude Code laufen mit Vollzugriff. Zum Ändern klicken.',
   'executionPermissions.otherAgentsNote': 'Andere Agenten-CLIs behalten ihre eigenen Berechtigungen.',
+  'executionPermissions.notAdminAccount': 'Dieses Windows-Konto ist kein Administrator. Windows würde das Passwort eines anderen Kontos verlangen und MonoField mit diesem Konto öffnen – mit anderen Einstellungen und Projekten. Deshalb startet MonoField nicht als Administrator neu. Codex und Claude Code laufen trotzdem mit Vollzugriff.',
+  'executionPermissions.confirmNotAdmin': 'Dieses Windows-Konto ist kein Administrator, daher wird MonoField nicht neu gestartet. Nur Codex und Claude Code ändern sich.',
+  'executionPermissions.readOnlyNote': 'Im Modus „Nur lesen“ können Codex und Claude Code keine Dateien schreiben: Spezifikationen, Dokumente und andere Ergebnisse werden nicht erstellt, und die Bilderzeugung wird abgelehnt. Wählen Sie „Standard“, um Dateien zu erzeugen.',
 };
