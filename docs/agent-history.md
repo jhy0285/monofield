@@ -314,6 +314,17 @@ Execution permissions (see the newest Log entry):
   Read only is not observed. Codex was run for real only as far as arguments, the Linux sandbox
   (`codex sandbox`) and the prompt it renders; no model turn.
 
+Flaky tests found on 2026-10-31 (not fixed):
+
+- `apps/daemon/tests/code-ontology-route.test.ts` ("joins real Java/Vue source…", line 107) compares the
+  `documentReviews` of two plan calls item by item, but `documentReviews()` in
+  `apps/daemon/src/services/ontology/change-graph.ts` keeps the unsorted order of `plan.graph.nodes`, so the API and
+  the CLI can answer in different orders (seen once in CI, passed on re-run). Proposed fix: sort the result by
+  `documentFile`, then `itemId`.
+- `apps/web/tests/components/BrandsTab.refresh.test.tsx` ("polls while a brand is extracting…") counts polls with real
+  timers and fails on a loaded machine (1 of 3 on the base files while an e2e run was going). Fake timers would make it
+  deterministic.
+
 End-to-end tests:
 
 - Run `e2e/ui` as a whole once on a quiet machine (one worker, `OD_PLAYWRIGHT_TIMEOUT=100000`,
@@ -406,6 +417,17 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-10-31 — pull request 14 merged; preview.5 notes synced and live (`ccr-8432aecf-n9xdfd`)
+
+- **Done:** pull request 14 (preview.5 notes and links, and the file list fix below) merged into `main` (merge commit
+  `3831e7b`) after CI run 41206346370 went green. In that run `Workspace unit tests` first failed in
+  `apps/daemon/tests/code-ontology-route.test.ts` (two `documentReviews` items in swapped order between the HTTP and
+  CLI calls; not this change, see Open items), and passed when the failed jobs were re-run once; every UI P0 group
+  passed on the first try. The push to `main` ran the release-notes sync (run 41207196384, success).
+- **Verified:** the `v0.11.7-preview.5` release body equals `docs/releases/0.11.7-preview.5.md` (only a trailing blank
+  line differs); it is still a prerelease and `releases/latest` is `v0.11.6`. monofield.vercel.app serves 13
+  references to `0.11.7-preview.5`, none to preview.4, and the new Read only line in the preview card.
 
 ### 2026-10-31 — file list missed changes made outside the web (`ccr-8432aecf-n9xdfd`)
 
