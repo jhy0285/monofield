@@ -64,9 +64,8 @@ As of 2026-10-30.
   reviewed spec diffs). It is an independent fork of the Apache-2.0 Open Design
   project; see `docs/adr/0002-upstream-maintenance.md` (status: Proposed, only
   phase A done).
-- Version: `0.11.7-preview.6` (root `package.json`), prepared on 2026-10-31 to ship the project file list
-  fix; `0.11.7-preview.5` (2026-10-31, from `0deb4f6`) is the previous published preview; stable `latest`
-  is still `v0.11.6`. Workspace packages are
+- Version: `0.11.7-preview.6` (root `package.json`), published on 2026-10-31 as a GitHub prerelease
+  (preview channel, unsigned) from `8b223ef` on `main`; stable `latest` is still `v0.11.6`. Workspace packages are
   still named `@open-design/*`; env vars still use the `OD_*` prefix.
 - Shape: pnpm monorepo. `apps/daemon` (Express + SQLite, `monofield` CLI) and
   `apps/web` (Next.js 16) hold most of the code (roughly 320k and 410k lines of
@@ -418,6 +417,21 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-10-31 — 0.11.7-preview.6 published from `main` with the file list fix (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** final check, push to `main`, release the app package again, confirm monofield.vercel.app.
+- **Done:** "chore(release): prepare 0.11.7-preview.6" (`8b223ef`) bumped the five release packages. `ci.yml` with
+  `ci_mode=full` on that commit (run 41209432742) passed all 20 jobs; locally `pnpm guard` 67 pass, `pnpm typecheck`
+  exit 0, `pnpm i18n:check` pass. The commit was pushed to `main` as a fast-forward (no pull request, at the user's
+  request). `release-windows.yml` from `main` with `ref=8b223ef…`, preview, unsigned allowed, publish (run
+  41210090324): build, install and runtime smoke passed; `v0.11.7-preview.6` is a prerelease on `8b223ef` with
+  setup.exe, portable ZIP, payload 7z, `latest.yml` and `SHA256SUMS.txt`; ranged GETs of the installer and ZIP answer
+  206; `releases/latest` is still `v0.11.6`.
+- **Changed here:** `docs/releases/0.11.7-preview.6.md`; README, the site's preview card, structured data and the site
+  README point at preview.6; the README release line mentions the file list fix. `node --test tests/seo.test.ts` 8
+  pass; the card viewed at 1440 px and 390 px (6 items, no overflow).
+- **Next agent:** this commit goes to `main` the same way; the push of `docs/releases/*.md` runs the notes sync.
 
 ### 2026-10-31 — pull request 14 merged; preview.5 notes synced and live (`ccr-8432aecf-n9xdfd`)
 
