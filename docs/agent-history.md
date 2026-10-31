@@ -64,8 +64,9 @@ As of 2026-10-30.
   reviewed spec diffs). It is an independent fork of the Apache-2.0 Open Design
   project; see `docs/adr/0002-upstream-maintenance.md` (status: Proposed, only
   phase A done).
-- Version: `0.11.7-preview.5` (root `package.json`), published on 2026-10-31 as a GitHub prerelease
-  (preview channel, unsigned) from `0deb4f6`; stable `latest` is still `v0.11.6`. Workspace packages are
+- Version: `0.11.7-preview.6` (root `package.json`), prepared on 2026-10-31 to ship the project file list
+  fix; `0.11.7-preview.5` (2026-10-31, from `0deb4f6`) is the previous published preview; stable `latest`
+  is still `v0.11.6`. Workspace packages are
   still named `@open-design/*`; env vars still use the `OD_*` prefix.
 - Shape: pnpm monorepo. `apps/daemon` (Express + SQLite, `monofield` CLI) and
   `apps/web` (Next.js 16) hold most of the code (roughly 320k and 410k lines of
