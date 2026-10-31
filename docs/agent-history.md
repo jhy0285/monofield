@@ -407,6 +407,28 @@ Code health:
 
 ## Log
 
+### 2026-10-31 — file list missed changes made outside the web (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** pull request 14 (preview.5 notes and links) went red on `UI P0 (workspace-restoration)`:
+  `e2e/ui/app-restoration.test.ts` "daemon error details persist between failed sends" failed twice; it had been
+  flaky (failed, then passed on retry) in both runs on the head of pull request 13, so it was not the docs change.
+- **Root cause:** `fetchProjectFiles` (`apps/web/src/providers/registry.ts`) caches a project's file list for one
+  second and drops that cache only after the web's own writes. A file written by anyone else (an agent, the API,
+  another editor) arrives as a `file-changed` event, and the refetch it triggers came within a second of another
+  fetch, read the cached list without the new file, and nothing refetched again. Instrumenting the test showed the
+  event reaching the page and no request after it. A second gap: the daemon's watcher ignores files it finds during
+  its initial scan (a local chokidar check lost 5 of 5 files written before `ready`, 0 of 5 after), so a file written
+  between the page's fetch and the watcher becoming ready, or while the stream reconnected, was never reported.
+- **Changed:** `apps/web/src/providers/project-events.ts` drops the project's cached listings
+  (`invalidateProjectListings`, now exported) on every `file-changed` and `ready`, and reports `ready` to the consumer
+  as `{ type: 'file-watch-ready' }`; `ProjectView.tsx` refetches the file list on it.
+- **Verified:** two new specs in `apps/web/tests/providers/project-events.test.ts` failed before the change (cached
+  list served after a reported change; `ready` not reported) and pass after (15 pass); web typecheck clean. The P0 test
+  locally (Node 24, one worker): with only the `ready` part of the change it still failed 6 of 7 runs at the file row
+  (the cache was the main cause); with the whole change 4 of 4 passed, each `file-changed` now followed by a file
+  list request. Without any change it failed in CI 2 of 2 on pull request 14 and on the first try in both runs of
+  pull request 13; it was not run locally without the change.
+
 ### 2026-10-31 — pull request 13 merged; 0.11.7-preview.5 published (`ccr-8432aecf-n9xdfd`)
 
 - **Request:** steps 2 and 3 of "real Windows test → merge → preview.5".

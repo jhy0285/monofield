@@ -898,6 +898,7 @@ function byokModelSeedForProtocol(
 
 function projectEventToAgentEvent(evt: ProjectEvent): LiveArtifactEventItem['event'] | null {
   if (evt.type === 'file-changed') return null;
+  if (evt.type === 'file-watch-ready') return null;
   if (evt.type === 'conversation-created') return null;
   if (evt.type === 'live_artifact') {
     return {
@@ -2427,6 +2428,13 @@ export function ProjectView({
   const handleProjectEvent = useCallback((evt: ProjectEvent) => {
     if (evt.type === 'file-changed') {
       iframeKeepAlivePool.evictProject(project.id);
+      coalescedFileChangedRefresh();
+      return;
+    }
+    if (evt.type === 'file-watch-ready') {
+      // Files written before the watcher was ready were never reported;
+      // refetch so the list matches the disk. Changed files get new mtimes,
+      // which reload their previews through the ?v= cache-bust.
       coalescedFileChangedRefresh();
       return;
     }

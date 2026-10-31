@@ -1445,7 +1445,12 @@ function currentProjectListGeneration(projectId: string): number {
   return projectListGeneration.get(projectId) ?? 0;
 }
 
-function invalidateProjectListings(projectId: string): void {
+/**
+ * Drop the cached file and folder listings of a project, so the next fetch
+ * reads the daemon. Called after the web's own writes and whenever the daemon
+ * reports a change on disk that some other writer made.
+ */
+export function invalidateProjectListings(projectId: string): void {
   projectListGeneration.set(projectId, currentProjectListGeneration(projectId) + 1);
   projectFilesCache.delete(projectId);
   projectFoldersCache.delete(projectId);
