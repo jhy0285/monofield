@@ -39,6 +39,10 @@ import { randomBytes } from 'node:crypto';
 import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import {
+  normalizeExecutionPermissionLevel,
+  type ExecutionPermissionLevel,
+} from '@open-design/contracts';
 import { MEDIA_PROVIDERS } from './models.js';
 import { agentCliEnvForAgent, appConfigDir, readAppConfig } from '../app-config.js';
 import { expandHomePrefix } from '../home-expansion.js';
@@ -392,6 +396,23 @@ async function readJsonIfPresent(file: string): Promise<JsonRecord | null> {
     // Auth files are best-effort fallbacks. A malformed local auth cache
     // should not break the Settings page or hide stored provider config.
     return null;
+  }
+}
+
+/**
+ * The Settings → Execution permissions level for a media run. Resolved the
+ * same way as `resolveCodexImagegenEnv` reads the Codex env, and an
+ * unreadable config keeps the shipped default instead of widening anything.
+ */
+export async function resolveExecutionPermissionLevelForMedia(
+  projectRoot?: string,
+): Promise<ExecutionPermissionLevel> {
+  if (!projectRoot) return normalizeExecutionPermissionLevel(undefined);
+  try {
+    const appConfig = await readAppConfig(appConfigDir(projectRoot));
+    return normalizeExecutionPermissionLevel(appConfig.executionPermissionLevel);
+  } catch {
+    return normalizeExecutionPermissionLevel(undefined);
   }
 }
 

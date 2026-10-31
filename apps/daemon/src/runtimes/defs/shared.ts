@@ -1,8 +1,9 @@
+import { normalizeExecutionPermissionLevel } from '@open-design/contracts';
 import { detectAcpModels } from '../../acp.js';
 import { parsePiModels } from '../../pi-rpc.js';
 import { execAgentFile } from '../invocation.js';
 import { DEFAULT_MODEL_OPTION } from '../models.js';
-import type { RuntimeModelOption } from '../types.js';
+import type { RuntimeContext, RuntimeModelOption } from '../types.js';
 
 export { detectAcpModels, parsePiModels, execAgentFile, DEFAULT_MODEL_OPTION };
 
@@ -45,4 +46,9 @@ export function parseLineSeparatedModels(stdout: string): RuntimeModelOption[] {
     out.push({ id, label: id });
   }
   return out;
+}
+
+/** True when the run was started at the "Read only" execution permission level. */
+export function isReadOnlyRun(runtimeContext?: RuntimeContext): boolean {
+  return normalizeExecutionPermissionLevel(runtimeContext?.executionPermissionLevel) === 'read-only';
 }

@@ -4344,4 +4344,8 @@ export const hu: Dict = {
   'executionPermissions.badge': 'Teljes hozzáférés',
   'executionPermissions.badgeTooltip': 'A Codex és a Claude Code teljes hozzáféréssel fut. Kattintson a módosításhoz.',
   'executionPermissions.otherAgentsNote': 'A többi ügynök CLI-je a saját jogosultsági beállításait követi.',
+  'executionPermissions.notAdminAccount': 'Ez a Windows-fiók nem rendszergazda. A Windows egy másik fiók jelszavát kérné, és azzal a fiókkal nyitná meg a MonoFieldet, más beállításokkal és projektekkel, ezért a MonoField nem indul újra rendszergazdaként. A Codex és a Claude Code továbbra is teljes hozzáféréssel fut.',
+  'executionPermissions.confirmNotAdmin': 'Ez a Windows-fiók nem rendszergazda, ezért a MonoField nem indul újra. Csak a Codex és a Claude Code változik.',
+  'executionPermissions.readOnlyNote': '„Csak olvasás” módban a Codex és a Claude Code nem tud fájlokat írni: specifikációk, dokumentumok és más kimenetek nem jönnek létre, a képgenerálást pedig elutasítja. Fájlok előállításához válassza az „Alapértelmezett” szintet.',
+  'executionPermissions.readOnlyAgents': 'A „Csak olvasás” a Codex, Claude Code, Gemini CLI, Qwen Code, CodeBuddy és Copilot esetén működik. A többi ügynök ezen a szinten nem indul el.',
 };

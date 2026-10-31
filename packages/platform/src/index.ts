@@ -1162,6 +1162,48 @@ export function parseWindowsWhoamiGroupsElevation(stdout: string): boolean | nul
 }
 
 /**
+ * Whether the signed-in account is a member of the local Administrators
+ * group. A split (filtered) administrator token still lists the group, marked
+ * "used for deny only", so its presence is what tells an administrator account
+ * (UAC asks for consent, and the elevated process runs as the same user) from
+ * a standard account (UAC asks for another account's credentials, and the
+ * elevated process would run as that other user). Null when no group rows
+ * could be read.
+ */
+export function parseWindowsWhoamiGroupsAdministrator(stdout: string): boolean | null {
+  const rows = stdout.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  if (rows.length === 0) return null;
+  return /\bS-1-5-32-544\b/.test(stdout);
+}
+
+export type WindowsTokenInfo = {
+  /** The running process holds an elevated (administrator) token. */
+  elevated: boolean | null;
+  /** The signed-in account is an administrator account (see the parser above). */
+  administratorAccount: boolean | null;
+};
+
+/**
+ * One `whoami /groups` read for both questions. Only Windows answers; every
+ * other platform, and any probe failure, returns nulls.
+ */
+export async function readWindowsTokenInfo(options: {
+  platform?: NodeJS.Platform;
+  run?: ElevationCommandRunner;
+} = {}): Promise<WindowsTokenInfo> {
+  if ((options.platform ?? process.platform) !== "win32") return { elevated: null, administratorAccount: null };
+  try {
+    const stdout = await (options.run ?? runCommandForStdout)("whoami.exe", ["/groups", "/fo", "csv", "/nh"]);
+    return {
+      elevated: parseWindowsWhoamiGroupsElevation(stdout),
+      administratorAccount: parseWindowsWhoamiGroupsAdministrator(stdout),
+    };
+  } catch {
+    return { elevated: null, administratorAccount: null };
+  }
+}
+
+/**
  * Whether the current process holds an elevated (administrator) token. Only
  * Windows answers; every other platform, and any probe failure, returns null.
  */
@@ -1169,13 +1211,7 @@ export async function isWindowsProcessElevated(options: {
   platform?: NodeJS.Platform;
   run?: ElevationCommandRunner;
 } = {}): Promise<boolean | null> {
-  if ((options.platform ?? process.platform) !== "win32") return null;
-  try {
-    const stdout = await (options.run ?? runCommandForStdout)("whoami.exe", ["/groups", "/fo", "csv", "/nh"]);
-    return parseWindowsWhoamiGroupsElevation(stdout);
-  } catch {
-    return null;
-  }
+  return (await readWindowsTokenInfo(options)).elevated;
 }
 
 function quoteWindowsArgument(value: string): string {
@@ -1189,10 +1225,12 @@ function quotePowerShellLiteral(value: string): string {
 
 /**
  * PowerShell arguments that start `executable` through the UAC "Run as
- * administrator" prompt. `Start-Process -Verb RunAs` throws when the user
- * declines, so the script exits 1 in that case and 0 once the elevated
- * process has started. Windows PowerShell joins `-ArgumentList` elements
- * without quoting them, so the list is passed as one pre-quoted string.
+ * administrator" prompt. Exit codes: 0 once the elevated process has started,
+ * 2 when the executable does not exist, 1 when `Start-Process -Verb RunAs`
+ * throws, which in practice is a declined prompt (Start-Process drops the
+ * Win32 error code and its message is localized, so nothing finer is
+ * reliable). Windows PowerShell joins `-ArgumentList` elements without quoting
+ * them, so the list is passed as one pre-quoted string.
  */
 export function buildWindowsElevatedLaunchArgs(executable: string, args: readonly string[] = []): string[] {
   if (executable.trim().length === 0) throw new Error("elevated launch needs an executable path");
@@ -1211,7 +1249,7 @@ export function buildWindowsElevatedLaunchArgs(executable: string, args: readonl
     "-ExecutionPolicy",
     "Bypass",
     "-Command",
-    `$ErrorActionPreference = 'Stop'; try { ${startProcess}; exit 0 } catch { exit 1 }`,
+    `$ErrorActionPreference = 'Stop'; if (-not (Test-Path -LiteralPath ${quotePowerShellLiteral(executable)} -PathType Leaf)) { exit 2 }; try { ${startProcess}; exit 0 } catch { exit 1 }`,
   ];
 }
 
@@ -1236,6 +1274,7 @@ export async function launchWindowsElevated(
   } catch (error) {
     const exitCode = typeof error === "object" && error != null && "code" in error ? (error as { code?: unknown }).code : null;
     if (exitCode === 1) return { ok: false, reason: "declined" };
+    if (exitCode === 2) return { ok: false, reason: "failed", detail: `executable not found: ${executable}` };
     return { ok: false, reason: "failed", detail: errorMessage(error) };
   }
 }

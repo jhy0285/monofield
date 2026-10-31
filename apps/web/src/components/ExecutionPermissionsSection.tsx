@@ -110,6 +110,7 @@ export function ExecutionPermissionsSection() {
     if (result.ok) return; // The app quits; the elevated copy takes over.
     setRelaunching(false);
     if (result.reason === 'declined') setStatus(t('executionPermissions.relaunchDeclined'));
+    else if (result.reason === 'not-administrator') setStatus(t('executionPermissions.notAdminAccount'));
     else if (result.reason === 'unsupported') setError(t('executionPermissions.relaunchUnavailable'));
     else setError(t('executionPermissions.relaunchFailed', { reason: result.reason }));
   }
@@ -121,7 +122,7 @@ export function ExecutionPermissionsSection() {
     try {
       const saved = await saveExecutionPermissionLevel(next);
       setStatus(t('executionPermissions.saved'));
-      if (next === 'full' && saved.elevated === false && elevation) {
+      if (next === 'full' && saved.elevated === false && saved.canElevate !== false && elevation) {
         await relaunchAsAdministrator();
       }
     } catch {
@@ -155,7 +156,10 @@ export function ExecutionPermissionsSection() {
   }
 
   const restartNeeded = permissions ? executionPermissionsNeedRestart(permissions) : false;
-  const confirmLabel = isWindows && elevation
+  // A standard account is never restarted as administrator (see canElevate in
+  // the contract), so the dialog must not promise a restart or a UAC prompt.
+  const standardAccount = isWindows && permissions?.canElevate === false;
+  const confirmLabel = isWindows && elevation && !standardAccount
     ? t('executionPermissions.confirmActionRestart')
     : t('executionPermissions.confirmAction');
 
@@ -264,7 +268,11 @@ export function ExecutionPermissionsSection() {
           <DialogTitle id={confirmTitleId}>{t('executionPermissions.confirmTitle')}</DialogTitle>
           <div id={confirmBodyId} className={styles.confirmBody}>
             <DialogDescription>{t('executionPermissions.confirmBody')}</DialogDescription>
-            {isWindows ? <DialogDescription>{t('executionPermissions.confirmWindows')}</DialogDescription> : null}
+            {isWindows ? (
+              <DialogDescription>
+                {t(standardAccount ? 'executionPermissions.confirmNotAdmin' : 'executionPermissions.confirmWindows')}
+              </DialogDescription>
+            ) : null}
           </div>
           <DialogFooter className={styles.confirmFooter}>
             <Button type="button" variant="ghost" onClick={() => setPendingFull(false)}>
@@ -307,8 +315,17 @@ function PermissionsStatus({
 }) {
   const wantsElevation = permissions.effective.startElevated;
   const notes: string[] = [];
+  if (permissions.level === 'read-only') {
+    notes.push(t('executionPermissions.readOnlyNote'), t('executionPermissions.readOnlyAgents'));
+  }
   if (permissions.codexSandboxLockedByEnv) notes.push(t('executionPermissions.lockedByEnv'));
-  if (permissions.platform === 'win32' && permissions.level === 'full') notes.push(t('executionPermissions.adminCaveats'));
+  if (permissions.platform === 'win32' && permissions.level === 'full') {
+    notes.push(
+      permissions.canElevate === false
+        ? t('executionPermissions.notAdminAccount')
+        : t('executionPermissions.adminCaveats'),
+    );
+  }
   if (permissions.platform !== 'win32' && permissions.level === 'full') notes.push(t('executionPermissions.nonWindowsNote'));
 
   return (

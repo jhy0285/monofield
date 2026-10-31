@@ -10,7 +10,9 @@ const USAGE = `Usage:
   monofield permissions set <level>          Set it: ${EXECUTION_PERMISSION_LEVELS.join(' | ')}.
 
 Levels:
-  read-only   Codex reads only (no network); Claude Code plans without editing.
+  read-only   Codex reads only (no network); Claude Code, Qwen Code and CodeBuddy plan without
+              editing; Gemini CLI uses plan mode; Copilot denies the shell and file writes.
+              Other agents are not started at this level.
   default     Codex writes inside the working folder with network; Claude Code runs every tool.
   full        Codex runs without a sandbox; Claude Code runs every tool; on Windows
               MonoField starts with administrator rights (UAC asks at every launch).
@@ -32,6 +34,14 @@ export interface PermissionsCliHelpers {
 
 export type PermissionsCliOutput = ExecutionPermissionsResponse & { restartRequired: boolean };
 
+function startAsAdministrator(output: PermissionsCliOutput): string {
+  if (output.platform !== 'win32') return 'n/a (Windows only)';
+  if (!output.effective.startElevated) return 'no';
+  return output.canElevate === false
+    ? 'requested, but this Windows account is not an administrator, so MonoField will not restart as administrator'
+    : 'yes';
+}
+
 function describe(output: PermissionsCliOutput): string {
   const { effective } = output;
   const elevated = output.elevated == null ? 'n/a' : output.elevated ? 'yes' : 'no';
@@ -39,9 +49,10 @@ function describe(output: PermissionsCliOutput): string {
     `Execution permission level: ${output.level}`,
     `  Codex sandbox:          ${effective.codexSandbox}${effective.codexNetwork ? ' (network on)' : ' (network off)'}${output.codexSandboxLockedByEnv ? ' [locked by OD_CODEX_SANDBOX]' : ''}`,
     `  Claude Code mode:       ${effective.claudePermissionMode}`,
-    `  Start as administrator: ${output.platform === 'win32' ? (effective.startElevated ? 'yes' : 'no') : 'n/a (Windows only)'}`,
+    `  Start as administrator: ${startAsAdministrator(output)}`,
     `  Running elevated:       ${elevated}`,
   ];
+
   if (output.restartRequired) {
     lines.push(effective.startElevated
       ? '  Restart MonoField Desktop to start it with administrator rights.'

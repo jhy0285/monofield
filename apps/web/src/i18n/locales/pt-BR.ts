@@ -4344,4 +4344,8 @@ export const ptBR: Dict = {
   'executionPermissions.badge': 'Acesso total',
   'executionPermissions.badgeTooltip': 'Codex e Claude Code rodam com acesso total. Clique para mudar.',
   'executionPermissions.otherAgentsNote': 'As outras CLIs de agentes mantêm suas próprias configurações de permissão.',
+  'executionPermissions.notAdminAccount': 'Esta conta do Windows não é administradora. O Windows pediria a senha de outra conta e abriria o MonoField com ela, com outras configurações e projetos, por isso o MonoField não reinicia como administrador. Codex e Claude Code continuam com acesso total.',
+  'executionPermissions.confirmNotAdmin': 'Esta conta do Windows não é administradora, então o MonoField não será reiniciado. Só o Codex e o Claude Code mudam.',
+  'executionPermissions.readOnlyNote': 'Em "Somente leitura", Codex e Claude Code não podem gravar arquivos: especificações, documentos e outras entregas não são criados, e a geração de imagens é recusada. Escolha "Padrão" para gerar arquivos.',
+  'executionPermissions.readOnlyAgents': '"Somente leitura" funciona com Codex, Claude Code, Gemini CLI, Qwen Code, CodeBuddy e Copilot. Os outros agentes não são iniciados neste nível.',
 };

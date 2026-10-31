@@ -1,4 +1,4 @@
-import { DEFAULT_MODEL_OPTION } from './shared.js';
+import { DEFAULT_MODEL_OPTION, isReadOnlyRun } from './shared.js';
 import type { RuntimeAgentDef } from '../types.js';
 import { agentCapabilities } from '../capabilities.js';
 
@@ -49,7 +49,17 @@ export const geminiAgentDef = {
     buildArgs: (_prompt, _imagePaths, extraAllowedDirs = [], options = {}, runtimeContext = {}) => {
       const caps = agentCapabilities.get('gemini') ?? {};
       const args = ['--output-format', 'stream-json'];
-      if (caps.approvalMode === false) {
+      if (isReadOnlyRun(runtimeContext)) {
+        // `--approval-mode=plan` is Gemini's read-only mode (its help lists
+        // "plan (read-only mode)"). Builds that predate `--approval-mode` only
+        // have `--yolo`, so they cannot honor "Read only": fail closed.
+        if (caps.approvalMode === false) {
+          throw new Error(
+            'This Gemini CLI build has no --approval-mode, so it cannot run at the "Read only" execution permission level. Update Gemini CLI or choose another level.',
+          );
+        }
+        args.push('--approval-mode=plan');
+      } else if (caps.approvalMode === false) {
         args.push('--yolo');
       } else {
         args.push('--approval-mode=yolo');
@@ -70,6 +80,7 @@ export const geminiAgentDef = {
       }
       return args;
     },
+    readOnlySupport: true,
     promptViaStdin: true,
     streamFormat: 'json-event-stream',
     eventParser: 'gemini',

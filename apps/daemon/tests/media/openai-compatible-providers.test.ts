@@ -540,6 +540,52 @@ process.stdin.on('end', () => {
     expect(bytes.length).toBeGreaterThan(0);
   });
 
+  async function writeExecutionLevel(level: string) {
+    const dataDir = appConfigDir(projectRoot);
+    await mkdir(dataDir, { recursive: true });
+    await writeFile(
+      path.join(dataDir, 'app-config.json'),
+      JSON.stringify({ executionPermissionLevel: level }),
+      'utf8',
+    );
+  }
+
+  it('keeps Codex image generation in workspace-write at the default execution permission level', async () => {
+    const generatedHome = path.join(root, 'level-default-codex-home');
+    await writeCodexAuth(generatedHome, { auth_mode: 'chatgpt', OPENAI_API_KEY: null });
+    await installFakeCodex(generatedHome, 'level-default-thread', {
+      expectedArgsIncludes: 'workspace-write',
+      expectedArgsExcludes: 'danger-full-access',
+    });
+    const result = await generateMedia({ projectRoot, projectsRoot, projectId: 'project-1', surface: 'image', model: 'gpt-image-2', prompt: 'A blue square', output: 'level-default.png' });
+    expect(result.providerId).toBe('codex');
+    expect(result.usedStubFallback).toBe(false);
+  });
+
+  it('runs Codex image generation without a sandbox at the full execution permission level', async () => {
+    await writeExecutionLevel('full');
+    const generatedHome = path.join(root, 'level-full-codex-home');
+    await writeCodexAuth(generatedHome, { auth_mode: 'chatgpt', OPENAI_API_KEY: null });
+    await installFakeCodex(generatedHome, 'level-full-thread', {
+      expectedArgsIncludes: 'danger-full-access',
+      expectedArgsExcludes: 'workspace-write',
+    });
+    const result = await generateMedia({ projectRoot, projectsRoot, projectId: 'project-1', surface: 'image', model: 'gpt-image-2', prompt: 'A blue square', output: 'level-full.png' });
+    expect(result.providerId).toBe('codex');
+    expect(result.usedStubFallback).toBe(false);
+  });
+
+  it('refuses Codex image generation at the read-only level before Codex is started', async () => {
+    await writeExecutionLevel('read-only');
+    const generatedHome = path.join(root, 'level-read-only-codex-home');
+    await writeCodexAuth(generatedHome, { auth_mode: 'chatgpt', OPENAI_API_KEY: null });
+    // If the refusal came from Codex itself this would be "codex imagegen exited 10".
+    await installFakeCodex(generatedHome, 'level-read-only-thread', { expectedArgsIncludes: 'never-present' });
+    await expect(
+      generateMedia({ projectRoot, projectsRoot, projectId: 'project-1', surface: 'image', model: 'gpt-image-2', prompt: 'A blue square', output: 'level-read-only.png' }),
+    ).rejects.toThrow(/"Read only" execution permission level/);
+  });
+
   it('accepts native Codex exec image filenames without reporting a generated image as missing', async () => {
     const generatedHome = path.join(root, 'exec-image-codex-home');
     await writeCodexAuth(generatedHome, { auth_mode: 'chatgpt', OPENAI_API_KEY: null });

@@ -93,7 +93,7 @@
 }
 
 .option[data-level='full'][data-selected='true'] .optionIcon {
-  color: #fff;
+  color: var(--red-contrast);
   background: var(--red);
 }
 
@@ -132,7 +132,7 @@
 }
 
 .option[data-level='full'] .check {
-  color: #fff;
+  color: var(--red-contrast);
   background: var(--red);
 }
 
@@ -283,7 +283,7 @@
 }
 
 .dangerButton.dangerButton {
-  color: #fff;
+  color: var(--red-contrast);
   background: var(--red);
   border-color: var(--red);
 }

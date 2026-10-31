@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { claude, codex, withEnvSnapshot, withPlatform } from './helpers/test-helpers.js';
+import { AGENT_DEFS, claude, codex, withEnvSnapshot, withPlatform } from './helpers/test-helpers.js';
+import { agentCapabilities } from '../../src/runtimes/capabilities.js';
+import { readOnlyUnsupportedMessage } from '../../src/runtimes/read-only.js';
 import { codexNeedsDangerFullAccessSandbox, codexSandboxMode } from '../../src/runtimes/defs/codex.js';
 
 const ENV_KEYS = ['OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX', 'WSL_DISTRO_NAME'];
@@ -115,5 +117,92 @@ describe('execution permission level → Claude Code permission mode', () => {
     const args = claude.buildArgs('', [], [], {}, { executionPermissionLevel: 'read-only' });
     expect(permissionMode(args)).toBe('plan');
     expect(args.filter((arg) => arg === '--permission-mode')).toHaveLength(1);
+  });
+});
+
+function agent(id: string) {
+  const def = AGENT_DEFS.find((candidate) => candidate.id === id);
+  if (!def) throw new Error(`no agent ${id}`);
+  return def;
+}
+
+describe('execution permission level → other agent CLIs', () => {
+  const read = { executionPermissionLevel: 'read-only' } as const;
+
+  it('keeps every adapter\'s shipped flags at the default and full levels', () => {
+    for (const level of [undefined, 'default', 'full'] as const) {
+      const ctx = level ? { executionPermissionLevel: level } : {};
+      expect(agent('gemini').buildArgs('', [], [], {}, ctx)).toContain('--approval-mode=yolo');
+      expect(agent('qwen').buildArgs('', [], [], {}, ctx)).toEqual(['--yolo']);
+      expect(agent('codebuddy').buildArgs('', [], [], {}, ctx).slice(-2)).toEqual(['--permission-mode', 'bypassPermissions']);
+      const copilotArgs = agent('copilot').buildArgs('', [], [], {}, ctx);
+      expect(copilotArgs).toContain('--allow-all-tools');
+      expect(copilotArgs.some((arg) => arg.startsWith('--deny-tool'))).toBe(false);
+    }
+  });
+
+  it('uses each CLI\'s own read-only mode at the read-only level', () => {
+    expect(agent('gemini').buildArgs('', [], [], {}, read)).toContain('--approval-mode=plan');
+    expect(agent('gemini').buildArgs('', [], [], {}, read)).not.toContain('--approval-mode=yolo');
+    expect(agent('qwen').buildArgs('', [], [], {}, read)).toEqual(['--approval-mode', 'plan']);
+    expect(agent('codebuddy').buildArgs('', [], [], {}, read).slice(-2)).toEqual(['--permission-mode', 'plan']);
+    const copilotArgs = agent('copilot').buildArgs('', [], [], {}, read);
+    expect(copilotArgs).toEqual(expect.arrayContaining(['--allow-all-tools', '--deny-tool=shell', '--deny-tool=write']));
+  });
+
+  it('fails closed on a Gemini build without --approval-mode instead of falling back to --yolo', () => {
+    const saved = agentCapabilities.get('gemini');
+    agentCapabilities.set('gemini', { approvalMode: false });
+    try {
+      expect(agent('gemini').buildArgs('', [], [], {}, {})).toContain('--yolo');
+      expect(() => agent('gemini').buildArgs('', [], [], {}, read)).toThrow(/Read only/);
+    } finally {
+      if (saved) agentCapabilities.set('gemini', saved);
+      else agentCapabilities.delete('gemini');
+    }
+  });
+
+  it('marks exactly the adapters whose CLI has a confirmed read-only mode', () => {
+    const supported = AGENT_DEFS.filter((def) => def.readOnlySupport === true).map((def) => def.id).sort();
+    expect(supported).toEqual(['claude', 'codebuddy', 'codex', 'copilot', 'gemini', 'qwen']);
+  });
+
+  it('never hands an approve-everything flag to an adapter that claims read-only support', () => {
+    const permissive = [
+      '--yolo',
+      '--approval-mode=yolo',
+      'bypassPermissions',
+      '--dangerously-allow-all',
+      '--dangerously-skip-permissions',
+      '--dangerously-bypass-approvals-and-sandbox',
+      'danger-full-access',
+      'dangerous',
+      '--force',
+    ];
+    for (const def of AGENT_DEFS.filter((candidate) => candidate.readOnlySupport === true)) {
+      withEnvSnapshot(['OD_CODEX_SANDBOX'], () => {
+        delete process.env.OD_CODEX_SANDBOX;
+        const args = def.buildArgs('', [], [], {}, { ...read, cwd: '/tmp/od-project', resumeSessionId: null });
+        for (const flag of permissive) {
+          expect(args, `${def.id} must not pass ${flag} at read-only`).not.toContain(flag);
+        }
+      });
+    }
+  });
+
+  it('refuses every other adapter at the read-only level with a message that says what to do', () => {
+    for (const def of AGENT_DEFS) {
+      const message = readOnlyUnsupportedMessage(def, 'read-only');
+      if (def.readOnlySupport === true) {
+        expect(message, def.id).toBeNull();
+      } else {
+        expect(message, def.id).toContain(def.name);
+        expect(message, def.id).toContain('Read only');
+        expect(message, def.id).toContain('Settings → Execution permissions');
+      }
+      // The other levels never refuse anything.
+      expect(readOnlyUnsupportedMessage(def, 'default')).toBeNull();
+      expect(readOnlyUnsupportedMessage(def, 'full')).toBeNull();
+    }
   });
 });

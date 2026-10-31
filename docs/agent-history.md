@@ -73,8 +73,8 @@ As of 2026-10-30.
   `apps/daemon/src/server.ts`, `apps/daemon/src/cli.ts`,
   `apps/web/src/components/ProjectView.tsx`, `SettingsDialog.tsx` (each 8k–11k
   lines).
-- Working branch for agent sessions: `ccr-8432aecf-n9xdfd`. Pull request 12 merges it into
-  `main` (opened 2026-10-30).
+- Working branch for agent sessions: `ccr-8432aecf-n9xdfd`. Pull request 12 merged it into `main`
+  on 2026-10-30 (merge commit `80cf9aa`); follow-up work restarts the branch from `main`.
 - Local verification status (run on 2026-10-28 at the head of the branch):
   `pnpm guard`, `pnpm typecheck` and `pnpm i18n:check` pass. Unit suites pass in
   full: `@open-design/web` 402 files / 3891 tests (13 skipped),
@@ -91,8 +91,8 @@ As of 2026-10-30.
 - Marketing site (`apps/monofield-site`, buildless static site for monofield.vercel.app):
   the hero redesigned on 2026-10-30 is finished on this branch. Traces show no Layout and no
   Paint during its loop and nothing of it running once it is scrolled away, and it was viewed
-  from 1440 px to 390 px in both languages and with reduced motion (see the two newest Log
-  entries). It is not live: the site deploys from `main`, and this branch is not merged.
+  from 1440 px to 390 px in both languages and with reduced motion. It is live on
+  monofield.vercel.app since pull request 12 merged (checked 2026-10-30, see the newest Log entry).
 - Layout: regions can be resized or folded in the development workspace (tools
   panel height, Design Files preview width, AI input) and the classic chat
   panel width; see the newest Log entry and `Splitter` in
@@ -104,7 +104,13 @@ As of 2026-10-30.
   change, and on Windows `full` makes MonoField Desktop restart with administrator rights (UAC
   at every launch). Surfaces: Settings → Execution permissions, a red "Full access" pill beside
   the settings cog, and `monofield permissions [show|set <level>] [--json]`. `default` keeps the
-  shipped behavior. The Windows elevation path has unit tests only; it was not run on Windows.
+  shipped behavior. Codex image generation (`apps/daemon/src/media/index.ts`) follows the level too
+  (`full` widens it, `read-only` refuses it). On Windows the response carries `canElevate`: a
+  standard (non-administrator) account is never restarted elevated, because UAC would open the app as
+  another user. Read only starts only agents marked `readOnlySupport` (Codex, Claude Code, Gemini CLI,
+  Qwen Code, CodeBuddy, Copilot); others are refused. The Windows elevation path was exercised on a fake
+  Windows host with a real PowerShell and on a real (already elevated) Windows CI runner with Windows
+  PowerShell 5.1; the UAC prompt itself has not been seen.
 
 ### Environment notes
 
@@ -192,7 +198,19 @@ machine. Check before relying on them.
   `settings-memory-routines`) break when the UI reads that endpoint more or less
   often. Flip them on a test-controlled flag instead.
 
+- A fake Windows host and real third-party CLIs can be had without Windows: PowerShell 7 comes from the
+  GitHub release tarball (check it against `hashes.sha256`), and Codex, Gemini, Qwen, Copilot, CodeBuddy,
+  Amp and Qoder CLIs install from npm into a scratch folder. `apps/desktop/tests/main/elevation-fake-windows.test.ts`
+  uses a `pwsh` on `PATH` or `MONOFIELD_TEST_PWSH` and skips without one (GitHub's Ubuntu runners have it).
+- Node processes report their `comm` as `MainThread`, so `ps -eo comm` filters miss them; match the arguments
+  and kill by PID (never `pkill -f`, which also matches the shell that runs it).
+
 ### Known baseline failures
+
+`apps/daemon/tests/run-retry-runtime.test.ts` is time-sensitive: run alone in this sandbox it failed
+(one of its two tests, either one) in 3 of 6 runs on `f71335b` (before pull request 12), 3 of 5 on
+`80cf9aa` (main) and 3 of 5 on the follow-up branch, and also failed once in a full daemon run. It
+passed in CI. Rerun it alone a few times before reading a failure there as a regression.
 
 `@open-design/desktop` unit suite in this sandbox (2026-10-30): 8 files fail on the base commit and
 after the execution-permissions change alike, 7 because the Electron binary is not installed
@@ -265,13 +283,35 @@ Execution permissions (see the newest Log entry):
   `apps/desktop/src/main/elevation.ts`); UAC "No" keeps the normal-rights window and
   Settings says so; a launch with `full` saved relaunches elevated; going back to `default`
   drops the rights after the app is reopened. Check that Explorer drag-and-drop is refused
-  while elevated (UIPI) and that the file picker still works. None of this was run.
+  while elevated (UIPI) and that the file picker still works. Also try a standard (non-admin)
+  Windows account: Settings should say the account is not an administrator and nothing should
+  restart. Done on a fake Windows host: the token reads, the generated PowerShell command, the
+  exit-code mapping and the daemon/CLI/Settings chain. Done on a real Windows runner (CI job
+  "Windows tools-pack payload tests", Windows PowerShell 5.1): real `whoami`, a real
+  `Start-Process -Verb RunAs` with every argument intact, a missing executable. Still not run:
+  the UAC prompt itself (the runner is already elevated), a declined prompt, the Electron IPC
+  hop (`preload.cts` → `od:elevation:relaunch` in `runtime.ts`; Electron is not installed in
+  this sandbox), and a domain account that is an administrator only through a nested group
+  (`canElevate` reads the `S-1-5-32-544` row of `whoami /groups`).
 - Files the elevated app or its agents create may be owned by the Administrators group;
   whether that trips Git's `safe.directory` check in a later normal-rights run was not
   checked.
-- The level covers Codex and Claude Code only. Other adapters (Gemini, OpenCode and so on)
-  keep their own flags, and Codex image generation (`apps/daemon/src/media/index.ts`) still
-  uses workspace-write unless `OD_CODEX_SANDBOX` is set; the Settings footnote says so.
+- Read only runs only on adapters with `readOnlySupport` (Codex, Claude Code, Gemini CLI,
+  Qwen Code, CodeBuddy, Copilot); every other adapter is refused with `AGENT_READ_ONLY_UNSUPPORTED`.
+  amp, cursor-agent, devin, qoder and trae-cli run with an approve-everything flag and no read-only
+  mode could be confirmed (qoder's `--permission-mode` has no plan choice; amp has permission rules
+  via `amp permissions`, not explored; cursor-agent, devin and trae-cli were not installed). The
+  ACP client (`apps/daemon/src/acp.ts` `choosePermissionOutcome`) always picks an allow option, so
+  ACP adapters cannot be narrowed on the host side today; rejecting non-read tool kinds at Read only
+  would be a way, but it only helps agents that ask before acting. At Default and Full the other
+  adapters keep their own flags, which are usually broader than Codex's workspace-write; the
+  Settings footnote says so.
+- At `read-only` Claude Code still writes its own plan file under its config folder
+  (`~/.claude/plans`), outside the project; the project stays untouched (checked with the real CLI).
+  The Gemini, Qwen, CodeBuddy and Copilot read-only flags come from each CLI's `--help` and were
+  accepted by the real parsers, but no model run was possible (no login), so their behavior at
+  Read only is not observed. Codex was run for real only as far as arguments, the Linux sandbox
+  (`codex sandbox`) and the prompt it renders; no model turn.
 
 End-to-end tests:
 
@@ -365,6 +405,121 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-10-31 — real Windows runner result for the administrator relaunch (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** record the outcome of step 1 (real Windows test) before the merge.
+- **Verified:** `ci.yml` dispatched with `ci_mode=hot` on the branch head "test(desktop): run the administrator
+  relaunch on a real Windows runner" (run 41197887276). Job "Windows tools-pack payload tests" (`windows-latest`)
+  passed: launcher payload 5 passed / 1 skipped; `tests/main/elevation.test.ts` 7 passed;
+  `tests/main/elevation-real-windows.test.ts` 4 passed. The runner reported Windows PowerShell 5.1.26100.33648 and
+  token `{"elevated":true,"administratorAccount":true}`; `whoami /groups` gave the rows `BUILTIN\Administrators`
+  (`S-1-5-32-544`, enabled, group owner) and `Mandatory Label\High Mandatory Level` (`S-1-16-12288`). A real
+  `Start-Process -Verb RunAs` started a copy of `node.exe` from `Mono'Field App\MonoField.exe` and every argument
+  (spaces, embedded quotes, an empty string, trailing and doubled backslashes, the after-quit flags) arrived intact;
+  a missing executable mapped to `failed`; the desktop left the already elevated process alone.
+- **Not done:** the runner is already elevated and has no UAC prompt, so the prompt, a declined prompt, a
+  non-elevated administrator and a standard account on real Windows are still unrun, as are the Electron IPC hop
+  and UIPI drag-and-drop.
+
+### 2026-10-31 — real Windows runner test for the administrator relaunch (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** run the Windows path on a real Windows host (step 1 of: real Windows test → merge → preview.5).
+- **Changed:** `apps/desktop/tests/main/elevation-real-windows.test.ts` (Windows only): real `whoami.exe`, real
+  Windows PowerShell, a real `Start-Process -Verb RunAs` launching a copy of `node.exe` from a folder named
+  `Mono'Field App` that records the argv it received; a missing executable; the desktop decision on the runner.
+  `ci.yml` job `windows_tools_pack_payload_tests` runs it (and the elevation unit tests); the topology test checks
+  the step. `buildWindowsElevatedLaunchArgs` now checks the executable exists first (`Test-Path`, exit 2 →
+  `failed`) instead of reporting a missing file as a declined prompt; the fake Windows test uses a real file.
+- **Verified:** locally the real-Windows file skips (4 skipped), the fake-host test passes (11 with the unit file),
+  `e2e` workflow test 11 pass, desktop typecheck clean. The Windows run itself is recorded in the next entry.
+
+### 2026-10-31 — fake Windows host, real third-party CLIs, Read only for other agents (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** try the Windows path on a fake Windows host instead of leaving it unrun, and test other AI CLIs.
+- **Fake Windows host:** `whoami.exe` and `powershell.exe` are scripts on `PATH`, so `execFile` in
+  `packages/platform` runs for real; `powershell.exe` hands MonoField's generated command to a real PowerShell 7.4.6
+  with only `Start-Process` replaced by a stand-in that records its arguments and can throw like a refused UAC.
+  Results: admin, standard, elevated, Korean-localized and broken `whoami` outputs read as expected; the command
+  parses, a path with an apostrophe survives, the argument string decodes (documented CommandLineToArgvW rules,
+  implemented in the test) to the exact argv including the after-quit flags, a refused prompt maps to `declined`,
+  a missing `powershell.exe` to `failed`; `createDesktopElevation` relaunches an administrator account, refuses a
+  standard one (`not-administrator`, UAC never asked) and an elevated one. A daemon started with
+  `process.platform` spoofed to `win32` answered `canElevate` true/false and `restartRequired` correctly over HTTP
+  and the CLI, and Settings (real daemon, not a routed mock) showed the matching dialog and status text. Kept as
+  `apps/desktop/tests/main/elevation-fake-windows.test.ts`. This does not prove real UAC.
+- **Real CLIs:** Codex 0.166.0 accepted all six argument sets MonoField builds (new and resume, three levels) and
+  rejected invalid values (controls); `codex sandbox -P :read-only` blocked writes inside and outside the project,
+  `:workspace` allowed only the project; `codex debug prompt-input` showed network restricted with
+  `sandbox_mode="read-only"` or workspace-write alone, enabled with `sandbox_workspace_write.network_access=true`
+  and with danger-full-access. Gemini 0.66.0 (`--approval-mode plan`, "read-only mode"), Qwen Code 0.26.4
+  (`--approval-mode plan`), CodeBuddy 2.179.0 (`--permission-mode plan`) and Copilot 1.0.105 (denials win over
+  `--allow-all-tools`) accepted the exact arguments built by the daemon's defs at Read only and Default. No model
+  turn was possible without logins. Claude Code plan mode was run for real (see the entry below).
+- **Changed:** `readOnlySupport` on `RuntimeAgentDef` (set for Codex, Claude Code, Gemini, Qwen, CodeBuddy, Copilot);
+  those adapters map Read only to their CLI's plan mode or deny rules (Gemini fails closed on a build without
+  `--approval-mode`); `server.ts` refuses a run for any other adapter at Read only with
+  `AGENT_READ_ONLY_UNSUPPORTED` (422) before any setup (`runtimes/read-only.ts`); Settings lists which agents
+  work at Read only (`executionPermissions.readOnlyAgents`, 19 locales); the CLI prints one consistent
+  "Start as administrator" line for a standard account.
+- **Verified:** `pnpm guard` 67 pass; `pnpm typecheck` exit 0; `pnpm i18n:check` pass; contracts 269, platform 71
+  (1 skipped), web 3932, daemon 5564 (all pass this run), `e2e` workflow test 11, desktop 196 passed and the same 8
+  files / 4 tests failing as on the base commit (Electron missing). New daemon tests: per-adapter arguments, an
+  invariant that no adapter with `readOnlySupport` passes an approve-everything flag at Read only, the refusal table
+  over every adapter, and a real-server run test.
+- **Not done:** real Windows (UAC, PowerShell 5.1, the Electron IPC hop); behavior of the Gemini, Qwen, CodeBuddy and
+  Copilot read-only modes with a model; read-only modes for amp, cursor-agent, devin, qoder, trae-cli and the ACP
+  adapters; narrowing other adapters at Default.
+- **Next agent:** `codex sandbox` needs `-P <profile>` in 0.166 (`:read-only`, `:workspace`); its profiles ignore the
+  legacy `sandbox_workspace_write.network_access` key, so use `codex debug prompt-input` to see how a `-c` setting is
+  read. Next dev allows one server per folder.
+
+### 2026-10-31 — execution permissions follow-ups: image generation, standard Windows accounts, notes, visual-baseline (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** fix the holes and issues listed after the 0.11.7-preview.4 release, as far as possible.
+- **Changed:**
+  - Codex image generation now follows the level: `media/config.ts` `resolveExecutionPermissionLevelForMedia`,
+    `media/index.ts` `codexImagegenSandboxArgs` (`full` or the `OD_CODEX_SANDBOX` override →
+    danger-full-access, `default` → workspace-write with network, `read-only` → an error before Codex starts,
+    because the run writes the image).
+  - Standard Windows accounts: `packages/platform` `readWindowsTokenInfo` (one `whoami /groups` read gives
+    `elevated` and `administratorAccount`), contracts `canElevate` and `executionPermissionsNeedRestart`
+    (false when `canElevate === false`), daemon response, CLI line, desktop `elevation.ts` (refuses with
+    `not-administrator`, no startup relaunch), web section (no restart promise, dialog and status wording).
+  - Read only now says in Settings that files, deliverables and image generation will not be produced
+    (`executionPermissions.readOnlyNote`); 3 new keys in 19 locales; danger button and filled red parts use
+    `--red-contrast` (white-on-salmon was low contrast in dark).
+  - `.github/workflows/visual-baseline.yml`: a "Check R2 configuration" step (same resolution order as
+    `r2ConfigFromEnv` in `e2e/scripts/visual-report.ts`) gates the R2 upload; capture and the debug artifact
+    still run. Reason: every run on `main` failed at the upload with "Missing R2 configuration".
+- **Verified:** Node 24.22.1. `pnpm guard` 67 pass; `pnpm typecheck` exit 0; `pnpm i18n:check` pass.
+  contracts 269 pass; platform 71 pass (1 skipped); components 18 pass; monofield-site 8 pass;
+  `e2e` `tests/packaged-smoke-workflow.test.ts` 11 pass (includes the new R2 gate assertions); web 3932 pass,
+  406 files; daemon 5554 pass, 1 fail (`run-retry-runtime`, flaky on the base commits too, see Known baseline
+  failures); desktop 4 failed / 192 passed in the same 8 files as the base commit. The workflow file parses
+  as YAML; it was not run on GitHub. Real Claude CLI (`claude -p --permission-mode plan`, empty folder, asked
+  to create `hello.txt`): the file was not created, the run ended `success`, the model said plan mode blocked it.
+  Dark theme viewed in a local stack (default, read only, a Windows-shaped standard-account answer, the
+  confirm dialog) in Korean.
+- **Not done:** the Windows path on Windows (see Open items); Codex `read-only` against a real Codex; Gemini,
+  OpenCode and other adapters; Oracle/Tibero; signing. The `visual-baseline` change only takes effect once it
+  is on `main`.
+- **Next agent:** the old scratchpad directory is gone; scratch files for this work lived under `.tmp/agent-work/`
+  (git-ignored). Run the daemon test files that spawn servers one at a time when the disk is tight.
+
+### 2026-10-30 — pull request 12 merged; live site and release notes checked (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** merge to `main` and apply the site motion graphics.
+- **Changed:** nothing in code. Pull request 12 merged with all CI checks green on its head
+  `a109f8f` (E2E Vitest, UI P0, Playwright visual, web and workspace tests, Nix, Docker, Windows
+  tools-pack). Merge commit `80cf9aa`.
+- **Verified:** `Sync published release notes` succeeded on `main`, and the `v0.11.7-preview.4` release
+  body is now `docs/releases/0.11.7-preview.4.md`. monofield.vercel.app served preview.4 after the
+  Vercel deploy. Playwright against the live site at 1440 px (KO, EN) and 390 px (KO), 11 s after load:
+  one `h1`, `.engine` present, 25 running animations at 1440 px and 5 at 390 px, the hero link and
+  preview card name `0.11.7-preview.4` with the execution permissions line first, no horizontal
+  overflow, no console errors.
+- **Not done:** this entry is on the branch only; it reaches `main` with the next pull request.
 
 ### 2026-10-30 — 0.11.7-preview.4 published; site and README point at it (`ccr-8432aecf-n9xdfd`)
 

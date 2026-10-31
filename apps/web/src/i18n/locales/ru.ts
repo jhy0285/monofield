@@ -4344,4 +4344,8 @@ export const ru: Dict = {
   'executionPermissions.badge': 'Полный доступ',
   'executionPermissions.badgeTooltip': 'Codex и Claude Code работают с полным доступом. Нажмите, чтобы изменить.',
   'executionPermissions.otherAgentsNote': 'Другие CLI агентов следуют своим настройкам прав.',
+  'executionPermissions.notAdminAccount': 'Эта учётная запись Windows не является администратором. Windows запросил бы пароль другой учётной записи и открыл бы MonoField под ней — с другими настройками и проектами, поэтому MonoField не перезапускается от имени администратора. Codex и Claude Code по-прежнему работают с полным доступом.',
+  'executionPermissions.confirmNotAdmin': 'Эта учётная запись Windows не является администратором, поэтому MonoField не будет перезапущен. Изменятся только Codex и Claude Code.',
+  'executionPermissions.readOnlyNote': 'В режиме «Только чтение» Codex и Claude Code не могут записывать файлы: спецификации, документы и другие результаты не создаются, а генерация изображений отклоняется. Чтобы получать файлы, выберите «По умолчанию».',
+  'executionPermissions.readOnlyAgents': 'Режим «Только чтение» работает с Codex, Claude Code, Gemini CLI, Qwen Code, CodeBuddy и Copilot. Остальные агенты на этом уровне не запускаются.',
 };

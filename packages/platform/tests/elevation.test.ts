@@ -4,7 +4,9 @@ import {
   buildWindowsElevatedLaunchArgs,
   isWindowsProcessElevated,
   launchWindowsElevated,
+  parseWindowsWhoamiGroupsAdministrator,
   parseWindowsWhoamiGroupsElevation,
+  readWindowsTokenInfo,
 } from "../src/index.js";
 
 const MEDIUM_GROUPS = [
@@ -52,6 +54,50 @@ describe("Windows elevation probe", () => {
   });
 });
 
+const STANDARD_GROUPS = [
+  '"Everyone","Well-known group","S-1-1-0","Mandatory group, Enabled by default, Enabled group"',
+  '"BUILTIN\\Users","Alias","S-1-5-32-545","Mandatory group, Enabled by default, Enabled group"',
+  '"Mandatory Label\\Medium Mandatory Level","Label","S-1-16-8192",""',
+].join("\r\n");
+
+describe("Windows administrator account probe", () => {
+  it("tells an administrator account (even with a filtered token) from a standard account", () => {
+    expect(parseWindowsWhoamiGroupsAdministrator(MEDIUM_GROUPS)).toBe(true);
+    expect(parseWindowsWhoamiGroupsAdministrator(HIGH_GROUPS)).toBe(true);
+    expect(parseWindowsWhoamiGroupsAdministrator(STANDARD_GROUPS)).toBe(false);
+    expect(parseWindowsWhoamiGroupsAdministrator("")).toBeNull();
+    expect(parseWindowsWhoamiGroupsAdministrator("  \r\n")).toBeNull();
+  });
+
+  it("answers both questions from one whoami read and nulls elsewhere", async () => {
+    let calls = 0;
+    const run = (out: string) => async () => {
+      calls += 1;
+      return out;
+    };
+    expect(await readWindowsTokenInfo({ platform: "win32", run: run(MEDIUM_GROUPS) })).toEqual({
+      elevated: false,
+      administratorAccount: true,
+    });
+    expect(await readWindowsTokenInfo({ platform: "win32", run: run(STANDARD_GROUPS) })).toEqual({
+      elevated: false,
+      administratorAccount: false,
+    });
+    expect(calls).toBe(2);
+    expect(await readWindowsTokenInfo({ platform: "darwin", run: run(HIGH_GROUPS) })).toEqual({
+      elevated: null,
+      administratorAccount: null,
+    });
+    expect(calls).toBe(2);
+    expect(await readWindowsTokenInfo({
+      platform: "win32",
+      run: async () => {
+        throw new Error("whoami missing");
+      },
+    })).toEqual({ elevated: null, administratorAccount: null });
+  });
+});
+
 describe("Windows elevated launch", () => {
   it("asks UAC through Start-Process -Verb RunAs with quoted literals", () => {
     const args = buildWindowsElevatedLaunchArgs("C:\\Program Files\\Mono'Field\\MonoField.exe", [
@@ -66,6 +112,8 @@ describe("Windows elevated launch", () => {
     expect(script).toContain("-ArgumentList '--launcher-after-quit --launcher-after-quit-target-pid 4242 \"a value\"'");
     expect(script).toContain("-Verb RunAs");
     expect(script).toContain("catch { exit 1 }");
+    // A missing executable is a failure, not a declined prompt.
+    expect(script).toContain("Test-Path -LiteralPath 'C:\\Program Files\\Mono''Field\\MonoField.exe' -PathType Leaf)) { exit 2 }");
   });
 
   it("omits -ArgumentList when there are no arguments and rejects an empty path", () => {
@@ -85,6 +133,12 @@ describe("Windows elevated launch", () => {
         throw Object.assign(new Error("Command failed"), { code: 1 });
       },
     })).toEqual({ ok: false, reason: "declined" });
+    expect(await launchWindowsElevated("C:\\gone.exe", [], {
+      platform: "win32",
+      run: async () => {
+        throw Object.assign(new Error("Command failed"), { code: 2 });
+      },
+    })).toEqual({ ok: false, reason: "failed", detail: "executable not found: C:\\gone.exe" });
     const failed = await launchWindowsElevated("C:\\MonoField.exe", [], {
       platform: "win32",
       run: async () => {

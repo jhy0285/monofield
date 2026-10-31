@@ -120,6 +120,12 @@ export type RuntimeAgentDef = {
   id: string;
   name: string;
   bin: string;
+  // True when `buildArgs` turns the "read-only" execution permission level into
+  // flags the real CLI documents and accepts (a plan or read-only mode, or tool
+  // denials), so the agent cannot change files or run commands at that level.
+  // Anything not marked is not started at "read-only": most adapters run with an
+  // approve-everything flag, and an unverified guess would be a false promise.
+  readOnlySupport?: boolean;
   versionArgs: string[];
   fallbackModels: RuntimeModelOption[];
   buildArgs: (

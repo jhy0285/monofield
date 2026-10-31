@@ -1,5 +1,5 @@
 import { agentCapabilities } from '../capabilities.js';
-import { DEFAULT_MODEL_OPTION } from './shared.js';
+import { DEFAULT_MODEL_OPTION, isReadOnlyRun } from './shared.js';
 import type { RuntimeAgentDef } from '../types.js';
 
 // Codebuddy Code (https://www.codebuddy.cn) — a Claude Code–compatible CLI
@@ -111,9 +111,11 @@ export const codebuddyAgentDef = {
       } else if (typeof runtimeContext.newSessionId === 'string' && runtimeContext.newSessionId) {
         args.push('--session-id', runtimeContext.newSessionId);
       }
-      args.push('--permission-mode', 'bypassPermissions');
+      // Same modes as Claude Code: `plan` plans without editing or running tools.
+      args.push('--permission-mode', isReadOnlyRun(runtimeContext) ? 'plan' : 'bypassPermissions');
       return args;
     },
+    readOnlySupport: true,
     promptViaStdin: true,
     promptInputFormat: 'stream-json',
     streamFormat: 'claude-stream-json',

@@ -6,9 +6,10 @@ import {
   buildLauncherAfterQuitArgs,
 } from "@open-design/launcher-proto";
 import {
-  isWindowsProcessElevated,
   launchWindowsElevated,
+  readWindowsTokenInfo,
   type WindowsElevatedLaunchResult,
+  type WindowsTokenInfo,
 } from "@open-design/platform";
 
 /**
@@ -21,7 +22,7 @@ export const ELEVATED_RELAUNCH_WAIT_MS = 120_000;
 export type DesktopElevationDeps = {
   argv: readonly string[];
   execPath: string;
-  isElevated?: () => Promise<boolean | null>;
+  readToken?: () => Promise<WindowsTokenInfo>;
   launchElevated?: (executable: string, args: readonly string[]) => Promise<WindowsElevatedLaunchResult>;
   packaged: boolean;
   pid: number;
@@ -33,12 +34,16 @@ export type DesktopElevation = {
    * Starts a second copy of this app through the UAC prompt and resolves once
    * Windows has started it. The caller then quits; the new copy waits for this
    * process to exit (the launcher after-quit handshake) before it boots.
+   * A standard (non-administrator) account is refused with `not-administrator`:
+   * UAC would ask for another account's credentials and open the app as that
+   * other user, with different settings and projects.
    */
   relaunch(): Promise<OpenDesignHostActionResult>;
   /**
    * True when Settings asks for administrator rights at launch and this
-   * process does not have them. `readStartElevated` reads that setting from
-   * the daemon; any failure there means "no".
+   * process does not have them, on an account that can elevate as itself.
+   * `readStartElevated` reads that setting from the daemon; any failure there
+   * means "no".
    */
   shouldRelaunchAtStartup(readStartElevated: () => Promise<boolean>): Promise<boolean>;
 };
@@ -65,18 +70,21 @@ export function elevatedRelaunchArgs(argv: readonly string[], pid: number): stri
  */
 export function createDesktopElevation(deps: DesktopElevationDeps): DesktopElevation | null {
   if (deps.platform !== "win32" || !deps.packaged) return null;
-  const isElevated = deps.isElevated ?? (() => isWindowsProcessElevated({ platform: deps.platform }));
+  const readToken = deps.readToken ?? (() => readWindowsTokenInfo({ platform: deps.platform }));
   const launchElevated = deps.launchElevated
     ?? ((executable: string, args: readonly string[]) => launchWindowsElevated(executable, args, { platform: deps.platform }));
-  let elevated: Promise<boolean | null> | null = null;
-  const currentElevation = (): Promise<boolean | null> => {
-    elevated ??= isElevated();
-    return elevated;
+  // The token and the account cannot change while the process runs.
+  let token: Promise<WindowsTokenInfo> | null = null;
+  const currentToken = (): Promise<WindowsTokenInfo> => {
+    token ??= readToken();
+    return token;
   };
 
   return {
     async relaunch() {
-      if ((await currentElevation()) === true) return { ok: false, reason: "already-elevated" };
+      const { elevated, administratorAccount } = await currentToken();
+      if (elevated === true) return { ok: false, reason: "already-elevated" };
+      if (administratorAccount === false) return { ok: false, reason: "not-administrator" };
       // argv[0] is the executable itself in a packaged app.
       const result = await launchElevated(deps.execPath, elevatedRelaunchArgs(deps.argv.slice(1), deps.pid));
       if (result.ok) return { ok: true };
@@ -87,7 +95,8 @@ export function createDesktopElevation(deps: DesktopElevationDeps): DesktopEleva
       };
     },
     async shouldRelaunchAtStartup(readStartElevated) {
-      if ((await currentElevation()) !== false) return false;
+      const { elevated, administratorAccount } = await currentToken();
+      if (elevated !== false || administratorAccount !== true) return false;
       try {
         return await readStartElevated();
       } catch {

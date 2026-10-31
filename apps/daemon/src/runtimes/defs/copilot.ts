@@ -1,4 +1,4 @@
-import { DEFAULT_MODEL_OPTION } from './shared.js';
+import { DEFAULT_MODEL_OPTION, isReadOnlyRun } from './shared.js';
 import type { RuntimeAgentDef } from '../types.js';
 
 const COPILOT_MODEL_ID = /\b(?:claude|gemini|gpt|kimi|mai|raptor)-[a-z0-9][a-z0-9._:-]*\b/gi;
@@ -102,6 +102,13 @@ export const copilotAgentDef = {
         '--output-format',
         'json',
       ];
+      if (isReadOnlyRun(runtimeContext)) {
+        // Copilot has no plan mode, but its help states that "denial rules always
+        // take precedence over allow rules, even --allow-all-tools". Programmatic
+        // runs need --allow-all-tools, so Read only denies the shell and every
+        // file write on top of it. MCP server tools are not covered.
+        args.push('--deny-tool=shell', '--deny-tool=write');
+      }
       if (options.model && options.model !== 'default') {
         args.push('--model', options.model);
       }
@@ -123,6 +130,7 @@ export const copilotAgentDef = {
       }
       return args;
     },
+    readOnlySupport: true,
     promptViaStdin: true,
     streamFormat: 'copilot-stream-json',
     resumesSessionViaCli: true,

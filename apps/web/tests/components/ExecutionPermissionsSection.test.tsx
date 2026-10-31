@@ -9,13 +9,14 @@ import { ExecutionPermissionBadge } from '../../src/components/ExecutionPermissi
 
 function permissions(
   level: ExecutionPermissionLevel,
-  { platform = 'win32', elevated = false as boolean | null } = {},
+  { platform = 'win32', elevated = false as boolean | null, canElevate = true as boolean | null } = {},
 ): ExecutionPermissionsResponse {
   return {
     level,
     effective: resolveExecutionPermissions(level, { platform }),
     codexSandboxLockedByEnv: false,
     elevated: platform === 'win32' ? elevated : null,
+    canElevate: platform === 'win32' ? canElevate : null,
     platform,
   };
 }
@@ -32,6 +33,7 @@ function stubDaemon(initial: ExecutionPermissionsResponse, options: { elevatedAf
       current = permissions(level, {
         platform: current.platform,
         elevated: options.elevatedAfterSave === undefined ? current.elevated : options.elevatedAfterSave,
+        canElevate: current.canElevate ?? null,
       });
     }
     return Response.json(current);
@@ -130,6 +132,53 @@ describe('Settings → Execution permissions', () => {
     fireEvent.click(retry);
     expect(await screen.findByText(/Windows confirmation was cancelled/)).toBeTruthy();
     expect(screen.getByText(/files cannot be dragged in from Explorer/)).toBeTruthy();
+  });
+
+  it('never restarts a standard Windows account as administrator, and says why', async () => {
+    const relaunch = setHostElevation(async () => ({ ok: true }));
+    const calls = stubDaemon(permissions('default', { elevated: false, canElevate: false }), { elevatedAfterSave: false });
+    render(<ExecutionPermissionsSection />);
+    const full = await screen.findByRole('radio', { name: /Full access/ });
+    await waitFor(() => expect((full as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(full);
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText(/is not an administrator, so MonoField is not restarted/)).toBeTruthy();
+    expect(within(dialog).queryByText(/UAC/)).toBeNull();
+    // The button does not promise a restart either.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Turn on full access' }));
+    await waitFor(() => expect(screen.getByRole('radio', { name: /Full access/ }).getAttribute('aria-checked')).toBe('true'));
+    expect(JSON.parse(String(calls.find(([, init]) => init?.method === 'PUT')?.[1]?.body))).toEqual({ level: 'full' });
+    expect(relaunch).not.toHaveBeenCalled();
+    expect(await screen.findByText(/Windows would ask for another account's password/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Restart as administrator' })).toBeNull();
+  });
+
+  it('shows the not-administrator note when the desktop refuses to restart', async () => {
+    setHostElevation(async () => ({ ok: false, reason: 'not-administrator' }));
+    // canElevate is unknown to this (older) daemon body, so the button is offered and the desktop answers.
+    stubDaemon({ ...permissions('full', { elevated: false }), canElevate: undefined });
+    render(<ExecutionPermissionsSection />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Restart as administrator' }));
+    expect(await screen.findByRole('status')).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain("Windows would ask for another account's password"));
+  });
+
+  it('tells a Read only user that files and images will not be created', async () => {
+    stubDaemon(permissions('read-only', { platform: 'linux' }));
+    render(<ExecutionPermissionsSection />);
+    expect(await screen.findByText(/cannot write files: specs, documents and other deliverables are not created/)).toBeTruthy();
+    expect(screen.getByText(/image generation is refused/)).toBeTruthy();
+    // And which agents can run at this level at all.
+    expect(screen.getByText(/Read only works with Codex, Claude Code, Gemini CLI, Qwen Code, CodeBuddy and Copilot/)).toBeTruthy();
+  });
+
+  it('shows no Read only warning at the default level', async () => {
+    const calls = stubDaemon(permissions('default', { platform: 'linux' }));
+    render(<ExecutionPermissionsSection />);
+    await waitFor(() => expect(calls.length).toBeGreaterThan(0));
+    await screen.findByRole('radio', { name: /Default/ });
+    expect(screen.queryByText(/cannot write files/)).toBeNull();
+    expect(screen.queryByText(/Read only works with/)).toBeNull();
   });
 
   it('explains that leaving full access drops administrator rights only after reopening', async () => {
