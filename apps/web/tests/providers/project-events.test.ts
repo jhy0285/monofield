@@ -5,6 +5,7 @@ import {
   projectEventsUrl,
   type ProjectEvent,
 } from '../../src/providers/project-events';
+import { fetchProjectFiles } from '../../src/providers/registry';
 
 type Listener = (evt: unknown) => void;
 
@@ -304,6 +305,68 @@ describe('createProjectEventsConnection', () => {
     expect(nextDelay).toBe(100);
 
     conn.close();
+  });
+
+  // The daemon's watcher runs with ignoreInitial, so a file written between
+  // the page's file fetch and the watcher's initial scan (or while the stream
+  // was reconnecting) never produces a file-changed event. Each `ready` must
+  // tell the consumer to resynchronise once.
+  it('reports every ready event, including after a reconnect, so the consumer can resync', () => {
+    const seen: ProjectEvent[] = [];
+    const setTimeoutFn = vi.fn((cb: () => void) => {
+      cb();
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    });
+    const conn = createProjectEventsConnection(
+      'p1',
+      (evt) => seen.push(evt),
+      {
+        EventSourceCtor: MockEventSource as unknown as typeof EventSource,
+        setTimeoutFn: setTimeoutFn as unknown as typeof setTimeout,
+      },
+    );
+    MockEventSource.instances[0]!.dispatch('ready', { data: JSON.stringify({ projectId: 'p1' }) });
+    expect(seen).toEqual([{ type: 'file-watch-ready' }]);
+
+    MockEventSource.instances[0]!.dispatch('error', {});
+    MockEventSource.instances[1]!.dispatch('ready', { data: JSON.stringify({ projectId: 'p1' }) });
+    expect(seen).toEqual([{ type: 'file-watch-ready' }, { type: 'file-watch-ready' }]);
+    conn.close();
+  });
+
+  // The file list is cached for a second. A change the daemon reports came
+  // from outside the web (an agent, the API, another editor), so a refetch
+  // right after it must read the disk, not a list cached before the change.
+  it('drops the cached file list when the daemon reports a change or a ready watcher', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ files: [] }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const conn = createProjectEventsConnection(
+        'cache-p1',
+        () => {},
+        { EventSourceCtor: MockEventSource as unknown as typeof EventSource },
+      );
+      const es = MockEventSource.instances[0]!;
+      await fetchProjectFiles('cache-p1');
+      await fetchProjectFiles('cache-p1');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      es.dispatch('file-changed', {
+        data: JSON.stringify({ type: 'file-changed', path: 'new.html', kind: 'add' }),
+      });
+      await fetchProjectFiles('cache-p1');
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+
+      es.dispatch('ready', { data: JSON.stringify({ projectId: 'cache-p1' }) });
+      await fetchProjectFiles('cache-p1');
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      conn.close();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('close() prevents further reconnects and closes the active source', () => {

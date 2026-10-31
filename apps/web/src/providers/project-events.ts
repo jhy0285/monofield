@@ -4,10 +4,21 @@ import type {
   LiveArtifactSsePayload,
   ProjectConversationCreatedSsePayload,
 } from '@open-design/contracts';
+import { invalidateProjectListings } from './registry';
 export interface ProjectFileChangeEvent {
   type: 'file-changed';
   path: string;
   kind: 'add' | 'change' | 'unlink';
+}
+
+/**
+ * The daemon's watcher finished its initial scan for this connection. The
+ * watcher ignores files it finds during that scan, so anything written after
+ * the consumer last fetched the file list (page load, or the gap while the
+ * stream reconnected) was not reported as `file-changed`: refetch once.
+ */
+export interface ProjectFileWatchReadyEvent {
+  type: 'file-watch-ready';
 }
 
 // Re-exported under the local "project event" naming so consumers in this
@@ -20,6 +31,7 @@ export type ProjectLiveArtifactEvent = LiveArtifactSsePayload | LiveArtifactRefr
 
 export type ProjectEvent =
   | ProjectFileChangeEvent
+  | ProjectFileWatchReadyEvent
   | ProjectConversationCreatedEvent
   | ProjectLiveArtifactEvent;
 
@@ -78,12 +90,17 @@ export function createProjectEventsConnection(
     if (cancelled) return;
     const es = new Ctor(projectEventsUrl(projectId));
     source = es;
+    // Both events mean the disk may differ from any listing the web cached,
+    // so the cache goes before the consumer refetches.
     es.addEventListener('ready', () => {
       backoff = initialBackoff;
+      invalidateProjectListings(projectId);
+      onChange({ type: 'file-watch-ready' });
     });
     es.addEventListener('file-changed', (evt) => {
       try {
         const data = JSON.parse((evt as MessageEvent).data) as ProjectFileChangeEvent;
+        invalidateProjectListings(projectId);
         onChange(data);
       } catch (err) {
         // Ignore malformed payloads — we'll get more on the next change.

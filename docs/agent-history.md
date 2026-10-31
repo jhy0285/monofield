@@ -64,8 +64,8 @@ As of 2026-10-30.
   reviewed spec diffs). It is an independent fork of the Apache-2.0 Open Design
   project; see `docs/adr/0002-upstream-maintenance.md` (status: Proposed, only
   phase A done).
-- Version: `0.11.7-preview.4` (root `package.json`), published on 2026-10-30 as a GitHub prerelease
-  (preview channel, unsigned) from `6ecaca6`; stable `latest` is still `v0.11.6`. Workspace packages are
+- Version: `0.11.7-preview.5` (root `package.json`), published on 2026-10-31 as a GitHub prerelease
+  (preview channel, unsigned) from `0deb4f6`; stable `latest` is still `v0.11.6`. Workspace packages are
   still named `@open-design/*`; env vars still use the `OD_*` prefix.
 - Shape: pnpm monorepo. `apps/daemon` (Express + SQLite, `monofield` CLI) and
   `apps/web` (Next.js 16) hold most of the code (roughly 320k and 410k lines of
@@ -73,8 +73,9 @@ As of 2026-10-30.
   `apps/daemon/src/server.ts`, `apps/daemon/src/cli.ts`,
   `apps/web/src/components/ProjectView.tsx`, `SettingsDialog.tsx` (each 8k–11k
   lines).
-- Working branch for agent sessions: `ccr-8432aecf-n9xdfd`. Pull request 12 merged it into `main`
-  on 2026-10-30 (merge commit `80cf9aa`); follow-up work restarts the branch from `main`.
+- Working branch for agent sessions: `ccr-8432aecf-n9xdfd`. Pull request 13 merged it into `main`
+  on 2026-10-31 (merge commit `94a41a3`, after pull request 12 on 2026-10-30); follow-up work
+  restarts the branch from `main`.
 - Local verification status (run on 2026-10-28 at the head of the branch):
   `pnpm guard`, `pnpm typecheck` and `pnpm i18n:check` pass. Unit suites pass in
   full: `@open-design/web` 402 files / 3891 tests (13 skipped),
@@ -405,6 +406,52 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-10-31 — file list missed changes made outside the web (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** pull request 14 (preview.5 notes and links) went red on `UI P0 (workspace-restoration)`:
+  `e2e/ui/app-restoration.test.ts` "daemon error details persist between failed sends" failed twice; it had been
+  flaky (failed, then passed on retry) in both runs on the head of pull request 13, so it was not the docs change.
+- **Root cause:** `fetchProjectFiles` (`apps/web/src/providers/registry.ts`) caches a project's file list for one
+  second and drops that cache only after the web's own writes. A file written by anyone else (an agent, the API,
+  another editor) arrives as a `file-changed` event, and the refetch it triggers came within a second of another
+  fetch, read the cached list without the new file, and nothing refetched again. Instrumenting the test showed the
+  event reaching the page and no request after it. A second gap: the daemon's watcher ignores files it finds during
+  its initial scan (a local chokidar check lost 5 of 5 files written before `ready`, 0 of 5 after), so a file written
+  between the page's fetch and the watcher becoming ready, or while the stream reconnected, was never reported.
+- **Changed:** `apps/web/src/providers/project-events.ts` drops the project's cached listings
+  (`invalidateProjectListings`, now exported) on every `file-changed` and `ready`, and reports `ready` to the consumer
+  as `{ type: 'file-watch-ready' }`; `ProjectView.tsx` refetches the listing on it with `refreshWorkspaceItems`, not
+  by bumping `filesRefresh`. The first version bumped `filesRefresh`, which FileViewer reads as "files changed" and
+  reloads every open preview; CI then failed `e2e/ui/app-manual-edit.test.ts:453` (preview frame navigated during an
+  `evaluate` after reload), reproduced locally 1 of 3 and 2 of 3 against 0 of 4 on the base files. With the listing-only
+  refetch it passed 4 of 4.
+- **Verified:** two new specs in `apps/web/tests/providers/project-events.test.ts` failed before the change (cached
+  list served after a reported change; `ready` not reported) and pass after (15 pass); web typecheck clean. The P0 test
+  locally (Node 24, one worker): with only the `ready` part of the change it still failed 6 of 7 runs at the file row
+  (the cache was the main cause); with the whole change 4 of 4 passed twice (before and after the listing-only
+  refetch), each `file-changed` now followed by a file list request. Web unit suite: 3933 pass, 1 fail
+  (`tests/components/BrandsTab.refresh.test.tsx`, a polling count that also failed 1 of 3 on the base files while the
+  machine was loaded; untouched by this change). `project-events` and `ProjectView` unit tests 185 pass. Without any change it failed in CI 2 of 2 on pull request 14 and on the first try in both runs of
+  pull request 13; it was not run locally without the change.
+
+### 2026-10-31 — pull request 13 merged; 0.11.7-preview.5 published (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** steps 2 and 3 of "real Windows test → merge → preview.5".
+- **Done:** pull request 13 (execution permissions follow-ups, Read only for more agents, real Windows test) passed
+  all 18 CI jobs on its head and was merged into `main` (merge commit `94a41a3`). The branch was restarted from
+  `main`; "chore(release): prepare 0.11.7-preview.5" (`0deb4f6`) bumped the five release packages.
+  `release-windows.yml` dispatched with `ref=0deb4f6…`, `release_channel=preview`, `signed=false`,
+  `allow_unsigned=true`, `publish=true` (run 41199091754): build, install and runtime smoke passed, and
+  `v0.11.7-preview.5` was published as a prerelease targeting `0deb4f6` with setup.exe, portable ZIP, payload 7z,
+  `latest.yml` and `SHA256SUMS.txt`; `releases/latest` still answers `v0.11.6`.
+- **Changed here:** `docs/releases/0.11.7-preview.5.md` (Korean notes, Source, run link); README, the site's preview
+  card, structured data and the site README point at preview.5; the card lists the six Read only agents.
+- **Verified:** ranged GETs of the installer and ZIP answer 206 and `SHA256SUMS.txt` lists all four files (HEAD
+  requests answer 401 through this sandbox's proxy, GET works); `node --test tests/seo.test.ts` in
+  `apps/monofield-site` 8 pass; the preview card viewed at 1440 px and 390 px (6 items, no horizontal overflow).
+- **Next agent:** the release-notes sync runs on the push of `docs/releases/*.md` to `main`; check that the GitHub
+  release body matches the file after the merge.
 
 ### 2026-10-31 — real Windows runner result for the administrator relaunch (`ccr-8432aecf-n9xdfd`)
 
