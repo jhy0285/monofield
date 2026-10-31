@@ -112,6 +112,8 @@ describe("Windows elevated launch", () => {
     expect(script).toContain("-ArgumentList '--launcher-after-quit --launcher-after-quit-target-pid 4242 \"a value\"'");
     expect(script).toContain("-Verb RunAs");
     expect(script).toContain("catch { exit 1 }");
+    // A missing executable is a failure, not a declined prompt.
+    expect(script).toContain("Test-Path -LiteralPath 'C:\\Program Files\\Mono''Field\\MonoField.exe' -PathType Leaf)) { exit 2 }");
   });
 
   it("omits -ArgumentList when there are no arguments and rejects an empty path", () => {
@@ -131,6 +133,12 @@ describe("Windows elevated launch", () => {
         throw Object.assign(new Error("Command failed"), { code: 1 });
       },
     })).toEqual({ ok: false, reason: "declined" });
+    expect(await launchWindowsElevated("C:\\gone.exe", [], {
+      platform: "win32",
+      run: async () => {
+        throw Object.assign(new Error("Command failed"), { code: 2 });
+      },
+    })).toEqual({ ok: false, reason: "failed", detail: "executable not found: C:\\gone.exe" });
     const failed = await launchWindowsElevated("C:\\MonoField.exe", [], {
       platform: "win32",
       run: async () => {

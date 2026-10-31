@@ -555,6 +555,11 @@ jobs:
       - name: Windows launcher payload archive tests
         run: pnpm --filter @open-design/tools-pack exec vitest run tests/launcher-payload.test.ts
 
+      # The administrator relaunch for Settings → Execution permissions, on a real
+      # Windows host: real whoami.exe, Windows PowerShell and Start-Process -Verb RunAs.
+      - name: Windows elevation tests
+        run: pnpm --filter @open-design/desktop exec vitest run -c vitest.config.ts tests/main/elevation-real-windows.test.ts tests/main/elevation.test.ts
+
   web_workspace_tests:
     name: Web workspace tests
     needs: [scopes]

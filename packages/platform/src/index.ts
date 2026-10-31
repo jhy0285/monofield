@@ -1225,10 +1225,12 @@ function quotePowerShellLiteral(value: string): string {
 
 /**
  * PowerShell arguments that start `executable` through the UAC "Run as
- * administrator" prompt. `Start-Process -Verb RunAs` throws when the user
- * declines, so the script exits 1 in that case and 0 once the elevated
- * process has started. Windows PowerShell joins `-ArgumentList` elements
- * without quoting them, so the list is passed as one pre-quoted string.
+ * administrator" prompt. Exit codes: 0 once the elevated process has started,
+ * 2 when the executable does not exist, 1 when `Start-Process -Verb RunAs`
+ * throws, which in practice is a declined prompt (Start-Process drops the
+ * Win32 error code and its message is localized, so nothing finer is
+ * reliable). Windows PowerShell joins `-ArgumentList` elements without quoting
+ * them, so the list is passed as one pre-quoted string.
  */
 export function buildWindowsElevatedLaunchArgs(executable: string, args: readonly string[] = []): string[] {
   if (executable.trim().length === 0) throw new Error("elevated launch needs an executable path");
@@ -1247,7 +1249,7 @@ export function buildWindowsElevatedLaunchArgs(executable: string, args: readonl
     "-ExecutionPolicy",
     "Bypass",
     "-Command",
-    `$ErrorActionPreference = 'Stop'; try { ${startProcess}; exit 0 } catch { exit 1 }`,
+    `$ErrorActionPreference = 'Stop'; if (-not (Test-Path -LiteralPath ${quotePowerShellLiteral(executable)} -PathType Leaf)) { exit 2 }; try { ${startProcess}; exit 0 } catch { exit 1 }`,
   ];
 }
 
@@ -1272,6 +1274,7 @@ export async function launchWindowsElevated(
   } catch (error) {
     const exitCode = typeof error === "object" && error != null && "code" in error ? (error as { code?: unknown }).code : null;
     if (exitCode === 1) return { ok: false, reason: "declined" };
+    if (exitCode === 2) return { ok: false, reason: "failed", detail: `executable not found: ${executable}` };
     return { ok: false, reason: "failed", detail: errorMessage(error) };
   }
 }

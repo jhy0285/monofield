@@ -403,6 +403,18 @@ Code health:
 
 ## Log
 
+### 2026-10-31 — real Windows runner test for the administrator relaunch (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** run the Windows path on a real Windows host (step 1 of: real Windows test → merge → preview.5).
+- **Changed:** `apps/desktop/tests/main/elevation-real-windows.test.ts` (Windows only): real `whoami.exe`, real
+  Windows PowerShell, a real `Start-Process -Verb RunAs` launching a copy of `node.exe` from a folder named
+  `Mono'Field App` that records the argv it received; a missing executable; the desktop decision on the runner.
+  `ci.yml` job `windows_tools_pack_payload_tests` runs it (and the elevation unit tests); the topology test checks
+  the step. `buildWindowsElevatedLaunchArgs` now checks the executable exists first (`Test-Path`, exit 2 →
+  `failed`) instead of reporting a missing file as a declined prompt; the fake Windows test uses a real file.
+- **Verified:** locally the real-Windows file skips (4 skipped), the fake-host test passes (11 with the unit file),
+  `e2e` workflow test 11 pass, desktop typecheck clean. The Windows run itself is recorded in the next entry.
+
 ### 2026-10-31 — fake Windows host, real third-party CLIs, Read only for other agents (`ccr-8432aecf-n9xdfd`)
 
 - **Request:** try the Windows path on a fake Windows host instead of leaving it unrun, and test other AI CLIs.

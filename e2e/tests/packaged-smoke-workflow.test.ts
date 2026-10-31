@@ -112,6 +112,8 @@ describe("packaged smoke workflow", () => {
     expect(job).toContain(
       "pnpm --filter @open-design/tools-pack exec vitest run tests/launcher-payload.test.ts",
     );
+    // The administrator relaunch is exercised on the same real Windows runner.
+    expect(job).toContain("tests/main/elevation-real-windows.test.ts");
     expect(validate).toContain("windows_tools_pack_payload_tests");
   });
 

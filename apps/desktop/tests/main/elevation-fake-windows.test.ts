@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 
@@ -102,7 +102,9 @@ describe.skipIf(pwsh == null)("elevation on a fake Windows host (real spawn, rea
   let root: string;
   let uacLog: string;
   const saved = { PATH: process.env.PATH, FAKE_WHOAMI: process.env.FAKE_WHOAMI, FAKE_UAC: process.env.FAKE_UAC, FAKE_UAC_LOG: process.env.FAKE_UAC_LOG };
-  const EXE = "C:\\Program Files\\Mono'Field\\MonoField.exe";
+  // A real file, because the generated command checks that the executable exists;
+  // its folder name carries a space and an apostrophe to exercise the quoting.
+  let EXE = "";
 
   beforeAll(() => {
     root = mkdtempSync(join(tmpdir(), "monofield-fake-windows-"));
@@ -127,6 +129,10 @@ exec ${JSON.stringify(pwsh)} "\${args[@]}"
     process.env.PATH = `${bin}${delimiter}${saved.PATH ?? ""}`;
     uacLog = join(root, "uac.log");
     process.env.FAKE_UAC_LOG = uacLog;
+    const appDir = join(root, "Mono'Field App");
+    mkdirSync(appDir);
+    EXE = join(appDir, "MonoField.exe");
+    writeFileSync(EXE, "", "utf8");
   });
 
   beforeEach(() => {
@@ -177,9 +183,18 @@ exec ${JSON.stringify(pwsh)} "\${args[@]}"
     expect(parseLauncherAfterQuitArgs(received)).toEqual({ targetPid: 4242, timeoutMs: 120_000 });
   }, 60_000);
 
-  it("maps a refused UAC prompt to declined, and a missing PowerShell to failed", async () => {
+  it("maps a refused UAC prompt to declined, and a missing executable or PowerShell to failed", async () => {
     process.env.FAKE_UAC = "decline";
     expect(await launchWindowsElevated(EXE, [], { platform: "win32" })).toEqual({ ok: false, reason: "declined" });
+    const gone = join(root, "gone", "MonoField.exe");
+    rmSync(uacLog, { force: true });
+    expect(await launchWindowsElevated(gone, [], { platform: "win32" })).toEqual({
+      ok: false,
+      reason: "failed",
+      detail: `executable not found: ${gone}`,
+    });
+    // UAC was never asked for a file that is not there.
+    expect(() => readFileSync(uacLog)).toThrow();
     const path = process.env.PATH;
     process.env.PATH = "/usr/bin:/bin";
     try {
