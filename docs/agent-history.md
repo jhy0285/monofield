@@ -64,9 +64,8 @@ As of 2026-10-30.
   reviewed spec diffs). It is an independent fork of the Apache-2.0 Open Design
   project; see `docs/adr/0002-upstream-maintenance.md` (status: Proposed, only
   phase A done).
-- Version: `0.11.7-preview.7` (root `package.json`), prepared on 2026-11-01 to ship the getting started
-  guide link and the Guide Center steps; `0.11.7-preview.6` (2026-10-31, from `8b223ef`) is the previous
-  published preview; stable `latest` is still `v0.11.6`. Workspace packages are
+- Version: `0.11.7-preview.7` (root `package.json`), published on 2026-11-01 as a GitHub prerelease
+  (preview channel, unsigned) from `b82aee0` on `main`; stable `latest` is still `v0.11.6`. Workspace packages are
   still named `@open-design/*`; env vars still use the `OD_*` prefix.
 - Shape: pnpm monorepo. `apps/daemon` (Express + SQLite, `monofield` CLI) and
   `apps/web` (Next.js 16) hold most of the code (roughly 320k and 410k lines of
@@ -418,6 +417,22 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-01 — 0.11.7-preview.7 published from `main` with the getting started guide (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** ship the getting started guide: `main`, the site, and an app release.
+- **Done:** "chore(release): prepare 0.11.7-preview.7" (`b82aee0`) bumped the five release packages; `ci.yml`
+  `ci_mode=full` on it (run 41270668239) passed all 20 jobs; it was pushed to `main` as a fast-forward.
+  `release-windows.yml` from `main` (`ref=b82aee0…`, preview, unsigned allowed, publish; run 41271130249) passed
+  build, install and runtime smoke and published `v0.11.7-preview.7` (prerelease on `b82aee0`, setup.exe, portable
+  ZIP, payload 7z, `latest.yml`, `SHA256SUMS.txt`; ranged GETs of the installer and ZIP answer 206; `releases/latest`
+  is still `v0.11.6`).
+- **Verified after the push to `main`:** the repository is public and
+  `github.com/jhy0285/monofield/blob/main/docs/getting-started.ko.md` answers 200 without a login;
+  monofield.vercel.app serves `downloads/monofield-sample-legacy-order.zip` byte-identical to the repository copy and
+  its guide section links the guide.
+- **Changed here:** `docs/releases/0.11.7-preview.7.md`; README, the site's preview card, structured data and the
+  site README point at preview.7; the README release line links the guide.
 
 ### 2026-11-01 — getting started guide and a Guide Center that names the real buttons (`ccr-8432aecf-n9xdfd`)
 
