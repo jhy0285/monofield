@@ -105,6 +105,22 @@ describe('GuideCenter', () => {
     expect(link.getAttribute('rel')).toContain('noopener');
   });
 
+  it('links the step-by-step getting started guide in the repository', () => {
+    renderGuide('ko');
+    const link = screen.getByTestId('guide-center-start-guide');
+    expect(link.textContent).toContain('처음 시작 가이드');
+    expect(link.getAttribute('href')).toBe('https://github.com/jhy0285/monofield/blob/main/docs/getting-started.ko.md');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toContain('noopener');
+  });
+
+  it('names the real buttons in each step', () => {
+    renderGuide('ko');
+    for (const label of ['작업 폴더 선택', '코드베이스에서 생성', 'Git 변경 분석', 'AI 제안 검토', 'OpenAPI 내보내기']) {
+      expect(screen.getByText(new RegExp(label))).toBeTruthy();
+    }
+  });
+
   it('renders nothing when closed and pauses playback when it closes', () => {
     const { rerender, onClose, onStartProject, onReplayTour } = renderGuide('en');
     rerender(

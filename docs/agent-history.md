@@ -418,6 +418,32 @@ Code health:
 
 ## Log
 
+### 2026-11-01 — getting started guide and a Guide Center that names the real buttons (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** write a first-run guide and a guide document that a new user understands right away.
+- **Changed:** `docs/getting-started.ko.md` (new): prerequisites with check commands (Codex or Claude Code CLI,
+  Python 3, Git), install, first launch (execution mode, execution permissions), the sample project, first interface
+  spec, first reviewed change, own-project tips and a troubleshooting table. `apps/monofield-site/downloads/
+  monofield-sample-legacy-order.zip` (new, 7 KB): the Spring fixture from `plugins/_official/interface-spec/fixtures/
+  spring` under `legacy-order/` with a README. Guide Center (`apps/web/src/components/GuideCenter.tsx`): the four step
+  bodies now name the exact buttons each locale shows, and a new `guide.startGuide` link opens the guide (19 locales,
+  `types.ts`); the two links wrap as one group. The site's guide section and the README link the guide instead of
+  `QUICKSTART.md` (which is the source and Docker setup).
+- **Verified:** every on-screen name in the guide was read from the UI strings or the running app: the help button
+  is at the bottom of the left sidebar (opened with "사이드바 펼치기" when folded), the agent check is under 설정 →
+  실행 모드 → 로컬 CLI, the card is 결과 형식 선택 → 인터페이스 명세서 in 문서/디자인 제작 mode, the question forms are
+  "인터페이스 명세서 작성 방식" then "인터페이스 명세서 설정". The sample ZIP was extracted, committed as a Git baseline
+  and scanned with `scan_spring.py` (Python 3.13): 5 endpoints, Korean field names from the glossary, an empty
+  interface ID, and auth evidence `SecurityConfig.java:15`. Guide Center viewed on a local dev stack in Korean and
+  German at 1280 px and Korean at 1024 px (links inside the dialog; the German PDF link is reached by scrolling the
+  body). `GuideCenter`, `EntryFeatureGuide` and `HomeView.first-run-guide` tests 16 pass; web typecheck exit 0;
+  `pnpm i18n:check` pass; `pnpm guard` 67 pass; site `tests/seo.test.ts` 8 pass.
+- **Not done:** the agent steps of the guide (the question forms filled by a model, the change proposal) were not run
+  with a logged-in model here; they follow `docs/demo/spring-interface-spec-demo.md`. Python is not bundled with the
+  app, so it is listed as a prerequisite. The 2026-08 PDF guide was not updated.
+- **Next agent:** the guide and the ZIP are served from `main` (GitHub and monofield.vercel.app), so the new links
+  answer 404 until this reaches `main`.
+
 ### 2026-10-31 — 0.11.7-preview.6 published from `main` with the file list fix (`ccr-8432aecf-n9xdfd`)
 
 - **Request:** final check, push to `main`, release the app package again, confirm monofield.vercel.app.

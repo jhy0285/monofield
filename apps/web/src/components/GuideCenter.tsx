@@ -16,6 +16,9 @@ import { modalContent, modalOverlay } from '../motion';
 import styles from './GuideCenter.module.css';
 
 const USER_GUIDE_URL = 'https://monofield.vercel.app/downloads/monofield-user-guide-ko.pdf';
+// The step-by-step first run (sample project, first spec, first change review).
+// One Markdown source in the repository, so it stays current with each release.
+const START_GUIDE_URL = 'https://github.com/jhy0285/monofield/blob/main/docs/getting-started.ko.md';
 
 type GuideKey = Extract<keyof Dict, `guide.${string}`>;
 
@@ -242,10 +245,22 @@ function GuideCenterDialog({ onClose, onStartProject, onReplayTour }: Omit<Guide
               <Button variant="ghost" onClick={onReplayTour} data-testid="guide-center-replay">
                 {t('guide.replayTour')}
               </Button>
-              <a className={styles.link} href={USER_GUIDE_URL} target="_blank" rel="noreferrer noopener">
-                <span>{t('guide.userGuide')}</span>
-                <Icon name="external-link" size={13} />
-              </a>
+              <div className={styles.links}>
+                <a
+                  className={styles.link}
+                  href={START_GUIDE_URL}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  data-testid="guide-center-start-guide"
+                >
+                  <span>{t('guide.startGuide')}</span>
+                  <Icon name="external-link" size={13} />
+                </a>
+                <a className={styles.link} href={USER_GUIDE_URL} target="_blank" rel="noreferrer noopener">
+                  <span>{t('guide.userGuide')}</span>
+                  <Icon name="external-link" size={13} />
+                </a>
+              </div>
             </div>
           </section>
         </div>

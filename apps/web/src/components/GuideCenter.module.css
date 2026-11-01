@@ -329,6 +329,19 @@
   border-color: var(--text);
 }
 
+/* The two guide links wrap as one group, pushed to the right edge. */
+.links {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin-left: auto;
+}
+
+.links .link {
+  margin-left: 0;
+}
+
 @keyframes guide-rise {
   from {
     opacity: 0;
@@ -352,7 +365,8 @@
     gap: 22px;
   }
 
-  .link {
+  .link,
+  .links {
     margin-left: 0;
   }
 }

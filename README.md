@@ -166,7 +166,10 @@ Preview downloads are pinned to the REA/Laya `0.11.7-preview.6` release;
 stable links follow the latest stable GitHub Release.
 The current public Desktop build targets Windows 10/11. Direct-download builds
 are unsigned, so Windows can show an unrecognized-publisher warning; verify the
-download with the release's `SHA256SUMS.txt`. See
+download with the release's `SHA256SUMS.txt`. New here? Follow
+[처음 시작하기 (getting started, Korean)](docs/getting-started.ko.md): a 15-minute
+first run with a sample Spring project, from the first interface spec to the first
+reviewed change. See
 [the user guide](https://monofield.vercel.app/downloads/monofield-user-guide-ko.pdf)
 for illustrated setup and real workflows.
 

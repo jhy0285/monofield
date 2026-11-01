@@ -1361,6 +1361,7 @@ export interface Dict {
   'guide.step4.body': string;
   'guide.startProject': string;
   'guide.replayTour': string;
+  'guide.startGuide': string;
   'guide.userGuide': string;
   'workspaceTabs.project': string;
   'workspaceTabs.pluginDetails': string;
