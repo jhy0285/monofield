@@ -1,6 +1,6 @@
 # JEV and local typed decisions
 
-MonoField exposes System One decisions under **Integrations → JEV / local decisions** and through `monofield jev`. These models answer closed questions (`choice`, `score`, `noul`). Codex, Claude and other coding agents still write code. A prediction is advisory: it does not grant permissions, run commands or change the selected coding agent.
+MonoField exposes System One decisions under **Integrations → JEV / local decisions** and through `monofield jev`. The main product use is the [judgment check on interface specifications](judgment-checks.md): Korean field labels and business names are checked item by item, in observe mode until your labels support a policy. These models answer closed questions (`choice`, `score`, `noul`). Codex, Claude and other coding agents still write code. A prediction is advisory: it does not grant permissions, run commands or change the selected coding agent.
 
 ## Hosted TypeSafe JEV
 
@@ -26,7 +26,7 @@ An example CPU installation in your own Python virtual environment:
 python -m venv .venv
 # Activate that environment before installing.
 python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-python -m pip install 'laya[serve]==0.3.28' 'transformers<5'
+python -m pip install 'laya[serve]==0.4.20'
 ```
 
 Run only the multilingual checkpoint on loopback. The environment assignments below use POSIX shell syntax; set the equivalent variables in PowerShell on Windows.

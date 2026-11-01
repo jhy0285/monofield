@@ -12,6 +12,7 @@ import { parseInterfaceSpecDocument, validateInterfaceSpecDocument } from '@open
 import type { ArtifactManifest } from '../../artifacts/types';
 import { useI18n } from '../../i18n';
 import { fetchProjectFileText, writeProjectTextFileDetailed } from '../../providers/registry';
+import { JudgmentCheckPanel } from '../document-spec/JudgmentCheckPanel';
 import { DocumentImpactPanel, documentContentHash } from '../document-spec/DocumentImpactPanel';
 import { DocumentDependencyPanel } from '../document-spec/DocumentDependencyPanel';
 import { DocumentRenderActions } from '../document-spec/DocumentRenderActions';
@@ -207,6 +208,7 @@ export function InterfaceSpecEditor({ projectId, file, onFileSaved, onOpenFile, 
         {warningIssues.length > 0 ? <IssueList title={copy.warnings(warningIssues.length)} tone="warning" issues={warningIssues.map((issue) => issue.message)} /> : null}
 
         <DocumentImpactPanel projectId={projectId} inputFile={file.name} doc={doc} loadedContentSha256={loadedHash.current} dirty={dirty} onRequestUpdate={onRequestDocumentUpdate} onApplyProposal={(proposal) => mutate(() => proposal)} />
+        <JudgmentCheckPanel projectId={projectId} inputFile={file.name} dirty={dirty} />
         <DocumentDependencyPanel projectId={projectId} dirty={dirty} onRequestDraft={onRequestDocumentUpdate} />
 
         <section className={styles.documentPanel}>

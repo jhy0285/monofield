@@ -97,7 +97,8 @@ async function readJson(response: Response): Promise<unknown> {
   catch { throw new JevError('INVALID_RESPONSE', 'The decision server returned invalid or excessive JSON.', 502); }
   finally { await reader.cancel().catch(() => undefined); reader.releaseLock(); }
 }
-export async function jevProviderRequest(dataDir: string, endpoint: '/v1/systemone' | '/v1/models' | '/health', body?: JevRequest, options: { fetchImpl?: typeof fetch; env?: NodeJS.ProcessEnv; signal?: AbortSignal; timeoutMs?: number; config?: JevConfig } = {}): Promise<unknown> {
+type JevBatchBody = { model: string; states: JevRequest['state'][]; questions: JevRequest['questions'] };
+export async function jevProviderRequest(dataDir: string, endpoint: '/v1/systemone' | '/v1/systemone/batch' | '/v1/models' | '/health', body?: JevRequest | JevBatchBody, options: { fetchImpl?: typeof fetch; env?: NodeJS.ProcessEnv; signal?: AbortSignal; timeoutMs?: number; config?: JevConfig } = {}): Promise<unknown> {
   const env = options.env ?? process.env, config = options.config ? validateJevConfig(options.config) : await readJevConfig(dataDir);
   let key = '';
   if (config.backend === 'typesafe') {
@@ -150,4 +151,39 @@ export async function evaluateJev(dataDir: string, value: unknown, options: Para
   const request = validateJevRequest(value), config = options.config ? validateJevConfig(options.config) : await readJevConfig(dataDir), start = performance.now();
   const result = validateJevResponse(await jevProviderRequest(dataDir, '/v1/systemone', request, { ...options, config }), request);
   return { backend: config.backend, requestedModel: request.model, elapsedMs: Math.round(performance.now() - start), result };
+}
+
+/**
+ * One question set over many states. A local server answers through its batch
+ * endpoint (Laya: up to 64 states per request); hosted JEV has no batch
+ * endpoint, so each state is its own request, at most four in flight. Every
+ * answer is validated exactly like a single evaluation.
+ */
+export async function evaluateJevStates(dataDir: string, input: { model: string; states: JevRequest['state'][]; questions: JevRequest['questions'] },
+  options: Parameters<typeof jevProviderRequest>[3] & { chunkSize?: number } = {}): Promise<{ backend: JevConfig['backend']; elapsedMs: number; calls: number; results: JevResponse[] }> {
+  const config = options.config ? validateJevConfig(options.config) : await readJevConfig(dataDir), start = performance.now();
+  const requests = input.states.map((state) => validateJevRequest({ model: input.model, state, questions: input.questions }));
+  const results: JevResponse[] = new Array(requests.length);
+  let calls = 0;
+  if (config.backend === 'local') {
+    const size = Math.min(Math.max(options.chunkSize ?? 32, 1), 64);
+    for (let i = 0; i < requests.length; i += size) {
+      const chunk = requests.slice(i, i + size);
+      calls++;
+      const raw = await jevProviderRequest(dataDir, '/v1/systemone/batch', { model: input.model, states: chunk.map((r) => r.state), questions: chunk[0]!.questions }, { ...options, config });
+      if (!record(raw) || !Array.isArray(raw.results) || raw.results.length !== chunk.length) throw new JevError('INVALID_RESPONSE', 'The decision server returned an invalid batch response.', 502);
+      chunk.forEach((request, j) => { results[i + j] = validateJevResponse((raw.results as unknown[])[j], request); });
+    }
+  } else {
+    let next = 0;
+    const worker = async () => {
+      while (next < requests.length) {
+        const index = next++;
+        calls++;
+        results[index] = validateJevResponse(await jevProviderRequest(dataDir, '/v1/systemone', requests[index]!, { ...options, config }), requests[index]!);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(4, requests.length) }, worker));
+  }
+  return { backend: config.backend, elapsedMs: Math.round(performance.now() - start), calls, results };
 }

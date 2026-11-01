@@ -71,6 +71,8 @@ monofield jev models --json
 monofield jev review --request-file review.json --json
 ```
 
+인터페이스 명세서 편집기의 **판단 검토**는 같은 연결로 한글 필드명과 업무명을 한 항목씩 확인합니다. 자세한 사용법과 실제 측정치는 [판단 검토 문서](judgment-checks.md)를 보세요.
+
 분류 결과는 advisory입니다. 전체 시스템이 맞다는 판정·배포 승인으로 사용하지 않습니다. 로컬 서버가 없으면 REA 기반 조사·문서 출력은 계속 사용할 수 있습니다. Laya 가중치는 MonoField 설치본에 포함하지 않으며 서버를 자동 시작하지 않습니다.
 
 ## 실제로 검증한 범위

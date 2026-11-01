@@ -97,7 +97,7 @@ Laya는 문장을 생성하지 않고 **정해진 질문에 라벨·점수·예/
 ```powershell
 python -m venv .venv; .venv\Scripts\Activate.ps1
 python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-python -m pip install 'laya[serve]==0.3.28' 'transformers<5'
+python -m pip install 'laya[serve]==0.4.20'
 $env:LAYA_HOST='127.0.0.1'; $env:LAYA_PORT='8000'; $env:LAYA_DEVICE='cpu'
 $env:LAYA_MODELS='multilingual'; $env:LAYA_DEFAULT_MODEL='multilingual'
 $env:LAYA_PRELOAD='1'; $env:LAYA_JEV_STRICT='1'; $env:LAYA_REVISION='reviewed'

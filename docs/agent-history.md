@@ -418,6 +418,35 @@ Code health:
 
 ## Log
 
+### 2026-11-01 — judgment checks: JEV/Laya verify AI-written spec items (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** keep REA/Laya in the marketing, but make the judgment tool genuinely useful; research how JEV and
+  Laya are actually used and take that as the reference.
+- **Research:** read TypeSafe's JEV docs (system-one API, noul/choice/score, confidence, guardrails, "verify
+  extractions of any other AI", thresholds from your own labels) and the Laya repository (use cases, staged adoption:
+  shadow → compare → policy → bounded promotion, batch endpoint, abstention, fine-tuning; base checkpoints near chance
+  zero-shot). Installed Laya 0.4.20 locally (CPU, `multilingual` revision `55cf4c4e`) and measured it on hand-labelled
+  SI questions: accuracy 0.50 on all four kinds, AUC 0.63 (field label) and 0.55 (business name), confidently wrong
+  (`createdAt → 삭제일시` 0.955). Summary and sources: `docs/judgment-checks.md`.
+- **Changed:** contracts `packages/contracts/src/api/judgments.ts` (question wording, rules, verdict policy,
+  scorecard math, laya-train line); daemon `integrations/jev.ts` `evaluateJevStates` (Laya `/v1/systemone/batch` in
+  chunks, hosted JEV one state per request, four at a time), `services/judgments.ts` (rules first, one batch per kind,
+  distinct items asked once, observe mode by default, labels in `judgments/labels.jsonl` and policies under the daemon
+  data root, scorecard, apply/observe, dataset export), `services/judgment-seed.ts` (built-in SI seed set with disjoint
+  train/held-out vocabularies), routes `routes/judgments.ts`, CLI `monofield judge check|feedback|scorecard|policy|
+  export`; web `JudgmentCheckPanel` in the interface spec editor (grouped duplicate items, 맞음/틀림 labels, scorecard,
+  apply/observe, export), 39 `judgments.*` keys in 19 locales. Docs: `docs/judgment-checks.md`, links from
+  `docs/jev-decisions.md` and `docs/rea-laya-handover.md`; Laya install pin 0.3.28 → 0.4.20 (tested).
+- **Verified:** contracts 6, daemon `judgments` 7 + `judgment-seed` 3 + `judgments-route-cli` 3 (real server, CLI,
+  local batch fixture), web `JudgmentCheckPanel` 3 tests pass; daemon and web typecheck clean; `pnpm i18n:check`
+  pass; `pnpm guard` 67 pass. End to end against the real local Laya server: a spec generated from the sample with three
+  planted errors gave 37 items in 2 batch calls (about 7 s on CPU during training); rules flagged three labels the
+  scanner had left as `member Id`/`order Id`; the stock model, in observe mode, did not catch the planted errors
+  (`memberId → 주문번호` 0.77). The panel was viewed in the running app (Korean, 1440 px). Stock model on the seed
+  held-out split: field label AUC 0.891, business name AUC 0.539.
+- **Not done yet:** the fine-tune on the seed train split is still running; its held-out numbers and the end-to-end
+  check with the fine-tuned checkpoint are recorded in the next entry. Hosted JEV was not measured (no key).
+
 ### 2026-11-01 — 0.11.7-preview.7 published from `main` with the getting started guide (`ccr-8432aecf-n9xdfd`)
 
 - **Request:** ship the getting started guide: `main`, the site, and an app release.

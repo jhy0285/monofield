@@ -651,6 +651,7 @@ import { registerDevelopmentRoutes } from './routes/development.js';
 import { registerVerificationRoutes } from './routes/verification.js';
 import { DevelopmentVerificationService } from './services/development-verification.js';
 import { registerDocumentImpactRoutes } from './routes/document-impact.js';
+import { registerJudgmentRoutes } from './routes/judgments.js';
 import { registerCodeOntologyRoutes } from './routes/code-ontology.js';
 import { registerJavaToolsRoutes } from './routes/java-tools.js';
 import { JavaLanguageService } from './services/java/language-service.js';
@@ -5366,6 +5367,7 @@ export async function startServer({
     schemaWatch,
     verification,
   });
+  registerJudgmentRoutes(app, { db, http: httpDeps, paths: pathDeps, projectFiles: projectFileDeps });
   registerCodeOntologyRoutes(app, { db, http: httpDeps, paths: pathDeps, projectFiles: projectFileDeps, verification, schemaWatch });
   registerJavaToolsRoutes(app,{db,http:httpDeps,paths:pathDeps,projectFiles:projectFileDeps,javaLanguage,javaDebug,verification});
   registerPluginAssetRoutes(app, {
