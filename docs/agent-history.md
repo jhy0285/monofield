@@ -112,6 +112,11 @@ As of 2026-10-30.
   Qwen Code, CodeBuddy, Copilot); others are refused. The Windows elevation path was exercised on a fake
   Windows host with a real PowerShell and on a real (already elevated) Windows CI runner with Windows
   PowerShell 5.1; the UAC prompt itself has not been seen.
+- Judgment checks (2026-11-01, branch only, not on `main`): `monofield judge`, `/api/judgments/*` and the 판단 검토
+  panel ask JEV or a local Laya server yes/no questions about Korean field labels and business names, rules first,
+  observe mode until labels support a policy; see `docs/judgment-checks.md`.
+- REA browser evidence cross-check (2026-11-02, branch only, WIP): contracts, daemon service and routes exist and
+  were exercised once; tests, CLI, UI, i18n and docs are missing (see Open items).
 
 ### Environment notes
 
@@ -277,6 +282,37 @@ exercise is unchanged by it.
 
 Newest first within each group. Remove an item when it is done.
 
+REA browser evidence cross-check (WIP, see the 2026-11-02 Log entry). The UI+CLI dual-track rule in `AGENTS.md`
+is not met yet; finish all of these before a pull request:
+
+- Tests: contracts (`packages/contracts/tests/browser-evidence.test.ts`: field extraction, `generalizeObservedPath`,
+  `matchSpecPath` with `{id}`/`:id` and a deployment prefix, each finding kind, apply idempotence) and daemon
+  (`apps/daemon/tests/browser-evidence.test.ts` on `tests/fixtures/rea/`: decoding, a corrupted body →
+  `integrity-failed`, the routes through a real server, write with a stale `baseContentSha256` → 409). The planted-drift
+  results in the Log entry are the expected values.
+- CLI: extend `apps/daemon/src/services/rea-cli.ts` (`monofield rea`) with `evidence` (list), `cross-check --project
+  --input --evidence <file>... [--json]` and `apply ... [--finding <id>...] [--include-examples] [--note-lang ko|en]
+  [--write] [--out <file>]`, calling the same three routes; drafting without `--input` needs `--out`.
+- UI: a panel in `apps/web/src/components/interface-spec/InterfaceSpecEditor.tsx` next to `JudgmentCheckPanel`
+  (pick evidence files from the list route, show coverage and findings by endpoint, select findings, apply with
+  `mutate(() => doc)` so the reviewer saves; an "include examples" checkbox warning that they are real data;
+  afterwards suggest running the judgment check, since added rows have empty Korean labels). CSS Module, `Button`
+  from `@open-design/components`, keys in `apps/web/src/i18n/types.ts` first, then all 19 locales.
+- Docs: a section in `docs/rea-laya-practical-guide.md` and `docs/rea-laya-handover.md`, and the
+  `legacy-system-handover` skill (`skills/legacy-system-handover/SKILL.md`) step that tells agents to run the
+  cross-check after writing a spec from REA evidence.
+- Known gaps: response fields are compared only on 2xx bodies; error bodies only feed `undocumented-error`. A path
+  parameter is not compared. A field is "not observed" only in the captured samples, never absent (REA's rule).
+
+Judgment checks (Laya fine-tune):
+
+- Measure the fine-tuned checkpoint per question: restart `laya-serve` with
+  `LAYA_EXTRA_MODELS='{"si-judge": "<checkpoint dir>"}' LAYA_MODELS=multilingual,si-judge`, score both models on the
+  held-out file through `/v1/systemone/batch` (accuracy at 0.5, AUC, flag precision/recall at ≤ 0.3, per question
+  kind), then `monofield jev configure --backend local --model si-judge` and run `monofield judge check` on a spec with
+  planted errors (`memberId → 주문번호`, `POST /api/v1/orders → 회원 탈퇴`). Add the numbers to
+  `docs/judgment-checks.md`. The checkpoint is outside Git and must be retrained (recipe in that document).
+
 Execution permissions (see the newest Log entry):
 
 - Run the Windows elevation path on a real packaged Windows build: choosing Full access →
@@ -417,6 +453,33 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-02 — fine-tuned SI judge measured; REA browser evidence cross-check started (WIP) (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** "laya랑 rea사용처 더 고도화" (use Laya and REA in more, and more useful, places); then stop and hand
+  over to another agent through Git.
+- **Fine-tune (finished):** `laya-train` on `monofield judge export --seed train` (794 train / 88 calibration items),
+  scored on `--seed heldout` (378 items): accuracy 0.466 → 0.868, ECE 0.331 → 0.104, Brier 0.739 → 0.231, mean
+  confidence 0.797 → 0.971, calibration temperature on the 5.0 clamp. Recorded in `docs/judgment-checks.md`. The
+  checkpoint (1.3 GB) is not in Git; regenerate it with the recipe in that document.
+- **Changed (WIP):** REA `capture_browser_scenario` evidence compared with an interface spec.
+  `packages/contracts/src/api/browser-evidence.ts` (pure: observed JSON fields, path generalization and template
+  matching, `crossCheckBrowserEvidence` findings, `applyBrowserEvidence` that adds unreviewed rows with empty Korean
+  labels, renames to wire names, fixes types, notes observed error codes, attaches `kind: browser` evidence refs;
+  notes in Korean by default); new collector value `rea-browser` in `interface-spec.ts`; daemon
+  `services/browser-evidence.ts` (decodes REA 6.7.0 events, base64 bodies, SHA-256 check, list/cross-check/apply/
+  write with `expectedContentSha256`), `routes/browser-evidence.ts` registered in `server.ts`:
+  `GET /api/projects/:id/browser-evidence`, `POST .../browser-evidence/cross-check`, `POST .../browser-evidence/apply`.
+  Fixtures from the synthetic REA demo, screenshots removed: `apps/daemon/tests/fixtures/rea/`.
+- **Verified:** `pnpm --filter @open-design/contracts build` and `tsc --noEmit` for contracts and daemon pass. A
+  scratch `tsx` run on the fixtures with planted drift (one field removed, one renamed, one endpoint removed) gave
+  6 API calls, findings `undocumented-endpoint GET /api/settlements`, `undocumented-field fee_amount`,
+  `name-mismatch net_amount/netAmount`, `undocumented-error 409 code=ALREADY_SETTLED …`; apply gave 1 endpoint,
+  7 fields, 1 rename, 1 note, 2 evidence attachments, and a second check had 0 warnings. Not run: any vitest suite for
+  the new code, `pnpm guard`, `pnpm typecheck`, `pnpm i18n:check`, the browser.
+- **Not done:** tests, the `monofield rea cross-check|apply` CLI, the editor panel and its 19-locale keys, docs; the
+  per-question score and the end-to-end check of the fine-tuned judge. See Open items.
+- **Next agent:** the Laya server process did not survive the container restart; start it again before measuring.
 
 ### 2026-11-01 — judgment checks: JEV/Laya verify AI-written spec items (`ccr-8432aecf-n9xdfd`)
 

@@ -1,0 +1,1497 @@
+{
+ "evidence_id": "ev_afc703c94e56d48b45857bef4d39a8439cd8e9a5a0dc91e5491f82879f874eed",
+ "subject": null,
+ "provider": {
+  "id": "rea-playwright-browser-scenario",
+  "name": "REA Playwright browser scenario capture provider",
+  "version": "1"
+ },
+ "analysis_profile": null,
+ "predicate_type": "rea.browser-scenario-capture",
+ "operation": "capture_browser_scenario",
+ "parameters": {
+  "browser": {
+   "mode": "launch",
+   "executable_path": "/usr/bin/chromium",
+   "headless": true
+  },
+  "start_url": {
+   "url": "http://127.0.0.1:4318/",
+   "query": []
+  },
+  "environment": {
+   "viewport": {
+    "width": 1280,
+    "height": 720,
+    "device_scale_factor": 1
+   },
+   "locale": "en-US",
+   "timezone": "UTC",
+   "color_scheme": "light",
+   "reduced_motion": "reduce",
+   "service_workers": "block"
+  },
+  "actions": [
+   {
+    "step_id": "orders-loaded",
+    "timeout_ms": 10000,
+    "action": "wait_for",
+    "locator": {
+     "kind": "css",
+     "selector": "#orders[data-state=\"ready\"]"
+    },
+    "state": "visible"
+   },
+   {
+    "step_id": "paid-settlement-click",
+    "timeout_ms": 10000,
+    "action": "click",
+    "locator": {
+     "kind": "css",
+     "selector": "#settle-1001"
+    },
+    "button": "left",
+    "click_count": 1
+   },
+   {
+    "step_id": "paid-settlement-result",
+    "timeout_ms": 10000,
+    "action": "wait_for",
+    "locator": {
+     "kind": "css",
+     "selector": "#result[data-status=\"201\"]"
+    },
+    "state": "visible"
+   },
+   {
+    "step_id": "duplicate-settlement-click",
+    "timeout_ms": 10000,
+    "action": "click",
+    "locator": {
+     "kind": "css",
+     "selector": "#settle-1001"
+    },
+    "button": "left",
+    "click_count": 1
+   },
+   {
+    "step_id": "duplicate-settlement-result",
+    "timeout_ms": 10000,
+    "action": "wait_for",
+    "locator": {
+     "kind": "css",
+     "selector": "#result[data-status=\"409\"]"
+    },
+    "state": "visible"
+   },
+   {
+    "step_id": "pending-rejected-click",
+    "timeout_ms": 10000,
+    "action": "click",
+    "locator": {
+     "kind": "css",
+     "selector": "#settle-1002"
+    },
+    "button": "left",
+    "click_count": 1
+   },
+   {
+    "step_id": "pending-rejected-result",
+    "timeout_ms": 10000,
+    "action": "wait_for",
+    "locator": {
+     "kind": "css",
+     "selector": "#result[data-status=\"409\"]"
+    },
+    "state": "visible"
+   },
+   {
+    "step_id": "cancelled-rejected-click",
+    "timeout_ms": 10000,
+    "action": "click",
+    "locator": {
+     "kind": "css",
+     "selector": "#settle-1003"
+    },
+    "button": "left",
+    "click_count": 1
+   },
+   {
+    "step_id": "cancelled-rejected-result",
+    "timeout_ms": 10000,
+    "action": "wait_for",
+    "locator": {
+     "kind": "css",
+     "selector": "#result[data-status=\"409\"]"
+    },
+    "state": "visible"
+   },
+   {
+    "step_id": "settlements-click",
+    "action": "click",
+    "locator": {
+     "kind": "css",
+     "selector": "#show-settlements"
+    },
+    "button": "left",
+    "click_count": 1
+   },
+   {
+    "step_id": "settlements-loaded",
+    "timeout_ms": 10000,
+    "action": "wait_for",
+    "locator": {
+     "kind": "css",
+     "selector": "#settlements[data-state=\"ready\"]"
+    },
+    "state": "visible"
+   }
+  ],
+  "storage": {
+   "cookies": [],
+   "local_storage": [],
+   "session_storage": []
+  },
+  "secrets": [],
+  "capture": {
+   "after_each_step": [
+    "dom"
+   ],
+   "at_end": [
+    "dom",
+    "accessibility",
+    "screenshot",
+    "url"
+   ],
+   "events": [
+    "network",
+    "page-errors"
+   ],
+   "network": {
+    "request_body": true,
+    "response_body": true,
+    "header_values": false
+   }
+  },
+  "scenario_sha256": "890879f8498aca96cac8c5084d7b00eaac876da004638b98dc460fc172b748af"
+ },
+ "normalized_result": {
+  "browser": {
+   "mode": "launch",
+   "process_ownership": "provider-owned",
+   "cleanup": "terminated-owned-process",
+   "product": "Chromium",
+   "version": "151.0.7922.173"
+  },
+  "scenario": {
+   "start_origin": "http://127.0.0.1:4318",
+   "action_count": 11,
+   "secret_references": [],
+   "network_content": {
+    "request_body": true,
+    "response_body": true,
+    "header_values": false
+   },
+   "event_families": [
+    "network",
+    "page-errors"
+   ]
+  },
+  "duration_ms": 2878,
+  "steps": [
+   {
+    "step_index": 0,
+    "step_id": "scenario_start",
+    "action": "goto_start",
+    "elapsed_ms": 2295,
+    "before_url": {
+     "url": "about:blank",
+     "origin": null,
+     "query_parameter_names": [],
+     "redacted": false
+    },
+    "after_url": {
+     "url": "http://127.0.0.1:4318/",
+     "origin": "http://127.0.0.1:4318",
+     "query_parameter_names": [],
+     "redacted": false
+    },
+    "event_sequence_start": 1,
+    "event_sequence_end": 15,
+    "completeness": {
+     "status": "complete",
+     "equality_eligible": true,
+     "missing_sections": [],
+     "truncated_sections": []
+    },
+    "status": "completed",
+    "error": null
+   },
+   {
+    "step_index": 1,
+    "step_id": "orders-loaded",
+    "action": "wait_for",
+    "elapsed_ms": 64,
+    "before_url": {
+     "url": "http://127.0.0.1:4318/",
+     "origin": "http://127.0.0.1:4318",
+     "query_parameter_names": [],
+     "redacted": false
+    },
+    "after_url": {
+     "url": "http://127.0.0.1:4318/",
+     "origin": "http://127.0.0.1:4318",
+     "query_parameter_names": [],
+     "redacted": false
+    },
+    "event_sequence_start": 16,
+    "event_sequence_end": 15,
+    "completeness": {
+     "status": "complete",
+     "equality_eligible": true,
+     "missing_sections": [],
+     "truncated_sections": []
+    },
+    "status": "completed",
+    "error": null
+   },
+   {
+    "step_index": 2,
+    "step_id": "paid-settlement-click",
+    "action": "click",
+    "elapsed_ms": 45,
+    "before_url": {
+     "url": "http://127.0.0.1:4318/",
+     "origin": "http://127.0.0.1:4318",
+     "query_parameter_names": [],
+     "redacted": false
+    },
+    "after_url": {
+     "url": "http://127.0.0.1:4318/",
+     "origin": "http://127.0.0.1:4318",
+     "query_parameter_names": [],
+     "redacted": false
+    },
+    "event_sequence_start": 16,
+    "event_sequence_end": 17,
+    "completeness": {
+     "status": "complete",
+     "equality_eligible": true,
+     "missing_sections": [],
+     "truncated_sections": []
+    },
+    "status": "completed",
+    "error": null
+   },
+   {
+    "step_index": 3,
+    "step_id": "paid-settlement-result",
+    "action": "wait_for",
+    "elapsed_ms": 14,
+    "before_url": {
+     "url": "http://127.0.0.1:4318/",
+     "origin": "http://127.0.0.1:4318",
+     "query_parameter_names": [],
+     "redacted": false
+    },
+    "after_url": {
+     "url": "http://127.0.0.1:4318/",
+     "origin": "http://127.0.0.1:4318",
+     "query_parameter_names": [],
+     "redacted": false
+    },
+    "event_sequence_start": 18,
+    "event_sequence_end": 20,
+    "completeness": {
+     "status": "complete",
+     "equality_eligible": true,
+     "missing_sections": [],
+     "truncated_sections": []
+    },
+    "status": "completed",
+    "error": null
+   },
+   {
+    "step_index": 4,
+    "step_id": "duplicate-settlement-click",
+    "action": "click",
+    "elapsed_ms": 34,
+    "before_url": {
+     "url": "http://127.0.0.1:4318/",
+     "origin": "http://127.0.0.1:4318",
+     "query_parameter_names": [],
+     "redacted": false
+    },
+    "after_url": {
+     "url": "http://127.0.0.1:4318/",
+     "origin": "http://127.0.0.1:4318",
+     "query_parameter_names": [],
+     "redacted": false
+    },
+    "event_sequence_start": 21,
+    "event_sequence_end": 22,
+    "completeness": {
+     "status": "complete",
+     "equality_eligible": true,
+     "missing_sections": [],
+     "truncated_sections": []
+    },
+    "status": "completed",
+    "error": null
+   },
+   {
+    "step_index": 5,
+    "step_id": "duplicate-settlement-result",
+    "action": "wait_for",
+    "elapsed_ms": 37,
+    "before_url": {
+     "url": "http://127.0.0.1:4318/",
+     "origin": "http://127.0.0.1:4318",
+     "query_parameter_names": [],
+     "redacted": false
+    },
+    "after_url": {
+     "url": "http://127.0.0.1:4318/",
+     "origin": "http://127.0.0.1:4318",
+     "query_parameter_names": [],
+     "redacted": false
+    },
+    "event_sequence_start": 23,
+    "event_sequence_end": 25,
+    "completeness": {
+     "status": "complete",
+     "equality_eligible": true,
+     "missing_sections": [],
+     "truncated_sections": []
+    },
+    "status": "completed",
+    "error": null
+   },
+   {
+    "step_index": 6,
+    "step_id": "pending-rejected-click",
+    "action": "click",
+    "elapsed_ms": 24,
+    "before_url": {
+     "url": "http://127.0.0.1:4318/",
+     "origin": "http://127.0.0.1:4318",
+     "query_parameter_names": [],
+     "redacted": false
+    },
+    "after_url": {
+     "url": "http://127.0.0.1:4318/",
+     "origin": "http://127.0.0.1:4318",
+     "query_parameter_names": [],
+     "redacted": false
+    },
+    "event_sequence_start": 26,
+    "event_sequence_end": 27,
+    "completeness": {
+     "status": "complete",
+     "equality_eligible": true,
+     "missing_sections": [],
+     "truncated_sections": []
+    },
+    "status": "completed",
+    "error": null
+   },
+   {
+    "step_index": 7,
+    "step_id": "pending-rejected-result",
+    "action": "wait_for",
+    "elapsed_ms": 29,
+    "before_url": {
+     "url": "http://127.0.0.1:4318/",
+     "origin": "http://127.0.0.1:4318",
+     "query_parameter_names": [],
+     "redacted": false
+    },
+    "after_url": {
+     "url": "http://127.0.0.1:4318/",
+     "origin": "http://127.0.0.1:4318",
+     "query_parameter_names": [],
+     "redacted": false
+    },
+    "event_sequence_start": 28,
+    "event_sequence_end": 30,
+    "completeness": {
+     "status": "complete",
+     "equality_eligible": true,
+     "missing_sections": [],
+     "truncated_sections": []
+    },
+    "status": "completed",
+    "error": null
+   },
+   {
+    "step_index": 8,
+    "step_id": "cancelled-rejected-click",
+    "action": "click",
+    "elapsed_ms": 38,
+    "before_url": {
+     "url": "http://127.0.0.1:4318/",
+     "origin": "http://127.0.0.1:4318",
+     "query_parameter_names": [],
+     "redacted": false
+    },
+    "after_url": {
+     "url": "http://127.0.0.1:4318/",
+     "origin": "http://127.0.0.1:4318",
+     "query_parameter_names": [],
+     "redacted": false
+    },
+    "event_sequence_start": 31,
+    "event_sequence_end": 32,
+    "completeness": {
+     "status": "complete",
+     "equality_eligible": true,
+     "missing_sections": [],
+     "truncated_sections": []
+    },
+    "status": "completed",
+    "error": null
+   },
+   {
+    "step_index": 9,
+    "step_id": "cancelled-rejected-result",
+    "action": "wait_for",
+    "elapsed_ms": 30,
+    "before_url": {
+     "url": "http://127.0.0.1:4318/",
+     "origin": "http://127.0.0.1:4318",
+     "query_parameter_names": [],
+     "redacted": false
+    },
+    "after_url": {
+     "url": "http://127.0.0.1:4318/",
+     "origin": "http://127.0.0.1:4318",
+     "query_parameter_names": [],
+     "redacted": false
+    },
+    "event_sequence_start": 33,
+    "event_sequence_end": 35,
+    "completeness": {
+     "status": "complete",
+     "equality_eligible": true,
+     "missing_sections": [],
+     "truncated_sections": []
+    },
+    "status": "completed",
+    "error": null
+   },
+   {
+    "step_index": 10,
+    "step_id": "settlements-click",
+    "action": "click",
+    "elapsed_ms": 37,
+    "before_url": {
+     "url": "http://127.0.0.1:4318/",
+     "origin": "http://127.0.0.1:4318",
+     "query_parameter_names": [],
+     "redacted": false
+    },
+    "after_url": {
+     "url": "http://127.0.0.1:4318/",
+     "origin": "http://127.0.0.1:4318",
+     "query_parameter_names": [],
+     "redacted": false
+    },
+    "event_sequence_start": 36,
+    "event_sequence_end": 37,
+    "completeness": {
+     "status": "complete",
+     "equality_eligible": true,
+     "missing_sections": [],
+     "truncated_sections": []
+    },
+    "status": "completed",
+    "error": null
+   },
+   {
+    "step_index": 11,
+    "step_id": "settlements-loaded",
+    "action": "wait_for",
+    "elapsed_ms": 79,
+    "before_url": {
+     "url": "http://127.0.0.1:4318/",
+     "origin": "http://127.0.0.1:4318",
+     "query_parameter_names": [],
+     "redacted": false
+    },
+    "after_url": {
+     "url": "http://127.0.0.1:4318/",
+     "origin": "http://127.0.0.1:4318",
+     "query_parameter_names": [],
+     "redacted": false
+    },
+    "event_sequence_start": 38,
+    "event_sequence_end": 40,
+    "completeness": {
+     "status": "complete",
+     "equality_eligible": true,
+     "missing_sections": [],
+     "truncated_sections": []
+    },
+    "status": "completed",
+    "error": null
+   }
+  ],
+  "events": {
+   "retained": 40,
+   "dropped": 0,
+   "items": [
+    {
+     "sequence": 1,
+     "step_index": 0,
+     "transaction_id": "request-1",
+     "redirected_from_transaction_id": null,
+     "method": "GET",
+     "url": {
+      "url": "http://127.0.0.1:4318/",
+      "origin": "http://127.0.0.1:4318",
+      "query_parameter_names": [],
+      "redacted": false
+     },
+     "resource_type": "document",
+     "header_names": [
+      "accept-language",
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "upgrade-insecure-requests",
+      "user-agent"
+     ],
+     "kind": "request",
+     "status": null,
+     "failure": null
+    },
+    {
+     "sequence": 2,
+     "step_index": 0,
+     "kind": "network-content",
+     "transaction_id": "request-1",
+     "source_event_sequence": 1,
+     "phase": "request",
+     "headers": {
+      "state": "not_requested"
+     },
+     "body": {
+      "state": "not_exposed"
+     }
+    },
+    {
+     "sequence": 3,
+     "step_index": 0,
+     "transaction_id": "request-1",
+     "redirected_from_transaction_id": null,
+     "method": "GET",
+     "url": {
+      "url": "http://127.0.0.1:4318/",
+      "origin": "http://127.0.0.1:4318",
+      "query_parameter_names": [],
+      "redacted": false
+     },
+     "resource_type": "document",
+     "header_names": [
+      "connection",
+      "content-type",
+      "date",
+      "keep-alive",
+      "transfer-encoding"
+     ],
+     "kind": "response",
+     "status": 200,
+     "failure": null
+    },
+    {
+     "sequence": 4,
+     "step_index": 0,
+     "transaction_id": "request-2",
+     "redirected_from_transaction_id": null,
+     "method": "GET",
+     "url": {
+      "url": "http://127.0.0.1:4318/app.js",
+      "origin": "http://127.0.0.1:4318",
+      "query_parameter_names": [],
+      "redacted": false
+     },
+     "resource_type": "script",
+     "header_names": [
+      "accept-language",
+      "origin",
+      "referer",
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "user-agent"
+     ],
+     "kind": "request",
+     "status": null,
+     "failure": null
+    },
+    {
+     "sequence": 5,
+     "step_index": 0,
+     "kind": "network-content",
+     "transaction_id": "request-2",
+     "source_event_sequence": 4,
+     "phase": "request",
+     "headers": {
+      "state": "not_requested"
+     },
+     "body": {
+      "state": "not_exposed"
+     }
+    },
+    {
+     "sequence": 6,
+     "step_index": 0,
+     "transaction_id": "request-1",
+     "redirected_from_transaction_id": null,
+     "method": "GET",
+     "url": {
+      "url": "http://127.0.0.1:4318/",
+      "origin": "http://127.0.0.1:4318",
+      "query_parameter_names": [],
+      "redacted": false
+     },
+     "resource_type": "document",
+     "header_names": [
+      "accept-language",
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "upgrade-insecure-requests",
+      "user-agent"
+     ],
+     "kind": "request-finished",
+     "status": null,
+     "failure": null
+    },
+    {
+     "sequence": 7,
+     "step_index": 0,
+     "transaction_id": "request-2",
+     "redirected_from_transaction_id": null,
+     "method": "GET",
+     "url": {
+      "url": "http://127.0.0.1:4318/app.js",
+      "origin": "http://127.0.0.1:4318",
+      "query_parameter_names": [],
+      "redacted": false
+     },
+     "resource_type": "script",
+     "header_names": [
+      "connection",
+      "content-type",
+      "date",
+      "keep-alive",
+      "transfer-encoding"
+     ],
+     "kind": "response",
+     "status": 200,
+     "failure": null
+    },
+    {
+     "sequence": 8,
+     "step_index": 0,
+     "transaction_id": "request-2",
+     "redirected_from_transaction_id": null,
+     "method": "GET",
+     "url": {
+      "url": "http://127.0.0.1:4318/app.js",
+      "origin": "http://127.0.0.1:4318",
+      "query_parameter_names": [],
+      "redacted": false
+     },
+     "resource_type": "script",
+     "header_names": [
+      "accept-language",
+      "origin",
+      "referer",
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "user-agent"
+     ],
+     "kind": "request-finished",
+     "status": null,
+     "failure": null
+    },
+    {
+     "sequence": 9,
+     "step_index": 0,
+     "kind": "network-content",
+     "transaction_id": "request-1",
+     "source_event_sequence": 3,
+     "phase": "response",
+     "headers": {
+      "state": "not_requested"
+     },
+     "body": {
+      "state": "captured",
+      "representation": "playwright-response-body-bytes",
+      "encoding": "base64",
+      "content": "PCFkb2N0eXBlIGh0bWw+PGh0bWwgbGFuZz0ia28iPjxtZXRhIGNoYXJzZXQ9InV0Zi04Ij48bWV0YSBuYW1lPSJ2aWV3cG9ydCIgY29udGVudD0id2lkdGg9ZGV2aWNlLXdpZHRoLGluaXRpYWwtc2NhbGU9MSI+PHRpdGxlPuyjvOusuMK37KCV7IKwIOyatOyYgSDsi5zsiqTthZw8L3RpdGxlPjxzdHlsZT5ib2R5e21hcmdpbjowO2JhY2tncm91bmQ6I2YxZjVmOTtjb2xvcjojMTQyMDM3O2ZvbnQ6MTZweCBzeXN0ZW0tdWl9aGVhZGVye2JhY2tncm91bmQ6IzE0MjAzNztjb2xvcjp3aGl0ZTtwYWRkaW5nOjMwcHggNiV9bWFpbnttYXgtd2lkdGg6MTA1MHB4O21hcmdpbjozNnB4IGF1dG87cGFkZGluZzowIDI0cHh9LmNhcmR7YmFja2dyb3VuZDp3aGl0ZTtib3JkZXI6MXB4IHNvbGlkICNkY2UzZWQ7Ym9yZGVyLXJhZGl1czoxMnB4O3BhZGRpbmc6MjVweDttYXJnaW4tYm90dG9tOjI0cHh9aDF7bWFyZ2luOjhweCAwfXNtYWxse2NvbG9yOiM5ZmI4ZGF9dGFibGV7d2lkdGg6MTAwJTtib3JkZXItY29sbGFwc2U6Y29sbGFwc2U7dGV4dC1hbGlnbjpsZWZ0fXRoLHRke3BhZGRpbmc6MTRweCA4cHg7Ym9yZGVyLWJvdHRvbToxcHggc29saWQgI2U3ZWNmMn10aHtjb2xvcjojNjY3MzhiO2ZvbnQtc2l6ZToxM3B4fWJ1dHRvbntib3JkZXI6MDtib3JkZXItcmFkaXVzOjZweDtiYWNrZ3JvdW5kOiMyMTU3ZDU7Y29sb3I6d2hpdGU7cGFkZGluZzoxMHB4IDE0cHg7Y3Vyc29yOnBvaW50ZXJ9cHJle3doaXRlLXNwYWNlOnByZS13cmFwO2JhY2tncm91bmQ6I2Y2ZjhmYztib3JkZXItcmFkaXVzOjhweDtwYWRkaW5nOjE4cHg7bWluLWhlaWdodDozNXB4O2ZvbnQtc2l6ZToxNHB4fWZvb3Rlcntjb2xvcjojNjc3MzhiO2ZvbnQtc2l6ZToxM3B4fTwvc3R5bGU+PGhlYWRlcj48c21hbGw+TEVHQUNZIE9QRVJBVElPTlMgLyBMT0NBTCBERU1PPC9zbWFsbD48aDE+7KO866y4wrfsoJXsgrAg7Jq07JiBIOyLnOyKpO2FnDwvaDE+PGRpdj7smrTsmIEg7ZmU66m06rO8IOuwsO2PrCDtjIzsnbzrp4wg64Ko7JWEIOyeiOuKlCDsnbjsiJjsnbjqs4Qg64yA7IOBPC9kaXY+PC9oZWFkZXI+PG1haW4+PGRpdiBjbGFzcz0iY2FyZCI+PGgyPuyjvOusuCDrqqnroZ08L2gyPjx0YWJsZT48dGhlYWQ+PHRyPjx0aD7so7zrrLg8L3RoPjx0aD7qsbDrnpjsspg8L3RoPjx0aD7sg4Htg5w8L3RoPjx0aD7quIjslaE8L3RoPjx0aD7siJjsiJjro4zsnKggYnBzPC90aD48dGg+7LKY66asPC90aD48L3RyPjwvdGhlYWQ+PHRib2R5IGlkPSJvcmRlcnMiIGRhdGEtc3RhdGU9ImxvYWRpbmciPjwvdGJvZHk+PC90YWJsZT48L2Rpdj48ZGl2IGNsYXNzPSJjYXJkIj48aDI+7LKY66asIOqysOqzvDwvaDI+PHByZSBpZD0icmVzdWx0IiBhcmlhLWxpdmU9InBvbGl0ZSI+7KCV7IKw7ZWgIOyjvOusuOydhCDshKDtg53tlZjshLjsmpQuPC9wcmU+PGJ1dHRvbiBpZD0ic2hvdy1zZXR0bGVtZW50cyI+7KCV7IKwIOuCtOyXrSDsobDtmow8L2J1dHRvbj48cHJlIGlkPSJzZXR0bGVtZW50cyI+PC9wcmU+PC9kaXY+PGZvb3Rlcj7tlanshLEg6rGw656YIOuNsOydtO2EsOuhnCDsi6TtlontlZjripQgUkVBIOyduOyImOyduOqzhCDqsoDspp3smqkg7Iuc7Iqk7YWcPC9mb290ZXI+PC9tYWluPjxzY3JpcHQgdHlwZT0ibW9kdWxlIiBzcmM9Ii9hcHAuanMiPjwvc2NyaXB0PjwvaHRtbD4=",
+      "bytes": 1661,
+      "sha256": "c821a45bdb3416b082e72985ff126370ff28b85bc7f237215d04f351554584c2",
+      "media_type": "text/html; charset=utf-8",
+      "redacted": false
+     }
+    },
+    {
+     "sequence": 10,
+     "step_index": 0,
+     "transaction_id": "request-3",
+     "redirected_from_transaction_id": null,
+     "method": "GET",
+     "url": {
+      "url": "http://127.0.0.1:4318/api/orders",
+      "origin": "http://127.0.0.1:4318",
+      "query_parameter_names": [],
+      "redacted": false
+     },
+     "resource_type": "fetch",
+     "header_names": [
+      "accept-language",
+      "referer",
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "user-agent"
+     ],
+     "kind": "request",
+     "status": null,
+     "failure": null
+    },
+    {
+     "sequence": 11,
+     "step_index": 0,
+     "kind": "network-content",
+     "transaction_id": "request-3",
+     "source_event_sequence": 10,
+     "phase": "request",
+     "headers": {
+      "state": "not_requested"
+     },
+     "body": {
+      "state": "not_exposed"
+     }
+    },
+    {
+     "sequence": 12,
+     "step_index": 0,
+     "transaction_id": "request-3",
+     "redirected_from_transaction_id": null,
+     "method": "GET",
+     "url": {
+      "url": "http://127.0.0.1:4318/api/orders",
+      "origin": "http://127.0.0.1:4318",
+      "query_parameter_names": [],
+      "redacted": false
+     },
+     "resource_type": "fetch",
+     "header_names": [
+      "connection",
+      "content-type",
+      "date",
+      "keep-alive",
+      "transfer-encoding"
+     ],
+     "kind": "response",
+     "status": 200,
+     "failure": null
+    },
+    {
+     "sequence": 13,
+     "step_index": 0,
+     "transaction_id": "request-3",
+     "redirected_from_transaction_id": null,
+     "method": "GET",
+     "url": {
+      "url": "http://127.0.0.1:4318/api/orders",
+      "origin": "http://127.0.0.1:4318",
+      "query_parameter_names": [],
+      "redacted": false
+     },
+     "resource_type": "fetch",
+     "header_names": [
+      "accept-language",
+      "referer",
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "user-agent"
+     ],
+     "kind": "request-finished",
+     "status": null,
+     "failure": null
+    },
+    {
+     "sequence": 14,
+     "step_index": 0,
+     "kind": "network-content",
+     "transaction_id": "request-2",
+     "source_event_sequence": 7,
+     "phase": "response",
+     "headers": {
+      "state": "not_requested"
+     },
+     "body": {
+      "state": "captured",
+      "representation": "playwright-response-body-bytes",
+      "encoding": "base64",
+      "content": "Y29uc3Qgcm93cz1kb2N1bWVudC5xdWVyeVNlbGVjdG9yKCcjb3JkZXJzJyk7CmFzeW5jIGZ1bmN0aW9uIHJlZnJlc2goKXtjb25zdCBkYXRhPWF3YWl0IGZldGNoKCcvYXBpL29yZGVycycpLnRoZW4ocj0+ci5qc29uKCkpO3Jvd3MuaW5uZXJIVE1MPWRhdGEubWFwKG89Pic8dHI+PHRkPicrby5pZCsnPC90ZD48dGQ+JytvLmN1c3RvbWVyX25hbWUrJzwvdGQ+PHRkPicrby5zdGF0dXMrJzwvdGQ+PHRkPicrby5ncm9zc19hbW91bnQudG9Mb2NhbGVTdHJpbmcoJ2tvLUtSJykrJzwvdGQ+PHRkPicrby5jb21taXNzaW9uX2JwcysnPC90ZD48dGQ+PGJ1dHRvbiBpZD0ic2V0dGxlLScrby5pZCsnIiBkYXRhLW9yZGVyPSInK28uaWQrJyI+7KCV7IKwIOyLpO2WiTwvYnV0dG9uPjwvdGQ+PC90cj4nKS5qb2luKCcnKTtyb3dzLmRhdGFzZXQuc3RhdGU9J3JlYWR5Jzt9CnJvd3MuYWRkRXZlbnRMaXN0ZW5lcignY2xpY2snLGFzeW5jKGUpPT57Y29uc3QgYnV0dG9uPWUudGFyZ2V0LmNsb3Nlc3QoJ2J1dHRvbltkYXRhLW9yZGVyXScpO2lmKCFidXR0b24pcmV0dXJuO2NvbnN0IHJlc3VsdD1kb2N1bWVudC5xdWVyeVNlbGVjdG9yKCcjcmVzdWx0Jyk7cmVzdWx0LmRhdGFzZXQuc3RhdHVzPSdsb2FkaW5nJztjb25zdCByZXNwb25zZT1hd2FpdCBmZXRjaCgnL2FwaS9vcmRlcnMvJytidXR0b24uZGF0YXNldC5vcmRlcisnL3NldHRsZScse21ldGhvZDonUE9TVCcsaGVhZGVyczp7J0NvbnRlbnQtVHlwZSc6J2FwcGxpY2F0aW9uL2pzb24nfSxib2R5Oid7fSd9KTtjb25zdCBkYXRhPWF3YWl0IHJlc3BvbnNlLmpzb24oKTtyZXN1bHQudGV4dENvbnRlbnQ9SlNPTi5zdHJpbmdpZnkoe2h0dHBfc3RhdHVzOnJlc3BvbnNlLnN0YXR1cywuLi5kYXRhfSxudWxsLDIpO3Jlc3VsdC5kYXRhc2V0LnN0YXR1cz1TdHJpbmcocmVzcG9uc2Uuc3RhdHVzKTt9KTsKZG9jdW1lbnQucXVlcnlTZWxlY3RvcignI3Nob3ctc2V0dGxlbWVudHMnKS5hZGRFdmVudExpc3RlbmVyKCdjbGljaycsYXN5bmMoKT0+e2NvbnN0IGRhdGE9YXdhaXQgZmV0Y2goJy9hcGkvc2V0dGxlbWVudHMnKS50aGVuKHI9PnIuanNvbigpKTtkb2N1bWVudC5xdWVyeVNlbGVjdG9yKCcjc2V0dGxlbWVudHMnKS50ZXh0Q29udGVudD1KU09OLnN0cmluZ2lmeShkYXRhLG51bGwsMik7ZG9jdW1lbnQucXVlcnlTZWxlY3RvcignI3NldHRsZW1lbnRzJykuZGF0YXNldC5zdGF0ZT0ncmVhZHknO30pOwpyZWZyZXNoKCk7Cg==",
+      "bytes": 1225,
+      "sha256": "d8116b3cbca45a3c4fac85b8dbd600a51ae0f184a54001605c7c843e20607299",
+      "media_type": "text/javascript; charset=utf-8",
+      "redacted": false
+     }
+    },
+    {
+     "sequence": 15,
+     "step_index": 0,
+     "kind": "network-content",
+     "transaction_id": "request-3",
+     "source_event_sequence": 12,
+     "phase": "response",
+     "headers": {
+      "state": "not_requested"
+     },
+     "body": {
+      "state": "captured",
+      "representation": "playwright-response-body-bytes",
+      "encoding": "base64",
+      "content": "W3siaWQiOjEwMDEsImN1c3RvbWVyX2lkIjoxLCJzdGF0dXMiOiJQQUlEIiwiZ3Jvc3NfYW1vdW50IjoxMDAwMSwiY29tbWlzc2lvbl9icHMiOjM1MCwic2V0dGxlZF9hdCI6bnVsbCwiY3VzdG9tZXJfbmFtZSI6IuuNsOuqqOyDgeyCrCJ9LHsiaWQiOjEwMDIsImN1c3RvbWVyX2lkIjoxLCJzdGF0dXMiOiJQRU5ESU5HIiwiZ3Jvc3NfYW1vdW50IjoxMjUwMDAsImNvbW1pc3Npb25fYnBzIjozMDAsInNldHRsZWRfYXQiOm51bGwsImN1c3RvbWVyX25hbWUiOiLrjbDrqqjsg4HsgqwifSx7ImlkIjoxMDAzLCJjdXN0b21lcl9pZCI6Miwic3RhdHVzIjoiQ0FOQ0VMTEVEIiwiZ3Jvc3NfYW1vdW50Ijo4MDAwMCwiY29tbWlzc2lvbl9icHMiOjMwMCwic2V0dGxlZF9hdCI6bnVsbCwiY3VzdG9tZXJfbmFtZSI6IuyDmO2UjOycoO2GtSJ9LHsiaWQiOjEwMDQsImN1c3RvbWVyX2lkIjoyLCJzdGF0dXMiOiJQQUlEIiwiZ3Jvc3NfYW1vdW50Ijo5OTAwMCwiY29tbWlzc2lvbl9icHMiOjMwMCwic2V0dGxlZF9hdCI6bnVsbCwiY3VzdG9tZXJfbmFtZSI6IuyDmO2UjOycoO2GtSJ9XQ==",
+      "bytes": 550,
+      "sha256": "2d3b96dc105cdc33ccbb899bb22dc9e9cf1fc8ff9a2873ee363dcb91a658da85",
+      "media_type": "application/json; charset=utf-8",
+      "redacted": false
+     }
+    },
+    {
+     "sequence": 16,
+     "step_index": 2,
+     "transaction_id": "request-4",
+     "redirected_from_transaction_id": null,
+     "method": "POST",
+     "url": {
+      "url": "http://127.0.0.1:4318/api/orders/1001/settle",
+      "origin": "http://127.0.0.1:4318",
+      "query_parameter_names": [],
+      "redacted": false
+     },
+     "resource_type": "fetch",
+     "header_names": [
+      "accept-language",
+      "content-type",
+      "referer",
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "user-agent"
+     ],
+     "kind": "request",
+     "status": null,
+     "failure": null
+    },
+    {
+     "sequence": 17,
+     "step_index": 2,
+     "kind": "network-content",
+     "transaction_id": "request-4",
+     "source_event_sequence": 16,
+     "phase": "request",
+     "headers": {
+      "state": "not_requested"
+     },
+     "body": {
+      "state": "captured",
+      "representation": "browser-exposed-request-bytes",
+      "encoding": "base64",
+      "content": "e30=",
+      "bytes": 2,
+      "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "media_type": "application/json",
+      "redacted": false
+     }
+    },
+    {
+     "sequence": 18,
+     "step_index": 3,
+     "transaction_id": "request-4",
+     "redirected_from_transaction_id": null,
+     "method": "POST",
+     "url": {
+      "url": "http://127.0.0.1:4318/api/orders/1001/settle",
+      "origin": "http://127.0.0.1:4318",
+      "query_parameter_names": [],
+      "redacted": false
+     },
+     "resource_type": "fetch",
+     "header_names": [
+      "connection",
+      "content-type",
+      "date",
+      "keep-alive",
+      "transfer-encoding"
+     ],
+     "kind": "response",
+     "status": 201,
+     "failure": null
+    },
+    {
+     "sequence": 19,
+     "step_index": 3,
+     "transaction_id": "request-4",
+     "redirected_from_transaction_id": null,
+     "method": "POST",
+     "url": {
+      "url": "http://127.0.0.1:4318/api/orders/1001/settle",
+      "origin": "http://127.0.0.1:4318",
+      "query_parameter_names": [],
+      "redacted": false
+     },
+     "resource_type": "fetch",
+     "header_names": [
+      "accept-language",
+      "content-type",
+      "referer",
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "user-agent"
+     ],
+     "kind": "request-finished",
+     "status": null,
+     "failure": null
+    },
+    {
+     "sequence": 20,
+     "step_index": 3,
+     "kind": "network-content",
+     "transaction_id": "request-4",
+     "source_event_sequence": 18,
+     "phase": "response",
+     "headers": {
+      "state": "not_requested"
+     },
+     "body": {
+      "state": "captured",
+      "representation": "playwright-response-body-bytes",
+      "encoding": "base64",
+      "content": "eyJzZXR0bGVtZW50X2lkIjoxLCJvcmRlcl9pZCI6MTAwMSwiZ3Jvc3NfYW1vdW50IjoxMDAwMSwiZmVlX2Ftb3VudCI6MzUxLCJuZXRfYW1vdW50Ijo5NjUwfQ==",
+      "bytes": 91,
+      "sha256": "5cc2f1d0fa3ebc3e808032d4e6d1312117891b952e2bc2ef92c3b0defd7c9263",
+      "media_type": "application/json; charset=utf-8",
+      "redacted": false
+     }
+    },
+    {
+     "sequence": 21,
+     "step_index": 4,
+     "transaction_id": "request-5",
+     "redirected_from_transaction_id": null,
+     "method": "POST",
+     "url": {
+      "url": "http://127.0.0.1:4318/api/orders/1001/settle",
+      "origin": "http://127.0.0.1:4318",
+      "query_parameter_names": [],
+      "redacted": false
+     },
+     "resource_type": "fetch",
+     "header_names": [
+      "accept-language",
+      "content-type",
+      "referer",
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "user-agent"
+     ],
+     "kind": "request",
+     "status": null,
+     "failure": null
+    },
+    {
+     "sequence": 22,
+     "step_index": 4,
+     "kind": "network-content",
+     "transaction_id": "request-5",
+     "source_event_sequence": 21,
+     "phase": "request",
+     "headers": {
+      "state": "not_requested"
+     },
+     "body": {
+      "state": "captured",
+      "representation": "browser-exposed-request-bytes",
+      "encoding": "base64",
+      "content": "e30=",
+      "bytes": 2,
+      "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "media_type": "application/json",
+      "redacted": false
+     }
+    },
+    {
+     "sequence": 23,
+     "step_index": 5,
+     "transaction_id": "request-5",
+     "redirected_from_transaction_id": null,
+     "method": "POST",
+     "url": {
+      "url": "http://127.0.0.1:4318/api/orders/1001/settle",
+      "origin": "http://127.0.0.1:4318",
+      "query_parameter_names": [],
+      "redacted": false
+     },
+     "resource_type": "fetch",
+     "header_names": [
+      "connection",
+      "content-type",
+      "date",
+      "keep-alive",
+      "transfer-encoding"
+     ],
+     "kind": "response",
+     "status": 409,
+     "failure": null
+    },
+    {
+     "sequence": 24,
+     "step_index": 5,
+     "transaction_id": "request-5",
+     "redirected_from_transaction_id": null,
+     "method": "POST",
+     "url": {
+      "url": "http://127.0.0.1:4318/api/orders/1001/settle",
+      "origin": "http://127.0.0.1:4318",
+      "query_parameter_names": [],
+      "redacted": false
+     },
+     "resource_type": "fetch",
+     "header_names": [
+      "accept-language",
+      "content-type",
+      "referer",
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "user-agent"
+     ],
+     "kind": "request-finished",
+     "status": null,
+     "failure": null
+    },
+    {
+     "sequence": 25,
+     "step_index": 5,
+     "kind": "network-content",
+     "transaction_id": "request-5",
+     "source_event_sequence": 23,
+     "phase": "response",
+     "headers": {
+      "state": "not_requested"
+     },
+     "body": {
+      "state": "captured",
+      "representation": "playwright-response-body-bytes",
+      "encoding": "base64",
+      "content": "eyJjb2RlIjoiQUxSRUFEWV9TRVRUTEVEIn0=",
+      "bytes": 26,
+      "sha256": "74a34f4893efd5740dbd73ba3f9bf2943b3a0f81fb6da069138e658c4962916d",
+      "media_type": "application/json; charset=utf-8",
+      "redacted": false
+     }
+    },
+    {
+     "sequence": 26,
+     "step_index": 6,
+     "transaction_id": "request-6",
+     "redirected_from_transaction_id": null,
+     "method": "POST",
+     "url": {
+      "url": "http://127.0.0.1:4318/api/orders/1002/settle",
+      "origin": "http://127.0.0.1:4318",
+      "query_parameter_names": [],
+      "redacted": false
+     },
+     "resource_type": "fetch",
+     "header_names": [
+      "accept-language",
+      "content-type",
+      "referer",
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "user-agent"
+     ],
+     "kind": "request",
+     "status": null,
+     "failure": null
+    },
+    {
+     "sequence": 27,
+     "step_index": 6,
+     "kind": "network-content",
+     "transaction_id": "request-6",
+     "source_event_sequence": 26,
+     "phase": "request",
+     "headers": {
+      "state": "not_requested"
+     },
+     "body": {
+      "state": "captured",
+      "representation": "browser-exposed-request-bytes",
+      "encoding": "base64",
+      "content": "e30=",
+      "bytes": 2,
+      "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "media_type": "application/json",
+      "redacted": false
+     }
+    },
+    {
+     "sequence": 28,
+     "step_index": 7,
+     "transaction_id": "request-6",
+     "redirected_from_transaction_id": null,
+     "method": "POST",
+     "url": {
+      "url": "http://127.0.0.1:4318/api/orders/1002/settle",
+      "origin": "http://127.0.0.1:4318",
+      "query_parameter_names": [],
+      "redacted": false
+     },
+     "resource_type": "fetch",
+     "header_names": [
+      "connection",
+      "content-type",
+      "date",
+      "keep-alive",
+      "transfer-encoding"
+     ],
+     "kind": "response",
+     "status": 409,
+     "failure": null
+    },
+    {
+     "sequence": 29,
+     "step_index": 7,
+     "transaction_id": "request-6",
+     "redirected_from_transaction_id": null,
+     "method": "POST",
+     "url": {
+      "url": "http://127.0.0.1:4318/api/orders/1002/settle",
+      "origin": "http://127.0.0.1:4318",
+      "query_parameter_names": [],
+      "redacted": false
+     },
+     "resource_type": "fetch",
+     "header_names": [
+      "accept-language",
+      "content-type",
+      "referer",
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "user-agent"
+     ],
+     "kind": "request-finished",
+     "status": null,
+     "failure": null
+    },
+    {
+     "sequence": 30,
+     "step_index": 7,
+     "kind": "network-content",
+     "transaction_id": "request-6",
+     "source_event_sequence": 28,
+     "phase": "response",
+     "headers": {
+      "state": "not_requested"
+     },
+     "body": {
+      "state": "captured",
+      "representation": "playwright-response-body-bytes",
+      "encoding": "base64",
+      "content": "eyJjb2RlIjoiT1JERVJfTk9UX1BBSUQiLCJzdGF0dXMiOiJQRU5ESU5HIn0=",
+      "bytes": 44,
+      "sha256": "da0d6ddfc9d4a6410ad2715f32a3ad205ce3cd97055e064bdba98f62340fa059",
+      "media_type": "application/json; charset=utf-8",
+      "redacted": false
+     }
+    },
+    {
+     "sequence": 31,
+     "step_index": 8,
+     "transaction_id": "request-7",
+     "redirected_from_transaction_id": null,
+     "method": "POST",
+     "url": {
+      "url": "http://127.0.0.1:4318/api/orders/1003/settle",
+      "origin": "http://127.0.0.1:4318",
+      "query_parameter_names": [],
+      "redacted": false
+     },
+     "resource_type": "fetch",
+     "header_names": [
+      "accept-language",
+      "content-type",
+      "referer",
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "user-agent"
+     ],
+     "kind": "request",
+     "status": null,
+     "failure": null
+    },
+    {
+     "sequence": 32,
+     "step_index": 8,
+     "kind": "network-content",
+     "transaction_id": "request-7",
+     "source_event_sequence": 31,
+     "phase": "request",
+     "headers": {
+      "state": "not_requested"
+     },
+     "body": {
+      "state": "captured",
+      "representation": "browser-exposed-request-bytes",
+      "encoding": "base64",
+      "content": "e30=",
+      "bytes": 2,
+      "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "media_type": "application/json",
+      "redacted": false
+     }
+    },
+    {
+     "sequence": 33,
+     "step_index": 9,
+     "transaction_id": "request-7",
+     "redirected_from_transaction_id": null,
+     "method": "POST",
+     "url": {
+      "url": "http://127.0.0.1:4318/api/orders/1003/settle",
+      "origin": "http://127.0.0.1:4318",
+      "query_parameter_names": [],
+      "redacted": false
+     },
+     "resource_type": "fetch",
+     "header_names": [
+      "connection",
+      "content-type",
+      "date",
+      "keep-alive",
+      "transfer-encoding"
+     ],
+     "kind": "response",
+     "status": 409,
+     "failure": null
+    },
+    {
+     "sequence": 34,
+     "step_index": 9,
+     "transaction_id": "request-7",
+     "redirected_from_transaction_id": null,
+     "method": "POST",
+     "url": {
+      "url": "http://127.0.0.1:4318/api/orders/1003/settle",
+      "origin": "http://127.0.0.1:4318",
+      "query_parameter_names": [],
+      "redacted": false
+     },
+     "resource_type": "fetch",
+     "header_names": [
+      "accept-language",
+      "content-type",
+      "referer",
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "user-agent"
+     ],
+     "kind": "request-finished",
+     "status": null,
+     "failure": null
+    },
+    {
+     "sequence": 35,
+     "step_index": 9,
+     "kind": "network-content",
+     "transaction_id": "request-7",
+     "source_event_sequence": 33,
+     "phase": "response",
+     "headers": {
+      "state": "not_requested"
+     },
+     "body": {
+      "state": "captured",
+      "representation": "playwright-response-body-bytes",
+      "encoding": "base64",
+      "content": "eyJjb2RlIjoiT1JERVJfTk9UX1BBSUQiLCJzdGF0dXMiOiJDQU5DRUxMRUQifQ==",
+      "bytes": 46,
+      "sha256": "7cb8a97425c01f6bf0ccef6ec9ae4343d502f7d379e4036b49cc9497a853b8d4",
+      "media_type": "application/json; charset=utf-8",
+      "redacted": false
+     }
+    },
+    {
+     "sequence": 36,
+     "step_index": 10,
+     "transaction_id": "request-8",
+     "redirected_from_transaction_id": null,
+     "method": "GET",
+     "url": {
+      "url": "http://127.0.0.1:4318/api/settlements",
+      "origin": "http://127.0.0.1:4318",
+      "query_parameter_names": [],
+      "redacted": false
+     },
+     "resource_type": "fetch",
+     "header_names": [
+      "accept-language",
+      "referer",
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "user-agent"
+     ],
+     "kind": "request",
+     "status": null,
+     "failure": null
+    },
+    {
+     "sequence": 37,
+     "step_index": 10,
+     "kind": "network-content",
+     "transaction_id": "request-8",
+     "source_event_sequence": 36,
+     "phase": "request",
+     "headers": {
+      "state": "not_requested"
+     },
+     "body": {
+      "state": "not_exposed"
+     }
+    },
+    {
+     "sequence": 38,
+     "step_index": 11,
+     "transaction_id": "request-8",
+     "redirected_from_transaction_id": null,
+     "method": "GET",
+     "url": {
+      "url": "http://127.0.0.1:4318/api/settlements",
+      "origin": "http://127.0.0.1:4318",
+      "query_parameter_names": [],
+      "redacted": false
+     },
+     "resource_type": "fetch",
+     "header_names": [
+      "connection",
+      "content-type",
+      "date",
+      "keep-alive",
+      "transfer-encoding"
+     ],
+     "kind": "response",
+     "status": 200,
+     "failure": null
+    },
+    {
+     "sequence": 39,
+     "step_index": 11,
+     "transaction_id": "request-8",
+     "redirected_from_transaction_id": null,
+     "method": "GET",
+     "url": {
+      "url": "http://127.0.0.1:4318/api/settlements",
+      "origin": "http://127.0.0.1:4318",
+      "query_parameter_names": [],
+      "redacted": false
+     },
+     "resource_type": "fetch",
+     "header_names": [
+      "accept-language",
+      "referer",
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "user-agent"
+     ],
+     "kind": "request-finished",
+     "status": null,
+     "failure": null
+    },
+    {
+     "sequence": 40,
+     "step_index": 11,
+     "kind": "network-content",
+     "transaction_id": "request-8",
+     "source_event_sequence": 38,
+     "phase": "response",
+     "headers": {
+      "state": "not_requested"
+     },
+     "body": {
+      "state": "captured",
+      "representation": "playwright-response-body-bytes",
+      "encoding": "base64",
+      "content": "W3siaWQiOjEsIm9yZGVyX2lkIjoxMDAxLCJncm9zc19hbW91bnQiOjEwMDAxLCJmZWVfYW1vdW50IjozNTEsIm5ldF9hbW91bnQiOjk2NTAsImNyZWF0ZWRfYXQiOiIyMDI2LTEwLTIyIDAyOjMwOjE4In1d",
+      "bytes": 117,
+      "sha256": "35ec5c0c64f98f1b75dc721e25503d639450bfbd573bb197db2ecfb1ff01e166",
+      "media_type": "application/json; charset=utf-8",
+      "redacted": false
+     }
+    }
+   ]
+  },
+  "completeness": {
+   "status": "incomplete",
+   "equality_eligible": false,
+   "missing_sections": [
+    "events"
+   ],
+   "truncated_sections": []
+  },
+  "limitations": [
+   "Event sequence records provider receipt order; simultaneous browser causality is not inferred.",
+   "Network content is retained only when selected; Playwright response-body bytes are API results and are not guaranteed to match wire bytes.",
+   "Request bytes are limited to what Playwright exposes; not_exposed does not establish body absence or multipart file coverage.",
+   "Network content reads settle within 5 seconds each and the observer does not request bodies from unfinished responses.",
+   "Captured response-body bytes are the result of Playwright's Response.body() API. Playwright may satisfy that API with a credentialed follow-up load of the request URL when CDP has no body, so transaction and event links do not verify that retained bytes came from the original network transaction.",
+   "Playwright scenario events do not expose request initiator stacks; receipt order does not prove causality.",
+   "Storage values are hashed only after declared-secret redaction.",
+   "Some selected network content was unavailable; per-transaction content states retain the reason."
+  ]
+ },
+ "confidence": "observed",
+ "authority": "controlled-replay",
+ "environment": {
+  "id": "Chromium@151.0.7922.173",
+  "platform": "unknown",
+  "architecture": "unknown",
+  "isolation": "process"
+ },
+ "limitations": [
+  "Artifact identity is unavailable for this observation.",
+  "Event sequence records provider receipt order; simultaneous browser causality is not inferred.",
+  "Network content is retained only when selected; Playwright response-body bytes are API results and are not guaranteed to match wire bytes.",
+  "Request bytes are limited to what Playwright exposes; not_exposed does not establish body absence or multipart file coverage.",
+  "Network content reads settle within 5 seconds each and the observer does not request bodies from unfinished responses.",
+  "Captured response-body bytes are the result of Playwright's Response.body() API. Playwright may satisfy that API with a credentialed follow-up load of the request URL when CDP has no body, so transaction and event links do not verify that retained bytes came from the original network transaction.",
+  "Playwright scenario events do not expose request initiator stacks; receipt order does not prove causality.",
+  "Storage values are hashed only after declared-secret redaction.",
+  "Some selected network content was unavailable; per-transaction content states retain the reason.",
+  "Browser host platform and architecture were not observed."
+ ],
+ "relationship_coverage": null,
+ "locations": [],
+ "evidence_links": []
+}

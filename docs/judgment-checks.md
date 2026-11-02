@@ -54,8 +54,19 @@ resources never appear in the train split), the stock `multilingual` checkpoint 
 | Business name | 288 | 0.375 | 0.539 | 0.417 / 0.026 |
 
 So the stock model separates easy label mismatches but not same-family confusions (the hand set above), and it
-cannot judge business names. A fine-tune on the train split (`laya-train`, 8 epochs, CPU) is being measured on the
-same held-out file; its numbers will be added here when the run finishes.
+cannot judge business names.
+
+A fine-tune on the train split (`laya-train` with the recipe below, base `multilingual`, 8 epochs, about 40 minutes
+on a 4-core CPU) was scored by `laya-train --eval-data` on the same 378 held-out items, both kinds together:
+
+| | Accuracy | Loss | ECE | Brier | Mean confidence |
+| --- | --- | --- | --- | --- | --- |
+| Before (stock) | 0.466 | 1.224 | 0.331 | 0.739 | 0.797 |
+| After (fine-tuned) | 0.868 | 0.464 | 0.104 | 0.231 | 0.971 |
+
+The fine-tuned model is confident (mean 0.97) and its calibration temperature hit the upper clamp (5.0), so treat
+its probabilities as rankings until your own labels say otherwise. Per-question accuracy, AUC and flag precision on
+the held-out file, and a run against a real specification, have not been measured yet.
 
 ## Use it
 

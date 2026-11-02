@@ -1,0 +1,485 @@
+{
+  "schemaVersion": 1,
+  "kind": "interface-spec",
+  "templatePreset": "si-standard",
+  "cover": {
+    "brand": "REA × MonoField / 합성 SI 인수인계 데모",
+    "docName": "주문·정산 인터페이스 명세서 — 검토용",
+    "version": "0.1",
+    "department": "실행 근거 기반 초안"
+  },
+  "source": {
+    "codebaseName": "legacy-settlement (controlled synthetic demo)",
+    "codebasePath": "../shipped-legacy",
+    "language": "JavaScript",
+    "framework": "Node.js HTTP + SQLite",
+    "collector": "agent",
+    "mode": "codebase",
+    "collectedAt": "2026-10-22T02:36:06.467Z",
+    "revision": "e1c0e057319c1ba85cdf39641a86aa5588cfc13873fee0b0ecb357259eeef6a8"
+  },
+  "auth": {
+    "type": "undecided",
+    "description": "로컬 합성 샘플의 무자격증명 요청 성공만 관찰. 운영 인증 정책 미확인."
+  },
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/api/orders",
+      "interfaceId": "ORDER-001",
+      "interfaceName": "주문 목록 조회",
+      "businessPurpose": "거래처명·주문 상태·금액·수수료율을 화면에 표시한다.",
+      "note": "합성 샘플의 실제 브라우저 응답에서 수집. 인증 헤더·쿠키 없이 실행한 범위이며 운영 인증 정책은 미확인. 전체 네트워크 캡처는 incomplete(events).",
+      "responseFields": [
+        {
+          "nameEn": "id",
+          "nameKo": "식별자",
+          "dataType": "Integer (observed)",
+          "required": "TBD",
+          "note": "이 샘플 응답에서 관찰한 필드. 필수 여부·일반 스키마는 미확인.",
+          "depth": 0,
+          "evidenceRefs": [
+            {
+              "kind": "browser",
+              "ref": "../evidence/browser.json",
+              "symbol": "ev_afc703c94e56d48b45857bef4d39a8439cd8e9a5a0dc91e5491f82879f874eed#request-3",
+              "summary": "실제 응답 sequence=12, 본문 sequence=15; GET http://127.0.0.1:4318/api/orders → 200"
+            }
+          ],
+          "reviewStatus": "unreviewed"
+        },
+        {
+          "nameEn": "customer_id",
+          "nameKo": "거래처 식별자",
+          "dataType": "Integer (observed)",
+          "required": "TBD",
+          "note": "이 샘플 응답에서 관찰한 필드. 필수 여부·일반 스키마는 미확인.",
+          "depth": 0,
+          "evidenceRefs": [
+            {
+              "kind": "browser",
+              "ref": "../evidence/browser.json",
+              "symbol": "ev_afc703c94e56d48b45857bef4d39a8439cd8e9a5a0dc91e5491f82879f874eed#request-3",
+              "summary": "실제 응답 sequence=12, 본문 sequence=15; GET http://127.0.0.1:4318/api/orders → 200"
+            }
+          ],
+          "reviewStatus": "unreviewed"
+        },
+        {
+          "nameEn": "status",
+          "nameKo": "상태",
+          "dataType": "String (observed)",
+          "required": "TBD",
+          "note": "이 샘플 응답에서 관찰한 필드. 필수 여부·일반 스키마는 미확인.",
+          "depth": 0,
+          "evidenceRefs": [
+            {
+              "kind": "browser",
+              "ref": "../evidence/browser.json",
+              "symbol": "ev_afc703c94e56d48b45857bef4d39a8439cd8e9a5a0dc91e5491f82879f874eed#request-3",
+              "summary": "실제 응답 sequence=12, 본문 sequence=15; GET http://127.0.0.1:4318/api/orders → 200"
+            }
+          ],
+          "reviewStatus": "unreviewed"
+        },
+        {
+          "nameEn": "gross_amount",
+          "nameKo": "주문 금액",
+          "dataType": "Integer (observed)",
+          "required": "TBD",
+          "note": "이 샘플 응답에서 관찰한 필드. 필수 여부·일반 스키마는 미확인.",
+          "depth": 0,
+          "evidenceRefs": [
+            {
+              "kind": "browser",
+              "ref": "../evidence/browser.json",
+              "symbol": "ev_afc703c94e56d48b45857bef4d39a8439cd8e9a5a0dc91e5491f82879f874eed#request-3",
+              "summary": "실제 응답 sequence=12, 본문 sequence=15; GET http://127.0.0.1:4318/api/orders → 200"
+            }
+          ],
+          "reviewStatus": "unreviewed"
+        },
+        {
+          "nameEn": "commission_bps",
+          "nameKo": "수수료율(bps)",
+          "dataType": "Integer (observed)",
+          "required": "TBD",
+          "note": "이 샘플 응답에서 관찰한 필드. 필수 여부·일반 스키마는 미확인.",
+          "depth": 0,
+          "evidenceRefs": [
+            {
+              "kind": "browser",
+              "ref": "../evidence/browser.json",
+              "symbol": "ev_afc703c94e56d48b45857bef4d39a8439cd8e9a5a0dc91e5491f82879f874eed#request-3",
+              "summary": "실제 응답 sequence=12, 본문 sequence=15; GET http://127.0.0.1:4318/api/orders → 200"
+            }
+          ],
+          "reviewStatus": "unreviewed"
+        },
+        {
+          "nameEn": "settled_at",
+          "nameKo": "정산 시각",
+          "dataType": "unknown (null observed)",
+          "required": "TBD",
+          "note": "이 샘플 응답에서 관찰한 필드. 필수 여부·일반 스키마는 미확인.",
+          "depth": 0,
+          "evidenceRefs": [
+            {
+              "kind": "browser",
+              "ref": "../evidence/browser.json",
+              "symbol": "ev_afc703c94e56d48b45857bef4d39a8439cd8e9a5a0dc91e5491f82879f874eed#request-3",
+              "summary": "실제 응답 sequence=12, 본문 sequence=15; GET http://127.0.0.1:4318/api/orders → 200"
+            }
+          ],
+          "reviewStatus": "unreviewed"
+        },
+        {
+          "nameEn": "customer_name",
+          "nameKo": "거래처명",
+          "dataType": "String (observed)",
+          "required": "TBD",
+          "note": "이 샘플 응답에서 관찰한 필드. 필수 여부·일반 스키마는 미확인.",
+          "depth": 0,
+          "evidenceRefs": [
+            {
+              "kind": "browser",
+              "ref": "../evidence/browser.json",
+              "symbol": "ev_afc703c94e56d48b45857bef4d39a8439cd8e9a5a0dc91e5491f82879f874eed#request-3",
+              "summary": "실제 응답 sequence=12, 본문 sequence=15; GET http://127.0.0.1:4318/api/orders → 200"
+            }
+          ],
+          "reviewStatus": "unreviewed"
+        }
+      ],
+      "responseType": "Array (observed sample)",
+      "responseExample": [
+        {
+          "id": 1001,
+          "customer_id": 1,
+          "status": "PAID",
+          "gross_amount": 10001,
+          "commission_bps": 350,
+          "settled_at": null,
+          "customer_name": "데모상사"
+        },
+        {
+          "id": 1002,
+          "customer_id": 1,
+          "status": "PENDING",
+          "gross_amount": 125000,
+          "commission_bps": 300,
+          "settled_at": null,
+          "customer_name": "데모상사"
+        },
+        {
+          "id": 1003,
+          "customer_id": 2,
+          "status": "CANCELLED",
+          "gross_amount": 80000,
+          "commission_bps": 300,
+          "settled_at": null,
+          "customer_name": "샘플유통"
+        },
+        {
+          "id": 1004,
+          "customer_id": 2,
+          "status": "PAID",
+          "gross_amount": 99000,
+          "commission_bps": 300,
+          "settled_at": null,
+          "customer_name": "샘플유통"
+        }
+      ],
+      "exampleSource": "live-probe",
+      "evidenceRefs": [
+        {
+          "kind": "browser",
+          "ref": "../evidence/browser.json",
+          "symbol": "ev_afc703c94e56d48b45857bef4d39a8439cd8e9a5a0dc91e5491f82879f874eed#request-3",
+          "summary": "실제 응답 sequence=12, 본문 sequence=15; GET http://127.0.0.1:4318/api/orders → 200"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/orders/{id}/settle",
+      "interfaceId": "ORDER-002",
+      "interfaceName": "주문 정산 실행",
+      "businessPurpose": "정산 실행 결과를 표시한다. 주문 1001: 10001 → 수수료 351, 지급액 9650. 단일 관찰이며 전체 계산 규칙 확정 아님.",
+      "note": "합성 샘플의 실제 브라우저 응답에서 수집. 인증 헤더·쿠키 없이 실행한 범위이며 운영 인증 정책은 미확인. 전체 네트워크 캡처는 incomplete(events). 중복:409 ALREADY_SETTLED. PENDING/CANCELLED:409 ORDER_NOT_PAID. 경로 {id}는 1001~1003 관찰을 일반화한 초안.",
+      "requestFields": [
+        {
+          "nameEn": "id",
+          "nameKo": "주문 식별자",
+          "dataType": "Integer (path)",
+          "required": "Y",
+          "depth": 0,
+          "note": "URL 경로값. 1001/1002/1003을 실행했다.",
+          "evidenceRefs": [
+            {
+              "kind": "browser",
+              "ref": "../evidence/browser.json",
+              "symbol": "ev_afc703c94e56d48b45857bef4d39a8439cd8e9a5a0dc91e5491f82879f874eed#request-4",
+              "summary": "실제 응답 sequence=18, 본문 sequence=20; POST http://127.0.0.1:4318/api/orders/1001/settle → 201"
+            }
+          ],
+          "reviewStatus": "unreviewed"
+        }
+      ],
+      "requestExample": {},
+      "responseFields": [
+        {
+          "nameEn": "settlement_id",
+          "nameKo": "정산 식별자",
+          "dataType": "Integer (observed)",
+          "required": "TBD",
+          "note": "이 샘플 응답에서 관찰한 필드. 필수 여부·일반 스키마는 미확인.",
+          "depth": 0,
+          "evidenceRefs": [
+            {
+              "kind": "browser",
+              "ref": "../evidence/browser.json",
+              "symbol": "ev_afc703c94e56d48b45857bef4d39a8439cd8e9a5a0dc91e5491f82879f874eed#request-4",
+              "summary": "실제 응답 sequence=18, 본문 sequence=20; POST http://127.0.0.1:4318/api/orders/1001/settle → 201"
+            }
+          ],
+          "reviewStatus": "unreviewed"
+        },
+        {
+          "nameEn": "order_id",
+          "nameKo": "주문 식별자",
+          "dataType": "Integer (observed)",
+          "required": "TBD",
+          "note": "이 샘플 응답에서 관찰한 필드. 필수 여부·일반 스키마는 미확인.",
+          "depth": 0,
+          "evidenceRefs": [
+            {
+              "kind": "browser",
+              "ref": "../evidence/browser.json",
+              "symbol": "ev_afc703c94e56d48b45857bef4d39a8439cd8e9a5a0dc91e5491f82879f874eed#request-4",
+              "summary": "실제 응답 sequence=18, 본문 sequence=20; POST http://127.0.0.1:4318/api/orders/1001/settle → 201"
+            }
+          ],
+          "reviewStatus": "unreviewed"
+        },
+        {
+          "nameEn": "gross_amount",
+          "nameKo": "주문 금액",
+          "dataType": "Integer (observed)",
+          "required": "TBD",
+          "note": "이 샘플 응답에서 관찰한 필드. 필수 여부·일반 스키마는 미확인.",
+          "depth": 0,
+          "evidenceRefs": [
+            {
+              "kind": "browser",
+              "ref": "../evidence/browser.json",
+              "symbol": "ev_afc703c94e56d48b45857bef4d39a8439cd8e9a5a0dc91e5491f82879f874eed#request-4",
+              "summary": "실제 응답 sequence=18, 본문 sequence=20; POST http://127.0.0.1:4318/api/orders/1001/settle → 201"
+            }
+          ],
+          "reviewStatus": "unreviewed"
+        },
+        {
+          "nameEn": "fee_amount",
+          "nameKo": "수수료",
+          "dataType": "Integer (observed)",
+          "required": "TBD",
+          "note": "이 샘플 응답에서 관찰한 필드. 필수 여부·일반 스키마는 미확인.",
+          "depth": 0,
+          "evidenceRefs": [
+            {
+              "kind": "browser",
+              "ref": "../evidence/browser.json",
+              "symbol": "ev_afc703c94e56d48b45857bef4d39a8439cd8e9a5a0dc91e5491f82879f874eed#request-4",
+              "summary": "실제 응답 sequence=18, 본문 sequence=20; POST http://127.0.0.1:4318/api/orders/1001/settle → 201"
+            }
+          ],
+          "reviewStatus": "unreviewed"
+        },
+        {
+          "nameEn": "net_amount",
+          "nameKo": "지급액",
+          "dataType": "Integer (observed)",
+          "required": "TBD",
+          "note": "이 샘플 응답에서 관찰한 필드. 필수 여부·일반 스키마는 미확인.",
+          "depth": 0,
+          "evidenceRefs": [
+            {
+              "kind": "browser",
+              "ref": "../evidence/browser.json",
+              "symbol": "ev_afc703c94e56d48b45857bef4d39a8439cd8e9a5a0dc91e5491f82879f874eed#request-4",
+              "summary": "실제 응답 sequence=18, 본문 sequence=20; POST http://127.0.0.1:4318/api/orders/1001/settle → 201"
+            }
+          ],
+          "reviewStatus": "unreviewed"
+        }
+      ],
+      "responseExample": {
+        "settlement_id": 1,
+        "order_id": 1001,
+        "gross_amount": 10001,
+        "fee_amount": 351,
+        "net_amount": 9650
+      },
+      "exampleSource": "live-probe",
+      "evidenceRefs": [
+        {
+          "kind": "browser",
+          "ref": "../evidence/browser.json",
+          "symbol": "ev_afc703c94e56d48b45857bef4d39a8439cd8e9a5a0dc91e5491f82879f874eed#request-4",
+          "summary": "실제 응답 sequence=18, 본문 sequence=20; POST http://127.0.0.1:4318/api/orders/1001/settle → 201"
+        },
+        {
+          "kind": "browser",
+          "ref": "../evidence/browser.json",
+          "symbol": "ev_afc703c94e56d48b45857bef4d39a8439cd8e9a5a0dc91e5491f82879f874eed#request-5",
+          "summary": "실제 응답 sequence=23, 본문 sequence=25; POST http://127.0.0.1:4318/api/orders/1001/settle → 409"
+        },
+        {
+          "kind": "browser",
+          "ref": "../evidence/browser.json",
+          "symbol": "ev_afc703c94e56d48b45857bef4d39a8439cd8e9a5a0dc91e5491f82879f874eed#request-6",
+          "summary": "실제 응답 sequence=28, 본문 sequence=30; POST http://127.0.0.1:4318/api/orders/1002/settle → 409"
+        },
+        {
+          "kind": "browser",
+          "ref": "../evidence/browser.json",
+          "symbol": "ev_afc703c94e56d48b45857bef4d39a8439cd8e9a5a0dc91e5491f82879f874eed#request-7",
+          "summary": "실제 응답 sequence=33, 본문 sequence=35; POST http://127.0.0.1:4318/api/orders/1003/settle → 409"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/settlements",
+      "interfaceId": "SETTLEMENT-001",
+      "interfaceName": "정산 내역 조회",
+      "businessPurpose": "관찰된 정산 1건을 조회해 표시한다.",
+      "note": "합성 샘플의 실제 브라우저 응답에서 수집. 인증 헤더·쿠키 없이 실행한 범위이며 운영 인증 정책은 미확인. 전체 네트워크 캡처는 incomplete(events).",
+      "responseFields": [
+        {
+          "nameEn": "id",
+          "nameKo": "식별자",
+          "dataType": "Integer (observed)",
+          "required": "TBD",
+          "note": "이 샘플 응답에서 관찰한 필드. 필수 여부·일반 스키마는 미확인.",
+          "depth": 0,
+          "evidenceRefs": [
+            {
+              "kind": "browser",
+              "ref": "../evidence/browser.json",
+              "symbol": "ev_afc703c94e56d48b45857bef4d39a8439cd8e9a5a0dc91e5491f82879f874eed#request-8",
+              "summary": "실제 응답 sequence=38, 본문 sequence=40; GET http://127.0.0.1:4318/api/settlements → 200"
+            }
+          ],
+          "reviewStatus": "unreviewed"
+        },
+        {
+          "nameEn": "order_id",
+          "nameKo": "주문 식별자",
+          "dataType": "Integer (observed)",
+          "required": "TBD",
+          "note": "이 샘플 응답에서 관찰한 필드. 필수 여부·일반 스키마는 미확인.",
+          "depth": 0,
+          "evidenceRefs": [
+            {
+              "kind": "browser",
+              "ref": "../evidence/browser.json",
+              "symbol": "ev_afc703c94e56d48b45857bef4d39a8439cd8e9a5a0dc91e5491f82879f874eed#request-8",
+              "summary": "실제 응답 sequence=38, 본문 sequence=40; GET http://127.0.0.1:4318/api/settlements → 200"
+            }
+          ],
+          "reviewStatus": "unreviewed"
+        },
+        {
+          "nameEn": "gross_amount",
+          "nameKo": "주문 금액",
+          "dataType": "Integer (observed)",
+          "required": "TBD",
+          "note": "이 샘플 응답에서 관찰한 필드. 필수 여부·일반 스키마는 미확인.",
+          "depth": 0,
+          "evidenceRefs": [
+            {
+              "kind": "browser",
+              "ref": "../evidence/browser.json",
+              "symbol": "ev_afc703c94e56d48b45857bef4d39a8439cd8e9a5a0dc91e5491f82879f874eed#request-8",
+              "summary": "실제 응답 sequence=38, 본문 sequence=40; GET http://127.0.0.1:4318/api/settlements → 200"
+            }
+          ],
+          "reviewStatus": "unreviewed"
+        },
+        {
+          "nameEn": "fee_amount",
+          "nameKo": "수수료",
+          "dataType": "Integer (observed)",
+          "required": "TBD",
+          "note": "이 샘플 응답에서 관찰한 필드. 필수 여부·일반 스키마는 미확인.",
+          "depth": 0,
+          "evidenceRefs": [
+            {
+              "kind": "browser",
+              "ref": "../evidence/browser.json",
+              "symbol": "ev_afc703c94e56d48b45857bef4d39a8439cd8e9a5a0dc91e5491f82879f874eed#request-8",
+              "summary": "실제 응답 sequence=38, 본문 sequence=40; GET http://127.0.0.1:4318/api/settlements → 200"
+            }
+          ],
+          "reviewStatus": "unreviewed"
+        },
+        {
+          "nameEn": "net_amount",
+          "nameKo": "지급액",
+          "dataType": "Integer (observed)",
+          "required": "TBD",
+          "note": "이 샘플 응답에서 관찰한 필드. 필수 여부·일반 스키마는 미확인.",
+          "depth": 0,
+          "evidenceRefs": [
+            {
+              "kind": "browser",
+              "ref": "../evidence/browser.json",
+              "symbol": "ev_afc703c94e56d48b45857bef4d39a8439cd8e9a5a0dc91e5491f82879f874eed#request-8",
+              "summary": "실제 응답 sequence=38, 본문 sequence=40; GET http://127.0.0.1:4318/api/settlements → 200"
+            }
+          ],
+          "reviewStatus": "unreviewed"
+        },
+        {
+          "nameEn": "created_at",
+          "nameKo": "생성 시각",
+          "dataType": "String (observed)",
+          "required": "TBD",
+          "note": "이 샘플 응답에서 관찰한 필드. 필수 여부·일반 스키마는 미확인.",
+          "depth": 0,
+          "evidenceRefs": [
+            {
+              "kind": "browser",
+              "ref": "../evidence/browser.json",
+              "symbol": "ev_afc703c94e56d48b45857bef4d39a8439cd8e9a5a0dc91e5491f82879f874eed#request-8",
+              "summary": "실제 응답 sequence=38, 본문 sequence=40; GET http://127.0.0.1:4318/api/settlements → 200"
+            }
+          ],
+          "reviewStatus": "unreviewed"
+        }
+      ],
+      "responseType": "Array (observed sample)",
+      "responseExample": [
+        {
+          "id": 1,
+          "order_id": 1001,
+          "gross_amount": 10001,
+          "fee_amount": 351,
+          "net_amount": 9650,
+          "created_at": "2026-10-22 02:30:18"
+        }
+      ],
+      "exampleSource": "live-probe",
+      "evidenceRefs": [
+        {
+          "kind": "browser",
+          "ref": "../evidence/browser.json",
+          "symbol": "ev_afc703c94e56d48b45857bef4d39a8439cd8e9a5a0dc91e5491f82879f874eed#request-8",
+          "summary": "실제 응답 sequence=38, 본문 sequence=40; GET http://127.0.0.1:4318/api/settlements → 200"
+        }
+      ]
+    }
+  ]
+}

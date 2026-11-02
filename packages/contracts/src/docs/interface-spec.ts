@@ -160,6 +160,8 @@ export const InterfaceSpecCollectorSchema = z.enum([
   'static-django',
   'static-go',
   'static-openapi',
+  /** Drafted from a recorded REA browser scenario (observed traffic, not code). */
+  'rea-browser',
   'manual',
 ]);
 export type InterfaceSpecCollector = z.infer<typeof InterfaceSpecCollectorSchema>;
