@@ -301,12 +301,12 @@ REA browser evidence cross-check (see the 2026-11-02 Log entry):
 
 Judgment checks (Laya fine-tune):
 
-- Measure the fine-tuned checkpoint per question: restart `laya-serve` with
-  `LAYA_EXTRA_MODELS='{"si-judge": "<checkpoint dir>"}' LAYA_MODELS=multilingual,si-judge`, score both models on the
-  held-out file through `/v1/systemone/batch` (accuracy at 0.5, AUC, flag precision/recall at ≤ 0.3, per question
-  kind), then `monofield jev configure --backend local --model si-judge` and run `monofield judge check` on a spec with
-  planted errors (`memberId → 주문번호`, `POST /api/v1/orders → 회원 탈퇴`). Add the numbers to
-  `docs/judgment-checks.md`. The checkpoint is outside Git and must be retrained (recipe in that document).
+- The fine-tuned judge ranks planted errors lowest but also scores very short generic fields low (`id → 주문 ID` 0.01,
+  `status → 주문 상태` 0.02, `amount → 결제 금액` 0.16), so on the 15-item planted-error spec a flag at ≤ 0.3 was right
+  3 times in 7 (the held-out file says 0.87 – 0.94). Add generic short identifiers (`id`, `status`, `amount`, `name`,
+  `type`, `code`, `no`, ...) with correct Korean labels to the seed in `apps/daemon/src/services/judgment-seed.ts`
+  (keep the train/held-out vocabularies disjoint), retrain with the recipe in `docs/judgment-checks.md`, and measure the
+  same planted-error spec again. The checkpoint is outside Git. Hosted JEV was never measured (no key).
 
 Execution permissions (see the newest Log entry):
 
@@ -448,6 +448,24 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-02 — fine-tuned SI judge measured per question and on a planted-error spec (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** the optional last step: retrain the local judge, serve it next to the stock model, measure each question
+  kind on the held-out file, run `monofield judge check` on a spec with planted errors, record the numbers.
+- **Done (no source change, `docs/judgment-checks.md` only):** `laya` 0.4.20 + CPU `torch` in a scratch venv; the recipe
+  in the document ran to completion (8 epochs, about 40 minutes on 4 cores) and reproduced the earlier run exactly
+  (accuracy 0.4656 → 0.8677, ECE 0.3311 → 0.1043, temperature on the 5.0 clamp). Served with `LAYA_EXTRA_MODELS`; scored
+  through `/v1/systemone/batch` with the daemon's wire format (a scratch script, not committed): field label stock AUC
+  0.891 → fine-tuned 0.974 (flag precision/recall at ≤ 0.3: 0.933/0.467 → 0.935/0.967); business name AUC 0.539 → 0.915
+  (0.417/0.026 → 0.868/0.922); the stock numbers match the ones already in the document, which checks the script.
+- **Planted-error run:** `monofield judge check` (local backend, observe mode) on 15 items: the fine-tuned model puts all three
+  planted errors at 0.01 – 0.03 (stock 0.73 – 0.96) but also scores four correct generic items low, so precision at the
+  flag band was 3 of 7 on this example. Recorded in the document with that caveat; the follow-up is in Open items.
+- **Verified:** the numbers above are from the commands run in this session; `pnpm guard` was not rerun for a docs-only
+  change. The scratch daemon, `laya-serve` and the venv are outside the repository and were stopped.
+- **Next agent:** the checkpoint (1.3 GB) is not in Git. The held-out split is synthetic and templated; do not quote its
+  numbers as accuracy on customer documents.
 
 ### 2026-11-02 — REA browser evidence cross-check finished: tests, CLI, editor panel, docs (`ccr-8432aecf-n9xdfd`)
 

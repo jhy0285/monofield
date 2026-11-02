@@ -65,8 +65,43 @@ on a 4-core CPU) was scored by `laya-train --eval-data` on the same 378 held-out
 | After (fine-tuned) | 0.868 | 0.464 | 0.104 | 0.231 | 0.971 |
 
 The fine-tuned model is confident (mean 0.97) and its calibration temperature hit the upper clamp (5.0), so treat
-its probabilities as rankings until your own labels say otherwise. Per-question accuracy, AUC and flag precision on
-the held-out file, and a run against a real specification, have not been measured yet.
+its probabilities as rankings until your own labels say otherwise. A second, independent training run with the same
+recipe reproduced these numbers exactly (accuracy 0.4656 → 0.8677, ECE 0.3311 → 0.1043).
+
+Both checkpoints served side by side (`LAYA_EXTRA_MODELS`) and scored per question on the same held-out file
+through `/v1/systemone/batch`, with the same wire format MonoField uses:
+
+| Question | Model | Accuracy at 0.5 | AUC | Flag precision / recall at ≤ 0.3 |
+| --- | --- | --- | --- | --- |
+| Korean field label (90 items, 60 wrong) | stock | 0.756 | 0.891 | 0.933 / 0.467 |
+| | fine-tuned | 0.933 | 0.974 | 0.935 / 0.967 |
+| Business name (288 items, 192 wrong) | stock | 0.375 | 0.539 | 0.417 / 0.026 |
+| | fine-tuned | 0.847 | 0.915 | 0.868 / 0.922 |
+
+Two-thirds of the held-out items are wrong ones, so "always wrong" would already score 0.67 accuracy; read the AUC and
+the flag columns. The held-out file is synthetic and templated: its wrong items are swaps and look alike, so these
+numbers say the model learned the pattern, not how it does on your documents.
+
+### Against a specification with planted errors
+
+`monofield judge check` on a 3-endpoint, 15-item specification with three planted errors (`POST /api/v1/orders →
+회원 탈퇴`, `memberId → 주문번호`, `createdAt → 삭제일시`), observe mode, local backend, two batch calls (about
+1.2–1.4 s on CPU), probability that the item is right:
+
+| | Stock | Fine-tuned |
+| --- | --- | --- |
+| `POST /api/v1/orders → 회원 탈퇴` (planted) | 0.73 | **0.01** |
+| `memberId → 주문번호` (planted) | 0.77 | **0.01** |
+| `createdAt → 삭제일시` (planted) | 0.96 | **0.03** |
+| 12 correct items | 0.03 – 0.96, no pattern | 8 at 0.98 – 0.99; **4 at 0.01 – 0.16** |
+
+The stock model misses all three, as before. The fine-tuned model ranks all three planted errors lowest, but it also
+gives four correct items a low score: `id → 주문 ID` (0.01), `status → 주문 상태` (0.02, on two endpoints) and
+`amount → 결제 금액` (0.16). Very short, generic identifiers are the weak spot; the seed vocabulary is built from
+longer, more specific fields. On this example a flag at ≤ 0.3 would have been right 3 times in 7 (precision 0.43),
+far below the held-out 0.87 – 0.94. That is the reason the default stays observe mode, and why a policy needs your
+own labels (the 성적표 section) before flags turn on: mark these generic fields correct and they become training
+data for the next `laya-train` run (`monofield judge export`).
 
 ## Use it
 
