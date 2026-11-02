@@ -242,6 +242,8 @@ export function observedFieldsFromJson(value: unknown): ObservedField[] {
     if (!node || typeof node !== 'object') return;
     for (const [name, child] of Object.entries(node as Record<string, unknown>)) {
       const path = parent ? `${parent}.${name}` : name;
+      // The cap holds inside one wide object too, not only between objects.
+      if (fields.size >= MAX_FIELDS && !fields.has(path)) return;
       const types = new Set(fields.get(path)?.types ?? []);
       types.add(jsonType(child));
       // An array of scalars is reported by its item type ("array" plus e.g. "string" is noise).

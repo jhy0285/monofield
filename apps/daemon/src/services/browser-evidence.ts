@@ -42,6 +42,19 @@ export class BrowserEvidenceError extends Error {
   constructor(message: string, readonly status = 400, readonly code = 'BROWSER_EVIDENCE_INVALID') { super(message); }
 }
 
+/** The HTTP status, code and message a failure of any of the operations below is reported with. */
+export function classifyBrowserEvidenceError(error: unknown): { status: number; code: string; message: string } {
+  if (error instanceof BrowserEvidenceError) return { status: error.status, code: error.code, message: error.message };
+  const status = Number((error as { status?: number })?.status) || 400;
+  const code = (error as { code?: string })?.code;
+  const message = error instanceof Error ? error.message : String(error);
+  if (code === 'ENOENT') return { status: 404, code: 'FILE_NOT_FOUND', message: 'A selected file does not exist in the project.' };
+  // `writeProjectFile` reports a file that changed after it was read as ESTALE.
+  if (code === 'ESTALE') return { status: 409, code: 'BROWSER_EVIDENCE_STALE', message: 'The document changed while it was being written; run the comparison again before writing.' };
+  if (code === 'EEXIST' || status === 409) return { status: 409, code: 'BROWSER_EVIDENCE_CONFLICT', message };
+  return { status, code: 'BROWSER_EVIDENCE_FAILED', message };
+}
+
 type Json = Record<string, unknown>;
 const isObject = (value: unknown): value is Json => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const sha256 = (value: Buffer | string) => createHash('sha256').update(value).digest('hex');

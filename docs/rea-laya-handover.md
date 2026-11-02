@@ -48,6 +48,18 @@ codex mcp add rea -- npx -y rea-agents@6.7.0 --mcp
 
 이 명령은 사용자 Codex 설정에 서버를 추가하므로 직접 선택해 실행합니다. MonoField는 이를 자동 실행하지 않습니다.
 
+## 브라우저 기록과 명세서 대조
+
+REA `capture_browser_scenario` 기록(`rea.browser-scenario-capture`)을 프로젝트 폴더에 두면, 인터페이스 명세서 편집기의 **브라우저 증거 대조 (REA)** 패널이나 CLI로 명세서가 실제 요청·응답과 맞는지 대조합니다. 명세서에 없는 엔드포인트·필드, 이름·타입 불일치, 문서화되지 않은 오류 코드를 찾고, 선택한 항목을 **편집기에 반영해 사용자가 저장**하게 합니다(CLI는 `--write`를 줄 때만 파일을 씁니다). 기록 본문은 저장된 SHA-256과 맞을 때만 읽습니다.
+
+```sh
+monofield rea evidence --project <id> --json
+monofield rea cross-check --project <id> --input docs/orders.interface-spec.json --evidence evidence/capture.json --json
+monofield rea apply --project <id> --input docs/orders.interface-spec.json --evidence evidence/capture.json --write
+```
+
+관찰되지 않은 필드는 "없음"이 아니라 "관찰되지 않음"입니다. 반영된 새 행은 한글명이 비어 있으므로 저장 후 **판단 검토**를 실행하세요. 응답 예시는 `--include-examples`를 줄 때만 복사합니다(실제 데이터일 수 있음). 자세한 사용법은 [실전 가이드](rea-laya-practical-guide.md#작성한-명세서를-브라우저-기록과-대조하기)를 보세요.
+
 ## Laya 연결과 근거 검토
 
 [로컬 모델 설치 가이드](jev-decisions.md#local-compatible-models)에 따라 Laya 서버를 loopback에서 실행합니다. MonoField의 **Integrations → JEV / local decisions**에서 local backend를 선택하거나:

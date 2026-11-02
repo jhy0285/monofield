@@ -51,6 +51,14 @@ monofield docs preview-screen-spec --input screen-spec.json --out screen-spec.ht
 
 Screen images must stay inside the input document directory. Keep source JSON as the editable truth; do not edit generated workbooks/decks directly. Validate actual renderer results and preserve warnings.
 
+After writing an interface specification from browser Evidence, compare it with that Evidence before presenting it:
+
+```sh
+monofield rea cross-check --project <project-id> --input interface-spec.json --evidence <capture.json> --json
+```
+
+The comparison reads the capture file's own response/request bodies after checking their SHA-256 and reports endpoints, fields, names, types and error codes the document does not match. Treat `undocumented-*`, `name-mismatch` and `type-mismatch` findings as corrections to review, and `integrity-failed` as a capture that must be re-taken. A field reported as unobserved is not absent. Use `monofield rea apply ... --finding <id>` only for findings the user wants applied; add `--write` only when the user asked you to change the file (otherwise the editor's **Browser evidence check** panel hands the result over unsaved). Do not pass `--include-examples` unless the user confirmed the captured bodies hold no personal or production data. Rows added by `apply` have empty Korean labels and `unreviewed` status: say so, and suggest `monofield judge check` before the document is relied on.
+
 ## Optional Laya review
 
 Laya is a separately installed loopback decision server configured in Integrations → JEV / local decisions. It can assist with typed ambiguity/evidence review; it does not replace runtime observations. Use `monofield jev review --request-file review.json --json` only when the user selected local review and the backend is configured. Supply the actual objective and bounded observations using the installed review contract. Preserve supporting/contradicting/unknown outcomes and model identity. Do not auto-approve documents or turn a prediction into verified system behavior. Without Laya, continue the evidence-based handover and disclose that no model review ran.

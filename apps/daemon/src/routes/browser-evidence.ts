@@ -5,6 +5,7 @@ import { listFiles, resolveProjectFilePath } from '../projects.js';
 import {
   BrowserEvidenceError,
   applyBrowserEvidenceFiles,
+  classifyBrowserEvidenceError,
   crossCheckBrowserEvidenceFiles,
   listBrowserEvidenceFiles,
   type BrowserEvidenceFileAccess,
@@ -36,12 +37,8 @@ export function registerBrowserEvidenceRoutes(app: Express, deps: RegisterBrowse
     };
   };
   const fail = (res: Response, error: unknown) => {
-    if (error instanceof BrowserEvidenceError) return deps.http.sendApiError(res, error.status, error.code, error.message);
-    const status = Number((error as { status?: number })?.status) || 400;
-    const code = (error as { code?: string })?.code;
-    if (code === 'ENOENT') return deps.http.sendApiError(res, 404, 'FILE_NOT_FOUND', 'A selected file does not exist in the project.');
-    if (code === 'EEXIST' || status === 409) return deps.http.sendApiError(res, 409, 'BROWSER_EVIDENCE_CONFLICT', error instanceof Error ? error.message : String(error));
-    return deps.http.sendApiError(res, status, 'BROWSER_EVIDENCE_FAILED', error instanceof Error ? error.message : String(error));
+    const failure = classifyBrowserEvidenceError(error);
+    return deps.http.sendApiError(res, failure.status, failure.code, failure.message);
   };
 
   app.get('/api/projects/:id/browser-evidence', deps.http.requireLocalDaemonRequest, async (req, res) => {

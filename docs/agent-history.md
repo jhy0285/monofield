@@ -57,7 +57,7 @@ Entry template:
 
 ## Current state
 
-As of 2026-10-30.
+As of 2026-11-02.
 
 - Product: MonoField, a local Windows workbench that takes Codex or Claude Code
   CLI work to Korean SI deliverables (interface-spec XLSX, screen-spec PPTX,
@@ -115,8 +115,10 @@ As of 2026-10-30.
 - Judgment checks (2026-11-01, branch only, not on `main`): `monofield judge`, `/api/judgments/*` and the 판단 검토
   panel ask JEV or a local Laya server yes/no questions about Korean field labels and business names, rules first,
   observe mode until labels support a policy; see `docs/judgment-checks.md`.
-- REA browser evidence cross-check (2026-11-02, branch only, WIP): contracts, daemon service and routes exist and
-  were exercised once; tests, CLI, UI, i18n and docs are missing (see Open items).
+- REA browser evidence cross-check (2026-11-02, branch only): an REA `capture_browser_scenario` recording is compared with an
+  interface spec from the editor ("브라우저 증거 대조 (REA)" panel, next to the judgment check) or `monofield rea
+  evidence|cross-check|apply`, all through `/api/projects/:id/browser-evidence*`. Tests, CLI, panel, 19-locale keys
+  and docs are done (see the newest Log entry).
 
 ### Environment notes
 
@@ -133,6 +135,12 @@ machine. Check before relying on them.
   - `node-pty`: no Linux prebuild is shipped; `node-gyp rebuild` in its package
     directory worked (make, g++, and python3 were present). Without it, any UI
     test that opens the terminal fails (for example `e2e/ui/development-focus.test.ts`).
+- Run Playwright as `pnpm exec playwright test -c <config> ...` from `e2e/`. With `npx` the suite's
+  `tools-dev start` runs as `npm tools-dev ...` (it copies `npm_execpath`) and the test fails in a few milliseconds.
+- A package's `dist` can be older than its source after a fetch (it is gitignored). Rebuild it before trusting a
+  typecheck error that names a missing export: this session `@open-design/contracts`, `platform` and `host` needed
+  `pnpm --filter <package> build`, and `apps/daemon` needed `pnpm --filter @open-design/daemon build` before the CLI
+  tests (they run `dist/cli.js`).
 - Playwright: `e2e` pins `@playwright/test` 1.60.0, which expects a different
   Chromium build than the sandbox preinstalled. The workaround was a throwaway
   Playwright config kept outside the repo that imports `e2e/playwright.config.ts`,
@@ -282,27 +290,14 @@ exercise is unchanged by it.
 
 Newest first within each group. Remove an item when it is done.
 
-REA browser evidence cross-check (WIP, see the 2026-11-02 Log entry). The UI+CLI dual-track rule in `AGENTS.md`
-is not met yet; finish all of these before a pull request:
+REA browser evidence cross-check (see the 2026-11-02 Log entry):
 
-- Tests: contracts (`packages/contracts/tests/browser-evidence.test.ts`: field extraction, `generalizeObservedPath`,
-  `matchSpecPath` with `{id}`/`:id` and a deployment prefix, each finding kind, apply idempotence) and daemon
-  (`apps/daemon/tests/browser-evidence.test.ts` on `tests/fixtures/rea/`: decoding, a corrupted body →
-  `integrity-failed`, the routes through a real server, write with a stale `baseContentSha256` → 409). The planted-drift
-  results in the Log entry are the expected values.
-- CLI: extend `apps/daemon/src/services/rea-cli.ts` (`monofield rea`) with `evidence` (list), `cross-check --project
-  --input --evidence <file>... [--json]` and `apply ... [--finding <id>...] [--include-examples] [--note-lang ko|en]
-  [--write] [--out <file>]`, calling the same three routes; drafting without `--input` needs `--out`.
-- UI: a panel in `apps/web/src/components/interface-spec/InterfaceSpecEditor.tsx` next to `JudgmentCheckPanel`
-  (pick evidence files from the list route, show coverage and findings by endpoint, select findings, apply with
-  `mutate(() => doc)` so the reviewer saves; an "include examples" checkbox warning that they are real data;
-  afterwards suggest running the judgment check, since added rows have empty Korean labels). CSS Module, `Button`
-  from `@open-design/components`, keys in `apps/web/src/i18n/types.ts` first, then all 19 locales.
-- Docs: a section in `docs/rea-laya-practical-guide.md` and `docs/rea-laya-handover.md`, and the
-  `legacy-system-handover` skill (`skills/legacy-system-handover/SKILL.md`) step that tells agents to run the
-  cross-check after writing a spec from REA evidence.
 - Known gaps: response fields are compared only on 2xx bodies; error bodies only feed `undocumented-error`. A path
-  parameter is not compared. A field is "not observed" only in the captured samples, never absent (REA's rule).
+  parameter is not compared. A field is "not observed" only in the captured samples, never absent (REA's rule). The
+  panel has no "select all / none" for findings (all applicable ones start ticked; untick one by one). The only real
+  REA recording tried is the synthetic settlement demo (`apps/daemon/tests/fixtures/rea/`); a recording of a real
+  customer screen has not been compared, and the Korean and the 17 other locale strings of the panel were written
+  without a native review.
 
 Judgment checks (Laya fine-tune):
 
@@ -453,6 +448,50 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-02 — REA browser evidence cross-check finished: tests, CLI, editor panel, docs (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** finish the WIP below in order (tests, `monofield rea` CLI, editor panel with all locales, docs), verify, and
+  push; measuring the fine-tuned judge per question was optional.
+- **Changed:**
+  - `packages/contracts/src/api/browser-evidence.ts`: the 400-field cap in `observedFieldsFromJson` held only between
+    objects, so one 600-key object returned 600 fields; it now stops inside the object too (found by the new test, red
+    before the fix).
+  - `apps/daemon/src/services/browser-evidence.ts` + `routes/browser-evidence.ts`: `classifyBrowserEvidenceError`. A file that
+    changed between the read and the write comes back from `writeProjectFile` as `ESTALE`; the route answered it 400
+    `BROWSER_EVIDENCE_FAILED`, it is now 409 `BROWSER_EVIDENCE_STALE` (same code as the hash check).
+  - `apps/daemon/src/services/rea-cli.ts`: `monofield rea evidence|cross-check|apply` beside `status|configure|disable`
+    (flags `--project --input --evidence <file>... --finding <id>... --include-examples --no-attach-evidence --note-lang ko|en
+    --write --out --base-sha256 --json`), calling only the three routes. `--evidence` and `--finding` repeat (`repeatedFlag`,
+    because `parseFlags` keeps the last value). Without `--write` nothing is written; `--out` without `--write` is an error;
+    drafting without `--input` needs `--out`; writing over `--input` pins the hash of the document as it is when the command
+    runs unless `--base-sha256` is given (take it from `cross-check --json`).
+  - `apps/web/src/components/document-spec/BrowserEvidencePanel.tsx` (+ CSS Module) mounted in `InterfaceSpecEditor.tsx` after
+    `JudgmentCheckPanel`: capture files from the list route (all ticked at first, max 10), compare, coverage per endpoint,
+    findings grouped by endpoint with checkboxes (only applicable ones), options for evidence references and examples (with a
+    real-data warning), apply → `mutate(() => doc)` so the reviewer saves. It refuses to compare or apply over unsaved edits and
+    marks a comparison stale when the file's hash differs from the one the editor loaded. Notes are written in Korean for the
+    Korean UI and English otherwise. 33 `browserEvidence.*` keys in `types.ts` and all 19 locales.
+  - Docs: `docs/rea-laya-practical-guide.md` (new section with a findings table and cautions), `docs/rea-laya-handover.md`,
+    `skills/legacy-system-handover/SKILL.md` (run the cross-check after writing a spec from browser evidence; no `--write` or
+    `--include-examples` without the user's say).
+  - Tests: `packages/contracts/tests/browser-evidence.test.ts` (31), `apps/daemon/tests/browser-evidence.test.ts` (23: decoding,
+    corruption, list, the planted-drift result, write rules, error mapping, routes through a real server),
+    `apps/daemon/tests/browser-evidence-cli.test.ts` (12, real server + `dist/cli.js`),
+    `apps/web/tests/components/BrowserEvidencePanel.test.tsx` (6), `e2e/ui/browser-evidence.test.ts` (`[P1]`, not in a CI
+    group; builds a small synthetic REA capture in the test).
+- **Verified:** `pnpm --filter @open-design/contracts test` 40 files / 306 tests pass; in `apps/daemon`, `vitest run` on
+  `browser-evidence`, `browser-evidence-cli`, `judgments`, `judgments-route-cli` and `mcp-config` 5 files / 131 tests pass
+  (daemon `dist` rebuilt first); `pnpm --filter @open-design/web` whole unit suite 408 files / 3945 passed, 13 skipped;
+  `pnpm guard` exit 0; `pnpm typecheck` exit 0 (it caught an `exactOptionalPropertyTypes` error in my own daemon test,
+  fixed); `pnpm i18n:check` pass; the e2e spec passed on a real daemon + web stack (`pnpm exec playwright test` with a
+  scratch config, 1 passed): compare → apply → editor dirty and file unchanged → save → compare again shows 0 errors and 0
+  warnings. Its screenshot showed the global `input { width: 100% }` stretching the checkboxes; fixed in the panel CSS and
+  viewed again at 1280 px (English). Not viewed: the Korean panel, mobile width.
+- **Not done:** the optional per-question measurement of the fine-tuned judge (Open items, "Judgment checks"); a "select all /
+  none" control for findings; native review of the translations.
+- **Next agent:** `git status` is the whole change set of this entry. The CLI tests need `pnpm --filter @open-design/daemon
+  build` first. `apply` needs the spec on disk, so the panel cannot compare unsaved edits by design.
 
 ### 2026-11-02 — fine-tuned SI judge measured; REA browser evidence cross-check started (WIP) (`ccr-8432aecf-n9xdfd`)
 
