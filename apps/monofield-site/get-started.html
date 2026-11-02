@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="ko" data-title-ko="MonoField 시작하기 · 10분 데모 | 기술 문서" data-title-en="Get started with MonoField · a 10-minute demo | Technical guide">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f5f7f1" />
+    <meta name="application-name" content="MonoField" />
+    <meta name="description" content="MonoField 시작하기 기술 문서. 합성 주문·정산 앱으로 REA 브라우저 기록과 인터페이스 명세서를 대조하고, 어긋난 부분을 반영해 Excel로 내보내는 과정을 실제 CLI 출력으로 따라 해 봅니다." />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <link rel="canonical" href="https://monofield.vercel.app/get-started" />
+    <meta property="og:site_name" content="MonoField" />
+    <meta property="og:title" content="MonoField 시작하기 · 10분 데모 | 기술 문서" />
+    <meta property="og:description" content="MonoField 시작하기 기술 문서. 합성 주문·정산 앱으로 REA 브라우저 기록과 인터페이스 명세서를 대조하고, 어긋난 부분을 반영해 Excel로 내보내는 과정을 실제 CLI 출력으로 따라 해 봅니다." />
+    <meta property="og:type" content="article" />
+    <meta property="og:url" content="https://monofield.vercel.app/get-started" />
+    <meta property="og:locale" content="ko_KR" />
+    <meta property="og:image" content="https://monofield.vercel.app/social-card.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="MonoField — one workspace for code, design, and documents" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="MonoField 시작하기 · 10분 데모 | 기술 문서" />
+    <meta name="twitter:description" content="MonoField 시작하기 기술 문서. 합성 주문·정산 앱으로 REA 브라우저 기록과 인터페이스 명세서를 대조하고, 어긋난 부분을 반영해 Excel로 내보내는 과정을 실제 CLI 출력으로 따라 해 봅니다." />
+    <meta name="twitter:image" content="https://monofield.vercel.app/social-card.png" />
+    <meta name="twitter:image:alt" content="MonoField — one workspace for code, design, and documents" />
+    <meta name="twitter:domain" content="monofield.vercel.app" />
+    <link rel="icon" href="https://monofield.vercel.app/mark.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="https://monofield.vercel.app/mark.svg" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/script.js" defer></script>
+    <script src="/get-started.js" defer></script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "TechArticle",
+        "@id": "https://monofield.vercel.app/get-started#article",
+        "url": "https://monofield.vercel.app/get-started",
+        "headline": "MonoField 시작하기 · 10분 데모 | 기술 문서",
+        "description": "MonoField 시작하기 기술 문서. 합성 주문·정산 앱으로 REA 브라우저 기록과 인터페이스 명세서를 대조하고, 어긋난 부분을 반영해 Excel로 내보내는 과정을 실제 CLI 출력으로 따라 해 봅니다.",
+        "isPartOf": { "@id": "https://monofield.vercel.app/#website" },
+        "inLanguage": ["ko", "en"],
+        "about": ["MonoField", "REA", "SI interface specification"]
+      }
+    </script>
+    <title>MonoField 시작하기 · 10분 데모 | 기술 문서</title>
+  </head>
+  <body class="gs-page">
+    <a class="skip-link" href="#main"><span data-ko="본문으로 건너뛰기" data-en="Skip to content">본문으로 건너뛰기</span></a>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="MonoField"><svg class="brand-mark" viewBox="0 0 444 444" width="28" height="28" aria-hidden="true" focusable="false"><rect width="444" height="444" rx="104" fill="#090909" /><path class="brand-mark-stroke" d="M92 312V138L222 306L352 138V312" pathLength="1" fill="none" stroke="#FAFAF8" stroke-width="40" stroke-linecap="round" stroke-linejoin="round" /></svg><span>monofield</span></a>
+      <nav id="primary-navigation" aria-label="Primary navigation">
+        <a href="/#product"><span data-ko="제품" data-en="Product">제품</span></a><a href="/#workflow"><span data-ko="작업 흐름" data-en="Workflow">작업 흐름</span></a><a href="/get-started" aria-current="page"><span data-ko="시작하기" data-en="Get started">시작하기</span></a><a href="/#guide"><span data-ko="가이드" data-en="Guide">가이드</span></a><a href="https://github.com/jhy0285/monofield"><span>GitHub</span></a>
+      </nav>
+      <div class="header-actions">
+        <button class="lang-toggle" type="button" aria-label="Switch language"><span data-lang-choice="ko">KO</span><span class="lang-divider" aria-hidden="true">/</span><span data-lang-choice="en">EN</span></button><a class="header-download" href="/#download"><span data-ko="다운로드" data-en="Download">다운로드</span></a><button class="menu-toggle" type="button" aria-controls="primary-navigation" aria-expanded="false" aria-label="메뉴 열기"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg></button>
+      </div>
+    </header>
+
+    <main id="main" class="gs">
+      <section class="gs-hero container" aria-labelledby="gs-title">
+        <p class="section-index">GET STARTED · TECHNICAL GUIDE</p>
+        <h1 id="gs-title"><span data-ko="10분 안에 따라 해 보는" data-en="Follow along in ten minutes:">10분 안에 따라 해 보는</span><span data-ko="코드와 명세서 맞추기" data-en="keep specs in line with reality">코드와 명세서 맞추기</span></h1>
+        <p class="gs-lede"><span data-ko="MonoField가 하는 일을 설명만 하지 않고, 합성 주문·정산 앱 하나로 직접 돌려 봅니다. 브라우저에서 실제로 오간 요청·응답(REA 기록)을 인터페이스 명세서와 대조하고, 어긋난 곳을 고쳐 Excel로 내보내는 데까지 가며, 아래 출력은 모두 실제 CLI를 실행한 결과입니다." data-en="Instead of only describing what MonoField does, this page runs it on one synthetic order-and-settlement app. You compare the requests and responses a browser really exchanged (an REA recording) with an interface spec, fix what drifted and export Excel. Every output below is from the real CLI.">MonoField가 하는 일을 설명만 하지 않고, 합성 주문·정산 앱 하나로 직접 돌려 봅니다. 브라우저에서 실제로 오간 요청·응답(REA 기록)을 인터페이스 명세서와 대조하고, 어긋난 곳을 고쳐 Excel로 내보내는 데까지 가며, 아래 출력은 모두 실제 CLI를 실행한 결과입니다.</span></p>
+        <nav class="gs-toc" aria-label="이 페이지">
+          <a href="#prepare"><span data-ko="1 준비" data-en="1 Prepare">1 준비</span></a><a href="#project"><span data-ko="2 데모 프로젝트" data-en="2 Demo project">2 데모 프로젝트</span></a><a href="#try"><span data-ko="3 직접 해 보기" data-en="3 Try it">3 직접 해 보기</span></a><a href="#architecture"><span data-ko="4 구조" data-en="4 How it fits">4 구조</span></a><a href="#reference"><span data-ko="5 명령 참조" data-en="5 Reference">5 명령 참조</span></a><a href="#limits"><span data-ko="6 한계" data-en="6 Limits">6 한계</span></a>
+        </nav>
+        <p class="gs-meta">MonoField 0.11.7-preview.7 · REA 6.7.0 · <span data-ko="합성 데이터" data-en="synthetic data">합성 데이터</span></p>
+      </section>
+
+      <section id="prepare" class="gs-section container" aria-labelledby="gs-prepare">
+        <p class="section-index">01</p>
+        <h2 id="gs-prepare"><span data-ko="준비" data-en="Prepare">준비</span></h2>
+        <div class="gs-cards">
+          <article class="gs-card"><h3>Windows 10/11</h3><p><span data-ko="현재 데스크톱 앱은 Windows만 지원합니다." data-en="The desktop app currently supports Windows only.">현재 데스크톱 앱은 Windows만 지원합니다.</span></p></article>
+          <article class="gs-card"><h3>Codex CLI · Claude Code CLI</h3><p><span data-ko="둘 중 하나를 설치하고 로그인까지 마칩니다. MonoField는 에이전트를 대신하지 않고 그 위에서 동작합니다." data-en="Install one and sign in. MonoField does not replace the agent; it works on top of it.">둘 중 하나를 설치하고 로그인까지 마칩니다. MonoField는 에이전트를 대신하지 않고 그 위에서 동작합니다.</span></p></article>
+          <article class="gs-card"><h3>MonoField Windows Preview</h3><p><span data-ko="설치본은 아직 코드 서명 전이라 Windows 보호 창이 뜰 수 있습니다." data-en="The installer is not code-signed yet, so Windows may show a protection prompt.">설치본은 아직 코드 서명 전이라 Windows 보호 창이 뜰 수 있습니다.</span> <a class="text-link-inline" href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.7/MonoField-release-preview-win-setup.exe"><span data-ko="설치 파일 받기" data-en="Download the installer">설치 파일 받기</span></a></p></article>
+        </div>
+        <p class="gs-note"><span data-ko="화면(UI)과 monofield CLI는 같은 로컬 데몬의 /api/* 를 호출합니다. CLI는 데몬이 떠 있어야 하며 --daemon-url 로 주소를 지정할 수 있습니다. 설치부터 첫 명세서까지의 전체 안내는" data-en="The UI and the monofield CLI call the same local daemon at /api/*. The CLI needs the daemon running; --daemon-url sets its address. The full walkthrough from install to a first spec is in the">화면(UI)과 monofield CLI는 같은 로컬 데몬의 /api/* 를 호출합니다. CLI는 데몬이 떠 있어야 하며 --daemon-url 로 주소를 지정할 수 있습니다. 설치부터 첫 명세서까지의 전체 안내는</span> <a class="text-link-inline" href="https://github.com/jhy0285/monofield/blob/main/docs/getting-started.ko.md"><span data-ko="처음 시작하기(15분)" data-en="Getting started guide (15 min, Korean)">처음 시작하기(15분)</span></a><span data-ko=" 문서에 있습니다." data-en="."> 문서에 있습니다.</span></p>
+      </section>
+
+      <section id="project" class="gs-section container" aria-labelledby="gs-project">
+        <p class="section-index">02</p>
+        <h2 id="gs-project"><span data-ko="데모 프로젝트: 주문·정산" data-en="Demo project: orders and settlements">데모 프로젝트: 주문·정산</span></h2>
+        <p><span data-ko="합성 주문·정산 앱입니다. 화면에서 주문 목록을 열고, 결제 완료 주문을 정산하고, 같은 주문을 다시 정산해 보고, 미결제·취소 주문을 정산해 보고, 정산 내역을 엽니다. REA가 이 장면을 Chromium에서 실행하며 오간 요청·응답을 기록한 파일이 증거입니다." data-en="A synthetic orders-and-settlements app. In the browser you open the order list, settle a paid order, settle it again, try a pending and a cancelled order, then open the settlement list. REA ran that scene in Chromium and recorded every request and response; that file is the evidence.">합성 주문·정산 앱입니다. 화면에서 주문 목록을 열고, 결제 완료 주문을 정산하고, 같은 주문을 다시 정산해 보고, 미결제·취소 주문을 정산해 보고, 정산 내역을 엽니다. REA가 이 장면을 Chromium에서 실행하며 오간 요청·응답을 기록한 파일이 증거입니다.</span></p>
+        <div class="gs-split">
+          <div>
+            <h3><span data-ko="명세서에 있는 인터페이스" data-en="Interfaces in the spec">명세서에 있는 인터페이스</span></h3>
+            <div class="gs-table-wrap"><table class="gs-table"><thead><tr><th>Method</th><th>Path</th><th>ID</th><th><span data-ko="이름" data-en="Name">이름</span></th><th><span data-ko="응답 필드" data-en="Response fields">응답 필드</span></th></tr></thead><tbody><tr><td><code>GET</code></td><td><code>/api/orders</code></td><td>ORDER-001</td><td>주문 목록 조회</td><td>7</td></tr><tr><td><code>POST</code></td><td><code>/api/orders/{id}/settle</code></td><td>ORDER-002</td><td>주문 정산 실행</td><td>5</td></tr><tr><td><code>GET</code></td><td><code>/api/settlements</code></td><td>SETTLEMENT-001</td><td>정산 내역 조회</td><td>6</td></tr></tbody></table></div>
+          </div>
+          <div>
+            <h3><span data-ko="REA가 기록한 API 호출 6건" data-en="Six API calls REA recorded">REA가 기록한 API 호출 6건</span></h3>
+            <div class="gs-table-wrap"><table class="gs-table"><thead><tr><th>Method</th><th>Path</th><th><span data-ko="상태" data-en="Status">상태</span></th></tr></thead><tbody><tr><td><code>GET</code></td><td><code>/api/orders</code></td><td><span class="gs-status-code" data-code="200">200</span></td></tr><tr><td><code>POST</code></td><td><code>/api/orders/1001/settle</code></td><td><span class="gs-status-code" data-code="201">201</span></td></tr><tr><td><code>POST</code></td><td><code>/api/orders/1001/settle</code></td><td><span class="gs-status-code" data-code="409">409</span></td></tr><tr><td><code>POST</code></td><td><code>/api/orders/1002/settle</code></td><td><span class="gs-status-code" data-code="409">409</span></td></tr><tr><td><code>POST</code></td><td><code>/api/orders/1003/settle</code></td><td><span class="gs-status-code" data-code="409">409</span></td></tr><tr><td><code>GET</code></td><td><code>/api/settlements</code></td><td><span class="gs-status-code" data-code="200">200</span></td></tr></tbody></table></div>
+          </div>
+        </div>
+        <p class="gs-cmd-label"><span data-ko="프로젝트에 넣은 기록 파일 확인" data-en="Check which capture files the project holds">프로젝트에 넣은 기록 파일 확인</span></p>
+        <pre class="gs-pre" aria-label="monofield rea evidence"><code>$ monofield rea evidence --project &lt;project-id&gt;
+evidence/capture.json  41.9 KB  2026-11-02T00:00:00.000Z</code></pre>
+        <p class="gs-note"><span data-ko="기록 파일은 REA 6.7.0의 capture_browser_scenario 결과이며 저장소의 apps/daemon/tests/fixtures/rea/ 에 있습니다. 본문마다 SHA-256이 들어 있어 MonoField는 일치할 때만 읽습니다." data-en="The file is a capture_browser_scenario result from REA 6.7.0, kept in the repository at apps/daemon/tests/fixtures/rea/. Each body carries a SHA-256, and MonoField reads it only when it matches.">기록 파일은 REA 6.7.0의 capture_browser_scenario 결과이며 저장소의 apps/daemon/tests/fixtures/rea/ 에 있습니다. 본문마다 SHA-256이 들어 있어 MonoField는 일치할 때만 읽습니다.</span></p>
+        <details class="gs-details"><summary><span data-ko="명세서 파일(*.interface-spec.json)은 이렇게 생겼습니다" data-en="What an interface spec file (*.interface-spec.json) looks like">명세서 파일(*.interface-spec.json)은 이렇게 생겼습니다</span></summary>
+          <pre class="gs-pre" aria-label="interface-spec.json excerpt"><code>{
+  &quot;kind&quot;: &quot;interface-spec&quot;,
+  &quot;endpoints&quot;: [{
+    &quot;method&quot;: &quot;POST&quot;,
+    &quot;path&quot;: &quot;/api/orders/{id}/settle&quot;,
+    &quot;interfaceId&quot;: &quot;ORDER-002&quot;,
+    &quot;interfaceName&quot;: &quot;주문 정산 실행&quot;,
+    &quot;responseFields&quot;: [{
+      &quot;nameEn&quot;: &quot;fee_amount&quot;,
+      &quot;nameKo&quot;: &quot;수수료&quot;,
+      &quot;dataType&quot;: &quot;Integer (observed)&quot;,
+      &quot;required&quot;: &quot;TBD&quot;,
+      &quot;reviewStatus&quot;: &quot;unreviewed&quot;,
+      &quot;evidenceRefs&quot;: [{
+        &quot;kind&quot;: &quot;browser&quot;,
+        &quot;ref&quot;: &quot;evidence/capture.json&quot;,
+        &quot;symbol&quot;: &quot;ev_afc703c9…#request-4&quot;,
+        &quot;summary&quot;: &quot;POST /api/orders/1001/settle → 201&quot;
+      }]
+    }]
+  }]
+}</code></pre>
+          <p class="gs-note"><span data-ko="모든 행에 근거(evidenceRefs)와 검토 상태(reviewStatus)가 붙습니다. 관찰로 알 수 없는 필수 여부는 TBD로 남습니다." data-en="Every row carries its evidence (evidenceRefs) and review status (reviewStatus). What observation cannot tell, such as required flags, stays TBD.">모든 행에 근거(evidenceRefs)와 검토 상태(reviewStatus)가 붙습니다. 관찰로 알 수 없는 필수 여부는 TBD로 남습니다.</span></p>
+        </details>
+      </section>
+
+      <section id="try" class="gs-section container" aria-labelledby="gs-try">
+        <p class="section-index">03</p>
+        <h2 id="gs-try"><span data-ko="직접 해 보기: 어긋난 명세서를 찾아 고치기" data-en="Try it: find and fix a drifted spec">직접 해 보기: 어긋난 명세서를 찾아 고치기</span></h2>
+        <p><span data-ko="먼저 명세서를 일부러 어긋나게 만들고, 다음 단계를 차례로 눌러 보세요. 조합마다 실제로 CLI를 실행해 저장한 결과가 나옵니다(8가지)." data-en="Break the spec on purpose, then click through the steps. Each combination shows what the real CLI printed when it was run (eight in all).">먼저 명세서를 일부러 어긋나게 만들고, 다음 단계를 차례로 눌러 보세요. 조합마다 실제로 CLI를 실행해 저장한 결과가 나옵니다(8가지).</span></p>
+        <div class="gs-demo" data-demo>
+          <fieldset class="gs-drifts">
+            <legend><span data-ko="① 명세서를 이렇게 어긋나게 합니다" data-en="1. Drift the spec like this">① 명세서를 이렇게 어긋나게 합니다</span></legend>
+            <label class="gs-drift"><input type="checkbox" data-drift="removeField" checked /><span><span data-ko="응답 필드 하나가 명세서에 빠짐" data-en="A response field is missing from the spec">응답 필드 하나가 명세서에 빠짐</span> <code>fee_amount</code></span></label>
+            <label class="gs-drift"><input type="checkbox" data-drift="renameField" checked /><span><span data-ko="필드 이름이 실제와 다르게 적힘" data-en="A field is written under another name">필드 이름이 실제와 다르게 적힘</span> <code>net_amount → netAmount</code></span></label>
+            <label class="gs-drift"><input type="checkbox" data-drift="removeEndpoint" checked /><span><span data-ko="인터페이스 하나가 통째로 빠짐" data-en="A whole interface is missing">인터페이스 하나가 통째로 빠짐</span> <code>GET /api/settlements</code></span></label>
+          </fieldset>
+          <div class="gs-steps" role="tablist" aria-label="단계">
+            <button class="gs-step is-active" type="button" role="tab" id="gs-tab-compare" aria-controls="gs-panel" aria-selected="true" data-step="compare"><b>②</b> <span data-ko="대조" data-en="Compare">대조</span></button>
+            <button class="gs-step" type="button" role="tab" id="gs-tab-apply" aria-controls="gs-panel" aria-selected="false" tabindex="-1" data-step="apply"><b>③</b> <span data-ko="반영" data-en="Apply">반영</span></button>
+            <button class="gs-step" type="button" role="tab" id="gs-tab-recheck" aria-controls="gs-panel" aria-selected="false" tabindex="-1" data-step="recheck"><b>④</b> <span data-ko="다시 대조" data-en="Re-check">다시 대조</span></button>
+            <button class="gs-step" type="button" role="tab" id="gs-tab-judge" aria-controls="gs-panel" aria-selected="false" tabindex="-1" data-step="judge"><b>⑤</b> <span data-ko="판단 검토" data-en="Judgment check">판단 검토</span></button>
+            <button class="gs-step" type="button" role="tab" id="gs-tab-render" aria-controls="gs-panel" aria-selected="false" tabindex="-1" data-step="render"><b>⑥</b> Excel</button>
+          </div>
+          <div class="gs-panel" id="gs-panel" role="tabpanel" aria-labelledby="gs-tab-compare" tabindex="0">
+            <p class="gs-explain" data-explain></p>
+            <div class="gs-terminal">
+              <div class="gs-terminal-bar"><span class="gs-dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="gs-terminal-title">monofield</span><button class="gs-copy" type="button" data-copy><span data-ko="명령 복사" data-en="Copy command">명령 복사</span></button></div>
+              <pre class="gs-pre gs-pre-live" data-output aria-live="off"><code>$ monofield rea cross-check --project &lt;project-id&gt; --input docs/orders.interface-spec.json --evidence evidence/capture.json
+docs/orders.interface-spec.json: 6 API calls · 2/2 endpoints exercised · 1 undocumented · 10/12 fields confirmed
+0 error · 3 warning · 1 info
+  evidence/capture.json: 6 API of 8 requests  (incomplete: events)
+  warning undocumented-endpoint  GET /api/settlements
+            id: undocumented-endpoint|GET|/api/settlements||
+  warning undocumented-field     POST /api/orders/{id}/settle (ORDER-002)  response fee_amount
+            id: undocumented-field|POST|/api/orders/{id}/settle|response|fee_amount
+  warning name-mismatch          POST /api/orders/{id}/settle (ORDER-002)  response net_amount ≠ netAmount
+            id: name-mismatch|POST|/api/orders/{id}/settle|response|net_amount
+  info    undocumented-error     POST /api/orders/{id}/settle (ORDER-002)  [409 code=ALREADY_SETTLED; 409 code=ORDER_NOT_PAID, status=CANCELLED; 409 code=ORDER_NOT_PAID, status=PENDING]
+            id: undocumented-error|POST|/api/orders/{id}/settle||
+content sha256: 816f91895ed314f9934f65ef7bbdadc071644c6f8eb2db1c462f9b2e8b01e780</code></pre>
+            </div>
+          </div>
+          <p class="gs-status" role="status" aria-live="polite" data-status></p>
+        </div>
+        <p class="gs-note"><span data-ko="경로는 줄이고 프로젝트 ID는 &lt;project-id&gt; 로 바꿨으며, 기록 파일 시각은 고정하고 긴 목록은 …로 줄였습니다. 그 밖의 줄은 CLI 출력 그대로입니다. 화면(UI)에서는 같은 일을 인터페이스 명세서 편집기의 &quot;브라우저 증거 대조 (REA)&quot; 패널에서 합니다." data-en="Paths are shortened, project IDs replaced by &lt;project-id&gt;, the capture file’s time fixed and long lists cut with …; every other line is the CLI output as printed. In the UI the same work is done in the interface spec editor’s “Browser evidence check (REA)” panel.">경로는 줄이고 프로젝트 ID는 &lt;project-id&gt; 로 바꿨으며, 기록 파일 시각은 고정하고 긴 목록은 …로 줄였습니다. 그 밖의 줄은 CLI 출력 그대로입니다. 화면(UI)에서는 같은 일을 인터페이스 명세서 편집기의 "브라우저 증거 대조 (REA)" 패널에서 합니다.</span></p>
+      </section>
+
+      <section id="architecture" class="gs-section container" aria-labelledby="gs-arch">
+        <p class="section-index">04</p>
+        <h2 id="gs-arch"><span data-ko="구조 한눈에" data-en="How it fits together">구조 한눈에</span></h2>
+        <div class="gs-arch" role="img" aria-label="Codex 또는 Claude Code, REA, MonoField 데몬, 화면과 CLI, 선택적 로컬 판단 모델의 관계">
+          <div class="gs-node"><b>Codex · Claude Code</b><span><span data-ko="코드를 읽고 고치는 에이전트" data-en="reads and edits the code">코드를 읽고 고치는 에이전트</span></span></div>
+          <div class="gs-node gs-node-core"><b>MonoField daemon</b><span><span data-ko="로컬 · /api/* · SQLite · 프로젝트 파일" data-en="local · /api/* · SQLite · project files">로컬 · /api/* · SQLite · 프로젝트 파일</span></span></div>
+          <div class="gs-node"><b>UI · monofield CLI</b><span><span data-ko="같은 API를 호출" data-en="call the same API">같은 API를 호출</span></span></div>
+          <div class="gs-node"><b>REA (MCP)</b><span><span data-ko="브라우저·정적·DB 근거 수집" data-en="collects browser, static and DB evidence">브라우저·정적·DB 근거 수집</span></span></div>
+          <div class="gs-node"><b>evidence/*.json</b><span><span data-ko="프로젝트 폴더의 기록 파일" data-en="capture files in the project folder">프로젝트 폴더의 기록 파일</span></span></div>
+          <div class="gs-node gs-node-optional"><b>Laya · JEV</b><span><span data-ko="선택: 로컬 판단 모델" data-en="optional: local judgment model">선택: 로컬 판단 모델</span></span></div>
+        </div>
+        <ul class="gs-list">
+          <li><span data-ko="모든 기능은 UI와 CLI 두 길로 열려 있고, 둘 다 같은 데몬 API를 거칩니다." data-en="Every capability is open through both the UI and the CLI, and both go through the same daemon API.">모든 기능은 UI와 CLI 두 길로 열려 있고, 둘 다 같은 데몬 API를 거칩니다.</span></li>
+          <li><span data-ko="MonoField는 파일을 임의로 바꾸지 않습니다. 화면은 변경을 편집기에 올려 사람이 저장하게 하고, CLI는 --write 를 줄 때만 쓰며 검토한 파일의 해시가 바뀌었으면 거부합니다." data-en="MonoField does not rewrite files on its own. The UI puts changes into the editor for a person to save; the CLI writes only with --write and refuses if the reviewed file’s hash changed.">MonoField는 파일을 임의로 바꾸지 않습니다. 화면은 변경을 편집기에 올려 사람이 저장하게 하고, CLI는 --write 를 줄 때만 쓰며 검토한 파일의 해시가 바뀌었으면 거부합니다.</span></li>
+          <li><span data-ko="판단 모델이 없어도 규칙(빈 값, 번역 안 된 이름)은 동작합니다. 모델은 관찰 모드로 시작해 결과가 쌓인 뒤에만 플래그를 켭니다." data-en="Without a model the rules (empty values, untranslated names) still run. A model starts in observe mode and flags only after your labels support it.">판단 모델이 없어도 규칙(빈 값, 번역 안 된 이름)은 동작합니다. 모델은 관찰 모드로 시작해 결과가 쌓인 뒤에만 플래그를 켭니다.</span></li>
+        </ul>
+      </section>
+
+      <section id="reference" class="gs-section container" aria-labelledby="gs-ref">
+        <p class="section-index">05</p>
+        <h2 id="gs-ref"><span data-ko="명령과 API 참조" data-en="Command and API reference">명령과 API 참조</span></h2>
+        <div class="gs-table-wrap"><table class="gs-table"><thead><tr><th>CLI</th><th><span data-ko="설명" data-en="What it does">설명</span></th></tr></thead><tbody><tr><td><code>monofield rea configure|status|disable</code></td><td><span data-ko="REA(MCP) 연결 설정" data-en="Configure the optional REA MCP server">REA(MCP) 연결 설정</span></td></tr><tr><td><code>monofield rea evidence --project &lt;id&gt;</code></td><td><span data-ko="프로젝트의 REA 브라우저 기록 파일 목록" data-en="List REA browser captures in a project">프로젝트의 REA 브라우저 기록 파일 목록</span></td></tr><tr><td><code>monofield rea cross-check --project &lt;id&gt; --evidence &lt;file&gt;… [--input &lt;spec&gt;]</code></td><td><span data-ko="기록과 명세서 비교(읽기 전용)" data-en="Compare a capture with a spec (read-only)">기록과 명세서 비교(읽기 전용)</span></td></tr><tr><td><code>monofield rea apply … [--finding &lt;id&gt;…] [--write [--out &lt;file&gt;]]</code></td><td><span data-ko="선택한 발견 사항을 명세서에 반영" data-en="Apply chosen findings to the spec">선택한 발견 사항을 명세서에 반영</span></td></tr><tr><td><code>monofield judge check --project &lt;id&gt; --input &lt;spec&gt;</code></td><td><span data-ko="한글명·업무명 판단 검토(규칙 먼저, 모델은 선택)" data-en="Check Korean labels and names (rules first, model optional)">한글명·업무명 판단 검토(규칙 먼저, 모델은 선택)</span></td></tr><tr><td><code>monofield judge feedback|scorecard|policy|export</code></td><td><span data-ko="검토 결과 라벨링·성적표·기준 적용·학습 데이터" data-en="Label results, scorecard, policy, training data">검토 결과 라벨링·성적표·기준 적용·학습 데이터</span></td></tr><tr><td><code>monofield jev configure --backend local …</code></td><td><span data-ko="로컬 판단 모델(Laya) 연결" data-en="Connect a local judgment model (Laya)">로컬 판단 모델(Laya) 연결</span></td></tr><tr><td><code>monofield docs render-interface-spec --input &lt;spec&gt; --out &lt;xlsx&gt;</code></td><td><span data-ko="인터페이스 명세서 → Excel" data-en="Interface spec → Excel workbook">인터페이스 명세서 → Excel</span></td></tr><tr><td><code>monofield docs preview-interface-spec | export-openapi</code></td><td><span data-ko="HTML 미리보기 · OpenAPI 내보내기" data-en="HTML preview · OpenAPI export">HTML 미리보기 · OpenAPI 내보내기</span></td></tr><tr><td><code>monofield docs render-screen-spec --input &lt;spec&gt; --out &lt;pptx&gt;</code></td><td><span data-ko="화면명세서 → PowerPoint" data-en="Screen spec → PowerPoint deck">화면명세서 → PowerPoint</span></td></tr></tbody></table></div>
+        <p class="gs-note"><span data-ko="모든 명령은 --json 으로 기계가 읽는 출력을, --daemon-url 로 데몬 주소를 지정할 수 있습니다(render·preview 명령은 JSON 결과를 출력)." data-en="Commands take --json for machine-readable output and --daemon-url for the daemon address (the render and preview commands print a JSON result).">모든 명령은 --json 으로 기계가 읽는 출력을, --daemon-url 로 데몬 주소를 지정할 수 있습니다(render·preview 명령은 JSON 결과를 출력).</span></p>
+        <div class="gs-table-wrap"><table class="gs-table"><thead><tr><th>Method</th><th>Path</th><th><span data-ko="설명" data-en="What it does">설명</span></th></tr></thead><tbody><tr><td><code>GET</code></td><td><code>/api/projects/:id/browser-evidence</code></td><td><span data-ko="기록 파일 목록" data-en="List capture files">기록 파일 목록</span></td></tr><tr><td><code>POST</code></td><td><code>/api/projects/:id/browser-evidence/cross-check</code></td><td><span data-ko="비교 (본문: inputFile, evidenceFiles)" data-en="Compare (body: inputFile, evidenceFiles)">비교 (본문: inputFile, evidenceFiles)</span></td></tr><tr><td><code>POST</code></td><td><code>/api/projects/:id/browser-evidence/apply</code></td><td><span data-ko="반영 (findingIds, write, baseContentSha256 …)" data-en="Apply (findingIds, write, baseContentSha256 …)">반영 (findingIds, write, baseContentSha256 …)</span></td></tr><tr><td><code>POST</code></td><td><code>/api/projects/:id/judgments/check</code></td><td><span data-ko="판단 검토" data-en="Judgment check">판단 검토</span></td></tr></tbody></table></div>
+        <p class="gs-note"><span data-ko="데몬은 다른 웹 출처에서 온 요청을 거부합니다. 더 자세한 사용법은" data-en="The daemon rejects requests that come from another web origin. More detail in the">데몬은 다른 웹 출처에서 온 요청을 거부합니다. 더 자세한 사용법은</span> <a class="text-link-inline" href="https://github.com/jhy0285/monofield/blob/main/docs/rea-laya-practical-guide.md"><span data-ko="REA·Laya 실전 가이드" data-en="REA and Laya practical guide (Korean)">REA·Laya 실전 가이드</span></a><span data-ko=" 와 " data-en=" and the "> 와 </span><a class="text-link-inline" href="https://github.com/jhy0285/monofield/blob/main/docs/judgment-checks.md"><span data-ko="판단 검토 문서" data-en="judgment checks document">판단 검토 문서</span></a><span data-ko=" 에 있습니다." data-en="."> 에 있습니다.</span></p>
+      </section>
+
+      <section id="limits" class="gs-section container" aria-labelledby="gs-limits">
+        <p class="section-index">06</p>
+        <h2 id="gs-limits"><span data-ko="알아 둘 한계" data-en="Limits to know">알아 둘 한계</span></h2>
+        <ul class="gs-list">
+          <li><span data-ko="&quot;관찰되지 않음&quot;은 &quot;없음&quot;이 아닙니다. 기록에 없는 필드는 그 시나리오에서 나타나지 않았을 뿐입니다. 응답 필드는 성공(2xx) 본문에서만 비교합니다." data-en="“Not observed” is not “absent”. A field missing from a recording simply did not appear in that scenario. Response fields are compared only on successful (2xx) bodies.">"관찰되지 않음"은 "없음"이 아닙니다. 기록에 없는 필드는 그 시나리오에서 나타나지 않았을 뿐입니다. 응답 필드는 성공(2xx) 본문에서만 비교합니다.</span></li>
+          <li><span data-ko="이 데모는 합성 데이터입니다. 고객 시스템에서 같은 결과가 나온다는 보증이 아닙니다." data-en="This demo uses synthetic data. It does not promise the same result on a customer system.">이 데모는 합성 데이터입니다. 고객 시스템에서 같은 결과가 나온다는 보증이 아닙니다.</span></li>
+          <li><span data-ko="반영으로 추가된 행은 한글명이 비어 있고 필수 여부가 TBD입니다. 사람이 채우고 검토해야 하며, 기록된 응답 예시는 실제 데이터일 수 있어 기본으로 복사하지 않습니다." data-en="Rows added by apply have empty Korean labels and a TBD required flag. A person fills and reviews them. Captured response examples can be real data, so they are not copied by default.">반영으로 추가된 행은 한글명이 비어 있고 필수 여부가 TBD입니다. 사람이 채우고 검토해야 하며, 기록된 응답 예시는 실제 데이터일 수 있어 기본으로 복사하지 않습니다.</span></li>
+          <li><span data-ko="판단 모델의 답은 참고용입니다. 승인이나 배포 판단의 근거로 쓰지 않습니다." data-en="A judgment model’s answer is advisory. Do not use it as a basis for approval or release.">판단 모델의 답은 참고용입니다. 승인이나 배포 판단의 근거로 쓰지 않습니다.</span></li>
+          <li><span data-ko="Windows 데스크톱 프리뷰입니다. 코드 서명 전이고 기능은 바뀔 수 있습니다." data-en="This is a Windows desktop preview: not code-signed yet, and features may change.">Windows 데스크톱 프리뷰입니다. 코드 서명 전이고 기능은 바뀔 수 있습니다.</span></li>
+        </ul>
+      </section>
+
+      <section id="next" class="gs-section container gs-next" aria-labelledby="gs-next">
+        <h2 id="gs-next"><span data-ko="다음에 할 일" data-en="What next">다음에 할 일</span></h2>
+        <div class="gs-actions">
+          <a class="button button-primary" href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.7/MonoField-release-preview-win-setup.exe"><span><span data-ko="Windows Preview 다운로드" data-en="Download Windows Preview">Windows Preview 다운로드</span></span><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 17v4h14v-4" /></svg></a>
+          <a class="button button-secondary" href="https://github.com/jhy0285/monofield/blob/main/docs/getting-started.ko.md"><span><span data-ko="처음 시작하기 (15분)" data-en="Getting started (15 min)">처음 시작하기 (15분)</span></span></a>
+          <a class="button button-secondary" href="https://github.com/jhy0285/monofield"><span>GitHub</span></a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer container">
+      <a class="brand" href="/" aria-label="MonoField"><img src="/mark.svg?v=monofield-m1" width="28" height="28" alt="" aria-hidden="true" /><span>monofield</span></a>
+      <p><span data-ko="코드, 디자인, 문서. 하나의 공간에서." data-en="Code, design, documents. One field.">코드, 디자인, 문서. 하나의 공간에서.</span></p>
+      <div class="footer-links"><a href="https://github.com/jhy0285/monofield"><span>GitHub</span></a><a href="https://github.com/jhy0285/monofield/releases"><span data-ko="릴리스" data-en="Releases">릴리스</span></a><a href="/downloads/monofield-user-guide-ko.pdf"><span data-ko="사용 가이드" data-en="User guide">사용 가이드</span></a><a href="/open-source"><span data-ko="오픈소스 고지" data-en="Open-source notices">오픈소스 고지</span></a></div>
+      <div class="footer-bottom"><span>Apache-2.0 · © 2026 MonoField contributors</span><span><span data-ko="로컬에서 시작하고, 자유롭게 연결하세요." data-en="Start local. Connect freely.">로컬에서 시작하고, 자유롭게 연결하세요.</span></span></div>
+    </footer>
+  </body>
+</html>

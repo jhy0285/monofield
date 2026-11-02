@@ -22,10 +22,13 @@
 
   function applyLanguage() {
     document.documentElement.lang = language;
+    // A page with its own title names it on <html data-title-ko data-title-en>.
+    const pageTitle = document.documentElement.getAttribute(`data-title-${language}`);
     document.title =
-      language === "ko"
+      pageTitle ||
+      (language === "ko"
         ? "MonoField (모노필드) | Codex·Claude Code SI 산출물 작업대"
-        : "MonoField (모노필드) | SI deliverables workbench for Codex and Claude Code";
+        : "MonoField (모노필드) | SI deliverables workbench for Codex and Claude Code");
     translatable.forEach((element) => {
       element.textContent =
         element.getAttribute(`data-${language}`) || element.textContent;

@@ -96,6 +96,8 @@ const residualAllowedExactPaths = new Set([
   "apps/monofield-site/script.js",
   // Same constraint for its progressive motion layer (reveals, parallax, intro video).
   "apps/monofield-site/motion.js",
+  // And for the recorded-demo player of its get-started page (reads get-started-demo.json).
+  "apps/monofield-site/get-started.js",
   // PostCSS loads Tailwind through a web-local .mjs compatibility config entry.
   "apps/web/postcss.config.mjs",
   "scripts/bake-html-ppt-examples.mjs",

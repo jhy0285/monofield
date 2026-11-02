@@ -53,3 +53,11 @@ pnpm --filter @open-design/e2e exec tsx scripts/render-intro-video.ts
 ```
 
 It needs `ffmpeg` and fetches the OFL fonts (Inter, Noto Sans KR) from npm once into the OS temp directory. Add `--preview 2,9.5,16` to write still frames instead. `intro-src` is excluded from the Vercel deployment; the CSP only allows same-origin scripts, so the scene is a render source, not a page.
+
+## Get-started page (`/get-started`)
+
+`get-started.html` is a bilingual technical guide whose demo replays recorded output: `get-started.js` reads `get-started-demo.json`, which holds what the real `monofield rea cross-check|apply`, `monofield judge check` and `monofield docs render-interface-spec` printed for each of eight ways the demo spec can drift from an REA recording (the synthetic settlement app in `apps/daemon/tests/fixtures/rea/`). Nothing is computed in the browser, so the page cannot show a result the CLI did not produce.
+
+Regenerate the data when the CLI's output changes (steps are at the top of `scripts/gen-get-started-demo.ts`), then update the default output printed in `get-started.html` (scenario `111`, step `compare`) to match; `tests/get-started.test.ts` fails if they disagree, if a scenario's printed warnings differ from its summary, or if the data holds a project ID or a local path. The page's text is written by hand in both languages (`data-ko` / `data-en`); the test requires every translated element to carry both.
+
+`script.js` takes a page's own title from `<html data-title-ko data-title-en>`; without them it uses the home page title.
