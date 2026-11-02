@@ -301,12 +301,12 @@ REA browser evidence cross-check (see the 2026-11-02 Log entry):
 
 Judgment checks (Laya fine-tune):
 
-- The fine-tuned judge ranks planted errors lowest but also scores very short generic fields low (`id → 주문 ID` 0.01,
-  `status → 주문 상태` 0.02, `amount → 결제 금액` 0.16), so on the 15-item planted-error spec a flag at ≤ 0.3 was right
-  3 times in 7 (the held-out file says 0.87 – 0.94). Add generic short identifiers (`id`, `status`, `amount`, `name`,
-  `type`, `code`, `no`, ...) with correct Korean labels to the seed in `apps/daemon/src/services/judgment-seed.ts`
-  (keep the train/held-out vocabularies disjoint), retrain with the recipe in `docs/judgment-checks.md`, and measure the
-  same planted-error spec again. The checkpoint is outside Git. Hosted JEV was never measured (no key).
+- The second fine-tune (generic short identifiers added to the seed) is better on unseen generic fields (AUC 0.868 → 0.949) but
+  `id → 주문 ID` and `status → 주문 상태` still score 0.02 – 0.03 on the planted-error spec, unseen Oracle-style abbreviations
+  (`ordAmt`, `userNm`, `rgstDt`) score ~0.04, and the original field-label subset moved 0.974 → 0.958 on a single run. Next: run
+  each recipe two or three times to see the run-to-run spread before reading differences as a trade-off; add more abbreviation
+  families to the train list (keeping some held out); retry with `id`/`status` in the train split and a fresh planted spec as the
+  unseen check. The checkpoints (1.3 GB each) are outside Git; hosted JEV was never measured (no key).
 
 Execution permissions (see the newest Log entry):
 
@@ -448,6 +448,31 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-02 — judgment follow-up: generic short identifiers in the seed, second fine-tune measured (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** carry out the follow-up from the measurement entry: the fine-tuned judge scored short generic fields (`id`, `status`,
+  `amount`) low even when right.
+- **Changed:** `apps/daemon/src/services/judgment-seed.ts`: `SEED_GENERIC_TRAIN` (35 identifiers) and `SEED_GENERIC_HELDOUT` (16:
+  `id`, `status`, `amount`, `state`, `rgstDt`, `ordAmt`, ... kept out of training on purpose), each with right labels and two clearly
+  wrong ones per right label (1 : 2, like the rest). They are written out rather than shuffled, so every other train/held-out split is
+  unchanged: the old 882 train and 378 held-out lines are all still in the files (checked by diffing the exports); the files are now
+  1,110 and 492 lines. `tests/judgment-seed.test.ts` +2 tests (generic identifiers are taught only in their own split; no duplicate
+  lines, no label both right and wrong for one identifier); both new tests fail against the previous seed code.
+- **Measured (`docs/judgment-checks.md`):** retrained with the documented recipe on the 1,110-line train file (about 55 min on 4 busy
+  cores), served stock, v1 and v2 side by side, scored 492 held-out lines per question and per subset, and ran the planted-error
+  spec through all three. Generic held-out subset, field label: AUC stock 0.818, v1 0.868, v2 0.949; original subset 0.891, 0.974,
+  0.958; business names 0.539, 0.915, 0.924. Planted-error spec (13 distinct items): all three planted errors at ≤ 0.06 for v1 and v2
+  (stock 0.73 – 0.96); flags at ≤ 0.3 right 3 of 6 for v1 and 3 of 5 for v2. This also corrects the previous entry, which counted the
+  duplicate `status` row twice (3 of 7); it is distinct items now.
+- **Verified:** daemon `judgment-seed`, `judgments`, `judgments-route-cli` 3 files / 15 tests pass; `tsc -p tsconfig.tests.json` clean. Not
+  rerun: the whole daemon suite and `pnpm typecheck` after this change (the files changed are the seed, its test and two docs).
+- **Not done:** the abbreviation case (unseen `ordAmt`, `userNm` stay at ~0.04), repeating a recipe to measure run-to-run noise, anything
+  hosted. Two single runs differ in data and in luck, so "v2 is worse on the original subset" is not established.
+- **Next agent:** the scoring script was a scratch file (`score.py`, not committed): one `/v1/systemone/batch` call per 32 items of one
+  question kind with the daemon's wire format, accuracy at 0.5, AUC, flag precision/recall at ≤ 0.3. A first run on a worker that was
+  restarted mid-training lost its trainer: start long jobs with `setsid nohup`, and never poll with `pgrep -f '<command text>'` inside
+  `bash -c` (the wrapper matches itself).
 
 ### 2026-11-02 — monofield.vercel.app get-started page: a technical guide with a recorded demo (`ccr-8432aecf-n9xdfd`)
 

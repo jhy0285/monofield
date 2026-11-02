@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { seedJudgmentCases, seedJudgmentDataset } from '../src/services/judgment-seed.js';
+import { SEED_GENERIC_HELDOUT, SEED_GENERIC_TRAIN, seedJudgmentCases, seedJudgmentDataset } from '../src/services/judgment-seed.js';
 
 const vocabulary = (cases: ReturnType<typeof seedJudgmentCases>) => ({
   identifiers: new Set(cases.filter((c) => c.kind === 'field-label').map((c) => c.subject.identifier)),
@@ -24,6 +24,30 @@ describe('SI judgment seed dataset', () => {
     expect(created.filter((c) => !c.correct).map((c) => c.subject.koreanLabel).sort()).toEqual(['삭제일시', '수정일시']);
     const positives = cases.filter((c) => c.correct).length;
     expect(cases.length - positives).toBe(positives * 2);
+  });
+
+  it('teaches short generic identifiers, in the train split only for the ones held out of it', () => {
+    const labels = (split: 'train' | 'heldout', identifier: string, correct: boolean) =>
+      seedJudgmentCases({ split }).filter((c) => c.kind === 'field-label' && c.subject.identifier === identifier && c.correct === correct).map((c) => c.subject.koreanLabel);
+    expect(labels('train', 'name', true)).toEqual(expect.arrayContaining(['이름', '회원명']));
+    expect(labels('train', 'id', true)).toEqual([]);
+    expect(labels('heldout', 'id', true).sort()).toEqual(['ID', '아이디', '주문 ID', '회원 ID'].sort());
+    expect(labels('heldout', 'status', false)).not.toContain('상태');
+    expect(labels('heldout', 'name', true)).toEqual([]);
+  });
+
+  it('never labels a generic identifier wrongly with a label it is also given as right, and has no duplicate lines', () => {
+    for (const split of ['train', 'heldout', 'all'] as const) {
+      const cases = seedJudgmentCases({ split, kinds: ['field-label'] });
+      const keys = cases.map((c) => `${c.subject.identifier}\u0000${c.subject.koreanLabel}`);
+      expect(new Set(keys).size).toBe(keys.length);
+    }
+    for (const [identifier, correct, wrong] of [...SEED_GENERIC_TRAIN, ...SEED_GENERIC_HELDOUT]) {
+      expect(wrong.filter((label) => correct.includes(label)), identifier).toEqual([]);
+      expect(wrong.length, identifier).toBeGreaterThanOrEqual(2);
+    }
+    const ids = [...SEED_GENERIC_TRAIN, ...SEED_GENERIC_HELDOUT].map(([identifier]) => identifier);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 
   it('writes laya-train / laya-evals lines with the evaluated question wording', () => {

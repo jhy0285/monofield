@@ -36,6 +36,73 @@ export const SEED_FIELDS: ReadonlyArray<readonly [string, string]> = [
   ['refundReason', '환불 사유'], ['cancelDate', '취소일자'], ['cancelReason', '취소 사유'], ['memo', '메모'],
 ];
 
+/**
+ * Short, generic identifiers (`id`, `status`, `amount`, `custNm`) whose Korean label is a qualifier plus the
+ * concept ("주문 ID", "결제 금액"). The long, specific fields above never taught this: a model trained on them
+ * alone scored `id → 주문 ID` at 0.01. Each entry is [identifier, correct labels, pool of clearly wrong labels];
+ * every correct label gets the next two wrong ones from the pool. The train and held-out lists are written out
+ * (not shuffled) so the identifiers stay disjoint, and they are kept apart from the shuffled seed above so
+ * adding them does not move any other split.
+ */
+type GenericField = readonly [identifier: string, correct: readonly string[], wrong: readonly string[]];
+
+export const SEED_GENERIC_TRAIN: ReadonlyArray<GenericField> = [
+  ['name', ['이름', '회원명', '상품명'], ['번호', '금액', '일자', '주소', '상태', '수량']],
+  ['type', ['유형', '구분', '결제 유형'], ['금액', '이름', '일자', '번호', '주소', '수량']],
+  ['code', ['코드', '분류 코드', '상태 코드'], ['일자', '이름', '금액', '주소', '수량', '비고']],
+  ['no', ['번호', '일련번호', '계약번호'], ['이름', '금액', '주소', '상태', '일자', '수량']],
+  ['count', ['건수', '수', '조회수'], ['일자', '이름', '주소', '상태', '금액', '비고']],
+  ['date', ['일자', '날짜', '등록일자'], ['금액', '상태', '이름', '번호', '주소', '수량']],
+  ['desc', ['설명', '상세 설명'], ['번호', '일자', '금액', '이름']],
+  ['description', ['설명', '상품 설명'], ['금액', '코드', '일자', '번호']],
+  ['remark', ['비고', '참고 사항'], ['금액', '일자', '번호', '이름']],
+  ['note', ['비고', '메모'], ['번호', '상태', '금액', '일자']],
+  ['seq', ['순번', '일련번호'], ['이름', '금액', '주소', '일자']],
+  ['level', ['등급', '단계'], ['이름', '일자', '금액', '주소']],
+  ['url', ['URL', '링크'], ['금액', '수량', '이름', '일자']],
+  ['rate', ['비율', '할인율'], ['이름', '번호', '주소', '일자']],
+  ['total', ['합계', '총계'], ['이름', '일자', '주소', '상태']],
+  ['price', ['가격', '판매가'], ['이름', '일자', '상태', '주소']],
+  ['qty', ['수량', '주문 수량'], ['이름', '일자', '주소', '상태']],
+  ['phone', ['전화번호', '연락처'], ['이메일', '주소', '이름', '금액']],
+  ['tel', ['전화번호', '연락처'], ['주소', '이름', '금액', '일자']],
+  ['flag', ['여부', '구분'], ['금액', '이름', '일자', '주소']],
+  ['message', ['메시지', '내용'], ['번호', '일자', '금액', '이름']],
+  ['reason', ['사유', '이유'], ['금액', '번호', '일자', '이름']],
+  ['result', ['결과', '처리 결과'], ['이름', '일자', '주소', '금액']],
+  ['comment', ['댓글', '의견'], ['금액', '번호', '일자', '주소']],
+  ['age', ['나이', '연령'], ['금액', '이름', '주소', '일자']],
+  ['size', ['크기', '용량'], ['이름', '일자', '주소', '상태']],
+  ['regDt', ['등록일자', '등록일시'], ['수정일자', '삭제일시', '이름', '금액']],
+  ['modDt', ['수정일자', '수정일시'], ['등록일자', '삭제일시', '이름', '금액']],
+  ['regId', ['등록자 ID', '등록자'], ['수정자 ID', '수정일자', '이름', '금액']],
+  ['modId', ['수정자 ID', '수정자'], ['등록자 ID', '등록일자', '이름', '금액']],
+  ['custNm', ['고객명', '고객 이름'], ['고객번호', '주소', '금액', '일자']],
+  ['prodCd', ['상품 코드', '제품 코드'], ['상품명', '일자', '금액', '주소']],
+  ['ordNo', ['주문번호', '주문 번호'], ['회원 ID', '주문 상태', '금액', '이름']],
+  ['amt', ['금액', '합계 금액'], ['수량', '이름', '일자', '주소']],
+  ['cnt', ['건수', '횟수'], ['금액', '이름', '주소', '일자']],
+];
+
+export const SEED_GENERIC_HELDOUT: ReadonlyArray<GenericField> = [
+  ['id', ['ID', '아이디', '주문 ID', '회원 ID'], ['주문 상태', '결제 금액', '생성일시', '이메일', '배송지 주소', '회원명', '수량', '삭제 여부']],
+  ['status', ['상태', '주문 상태', '처리 상태', '배송 상태'], ['주문번호', '생성일시', '결제 금액', '회원명', '이메일', '수량', '주소', '일자']],
+  ['amount', ['금액', '결제 금액', '주문 금액', '합계 금액'], ['상태', '회원명', '생성일시', '주소', '이메일', '번호', '사용 여부', '이름']],
+  ['state', ['상태', '진행 상태'], ['번호', '금액', '일자', '이름']],
+  ['value', ['값', '설정 값'], ['일자', '이름', '주소', '상태']],
+  ['time', ['시간', '시각'], ['금액', '이름', '주소', '상태']],
+  ['number', ['번호', '일련번호'], ['이름', '일자', '주소', '금액']],
+  ['text', ['텍스트', '본문'], ['번호', '금액', '일자', '상태']],
+  ['image', ['이미지', '대표 이미지'], ['금액', '일자', '번호', '상태']],
+  ['parentId', ['상위 ID', '부모 ID'], ['하위 ID', '이름', '금액', '일자']],
+  ['rgstDt', ['등록일자', '등록일시'], ['수정일자', '삭제일시', '이름', '금액']],
+  ['updtDt', ['수정일자', '수정일시'], ['등록일자', '삭제일시', '이름', '금액']],
+  ['userNm', ['사용자명', '사용자 이름'], ['사용자 ID', '연락처', '금액', '일자']],
+  ['statCd', ['상태 코드', '상태'], ['상품 코드', '일자', '금액', '이름']],
+  ['dlvAddr', ['배송지 주소', '배송 주소'], ['배송 상태', '결제 금액', '이름', '일자']],
+  ['ordAmt', ['주문 금액', '주문액'], ['주문번호', '주문 상태', '이름', '일자']],
+];
+
 const CONFUSIONS: Readonly<Record<string, readonly string[]>> = {
   createdAt: ['수정일시', '삭제일시'], updatedAt: ['생성일시'], deletedAt: ['생성일시'],
   startDate: ['종료일자'], endDate: ['시작일자'], unitPrice: ['수량', '총 금액'], quantity: ['단가'],
@@ -106,6 +173,19 @@ function fieldCases(pairs: ReadonlyArray<readonly [string, string]>, next: () =>
   return out;
 }
 
+function genericCases(entries: ReadonlyArray<GenericField>): SeedCase[] {
+  const out: SeedCase[] = [];
+  for (const [identifier, correct, wrong] of entries) {
+    correct.forEach((label, i) => {
+      out.push({ kind: 'field-label', subject: { identifier, koreanLabel: label }, correct: true });
+      for (const offset of [0, 1]) {
+        out.push({ kind: 'field-label', subject: { identifier, koreanLabel: wrong[(2 * i + offset) % wrong.length]! }, correct: false });
+      }
+    });
+  }
+  return out;
+}
+
 function businessCases(resources: ReadonlyArray<readonly [string, string]>, next: () => number): SeedCase[] {
   const out: SeedCase[] = [];
   for (const [r, k] of resources) {
@@ -131,9 +211,11 @@ export function seedJudgmentCases(options: { split?: 'train' | 'heldout' | 'all'
     return options.split === 'heldout' ? shuffled.slice(cut) : options.split === 'train' ? shuffled.slice(0, cut) : shuffled;
   };
   const fields = pick(SEED_FIELDS), resources = pick(SEED_RESOURCES);
+  const generic = options.split === 'heldout' ? SEED_GENERIC_HELDOUT : options.split === 'train' ? SEED_GENERIC_TRAIN : [...SEED_GENERIC_TRAIN, ...SEED_GENERIC_HELDOUT];
   const cases = [
     ...(kinds.includes('field-label') ? fieldCases(fields, next) : []),
     ...(kinds.includes('business-name') ? businessCases(resources, next) : []),
+    ...(kinds.includes('field-label') ? genericCases(generic) : []),
   ];
   return shuffle(cases, next);
 }

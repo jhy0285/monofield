@@ -82,26 +82,68 @@ Two-thirds of the held-out items are wrong ones, so "always wrong" would already
 the flag columns. The held-out file is synthetic and templated: its wrong items are swaps and look alike, so these
 numbers say the model learned the pattern, not how it does on your documents.
 
+The numbers above are for the seed set as it was on 2026-11-02 morning (378 held-out items, 882 train items). Later the
+seed gained short generic identifiers (below); the file now has 492 held-out and 1,110 train lines, and the 378 are still in
+it unchanged.
+
+### A second fine-tune: short generic identifiers
+
+The first fine-tune scored very short, generic identifiers low even when the label was right (`id → 주문 ID` 0.01), because
+the seed's long, specific fields (`memberId`, `orderStatus`) never taught that a generic `id` or `amount` takes "qualifier +
+concept" labels. `SEED_GENERIC_TRAIN` / `SEED_GENERIC_HELDOUT` in `apps/daemon/src/services/judgment-seed.ts` add 51 such
+identifiers (`name`, `code`, `qty`, `regDt`, `custNm`, ... for training; `id`, `status`, `amount`, `state`, `rgstDt`, `ordAmt`,
+... held out) with a right label and two wrong ones each. They are written out, not shuffled, so every other split is
+unchanged and the held-out identifiers stay unseen. A second fine-tune with the same recipe on the larger train split
+(1,110 lines) was served next to the first (`v1`) and the stock model and scored on the 492 held-out lines:
+
+| Field label, held-out subset | Model | Accuracy at 0.5 | AUC | Flag precision / recall at ≤ 0.3 |
+| --- | --- | --- | --- | --- |
+| Original (90 items, 60 wrong) | stock | 0.756 | 0.891 | 0.933 / 0.467 |
+| | v1 | 0.933 | 0.974 | 0.935 / 0.967 |
+| | v2 | 0.889 | 0.958 | 0.902 / 0.917 |
+| Generic (114 items, 76 wrong) | stock | 0.763 | 0.818 | 0.891 / 0.750 |
+| | v1 | 0.833 | 0.868 | 0.835 / 0.934 |
+| | v2 | 0.877 | 0.949 | 0.878 / 0.947 |
+
+Business names (288 items) are the same file as before: stock AUC 0.539, v1 0.915, v2 0.924 (flag precision/recall
+0.417/0.026, 0.868/0.922, 0.882/0.938). The held-out evaluation printed by `laya-train` for v2 was accuracy 0.535 → 0.870, ECE
+0.274 → 0.100 (v1 on its 378: 0.466 → 0.868, 0.331 → 0.104).
+
+So the generic identifiers help where they were meant to (AUC 0.868 → 0.949 on unseen generic fields) and the original subset
+got a little worse (0.974 → 0.958). These are two single training runs whose loss curves differ (v2's final-epoch loss
+was 0.33, v1's 0.06), so a difference of this size may be run-to-run noise as much as data; repeat a run before reading it as
+a trade-off. Per generic identifier, v2's mean probability for the right labels is ≥ 0.87 for `amount`, `state`, `image`,
+`parentId`, `time`, `text`, `value`, `number`, `updtDt`, but still 0.60 for `status`, 0.50 for `statCd`, 0.37 for `dlvAddr` and
+about 0.04 for the abbreviations `ordAmt` and `userNm`, and 0.03 for `rgstDt` (v1 gave `rgstDt` 0.99): abbreviations the
+training set did not contain are not generalized.
+
 ### Against a specification with planted errors
 
-`monofield judge check` on a 3-endpoint, 15-item specification with three planted errors (`POST /api/v1/orders →
-회원 탈퇴`, `memberId → 주문번호`, `createdAt → 삭제일시`), observe mode, local backend, two batch calls (about
-1.2–1.4 s on CPU), probability that the item is right:
+`monofield judge check` on a 3-endpoint specification with three planted errors (`POST /api/v1/orders → 회원 탈퇴`,
+`memberId → 주문번호`, `createdAt → 삭제일시`), observe mode, local backend, two batch calls (about 1.2–1.4 s on CPU).
+Probability that the item is right, for each distinct item (a label that appears on two endpoints is one item):
 
-| | Stock | Fine-tuned |
-| --- | --- | --- |
-| `POST /api/v1/orders → 회원 탈퇴` (planted) | 0.73 | **0.01** |
-| `memberId → 주문번호` (planted) | 0.77 | **0.01** |
-| `createdAt → 삭제일시` (planted) | 0.96 | **0.03** |
-| 12 correct items | 0.03 – 0.96, no pattern | 8 at 0.98 – 0.99; **4 at 0.01 – 0.16** |
+| Item | Stock | v1 | v2 |
+| --- | --- | --- | --- |
+| `POST /api/v1/orders → 회원 탈퇴` (planted) | 0.73 | **0.01** | **0.01** |
+| `memberId → 주문번호` (planted) | 0.77 | **0.01** | **0.06** |
+| `createdAt → 삭제일시` (planted) | 0.96 | **0.03** | **0.03** |
+| `id → 주문 ID` | 0.03 | 0.01 | 0.02 |
+| `status → 주문 상태` | 0.38 | 0.02 | 0.03 |
+| `amount → 결제 금액` | 0.95 | 0.16 | 0.99 |
+| `deletedAt → 탈퇴 일시` | 0.44 | 0.98 | 0.50 |
+| `orderNo → 주문번호` | 0.21 | 0.99 | 0.99 |
+| the other five correct items | 0.82 – 0.96 | 0.99 | 0.89 – 0.99 |
 
-The stock model misses all three, as before. The fine-tuned model ranks all three planted errors lowest, but it also
-gives four correct items a low score: `id → 주문 ID` (0.01), `status → 주문 상태` (0.02, on two endpoints) and
-`amount → 결제 금액` (0.16). Very short, generic identifiers are the weak spot; the seed vocabulary is built from
-longer, more specific fields. On this example a flag at ≤ 0.3 would have been right 3 times in 7 (precision 0.43),
-far below the held-out 0.87 – 0.94. That is the reason the default stays observe mode, and why a policy needs your
-own labels (the 성적표 section) before flags turn on: mark these generic fields correct and they become training
-data for the next `laya-train` run (`monofield judge export`).
+The stock model misses all three planted errors and flags two correct items. Both fine-tuned models rank all three planted
+errors lowest. With flags at ≤ 0.3, v1 raised 6 flags (3 planted, precision 0.50) and v2 raised 5 (3 planted, precision
+0.60); the held-out files say 0.84 – 0.94. v2 fixed `amount → 결제 금액` but `id → 주문 ID` and `status → 주문 상태` stay low
+(`id` and `status` are held out of the generic training set on purpose, so they stay an honest test), and it now doubts
+`deletedAt → 탈퇴 일시` (0.50). Which of these were unseen: `memberId` and every generic item are held out of both training
+sets, while `createdAt` and the resource `orders` are in the seed's train split, so those two planted catches are not a
+generalization test. That is why the default stays observe mode and why a policy needs your own labels (the 성적표 section)
+before flags turn on: mark the generic fields correct and they become training data for the next `laya-train` run
+(`monofield judge export`).
 
 ## Use it
 
