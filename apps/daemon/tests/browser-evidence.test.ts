@@ -61,7 +61,7 @@ function memoryFiles(initial: Record<string, string>) {
         throw Object.assign(new Error('file changed since it was loaded'), { code: 'ESTALE' });
       }
       if (!options.overwrite && current !== undefined) throw Object.assign(new Error('file already exists'), { code: 'EEXIST' });
-      store.set(name, body);
+      store.set(name, typeof body === 'string' ? body : body.toString('utf8'));
     },
   };
   return { access, store, writes };

@@ -585,7 +585,7 @@ interface Props {
   createDesignFromActiveDesignSystemBusy?: boolean;
   // Bumped by the parent to push a draft into the composer (used by the
   // "Import repo" CTA). The nonce lets the same text fire more than once.
-  composerDraftSignal?: { text: string; nonce: number };
+  composerDraftSignal?: { text: string; nonce: number; append?: boolean; intro?: string };
   // Optional pet wiring forwarded straight through to ChatComposer's
   // /pet button. When omitted the composer hides the button entirely.
   petConfig?: AppConfig['pet'];
@@ -1304,7 +1304,8 @@ export function ChatPane({
     if (!composerDraftSignal) return;
     if (lastDraftSignalNonceRef.current === composerDraftSignal.nonce) return;
     lastDraftSignalNonceRef.current = composerDraftSignal.nonce;
-    composerRef.current?.setDraft(composerDraftSignal.text);
+    if (composerDraftSignal.append) composerRef.current?.appendDraft(composerDraftSignal.text, composerDraftSignal.intro);
+    else composerRef.current?.setDraft(composerDraftSignal.text);
   }, [composerDraftSignal]);
 
   // Library "optimize design system" hand-off: when the user pushed selected

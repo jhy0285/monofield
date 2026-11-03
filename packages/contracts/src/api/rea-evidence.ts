@@ -23,8 +23,17 @@ export interface ReaEvidenceListEntry {
   evidenceId: string;
 }
 
+/** A case-result file (`{ "cases": [...] }`, "cases" first or right after "format"): one side of a comparison. */
+export interface ReaCaseFileEntry {
+  file: string;
+  size: number;
+  mtime: number;
+}
+
 export interface ReaEvidenceListResponse {
   files: ReaEvidenceListEntry[];
+  /** Case-result files, which can be compared with each other (not REA evidence themselves). */
+  cases: ReaCaseFileEntry[];
 }
 
 export interface ReaEnvelope {
@@ -297,4 +306,192 @@ export function parseSqliteConstraints(sql: string | null | undefined): SqliteCo
     if (name && /\bUNIQUE\b/i.test(definition.replace(/\bCHECK\s*\([\s\S]*\)/gi, ''))) out.unique.push(name);
   }
   return out;
+}
+
+// ── Citing evidence in a conversation ──────────────────────────────────────
+
+/** The part of an evidence file a citation points at. */
+export type ReaCiteTarget =
+  | { kind: 'file' }
+  | { kind: 'step'; index: number }
+  | { kind: 'request'; id: string }
+  | { kind: 'table'; name: string }
+  | { kind: 'node'; id: string }
+  | { kind: 'path'; index: number };
+
+export interface ReaCiteRequest {
+  file: string;
+  target: ReaCiteTarget;
+  /**
+   * Quote captured values (body excerpts, DOM text, SQLite rows). They are real application data, so by default a
+   * citation carries their structure only: JSON keys and types, column names.
+   */
+  includeValues?: boolean;
+}
+
+/**
+ * One evidence item, ready to quote in a prompt. `block` is the same text in the chat composer and in
+ * `monofield rea cite`, so a person and an external agent cite evidence the same way.
+ */
+export interface ReaCitation {
+  ok: true;
+  file: string;
+  evidenceId: string;
+  /** Where the item is in the evidence file, e.g. `steps[2]` or `schema.tables[name=orders]`. */
+  pointer: string;
+  /** One line that names the item. */
+  label: string;
+  block: string;
+  /** Project files written for the citation (a step's verified screenshot), so an agent can open them. */
+  files: string[];
+  valuesIncluded: boolean;
+}
+
+// ── Comparing an original with a remake ────────────────────────────────────
+
+export type ReaCompareVerdict = 'pass' | 'fail' | 'missing' | 'extra';
+/** Why a step pair failed. */
+export type ReaStepDifference = 'action' | 'status' | 'url' | 'calls' | 'text';
+
+export interface ReaCompareStepSide {
+  index: number;
+  id: string;
+  action: string;
+  status: string;
+  /** Path of the page after the step, without the origin (the remake usually runs elsewhere). */
+  path: string | null;
+}
+
+/** One API route in a step: the statuses each side received, in order. */
+export interface ReaCompareCall {
+  method: string;
+  /** The path with numeric and ID-like segments replaced by `{n}` / `{id}`, so `/orders/1001` and `/orders/7` match. */
+  route: string;
+  original: number[];
+  remake: number[];
+  same: boolean;
+}
+
+export interface ReaCompareStepRow {
+  position: number;
+  original: ReaCompareStepSide | null;
+  remake: ReaCompareStepSide | null;
+  verdict: ReaCompareVerdict;
+  differences: ReaStepDifference[];
+  calls: ReaCompareCall[];
+  /**
+   * Screen lines only one side has. They come from the accessibility snapshot when both sides captured one (roles and
+   * names, no styling), else from the text of the captured HTML. `compared` is false when a side captured neither.
+   */
+  text: { compared: boolean; source: 'accessibility' | 'dom' | null; onlyOriginal: string[]; onlyRemake: string[] };
+  /** Whether each side has a verified screenshot for the step, for the side-by-side view. */
+  screenshots: { original: boolean; remake: boolean };
+}
+
+export interface ReaCompareSummary {
+  total: number;
+  pass: number;
+  fail: number;
+  missing: number;
+  extra: number;
+}
+
+export interface ReaBrowserComparison {
+  kind: 'browser';
+  steps: ReaCompareStepRow[];
+  textCompared: boolean;
+}
+
+/**
+ * Case results: `{ "cases": [{ "id"?, "input"?, "output" }] }`, one file run on the original and one on the remake
+ * (a harness the agent writes prints them). Cases are matched by `id`, else by `input`, else by position.
+ */
+export interface ReaCaseRow {
+  key: string;
+  input: string | null;
+  original: string | null;
+  remake: string | null;
+  verdict: ReaCompareVerdict;
+  /** JSON path of the first difference, e.g. `$.pan` or `$[2]`. */
+  at?: string;
+}
+
+export interface ReaCaseComparison {
+  kind: 'cases';
+  /** Largest absolute difference two numbers may have and still count as equal. */
+  tolerance: number;
+  /** Rows that did not pass come first (fail, missing, extra), then the passing ones, each in file order. */
+  rows: ReaCaseRow[];
+  /** More rows than {@link REA_COMPARE_ROW_LIMIT}: the summary counts all of them, `rows` holds the first ones. */
+  truncated: boolean;
+}
+
+export const REA_COMPARE_ROW_LIMIT = 2000;
+
+export type ReaComparison = (ReaBrowserComparison | ReaCaseComparison) & {
+  ok: true;
+  original: string;
+  remake: string;
+  summary: ReaCompareSummary;
+  /** The comparison as plain text: what `monofield rea compare` prints, and what the screen puts into the chat. */
+  report: string;
+};
+
+export interface ReaCompareRequest {
+  original: string;
+  remake: string;
+  /** Cases only. Default 0: outputs must be equal. */
+  tolerance?: number;
+  /** Browser only. Default true; false compares action, status, page path and API calls but not visible text. */
+  compareText?: boolean;
+}
+
+// ── Setup check ────────────────────────────────────────────────────────────
+
+/** The REA release MonoField's MCP template pins, and the Node.js range its package declares (`engines.node`). */
+export const REA_PACKAGE = { name: 'rea-agents', version: '6.7.0', node: '^22.19.0 || ^24.11.0 || >=26.0.0' } as const;
+
+export type ReaDoctorCheckId = 'node' | 'npx' | 'browser' | 'mcp' | 'native' | 'java' | 'jadx' | 'apktool' | 'tshark' | 'adb';
+export type ReaDoctorStatus = 'ok' | 'warn' | 'missing';
+
+export interface ReaDoctorCheck {
+  id: ReaDoctorCheckId;
+  status: ReaDoctorStatus;
+  /** Needed for REA to start at all; the others are needed only for some targets. */
+  required: boolean;
+  /** What was found: a version, an executable path, an MCP command line. */
+  found: string | null;
+  /** A short machine-readable note, e.g. `outside-range`, `disabled`, `not-saved`. */
+  note?: string;
+}
+
+export interface ReaDoctorResponse {
+  ok: true;
+  /** Every required check passed. It does not start REA: whether the agent lists REA's tools is seen in a conversation. */
+  ready: boolean;
+  platform: string;
+  package: typeof REA_PACKAGE;
+  checks: ReaDoctorCheck[];
+}
+
+/**
+ * Whether a Node.js version (`v24.11.1` or `24.11.1`) satisfies a range made of `^x.y.z` and `>=x.y.z` parts joined
+ * by `||`, the only forms {@link REA_PACKAGE} uses. Pre-release tags are ignored.
+ */
+export function satisfiesNodeRange(version: string, range: string): boolean {
+  const parse = (text: string) => {
+    const match = text.trim().replace(/^v/, '').match(/^(\d+)\.(\d+)\.(\d+)/);
+    return match ? [Number(match[1]), Number(match[2]), Number(match[3])] as const : null;
+  };
+  const have = parse(version);
+  if (!have) return false;
+  const atLeast = (want: readonly [number, number, number]) => have[0] !== want[0] ? have[0] > want[0] : have[1] !== want[1] ? have[1] > want[1] : have[2] >= want[2];
+  return range.split('||').some((part) => {
+    const term = part.trim();
+    const want = parse(term.replace(/^(\^|>=)/, ''));
+    if (!want) return false;
+    if (term.startsWith('^')) return have[0] === want[0] && atLeast(want);
+    if (term.startsWith('>=')) return atLeast(want);
+    return have[0] === want[0] && have[1] === want[1] && have[2] === want[2];
+  });
 }

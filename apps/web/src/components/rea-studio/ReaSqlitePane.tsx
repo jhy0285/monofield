@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { ReaSqliteTable, ReaSqliteView } from '@open-design/contracts';
 import { useI18n } from '../../i18n';
 import { ER_HEADER, ER_ROW, layoutEr } from './layout';
+import { CiteButton } from './cite';
 import styles from './ReaStudio.module.css';
 
 /** A SQLite inspection: the tables as a relationship diagram, then each table's columns, constraints and sampled rows. */
@@ -43,6 +44,7 @@ export function ReaSqlitePane({ view }: { view: ReaSqliteView }) {
       {view.tables.map((item) => <button key={item.name} type="button" role="tab" aria-selected={item.name === selected} data-active={item.name === selected} onClick={() => setSelected(item.name)}>{item.name}</button>)}
     </div>
     {table ? <section className={styles.panel} aria-label={table.name}>
+      <div className={styles.itemBar}><b>{table.name}</b><CiteButton target={{ kind: 'table', name: table.name }} /></div>
       <div className={styles.tableWrap}>
         <table className={styles.table}>
           <thead><tr><th>{t('reaStudio.columns')}</th><th>{t('reaStudio.type')}</th><th /><th>{t('reaStudio.default')}</th></tr></thead>

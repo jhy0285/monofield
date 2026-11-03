@@ -181,6 +181,8 @@ interface Props {
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[], images?: File[]) => Promise<boolean | void> | boolean | void;
   onSendBrowserReviewBatch?: (prompt: string, attachments: ChatCommentAttachment[], images?: File[]) => Promise<boolean | void> | boolean | void;
   onRequestBrowserUsePrompt?: (prompt: string) => void;
+  /** Adds text after the chat composer's draft (REA Studio's "add to chat"). */
+  onAppendToChat?: (text: string, introIfEmpty?: string) => void;
   onRequestVerificationRepair?: (prompt: string) => void;
   onPluginFolderAgentAction?: (
     relativePath: string,
@@ -448,6 +450,7 @@ export function FileWorkspace({
   onSendBoardCommentAttachments,
   onSendBrowserReviewBatch,
   onRequestBrowserUsePrompt,
+  onAppendToChat,
   onRequestVerificationRepair,
   onPluginFolderAgentAction,
   activePluginActionPaths,
@@ -2537,6 +2540,7 @@ export function FileWorkspace({
             onRemovePreviewComment={onRemovePreviewComment}
             onSendBoardCommentAttachments={onSendBoardCommentAttachments}
             onRequestDocumentUpdate={onRequestBrowserUsePrompt}
+            onAppendToChat={onAppendToChat}
             onFileSaved={onRefreshFiles}
             onOpenFile={openFile}
             onOpenFileReplacing={openFileReplacing}

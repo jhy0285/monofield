@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyReaEvidence, parseSqliteConstraints } from '../src/api/rea-evidence';
+import { REA_PACKAGE, classifyReaEvidence, parseSqliteConstraints, satisfiesNodeRange } from '../src/api/rea-evidence';
 
 describe('classifyReaEvidence', () => {
   it('names the kind from the predicate or the operation', () => {
@@ -41,5 +41,13 @@ describe('parseSqliteConstraints', () => {
     expect(parseSqliteConstraints("CREATE TABLE t(code TEXT CHECK(code <> 'UNIQUE'), n INTEGER)").unique).toEqual([]);
     expect(parseSqliteConstraints(null)).toEqual({ foreignKeys: [], unique: [], checks: [] });
     expect(parseSqliteConstraints('not sql')).toEqual({ foreignKeys: [], unique: [], checks: [] });
+  });
+});
+
+describe('satisfiesNodeRange', () => {
+  it('reads the caret and lower-bound ranges REA declares', () => {
+    const range = REA_PACKAGE.node;
+    expect(['v22.19.0', '22.20.1', 'v24.11.0', 'v24.15.2', 'v26.0.0', 'v27.1.0'].map((version) => satisfiesNodeRange(version, range))).toEqual([true, true, true, true, true, true]);
+    expect(['v20.18.0', 'v22.18.9', 'v23.5.0', 'v24.10.9', 'v25.9.0', 'not-a-version'].map((version) => satisfiesNodeRange(version, range))).toEqual([false, false, false, false, false, false]);
   });
 });

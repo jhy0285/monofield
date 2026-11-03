@@ -274,6 +274,11 @@ interface Props {
 // push text into the composer without owning its draft state.
 export interface ChatComposerHandle {
   setDraft: (text: string) => void;
+  /**
+   * Adds text after what is already typed (a blank line between), so several pieces of context can be collected before
+   * sending. `introIfEmpty` leads the text when the composer was empty.
+   */
+  appendDraft: (text: string, introIfEmpty?: string) => void;
   restoreDraft: (draft: {
     text: string;
     attachments?: ChatAttachment[];
@@ -929,6 +934,16 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         setDraft: (text: string) => {
           setDraft(text);
           editorRef.current?.setText(text);
+          editorRef.current?.focus();
+          seededRef.current = true;
+        },
+        appendDraft: (text: string, introIfEmpty?: string) => {
+          // draftRef, not the editor's getText(): that collapses blank lines for the wire format.
+          const existing = draftRef.current.replace(/\s+$/, '');
+          const next = existing ? `${existing}\n\n${text}` : introIfEmpty ? `${introIfEmpty}\n\n${text}` : text;
+          draftRef.current = next;
+          setDraft(next);
+          editorRef.current?.setText(next);
           editorRef.current?.focus();
           seededRef.current = true;
         },

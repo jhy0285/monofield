@@ -1,0 +1,21 @@
+.root { display: grid; gap: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-panel); margin-bottom: 12px; }
+.head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.title { margin: 0; font-size: 14px; }
+.version { margin-left: 6px; font: 12px var(--font-mono); color: var(--text-muted); }
+.verdict { margin: 4px 0 0; font-size: 12.5px; color: var(--amber, var(--text)); }
+.verdict[data-ready="true"] { color: var(--green, var(--text)); }
+.alert { margin: 0; font-size: 12.5px; color: var(--red); }
+.list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.item { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+.glyph { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; font: 700 12px var(--font-mono); color: var(--text-muted); border: 1px solid var(--border); }
+.item[data-status="ok"] .glyph { color: var(--green, var(--text)); border-color: currentColor; }
+.item[data-status="warn"] .glyph { color: var(--amber, var(--text)); border-color: currentColor; }
+.item[data-status="missing"] .glyph { color: var(--red); border-color: currentColor; }
+.body { display: grid; gap: 3px; min-width: 0; justify-items: start; }
+.line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; }
+.tag { padding: 0 6px; border: 1px solid var(--border); border-radius: 5px; font: 600 10px var(--font-mono); color: var(--text-muted); }
+.note { font-size: 12px; color: var(--amber, var(--text)); }
+.need { margin: 0; font-size: 12px; color: var(--text-muted); }
+.found { font: 11.5px var(--font-mono); color: var(--text-muted); overflow-wrap: anywhere; }
+.scope { margin: 0; font-size: 11.5px; color: var(--text-muted); }
+@media (max-width: 600px) { .head { flex-direction: column; } }

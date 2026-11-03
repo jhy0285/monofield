@@ -7160,7 +7160,7 @@ export function ProjectView({
   }, [connectRepoNeeded]);
 
   // Signal that pushes a draft into the chat composer (the "Import repo" CTA).
-  const [composerDraftSignal, setComposerDraftSignal] = useState<{ text: string; nonce: number }>();
+  const [composerDraftSignal, setComposerDraftSignal] = useState<{ text: string; nonce: number; append?: boolean; intro?: string }>();
   // One handler for both the review banner and the chat CTA. When GitHub is
   // not connected it opens Connectors; once connected it prefills the composer
   // with the import instruction so the user can review and send it.
@@ -7205,6 +7205,11 @@ export function ProjectView({
       text,
       nonce: Date.now(),
     });
+  }, []);
+  // Evidence quoted from REA Studio is added after what the person already typed, so several items can be collected.
+  const handleAppendToChat = useCallback((text: string, intro?: string) => {
+    setWorkspaceFocused(false);
+    setComposerDraftSignal({ text, nonce: Date.now(), append: true, ...(intro ? { intro } : {}) });
   }, []);
 
   const isDeck = useMemo(
@@ -8047,6 +8052,7 @@ export function ProjectView({
           onSendBoardCommentAttachments={handleSendBoardCommentAttachments}
           onSendBrowserReviewBatch={handleSendBrowserReviewBatch}
           onRequestBrowserUsePrompt={handleBrowserUsePrompt}
+          onAppendToChat={handleAppendToChat}
           onRequestVerificationRepair={handleBrowserUsePrompt}
           onPluginFolderAgentAction={handlePluginFolderAgentAction}
           activePluginActionPaths={activePluginActionPaths}

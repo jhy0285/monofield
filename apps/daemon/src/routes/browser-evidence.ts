@@ -31,7 +31,7 @@ export function projectEvidenceAccess(deps: RegisterBrowserEvidenceRoutesDeps, i
         return buffer.subarray(0, bytesRead);
       } finally { await handle.close(); }
     },
-    write: (name, body, options) => deps.projectFiles.writeProjectFile(projectsDir, id, name, Buffer.from(body, 'utf8'),
+    write: (name, body, options) => deps.projectFiles.writeProjectFile(projectsDir, id, name, typeof body === 'string' ? Buffer.from(body, 'utf8') : body,
       { overwrite: options.overwrite, expectedContentSha256: options.expectedContentSha256 ?? null }, project.metadata),
   };
 }

@@ -91,7 +91,9 @@ As of 2026-11-03.
   could not pass were removed at the user's request (see the newest Log entry).
 - REA Studio (2026-11-03, branch only): a JSON file in a project that is REA evidence opens as a screen (browser capture, SQLite
   relationship diagram, static graph, trace) with a switch back to the raw JSON; `monofield rea files|show` print the same
-  views. Built on my own reading of "apply REA better", not on a decision by the user: keep or drop it (see the newest Log entries).
+  views. It was first built on my own reading of "apply REA better"; the user then asked for three additions, now built: evidence
+  items go into the chat (`monofield rea cite`), an original capture or case-result file is compared with its remake
+  (`monofield rea compare`), and Settings → MCP checks REA's setup (`monofield rea doctor`). See the newest Log entry.
 - Marketing site (`apps/monofield-site`, buildless static site for monofield.vercel.app):
   the hero redesigned on 2026-10-30 is finished on this branch. Traces show no Layout and no
   Paint during its loop and nothing of it running once it is scrolled away, and it was viewed
@@ -304,10 +306,14 @@ REA browser evidence cross-check (see the 2026-11-02 Log entry):
 
 REA Studio (see the 2026-11-03 Log entry):
 
-- The user asked "how about it?" (an opinion) and I built the feature; ask before extending it. Not done: an end-to-end UI spec. A
-  Playwright draft passed the SQLite and browser steps but opening files by deep link was flaky (landed on the file list or on the
-  previously active tab), so it was left out; write it against the app's own navigation. Local PII screening of captured bodies
-  with a local judgment model was only proposed (rules first, observe mode), not started.
+- Not done: an end-to-end UI spec. Opening a file by deep link (`/projects/<id>/files/<path>`) needs onboarding finished in a fresh
+  data dir (else it redirects to `/onboarding`) and sometimes lands on the previously open tab; the scratch walkthrough of
+  2026-11-03 (newest Log entry) clicked the file's tab when that happened. Write the spec against the app's own navigation.
+- REA itself has never run in this environment (the classifier refused `npx -y rea-agents`), so citation and comparison were tested on
+  REA's real outputs from `docs/testing/evidence/rea-handover-2026-10-22` and on remakes made by editing those files, not on a second
+  real recording. The setup check was run on Linux only; its Windows paths (Program Files, PATHEXT) are covered by unit tests.
+- No screen yet for native-binary evidence (function lists, disassembly), which the game-mechanic showcases of REA produce.
+- Local PII screening of captured bodies with a local judgment model was only proposed (rules first, observe mode), not started.
 
 Judgment checks (Laya fine-tune):
 
@@ -460,6 +466,53 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-03 — REA Studio: evidence into the chat, original vs remake, setup check (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** after I suggested three ways to make REA easier in MonoField than in a terminal, the user asked for all three: put an
+  evidence item into the chat with its evidence ID, compare an original with a remake (pass/fail table, screenshots side by side),
+  and check installation and connection on one screen.
+- **Changed (API + UI + CLI for each, same daemon routes):**
+  - Cite: `POST /api/projects/:id/rea-evidence/cite` (`apps/daemon/src/services/rea-cite.ts`) builds a `<rea-evidence file=…
+    evidence_id=… pointer=…>` block for a step, request, table, graph node, trace path or the whole file. A step's screenshot is
+    written to `rea-cite/` next to the evidence only when its SHA-256 matches. Values (bodies, screen text, rows) are quoted only with
+    `includeValues`; otherwise JSON keys/types and an accessibility outline (roles; names for headings and controls only). REA's
+    `dom` artifact is the page's HTML, so screen text comes from the accessibility snapshot, or from the HTML's text
+    (`htmlText`). Studio: "Add to chat" buttons in every pane, a values checkbox, and `ChatComposerHandle.appendDraft` (threaded as
+    `composerDraftSignal.append` → `ProjectView.handleAppendToChat` → `FileWorkspace`/`FileViewer` `onAppendToChat`); it appends after
+    what is typed and adds an intro only to an empty composer. CLI `monofield rea cite` prints the block on stdout.
+  - Compare: `POST .../rea-evidence/compare` (`rea-compare.ts`) compares two browser captures step by step (pair by step ID when
+    half or more match, else by position; action, status, page path without origin, API calls with `{n}`/`{id}` route segments,
+    screen lines) or two case-result files (`{"cases": [{id, input, output}]}`, matched by id → input → position, numeric tolerance,
+    first differing JSON path). The response carries `report`, the same text `monofield rea compare` prints (exit 1 on any
+    difference). Studio: "Compare with a remake" on browser captures; a case-result file opens as a comparison view; the probe and
+    `GET .../rea-evidence` now also report case files.
+  - Setup check: `GET /api/rea/doctor` (`rea-doctor.ts`, injectable for tests) checks Node.js against rea-agents 6.7.0's declared
+    `engines.node` (`^22.19.0 || ^24.11.0 || >=26.0.0`, read from the npm registry metadata; `REA_PACKAGE` in contracts), npx and
+    the REA MCP entry (required), and a Chromium-family browser, Ghidra/IDA/Hopper, Java, JADX, Apktool, tshark, adb (optional),
+    on PATH (PATHEXT on Windows) and usual install paths only. `ReaDoctorPanel` sits at the top of Settings/Integrations → MCP with
+    an "Add REA to the MCP list" button that uses the section's own add-from-template (saved with its Save button). CLI `monofield
+    rea doctor`.
+  - Contracts in `packages/contracts/src/api/rea-evidence.ts` (citation, comparison, doctor types, `satisfiesNodeRange`); 66 i18n
+    keys × 19 locales; `BrowserEvidenceFileAccess.write` takes a Buffer too. Docs: `docs/rea-laya-practical-guide.md`,
+    `skills/legacy-system-handover/SKILL.md`.
+  - Fixed on the way: REA Studio's grid column grew to the step timeline's content width on long captures (12 steps pushed the
+    compare table off screen); `.root` now has `grid-template-columns: minmax(0, 1fr)`.
+- **Verified:** daemon `tests/rea-cite-compare.test.ts` 19, `rea-studio-cli` 8 (real server, `dist/cli.js` after `pnpm --filter
+  @open-design/daemon build`), `rea-evidence`, `browser-evidence(-cli)` all pass (77 in the five REA files); contracts suite 312/312;
+  whole daemon suite 5,657 passed, 1 failed: `tests/run-retry-runtime.test.ts` (event count 1 instead of 2) failed once under load
+  and passed alone twice; not compared on the base commit. Web: `ReaStudio.cite-compare` 7 new, `ReaStudio`, `rea-studio-layout`,
+  `ChatPane.connect-repo` (+1 append test), `ChatComposer.context-pickers` (+1 `appendDraft` test), `McpClientSection.oauth`,
+  `FileViewer`, `FileWorkspace`: 286 passed. `pnpm guard`, `pnpm typecheck` (root, with a Node 24 corepack pnpm shim first on PATH:
+  the image's `/opt/node22/bin/pnpm` fails the engine check) and `pnpm i18n:check` pass. In Chromium against a scratch
+  `tools-dev` runtime (fresh data dir, onboarding finished first): a step citation landed in the composer with the intro and the
+  screenshot saved; compare showed 11/12 with `POST /api/orders/{n}/settle 409 → 200`, the overview remake's heading change as
+  `-`/`+` lines next to both screenshots, a case file as 7/9; the setup panel at 1600 px and 390 px (no horizontal overflow).
+- **Not done:** the whole web suite (only the files above); an end-to-end spec; a real second REA recording (REA not runnable here);
+  the setup check on Windows; a native-binary view. See Open items, "REA Studio".
+- **Next agent:** the citation block is the contract between the screen and external agents: change it in `rea-cite.ts` only and
+  keep `rea-studio-cli` and `rea-cite-compare` tests in step. The composer separates appended blocks with blank lines through
+  `draftRef`; the editor's own `getText()` collapses blank lines by design.
 
 ### 2026-11-03 — measured the abbreviation fine-tune (v3) (`ccr-8432aecf-n9xdfd`)
 

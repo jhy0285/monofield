@@ -35,7 +35,7 @@ export interface BrowserEvidenceFileAccess {
   read(name: string): Promise<{ buffer: Buffer; name: string }>;
   /** The first bytes of a file, to recognize evidence without reading it whole. */
   head(name: string, bytes: number): Promise<Buffer>;
-  write(name: string, body: string, options: { expectedContentSha256?: string | null; overwrite: boolean }): Promise<unknown>;
+  write(name: string, body: string | Buffer, options: { expectedContentSha256?: string | null; overwrite: boolean }): Promise<unknown>;
 }
 
 export class BrowserEvidenceError extends Error {

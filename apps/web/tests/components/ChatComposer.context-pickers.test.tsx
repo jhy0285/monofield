@@ -1078,3 +1078,15 @@ describe('ChatComposer context pickers', () => {
     expect(screen.queryByText('Buddy')).toBeNull();
   });
 });
+
+describe('ChatComposer appendDraft', () => {
+  it('adds text after what is already typed, and leads with the intro only when the composer was empty', async () => {
+    const composerRef = createRef<ChatComposerHandle>();
+    render(<ChatComposer ref={composerRef} {...composerElement().props} />);
+    await flushMounts();
+    act(() => { composerRef.current?.appendDraft('<rea-evidence a/>', 'Build this:'); });
+    await waitFor(() => expect(composerText()).toBe('Build this:\n\n<rea-evidence a/>'));
+    act(() => { composerRef.current?.appendDraft('<rea-evidence b/>', 'Build this:'); });
+    await waitFor(() => expect(composerText()).toBe('Build this:\n\n<rea-evidence a/>\n\n<rea-evidence b/>'));
+  });
+});

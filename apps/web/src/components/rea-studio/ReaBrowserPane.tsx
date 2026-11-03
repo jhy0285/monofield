@@ -4,6 +4,7 @@ import { Fragment, useMemo, useState } from 'react';
 import type { ReaBrowserRequest, ReaBrowserStep, ReaBrowserView, ReaPayload } from '@open-design/contracts';
 import { REA_TEXT_LIMIT } from '@open-design/contracts';
 import { useI18n } from '../../i18n';
+import { CiteButton } from './cite';
 import styles from './ReaStudio.module.css';
 
 const statusClass = (status: number | null, failed: boolean) => (failed || status === null ? 'fail' : status >= 500 ? 'fail' : status >= 400 ? 'warn' : status >= 300 ? 'info' : 'ok');
@@ -54,6 +55,7 @@ function RequestDetail({ request }: { request: ReaBrowserRequest }) {
         {t(key === 'request' ? 'reaStudio.request' : 'reaStudio.response')}
       </button>)}
     </div>
+    <div className={styles.itemBar}><CiteButton target={{ kind: 'request', id: request.id }} /></div>
     {request.queryNames.length ? <p className={styles.muted}>?{request.queryNames.join('&')}</p> : null}
     {request.failure ? <p className={styles.alert} role="alert">{t('reaStudio.requestFailed')}: {request.failure}</p> : null}
     <PayloadView payload={request[side]} />
@@ -96,7 +98,10 @@ export function ReaBrowserPane({ view }: { view: ReaBrowserView }) {
       </button>)}
     </div>
     {step ? <section className={styles.panel} aria-label={step.id}>
-      <h4 className={styles.sectionTitle}>{step.id} <span className={styles.muted}>{step.action} · {step.status}</span></h4>
+      <div className={styles.itemBar}>
+        <h4 className={styles.sectionTitle}>{step.id} <span className={styles.muted}>{step.action} · {step.status}</span></h4>
+        <CiteButton target={{ kind: 'step', index: step.index }} />
+      </div>
       {step.error ? <p className={styles.alert} role="alert">{step.error}</p> : null}
       {step.url ? <p className={styles.muted}>{step.url}</p> : null}
       <StepArtifacts key={step.index} step={step} />

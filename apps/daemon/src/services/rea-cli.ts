@@ -1,5 +1,8 @@
 import type {
   ReaBrowserView,
+  ReaCitation,
+  ReaComparison,
+  ReaDoctorResponse,
   ReaEvidenceListResponse,
   ReaEvidenceView,
   ReaSqliteView,
@@ -14,8 +17,12 @@ import type { McpServerConfig, McpTemplate } from '../mcp-config.js';
 
 const USAGE = `Usage:
   monofield rea <status|configure|disable> [--json] [--daemon-url URL]
+  monofield rea doctor      [--json]
   monofield rea files       --project <id> [--json]
   monofield rea show        --project <id> --file <evidence.json> [--json]
+  monofield rea cite        --project <id> --file <evidence.json> [--step <n> | --request <id> | --table <name> | --node <id> | --path <n>]
+                            [--include-values] [--json]
+  monofield rea compare     --project <id> --original <a.json> --remake <b.json> [--tolerance <n>] [--no-text] [--json]
   monofield rea evidence    --project <id> [--json]
   monofield rea cross-check --project <id> --evidence <file>... [--input <spec.interface-spec.json>] [--json]
   monofield rea apply       --project <id> --evidence <file>... [--input <spec>] [--finding <id>...]
@@ -26,6 +33,20 @@ files lists every REA evidence file in a project (browser captures, SQLite inspe
 prints one of them the way the REA Studio screen does: its envelope (operation, provider, confidence, limitations), then
 what it holds. A payload is shown only when its SHA-256 matches the recorded one; REA's limitations and unknowns are
 printed unchanged, and "not observed" is never turned into "absent".
+
+doctor checks what REA needs on this machine: Node.js in the range rea-agents declares, npx, the REA MCP server in
+MonoField's settings (required), a Chromium-family browser for browser capture and the engines some targets use
+(optional). It looks on PATH and in the usual install locations only and installs nothing.
+
+cite prints one evidence item (a step, request, table, graph node or trace path; the whole file without a selector) as
+a <rea-evidence> block to quote in a prompt, the same block the REA Studio screen puts into the chat. A step's verified
+screenshot is written next to the evidence (rea-cite/) and named in the block. Bodies, DOM text and SQLite rows are
+real application data: without --include-values only their structure (JSON keys and types) is quoted.
+
+compare puts an original next to its remake: two REA browser captures step by step (action, result, page path, API
+calls with IDs normalized, visible text unless --no-text), or two case-result files ({"cases": [{"id", "input",
+"output"}]}) case by case, numbers equal within --tolerance. It exits with status 1 when anything differs, so an agent
+can loop until the remake matches. A pass means the recorded runs matched, not that the remake is equivalent.
 
 status, configure and disable manage the optional pinned REA MCP server for new
 supported local-agent conversations. They do not install Node.js, start REA, or
@@ -51,7 +72,7 @@ interface Helpers {
   positionalArgs: (args: string[], stringFlags: Set<string>) => string[];
 }
 
-const EVIDENCE_COMMANDS = ['files', 'show', 'evidence', 'cross-check', 'apply'];
+const EVIDENCE_COMMANDS = ['files', 'show', 'cite', 'compare', 'evidence', 'cross-check', 'apply'];
 const MCP_COMMANDS = ['status', 'configure', 'disable'];
 
 /** `parseFlags` keeps the last value of a flag; these two may be given several times. */
@@ -131,11 +152,24 @@ export function formatReaView(view: ReaEvidenceView): string {
   return lines.join('\n');
 }
 
+const STRING_FLAGS = ['daemon-url', 'project', 'input', 'evidence', 'finding', 'out', 'note-lang', 'base-sha256', 'file',
+  'step', 'request', 'table', 'node', 'path', 'original', 'remake', 'tolerance'];
+
+/** The setup check as text, required items first. */
+export function formatReaDoctor(result: ReaDoctorResponse): string {
+  const lines = [`REA ${result.package.version} (${result.package.name}, Node ${result.package.node}) on ${result.platform}: ${result.ready ? 'ready' : 'not ready'}`];
+  for (const check of [...result.checks].sort((a, b) => Number(b.required) - Number(a.required))) {
+    lines.push(`  ${check.status.padEnd(7)} ${check.id.padEnd(8)} ${check.required ? 'required' : 'optional'}  ${check.found ?? 'not found'}${check.note ? `  (${check.note})` : ''}`);
+  }
+  lines.push('Looked on PATH and in the usual install locations only. A ready setup still has to be seen working: start a new agent conversation and check that it lists REA tools.');
+  return lines.join('\n');
+}
+
 async function runEvidenceCommand(command: string, args: string[], helpers: Helpers): Promise<void> {
-  const strings = new Set(['daemon-url', 'project', 'input', 'evidence', 'finding', 'out', 'note-lang', 'base-sha256', 'file']);
+  const strings = new Set(STRING_FLAGS);
   const flags = helpers.parseFlags(args, {
     string: strings,
-    boolean: new Set(['json', 'help', 'include-examples', 'no-attach-evidence', 'write']),
+    boolean: new Set(['json', 'help', 'include-examples', 'no-attach-evidence', 'write', 'include-values', 'no-text']),
   });
   if (flags.help) { console.log(USAGE); return; }
   if (helpers.positionalArgs(args, strings).length > 1) throw new Error(`Unexpected argument. Use monofield rea ${command} --help.`);
@@ -154,10 +188,11 @@ async function runEvidenceCommand(command: string, args: string[], helpers: Help
   };
 
   if (command === 'files') {
-    const { files } = await call<ReaEvidenceListResponse>(`/api/projects/${project}/rea-evidence`);
-    if (flags.json) { print({ files }); return; }
+    const { files, cases = [] } = await call<ReaEvidenceListResponse>(`/api/projects/${project}/rea-evidence`);
+    if (flags.json) { print({ files, cases }); return; }
     if (files.length === 0) console.log('No REA evidence files in this project.');
     for (const file of files) console.log(`${file.kind.padEnd(8)} ${file.file}  ${(file.size / 1024).toFixed(1)} KB  ${file.operation}`);
+    for (const file of cases) console.log(`${'cases'.padEnd(8)} ${file.file}  ${(file.size / 1024).toFixed(1)} KB  case results (compare with monofield rea compare)`);
     return;
   }
   if (command === 'show') {
@@ -165,6 +200,34 @@ async function runEvidenceCommand(command: string, args: string[], helpers: Help
     const view = await call<ReaEvidenceView>(`/api/projects/${project}/rea-evidence/view`, { file: flags.file });
     if (flags.json) { print(view); return; }
     console.log(formatReaView(view));
+    return;
+  }
+  if (command === 'cite') {
+    if (typeof flags.file !== 'string' || !flags.file) throw new Error('cite requires --file <evidence.json>.');
+    const selectors = (['step', 'request', 'table', 'node', 'path'] as const).filter((name) => typeof flags[name] === 'string');
+    if (selectors.length > 1) throw new Error('cite takes one of --step, --request, --table, --node, --path.');
+    const name = selectors[0];
+    const value = name ? String(flags[name]) : '';
+    const index = Number(value);
+    if ((name === 'step' || name === 'path') && (!Number.isInteger(index) || index < 0)) throw new Error(`--${name} must be a whole number.`);
+    // Trace paths are numbered from 1 in the printed output, and from 0 in the file.
+    const target = !name ? { kind: 'file' } : name === 'step' ? { kind: 'step', index } : name === 'path' ? { kind: 'path', index: Math.max(0, index - 1) }
+      : name === 'table' ? { kind: 'table', name: value } : { kind: name, id: value };
+    const citation = await call<ReaCitation>(`/api/projects/${project}/rea-evidence/cite`, { file: flags.file, target, includeValues: flags['include-values'] === true });
+    if (flags.json) { print(citation); return; }
+    console.log(citation.block);
+    for (const file of citation.files) process.stderr.write(`written: ${file}\n`);
+    return;
+  }
+  if (command === 'compare') {
+    if (typeof flags.original !== 'string' || typeof flags.remake !== 'string') throw new Error('compare requires --original <file> and --remake <file>.');
+    const tolerance = flags.tolerance === undefined ? undefined : Number(flags.tolerance);
+    if (tolerance !== undefined && (!Number.isFinite(tolerance) || tolerance < 0)) throw new Error('--tolerance must be a number of at least 0.');
+    const result = await call<ReaComparison>(`/api/projects/${project}/rea-evidence/compare`, {
+      original: flags.original, remake: flags.remake, ...(tolerance !== undefined ? { tolerance } : {}), compareText: flags['no-text'] !== true,
+    });
+    if (flags.json) print(result); else console.log(result.report);
+    if (result.summary.pass !== result.summary.total) process.exitCode = 1;
     return;
   }
 
@@ -242,12 +305,23 @@ async function runEvidenceCommand(command: string, args: string[], helpers: Help
 /** Configure the optional REA MCP server (Settings → MCP) and compare REA browser evidence with interface specifications. */
 export async function runReaCli(args: string[], helpers: Helpers): Promise<void> {
   const strings = new Set(['daemon-url', 'project', 'input', 'evidence', 'finding', 'out', 'note-lang', 'base-sha256', 'file']);
-  const [command = 'status', ...extra] = helpers.positionalArgs(args, strings);
+  const [command = 'status', ...extra] = helpers.positionalArgs(args, new Set([...strings, ...STRING_FLAGS]));
   if (EVIDENCE_COMMANDS.includes(command)) return runEvidenceCommand(command, args, helpers);
+  if (command === 'doctor') {
+    const flags = helpers.parseFlags(args, { string: new Set(['daemon-url']), boolean: new Set(['json', 'help']) });
+    if (flags.help) { console.log(USAGE); return; }
+    if (extra.length) throw new Error('Unexpected argument. Use monofield rea doctor --help.');
+    const base = (await helpers.baseUrl(flags)).replace(/\/$/, '');
+    const response = await fetch(`${base}/api/rea/doctor`);
+    if (!response.ok) throw new Error(`Could not run the REA setup check (HTTP ${response.status}).`);
+    const result = await response.json() as ReaDoctorResponse;
+    if (flags.json) process.stdout.write(`${JSON.stringify(result, null, 2)}\n`); else console.log(formatReaDoctor(result));
+    return;
+  }
 
   const flags = helpers.parseFlags(args, { string: new Set(['daemon-url']), boolean: new Set(['json', 'help']) });
   if (flags.help) { console.log(USAGE); return; }
-  if (extra.length || !MCP_COMMANDS.includes(command)) throw new Error('Use monofield rea <status|configure|disable|evidence|cross-check|apply> --help.');
+  if (extra.length || !MCP_COMMANDS.includes(command)) throw new Error('Use monofield rea <status|configure|disable|doctor|files|show|cite|compare|evidence|cross-check|apply> --help.');
   const base = (await helpers.baseUrl(flags)).replace(/\/$/, '');
   const endpoint = `${base}/api/mcp/servers`;
   const response = await fetch(endpoint);

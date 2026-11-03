@@ -35,6 +35,7 @@ import type {
 } from '../state/mcp';
 import { fetchAgents } from '../providers/registry';
 import type { AgentInfo } from '../types';
+import { ReaDoctorPanel } from './rea-studio/ReaDoctorPanel';
 import { Icon } from './Icon';
 import { useT } from '../i18n';
 
@@ -384,6 +385,9 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
   }, []);
 
   const dirty = useMemo(() => signature(rows) !== savedSig, [rows, savedSig]);
+  // REA's setup check sits above the list when this daemon ships the REA template.
+  const reaTemplate = templates.find((template) => template.id === 'rea');
+  const reaRow = rows.find((row) => row.id === 'rea' || row.templateId === 'rea');
 
   useEffect(() => {
     onDirtyChange?.(dirty);
@@ -485,6 +489,14 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
       </div>
 
       <McpAgentSupportBanner agents={agents} />
+
+      {reaTemplate ? (
+        <ReaDoctorPanel
+          mcpRow={reaRow ? (reaRow._isNew || dirty ? 'unsaved' : 'saved') : 'none'}
+          onAddRea={() => addFromTemplate(reaTemplate)}
+          refreshKey={savedAt}
+        />
+      ) : null}
 
       {pickerOpen ? (
         <PickerPanel

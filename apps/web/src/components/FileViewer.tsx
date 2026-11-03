@@ -960,6 +960,8 @@ interface Props {
   onFileSaved?: () => Promise<void> | void;
   onOpenFile?: (name: string) => void;
   onRequestDocumentUpdate?: (prompt: string) => void;
+  /** Adds text after the chat composer's draft; REA Studio quotes evidence with it. */
+  onAppendToChat?: (text: string, introIfEmpty?: string) => void;
   // Open `openName` as a tab (focusing it) and close `closeName` in one
   // atomic tab-state update. The React module pointer uses this to jump to the
   // HTML entry that renders a module and drop the dead-end module tab.
@@ -998,6 +1000,7 @@ export function FileViewer({
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
   onRequestDocumentUpdate,
+  onAppendToChat,
   onFileSaved,
   onOpenFile,
   onOpenFileReplacing,
@@ -1103,7 +1106,7 @@ export function FileViewer({
       />
     );
     // A JSON file that turns out to be REA evidence opens in REA Studio, with a switch back to the raw text.
-    return /\.json$/i.test(file.name) ? <ReaEvidenceGate projectId={projectId} file={file} raw={text} /> : text;
+    return /\.json$/i.test(file.name) ? <ReaEvidenceGate projectId={projectId} file={file} raw={text} onSendToChat={onAppendToChat} /> : text;
   }
   if (
     file.kind === 'pdf' ||

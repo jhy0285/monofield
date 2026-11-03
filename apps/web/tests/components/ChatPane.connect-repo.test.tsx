@@ -8,6 +8,7 @@ import { ChatPane } from '../../src/components/ChatPane';
 import type { Conversation, ProjectMetadata } from '../../src/types';
 
 const composerMocks = vi.hoisted(() => ({
+  appendDraft: vi.fn(),
   focus: vi.fn(),
   restoreDraft: vi.fn(),
   setDraft: vi.fn(),
@@ -21,6 +22,7 @@ vi.mock('../../src/i18n', () => ({
 vi.mock('../../src/components/ChatComposer', () => ({
   ChatComposer: forwardRef((_props, ref) => {
     useImperativeHandle(ref, () => ({
+      appendDraft: composerMocks.appendDraft,
       focus: composerMocks.focus,
       restoreDraft: composerMocks.restoreDraft,
       setDraft: composerMocks.setDraft,
@@ -109,6 +111,12 @@ describe('ChatPane connect-repo CTA', () => {
     });
 
     expect(composerMocks.setDraft).toHaveBeenCalledWith('Pull the linked repo');
+  });
+
+  it('appends instead of replacing when the signal asks for it (REA Studio evidence)', () => {
+    renderPane({ composerDraftSignal: { text: '<rea-evidence/>', nonce: 2, append: true, intro: 'Build this:' } });
+    expect(composerMocks.appendDraft).toHaveBeenCalledWith('<rea-evidence/>', 'Build this:');
+    expect(composerMocks.setDraft).not.toHaveBeenCalled();
   });
 
   it('hides the CTA when the project does not need a repo connection', () => {

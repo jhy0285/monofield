@@ -1,4 +1,4 @@
-.root { padding: 18px 22px 40px; display: grid; gap: 14px; align-content: start; }
+.root { padding: 18px 22px 40px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-content: start; }
 .head { display: flex; align-items: flex-start; gap: 12px; }
 .headText { flex: 1; min-width: 0; }
 .head h3 { margin: 0 0 4px; font-size: 18px; }
@@ -87,4 +87,17 @@
 .srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; margin: 0; padding: 0; list-style: none; }
 .rawWrap { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .rawBar { padding: 6px 12px; border-bottom: 1px solid var(--border); }
-@media (max-width: 700px) { .root { padding: 14px; } .facts > div { flex-direction: column; gap: 2px; } .bars li { grid-template-columns: 1fr 40px; } .barTrack { display: none; } }
+.citeBar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 12px; border: 1px dashed var(--border); border-radius: 10px; }
+.citeDone { font-size: 12px; color: var(--green, var(--text)); overflow-wrap: anywhere; }
+.itemBar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.itemBar .sectionTitle { margin: 0; }
+.graphNode { cursor: pointer; outline: none; }
+.graphNode[data-selected="true"] rect, .graphNode:focus-visible rect { stroke: var(--text-strong, var(--text)); stroke-width: 2; }
+.sideBySide { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.sideBySide figure { margin: 0; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.sideBySide figcaption { font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
+.minus { color: var(--red); }
+.plus { color: var(--green, var(--text)); }
+.number { width: 90px; }
+.table tbody tr[data-testid="rea-compare-row"] { cursor: pointer; }
+@media (max-width: 700px) { .sideBySide { grid-template-columns: 1fr; } .root { padding: 14px; } .facts > div { flex-direction: column; gap: 2px; } .bars li { grid-template-columns: 1fr 40px; } .barTrack { display: none; } }

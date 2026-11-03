@@ -1,8 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import type { ReaOtherView, ReaStaticView, ReaTraceView } from '@open-design/contracts';
 import { useI18n } from '../../i18n';
 import { GRAPH_NODE_HEIGHT, GRAPH_NODE_WIDTH, layoutGraph } from './layout';
+import { CiteButton } from './cite';
 import styles from './ReaStudio.module.css';
 
 const coverageTone = (status: string | null) => (status === 'complete' ? 'ok' : status === null ? 'info' : 'warn');
@@ -14,6 +16,8 @@ export function ReaStaticPane({ view }: { view: ReaStaticView }) {
   const layout = layoutGraph(view.nodes, view.edges);
   const counters = [...view.statistics].sort((a, b) => Number(b.value > 0) - Number(a.value > 0));
   const label = (value: string) => value.replace(/[_-]/g, ' ');
+  const [selected, setSelected] = useState<string | null>(null);
+  const node = view.nodes.find((item) => item.id === selected);
   return <div data-testid="rea-static">
     <div className={styles.tiles}>
       <div className={styles.tile} data-tone={coverageTone(view.applicationCoverage)}><b>{view.applicationCoverage ?? '—'}</b><span>{t('reaStudio.applicationCoverage')}</span></div>
@@ -26,14 +30,17 @@ export function ReaStaticPane({ view }: { view: ReaStaticView }) {
     <div className={styles.diagram}>
       <svg viewBox={`0 0 ${layout.width} ${layout.height}`} width={layout.width} height={layout.height} role="img" aria-label={t('reaStudio.graph')} data-testid="rea-graph">
         {layout.links.map((link, index) => <path key={index} d={link.d} className={styles.link} />)}
-        {layout.boxes.map((box) => <g key={box.id} transform={`translate(${box.x},${box.y})`} className={styles.graphNode} data-tone={KIND_TONE[box.kind] ?? 'other'}>
+        {layout.boxes.map((box) => <g key={box.id} transform={`translate(${box.x},${box.y})`} className={styles.graphNode} data-tone={KIND_TONE[box.kind] ?? 'other'}
+          data-selected={box.id === selected} role="button" tabIndex={0} aria-label={`${box.kind} ${box.label}`} onClick={() => setSelected(box.id === selected ? null : box.id)}
+          onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelected(box.id === selected ? null : box.id); } }}>
           <rect width={GRAPH_NODE_WIDTH} height={GRAPH_NODE_HEIGHT} rx="9" />
           <text x="10" y="16" className={styles.erType}>{box.kind}</text>
           <text x="10" y="32" className={styles.erColumn}>{box.label.length > 30 ? `${box.label.slice(0, 29)}…` : box.label}</text>
         </g>)}
       </svg>
     </div>
-    <ul className={styles.srOnly}>{view.nodes.map((node) => <li key={node.id}>{node.kind}: {node.label}</li>)}</ul>
+    {node ? <div className={styles.itemBar} data-testid="rea-node-selected"><span className={styles.chip}>{node.kind}</span><code>{node.label}</code><CiteButton target={{ kind: 'node', id: node.id }} /></div> : null}
+    <ul className={styles.srOnly}>{view.nodes.map((item) => <li key={item.id}>{item.kind}: {item.label}</li>)}</ul>
     {counters.length ? <>
       <h4 className={styles.sectionTitle}>{t('reaStudio.counters')}</h4>
       <div className={styles.chips}>{counters.map((counter) => <span key={counter.key} className={styles.chip} data-zero={counter.value === 0}>{label(counter.key)} <b>{counter.value}</b></span>)}</div>
@@ -57,7 +64,7 @@ export function ReaTracePane({ view }: { view: ReaTraceView }) {
       <div className={styles.tile}><b>{view.terminalPaths}</b><span>{t('reaStudio.paths')}</span></div>
     </div>
     {view.status === 'no-match' ? <p className={styles.muted} role="note">{t('reaStudio.noMatch')}</p> : null}
-    {view.paths.map((path, index) => <div key={index} className={styles.path}>{path.map((step, i) => <span key={i}>{i ? <i aria-hidden> → </i> : null}<span className={styles.chip}>{step}</span></span>)}</div>)}
+    {view.paths.map((path, index) => <div key={index} className={styles.path}>{path.map((step, i) => <span key={i}>{i ? <i aria-hidden> → </i> : null}<span className={styles.chip}>{step}</span></span>)}<CiteButton target={{ kind: 'path', index }} /></div>)}
   </div>;
 }
 

@@ -43,7 +43,13 @@
    ```
 
 4. 브라우저 캡처에는 설치된 Chrome/Edge 등 Chromium 계열 브라우저가 필요합니다.
-5. 사용자님의 포크(`jhy0285/rea-yj`)를 쓰려면 MCP 명령을
+5. **한 화면에서 점검**: Settings → MCP(또는 Integrations → MCP) 맨 위의 **REA 설치·연결 점검**이
+   Node.js 버전(rea-agents 6.7.0 패키지가 선언한 `^22.19.0 || ^24.11.0 || >=26.0.0`), npx, MCP 등록(이상 필수)과
+   Chromium 계열 브라우저, 네이티브 분석 엔진(Ghidra·IDA·Hopper), Java·JADX·Apktool·tshark·adb(선택)를 한 번에 보여 줍니다.
+   MCP에 REA가 없으면 **REA를 MCP 목록에 추가**를 누른 뒤 저장합니다. 터미널에서는 `monofield rea doctor [--json]`.
+   PATH와 일반 설치 위치만 확인하고 아무것도 설치하지 않으므로, 다른 곳에 설치한 도구는 "찾지 못함"으로 나올 수 있습니다.
+   "준비됨"이어도 실제 연결은 새 에이전트 대화에서 REA 도구가 보이는지로 확인합니다.
+6. 사용자님의 포크(`jhy0285/rea-yj`)를 쓰려면 MCP 명령을
    `node <rea-yj 경로>/scripts/rea.mjs --mcp`로 바꿉니다. 포크는 현재 6.4.0이고
    프리셋은 6.7.0이라 도구 목록이 다를 수 있습니다. 둘 중 하나로 통일하세요.
 
@@ -103,6 +109,53 @@ REA가 남긴 증거 JSON(브라우저 캡처, SQLite 검사, 정적 분석, 기
 monofield rea files --project <프로젝트ID>
 monofield rea show  --project <프로젝트ID> --file evidence/browser.json [--json]
 ```
+
+### 증거를 대화에 넣기
+
+스튜디오의 단계·요청·테이블·그래프 노드·추적 경로마다 **대화에 넣기** 버튼이 있고, 위쪽에 **파일 전체를 대화에 넣기**가 있습니다.
+누르면 채팅 입력창 끝에 `<rea-evidence file="…" evidence_id="…" pointer="steps[step_index=1]">` 블록이 붙습니다(입력창이 비어
+있으면 "아래 REA 증거를 기준으로 만들어 주세요…" 안내문이 앞에 붙고, 이미 쓴 내용은 지우지 않으므로 여러 개를 모은 뒤 보내면 됩니다).
+블록에는 무엇을 했는지(동작·결과·페이지·그 단계의 API 호출), 출처(REA 버전·confidence·authority), REA의 미확인·한계 개수가 들어갑니다.
+단계의 스크린샷이 기록된 SHA-256과 맞으면 증거 파일 옆 `rea-cite/` 폴더에 PNG로 저장하고 그 경로를 블록에 적으므로, 에이전트가
+그 파일을 열어 화면을 봅니다.
+
+캡처된 값(요청·응답 본문, 화면 문구, SQLite 행)은 실제 데이터라 기본으로는 **구조만** 넣습니다. JSON은 키와 타입(`{ id: number, … }`),
+화면은 접근성 트리에서 역할과 제목·버튼·열 이름만 남기고 셀 값·본문 문구는 뺍니다. **캡처된 값 포함**을 켜야 본문 발췌, 화면 문구,
+SQLite 행 5개가 들어갑니다. 터미널(외부 에이전트)에서는 같은 블록을 이렇게 받습니다(블록은 stdout, 저장한 파일은 stderr):
+
+```sh
+monofield rea cite --project <프로젝트ID> --file evidence/browser.json --step 1 [--include-values] [--json]
+monofield rea cite --project <프로젝트ID> --file evidence/db.json --table orders
+```
+
+### 원본과 재현본 대조
+
+다시 만든 화면·기능은 원본과 **같은 시나리오로 REA 브라우저 캡처**를 한 번 더 남긴 뒤, 원본 캡처를 열고 **재현본과 대조**를 누릅니다.
+같은 프로젝트의 다른 브라우저 캡처를 고르면 단계마다 **일치 / 다름 / 재현본에 없음 / 재현본에만 있음**이 나옵니다.
+
+- 단계는 단계 ID가 절반 이상 같으면 ID로, 아니면 순서로 짝짓습니다.
+- 비교 항목: 동작, 결과, 페이지 경로(origin은 무시: 재현본은 보통 다른 주소에서 돕니다), 그 단계의 API 호출(경로의 숫자·UUID는 `{n}`·`{id}`로
+  바꿔 `/orders/1001`과 `/orders/7`을 같은 경로로 봄, 상태 코드는 순서대로 비교), 화면 문구(양쪽에 접근성 트리가 있으면 그것으로, 없으면
+  캡처한 HTML의 글자로; **화면 문구도 비교**를 끄면 제외).
+- 행을 펼치면 두 스크린샷이 좌우로 놓이고, 다른 호출(`409 → 200`)과 다른 문구(`-` 원본, `+` 재현본)가 보입니다.
+- **차이를 대화에 넣기**는 대조 결과를 그대로 입력창에 붙여 에이전트가 재현본을 고치게 합니다.
+
+화면이 없는 계산(게임의 판정식, 정산 로직 등)은 **케이스 결과 파일** 두 개로 대조합니다. 에이전트에게 같은 입력을 원본과 재현본에
+돌려 아래 형식으로 저장하게 하세요(`"cases"`가 첫 키이거나 `"format"` 바로 다음이어야 목록에서 알아봅니다).
+
+```json
+{ "cases": [ { "id": "pan-320", "input": { "x": 320 }, "output": 0 } ] }
+```
+
+이 파일을 열면 대조 화면이 나오고, 케이스는 `id` → `input` → 순서로 짝짓습니다. 숫자는 **숫자 허용 오차** 안이면 같은 값으로 보고, 다르면
+첫 차이 위치(`$.pan`, `$[2]`)를 보여 줍니다. 터미널에서는 차이가 있으면 종료 코드 1로 끝나므로 에이전트가 0이 될 때까지 고치게 할 수 있습니다.
+
+```sh
+monofield rea compare --project <프로젝트ID> --original evidence/original.json --remake evidence/remake.json [--no-text] [--json]
+monofield rea compare --project <프로젝트ID> --original cases/original.json --remake cases/remake.json --tolerance 0.001
+```
+
+일치는 **기록된 실행끼리 같았다**는 뜻이지 재현본이 모든 경우에 같다는 뜻은 아닙니다. 기록하지 않은 단계·입력은 비교되지 않습니다.
 
 ## 작성한 명세서를 브라우저 기록과 대조하기
 
@@ -211,6 +264,8 @@ monofield jev configure --backend local --local-url http://127.0.0.1:8000 --mode
   PostgreSQL만 지원합니다.
 - **JVM 배포물(WAR/JAR) 분석**: 소스 없는 Java 서버는 디컴파일 후 스캔하는 우회만 가능합니다.
 - **Codex 자동 MCP 전달**: Claude Code·OpenCode와 달리 Codex는 수동 등록이 필요합니다.
+- **네이티브 바이너리 화면**: REA 스튜디오는 브라우저·SQLite·JavaScript 정적 분석·기능 추적만 화면으로 그립니다. 게임 등 실행 파일
+  분석 결과(함수 목록, 디스어셈블)는 아직 "기타" 사실 목록으로만 보입니다.
 
 근거: REA 저장소 README(`jhy0285/rea-yj` 커밋 `bb54082`)와 등록된 MCP 도구 목록,
 MonoField의 [REA 실행 보고서](testing/rea-handover-2026-10-22.md),

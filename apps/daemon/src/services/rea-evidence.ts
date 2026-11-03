@@ -6,6 +6,7 @@ import {
   type ReaBrowserRequest,
   type ReaBrowserStep,
   type ReaBrowserView,
+  type ReaCaseFileEntry,
   type ReaCompleteness,
   type ReaEnvelope,
   type ReaEvidenceBody,
@@ -46,6 +47,70 @@ const text = (value: unknown, fallback = ''): string => (typeof value === 'strin
 const num = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null);
 const strings = (value: unknown): string[] => asArray(value).filter((item): item is string => typeof item === 'string');
 const sha256 = (value: Buffer) => createHash('sha256').update(value).digest('hex');
+
+const ENTITIES: Readonly<Record<string, string>> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+
+/** The text a person sees in captured HTML: no head, scripts or styles; block ends become line breaks. */
+export function htmlText(html: string): string {
+  return html
+    .replace(/<head[\s\S]*?<\/head>/gi, '')
+    .replace(/<(script|style|noscript|template)\b[\s\S]*?<\/\1>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|tr|h[1-6]|header|footer|section|article|main|nav|pre|table|thead|tbody|ul|ol|form|label|button|option)>/gi, '\n')
+    .replace(/<\/t[dh]>/gi, '\t')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (match, code: string) => code[0] === '#'
+      ? String.fromCodePoint(code[1]?.toLowerCase() === 'x' ? parseInt(code.slice(2), 16) : Number(code.slice(1)))
+      : ENTITIES[code.toLowerCase()] ?? match)
+    .split('\n').map((line) => line.replace(/[ \t\f\v\u00a0]+/g, ' ').trim()).filter(Boolean).join('\n');
+}
+
+/** Roles whose names are part of the screen's design (headings, controls, column headers), not its data. */
+const OUTLINE_NAMED_ROLES = new Set(['heading', 'button', 'link', 'columnheader', 'rowheader', 'tab', 'menuitem', 'textbox', 'searchbox',
+  'checkbox', 'radio', 'combobox', 'listbox', 'option', 'switch', 'slider', 'spinbutton', 'dialog', 'navigation', 'img', 'group', 'region', 'form']);
+
+/**
+ * An accessibility snapshot (Playwright's `- role "name" [attrs]` lines) reduced to the screen's structure: every role
+ * stays, names stay only for headings and controls, so cell values and free text are not quoted.
+ */
+export function accessibilityOutline(snapshot: string, maxLines = 60): string {
+  const out: string[] = [];
+  for (const raw of snapshot.split('\n')) {
+    const match = raw.match(/^(\s*)- ([a-z]+)(?: "((?:[^"\\]|\\.)*)")?(.*?)(:?)\s*$/i);
+    if (!match) continue;
+    const [, indent = '', role = '', name, rest = '', colon = ''] = match;
+    if (role === 'text') { out.push(`${indent}- text`); continue; }
+    const keep = name !== undefined && OUTLINE_NAMED_ROLES.has(role);
+    const attrs = rest.replace(/^:\s.*$/, '').trim();
+    out.push(`${indent}- ${role}${keep ? ` "${name}"` : ''}${attrs.startsWith('[') ? ` ${attrs}` : ''}${colon}`);
+  }
+  // Repeated identical lines at the same depth (rows of a table) are counted, not listed.
+  const folded: string[] = [];
+  for (const line of out) {
+    const last = folded[folded.length - 1];
+    const repeat = last?.match(/^(.*) ×(\d+)$/);
+    if (last === line) folded[folded.length - 1] = `${line} ×2`;
+    else if (repeat && repeat[1] === line) folded[folded.length - 1] = `${line} ×${Number(repeat[2]) + 1}`;
+    else folded.push(line);
+  }
+  return folded.length > maxLines ? [...folded.slice(0, maxLines), `… ${folded.length - maxLines} more lines`].join('\n') : folded.join('\n');
+}
+
+/** A case-result file starts with `{"cases": [` (or `{"format": "…", "cases": [`), so its first bytes are enough. */
+const CASES_HEAD = /^\s*\{\s*(?:"format"\s*:\s*"[^"]*"\s*,\s*)?"cases"\s*:\s*\[/;
+
+/** Project JSON files that hold case results, newest first. */
+export async function listReaCaseFiles(files: BrowserEvidenceFileAccess): Promise<ReaCaseFileEntry[]> {
+  const found: ReaCaseFileEntry[] = [];
+  for (const file of (await files.list()).filter((item) => /\.json$/i.test(item.name) && (item.size ?? 0) <= MAX_EVIDENCE_BYTES).slice(0, 2000)) {
+    try {
+      if (CASES_HEAD.test((await files.head(file.name, 512)).toString('utf8'))) found.push({ file: file.name, size: Number(file.size ?? 0), mtime: Number(file.mtime ?? 0) });
+    } catch { /* unreadable files are not case results */ }
+    if (found.length >= 300) break;
+  }
+  return found.sort((a, b) => b.mtime - a.mtime);
+}
 
 /** Project JSON files whose head carries an REA envelope, newest first. */
 export async function listReaEvidenceFiles(files: BrowserEvidenceFileAccess): Promise<ReaEvidenceListEntry[]> {
@@ -355,11 +420,11 @@ export function buildReaEvidenceView(buffer: Buffer, file: string): ReaEvidenceV
  * Whether one file is REA evidence, from its first 64 KB only: the screen asks this for every JSON file a person opens,
  * so it must not read a large unrelated file whole.
  */
-export async function probeReaEvidenceFile(files: BrowserEvidenceFileAccess, body: { file?: unknown }): Promise<{ evidence: boolean; kind?: ReaEvidenceKind; operation?: string }> {
+export async function probeReaEvidenceFile(files: BrowserEvidenceFileAccess, body: { file?: unknown }): Promise<{ evidence: boolean; cases?: boolean; kind?: ReaEvidenceKind; operation?: string }> {
   if (!isDocumentPath(body.file)) throw new BrowserEvidenceError('file must be a project-relative JSON path.');
   const head = (await files.head(body.file, HEAD_BYTES)).toString('utf8');
   const predicate = head.match(PREDICATE)?.[1];
-  if (!predicate) return { evidence: false };
+  if (!predicate) return CASES_HEAD.test(head) ? { evidence: false, cases: true } : { evidence: false };
   const operation = head.match(OPERATION)?.[1] ?? '';
   return { evidence: true, kind: classifyReaEvidence(predicate, operation), operation };
 }
