@@ -103,6 +103,103 @@ export const SEED_GENERIC_HELDOUT: ReadonlyArray<GenericField> = [
   ['ordAmt', ['주문 금액', '주문액'], ['주문번호', '주문 상태', '이름', '일자']],
 ];
 
+/**
+ * Korean legacy schemas abbreviate: `custNm`, `ORD_AMT`, `regDt`. The label is the prefix's word plus the suffix's word
+ * ("고객명", "주문 금액", "등록일자"). The first fine-tune had none of these and scored unseen ones near 0.04, so they are
+ * generated from a prefix table x a suffix table, which also lets a held-out identifier be a new combination of stems the model
+ * has seen. Rules that keep the set honest:
+ * - only combinations that make sense (each prefix lists its own suffixes);
+ * - two wrong labels per right one: the same prefix with a suffix of another family (never `Dt` vs `Dtm`, which are both
+ *   dates) and the same suffix with a prefix of another group (never `cust` vs `mem`, which many systems use for the same
+ *   person; `rcv` and `snd`, opposites, are different groups on purpose);
+ * - the surface form rotates between camelCase, snake_case and UPPER_SNAKE so the model does not learn one spelling;
+ * - `ABBREVIATION_HELDOUT_PREFIXES` are held out whole (an unseen stem), and of every other prefix one combination in four;
+ * - an identifier that another seed list already has is skipped, so the lists stay disjoint.
+ */
+type Suffix = readonly [code: string, ko: string, attached: boolean, family: string];
+const ABBREVIATION_SUFFIXES: Readonly<Record<string, Suffix>> = {
+  Nm: ['Nm', '명', true, 'name'], Cd: ['Cd', '코드', false, 'ident'], No: ['No', '번호', true, 'ident'], Id: ['Id', 'ID', false, 'ident'],
+  Stts: ['Stts', '상태', false, 'state'], Typ: ['Typ', '유형', false, 'state'], Tel: ['Tel', '전화번호', false, 'contact'],
+  Addr: ['Addr', '주소', false, 'contact'], Dt: ['Dt', '일자', true, 'date'], Dtm: ['Dtm', '일시', true, 'date'],
+  Amt: ['Amt', '금액', false, 'money'], Cnt: ['Cnt', '건수', false, 'count'], Qty: ['Qty', '수량', false, 'count'],
+  Rsn: ['Rsn', '사유', false, 'text'], Ctnt: ['Ctnt', '내용', false, 'text'],
+};
+const ABBREVIATION_PREFIXES: ReadonlyArray<readonly [prefix: string, ko: string, suffixes: readonly string[], group: string]> = [
+  ['cust', '고객', ['Nm', 'Cd', 'No', 'Id', 'Stts', 'Typ', 'Tel', 'Addr'], 'party'],
+  ['mem', '회원', ['Nm', 'No', 'Id', 'Stts', 'Typ', 'Tel', 'Addr'], 'party'],
+  ['user', '사용자', ['Nm', 'Id', 'Stts', 'Typ', 'Tel'], 'party'],
+  ['emp', '직원', ['Nm', 'No', 'Id', 'Stts', 'Tel', 'Addr'], 'party'],
+  ['dept', '부서', ['Nm', 'Cd', 'No', 'Typ'], 'party'],
+  ['comp', '회사', ['Nm', 'Cd', 'No', 'Tel', 'Addr'], 'party'],
+  ['prod', '상품', ['Nm', 'Cd', 'No', 'Stts', 'Typ', 'Qty', 'Ctnt'], 'goods'],
+  ['ord', '주문', ['No', 'Dt', 'Dtm', 'Stts', 'Amt', 'Cnt', 'Qty', 'Typ'], 'deal'],
+  ['pay', '결제', ['No', 'Dt', 'Dtm', 'Stts', 'Amt', 'Typ'], 'deal'],
+  ['dlv', '배송', ['No', 'Dt', 'Stts', 'Typ', 'Addr', 'Rsn'], 'deal'],
+  ['rfd', '환불', ['No', 'Dt', 'Stts', 'Amt', 'Rsn'], 'deal'],
+  ['cncl', '취소', ['No', 'Dt', 'Stts', 'Amt', 'Rsn'], 'deal'],
+  ['rsv', '예약', ['No', 'Dt', 'Stts', 'Cnt', 'Typ'], 'deal'],
+  ['ctrt', '계약', ['No', 'Dt', 'Stts', 'Amt', 'Typ'], 'deal'],
+  ['stk', '재고', ['Qty', 'Stts', 'Cnt', 'Cd'], 'goods'],
+  ['acct', '계좌', ['No', 'Nm', 'Stts', 'Typ'], 'account'],
+  ['bbs', '게시글', ['No', 'Dt', 'Stts', 'Cnt', 'Ctnt'], 'content'],
+  ['fl', '파일', ['Nm', 'No', 'Typ', 'Stts', 'Cnt'], 'content'],
+  ['rcv', '수신', ['Dt', 'Dtm', 'Stts', 'Cnt', 'Id'], 'in'],
+  ['snd', '발신', ['Dt', 'Dtm', 'Stts', 'Cnt', 'Id'], 'out'],
+];
+/** Who did it, and when: `regId` is the registrant ("등록자 ID"), `regDt` the date of registration ("등록일자"). */
+const ABBREVIATION_ACTIONS: ReadonlyArray<readonly [prefix: string, ko: string]> = [['reg', '등록'], ['mod', '수정'], ['del', '삭제'], ['appr', '승인']];
+const ACTION_SUFFIX_KO: Readonly<Record<string, string>> = { Id: '자 ID', Nm: '자명', Dt: '일자', Dtm: '일시' };
+const ACTION_SUFFIX_FAMILY: Readonly<Record<string, string>> = { Id: 'person', Nm: 'person', Dt: 'date', Dtm: 'date' };
+export const ABBREVIATION_HELDOUT_PREFIXES: readonly string[] = ['comp', 'rsv'];
+
+interface AbbreviationCombo { identifier: string; label: string; wrong: [string, string]; heldout: boolean }
+
+function abbreviationCombos(taken: ReadonlySet<string>): AbbreviationCombo[] {
+  const surface = (prefix: string, code: string, index: number) => {
+    const words = [prefix, code.toLowerCase()];
+    return [`${prefix}${code}`, words.join('_'), words.join('_').toUpperCase()][index % 3]!;
+  };
+  const word = (ko: string, suffix: Suffix) => `${ko}${suffix[2] ? '' : ' '}${suffix[1]}`;
+  const entries: Array<{ prefix: string; code: string; label: string; wrong: [string, string] }> = [];
+  for (const [prefix, ko, codes, group] of ABBREVIATION_PREFIXES) {
+    for (const code of codes) {
+      const suffix = ABBREVIATION_SUFFIXES[code]!;
+      const otherCode = [...codes.slice(codes.indexOf(code) + 1), ...codes.slice(0, codes.indexOf(code))].find((c) => ABBREVIATION_SUFFIXES[c]![3] !== suffix[3]);
+      const at = ABBREVIATION_PREFIXES.findIndex(([p]) => p === prefix);
+      const otherPrefix = [...ABBREVIATION_PREFIXES.slice(at + 1), ...ABBREVIATION_PREFIXES.slice(0, at)]
+        .find(([, , cs, g]) => g !== group && cs.includes(code));
+      if (!otherCode || !otherPrefix) continue;
+      entries.push({ prefix, code, label: word(ko, suffix), wrong: [word(ko, ABBREVIATION_SUFFIXES[otherCode]!), word(otherPrefix[1], suffix)] });
+    }
+  }
+  ABBREVIATION_ACTIONS.forEach(([prefix, ko], actionIndex) => {
+    for (const code of Object.keys(ACTION_SUFFIX_KO)) {
+      const family = ACTION_SUFFIX_FAMILY[code]!;
+      const otherCode = Object.keys(ACTION_SUFFIX_KO).find((c) => ACTION_SUFFIX_FAMILY[c] !== family)!;
+      const [, otherKo] = ABBREVIATION_ACTIONS[(actionIndex + 1) % ABBREVIATION_ACTIONS.length]!;
+      entries.push({ prefix, code, label: `${ko}${ACTION_SUFFIX_KO[code]}`, wrong: [`${ko}${ACTION_SUFFIX_KO[otherCode]}`, `${otherKo}${ACTION_SUFFIX_KO[code]}`] });
+    }
+  });
+  const out: AbbreviationCombo[] = [];
+  entries.forEach((entry, index) => {
+    const identifier = surface(entry.prefix, entry.code, index);
+    const key = identifier.replaceAll('_', '').toLowerCase();
+    if (taken.has(key)) return;
+    out.push({ identifier, label: entry.label, wrong: entry.wrong, heldout: ABBREVIATION_HELDOUT_PREFIXES.includes(entry.prefix) || index % 4 === 3 });
+  });
+  return out;
+}
+
+const ABBREVIATIONS = (() => {
+  const taken = new Set<string>();
+  for (const [identifier] of SEED_FIELDS) taken.add(identifier.toLowerCase());
+  for (const [identifier] of [...SEED_GENERIC_TRAIN, ...SEED_GENERIC_HELDOUT]) taken.add(identifier.toLowerCase());
+  return abbreviationCombos(taken);
+})();
+
+export const SEED_ABBREVIATION_TRAIN: ReadonlyArray<{ identifier: string; label: string }> = ABBREVIATIONS.filter((c) => !c.heldout);
+export const SEED_ABBREVIATION_HELDOUT: ReadonlyArray<{ identifier: string; label: string }> = ABBREVIATIONS.filter((c) => c.heldout);
+
 const CONFUSIONS: Readonly<Record<string, readonly string[]>> = {
   createdAt: ['수정일시', '삭제일시'], updatedAt: ['생성일시'], deletedAt: ['생성일시'],
   startDate: ['종료일자'], endDate: ['시작일자'], unitPrice: ['수량', '총 금액'], quantity: ['단가'],
@@ -186,6 +283,16 @@ function genericCases(entries: ReadonlyArray<GenericField>): SeedCase[] {
   return out;
 }
 
+function abbreviationCases(heldout: boolean | 'all'): SeedCase[] {
+  const out: SeedCase[] = [];
+  for (const combo of ABBREVIATIONS) {
+    if (heldout !== 'all' && combo.heldout !== heldout) continue;
+    out.push({ kind: 'field-label', subject: { identifier: combo.identifier, koreanLabel: combo.label }, correct: true });
+    for (const wrong of combo.wrong) out.push({ kind: 'field-label', subject: { identifier: combo.identifier, koreanLabel: wrong }, correct: false });
+  }
+  return out;
+}
+
 function businessCases(resources: ReadonlyArray<readonly [string, string]>, next: () => number): SeedCase[] {
   const out: SeedCase[] = [];
   for (const [r, k] of resources) {
@@ -216,6 +323,7 @@ export function seedJudgmentCases(options: { split?: 'train' | 'heldout' | 'all'
     ...(kinds.includes('field-label') ? fieldCases(fields, next) : []),
     ...(kinds.includes('business-name') ? businessCases(resources, next) : []),
     ...(kinds.includes('field-label') ? genericCases(generic) : []),
+    ...(kinds.includes('field-label') ? abbreviationCases(options.split === 'heldout' ? true : options.split === 'train' ? false : 'all') : []),
   ];
   return shuffle(cases, next);
 }

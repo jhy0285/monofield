@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { SEED_GENERIC_HELDOUT, SEED_GENERIC_TRAIN, seedJudgmentCases, seedJudgmentDataset } from '../src/services/judgment-seed.js';
+import {
+  ABBREVIATION_HELDOUT_PREFIXES,
+  SEED_ABBREVIATION_HELDOUT,
+  SEED_ABBREVIATION_TRAIN,
+  SEED_GENERIC_HELDOUT,
+  SEED_GENERIC_TRAIN,
+  seedJudgmentCases,
+  seedJudgmentDataset,
+} from '../src/services/judgment-seed.js';
 
 const vocabulary = (cases: ReturnType<typeof seedJudgmentCases>) => ({
   identifiers: new Set(cases.filter((c) => c.kind === 'field-label').map((c) => c.subject.identifier)),
@@ -48,6 +56,45 @@ describe('SI judgment seed dataset', () => {
     }
     const ids = [...SEED_GENERIC_TRAIN, ...SEED_GENERIC_HELDOUT].map(([identifier]) => identifier);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('generates legacy-style abbreviations from stems, in all three spellings, with an unseen stem held out whole', () => {
+    expect(SEED_ABBREVIATION_TRAIN.length).toBeGreaterThanOrEqual(60);
+    expect(SEED_ABBREVIATION_HELDOUT.length).toBeGreaterThanOrEqual(25);
+    const stem = (identifier: string) => identifier.toLowerCase().replace(/_/g, '').replace(/(nm|cd|no|id|stts|typ|tel|addr|dt|dtm|amt|cnt|qty|rsn|ctnt)$/, '');
+    const trainStems = new Set(SEED_ABBREVIATION_TRAIN.map((c) => stem(c.identifier)));
+    const heldoutStems = new Set(SEED_ABBREVIATION_HELDOUT.map((c) => stem(c.identifier)));
+    for (const prefix of ABBREVIATION_HELDOUT_PREFIXES) {
+      expect(heldoutStems.has(prefix), prefix).toBe(true);
+      expect(trainStems.has(prefix), `${prefix} must not be trained`).toBe(false);
+    }
+    // The other stems are trained on and also appear held out in a new combination.
+    expect([...heldoutStems].filter((s) => trainStems.has(s)).length).toBeGreaterThanOrEqual(8);
+    const all = [...SEED_ABBREVIATION_TRAIN, ...SEED_ABBREVIATION_HELDOUT].map((c) => c.identifier);
+    expect(all.some((id) => /^[a-z]+[A-Z][a-z]+$/.test(id))).toBe(true);
+    expect(all.some((id) => /^[a-z]+_[a-z]+$/.test(id))).toBe(true);
+    expect(all.some((id) => /^[A-Z]+_[A-Z]+$/.test(id))).toBe(true);
+  });
+
+  it('labels abbreviations by their stems and gives each two wrong labels of another meaning', () => {
+    const cases = seedJudgmentCases({ split: 'all', kinds: ['field-label'] });
+    const labelsOf = (identifier: string) => cases.filter((c) => c.subject.identifier === identifier);
+    const find = (flat: string) => [...SEED_ABBREVIATION_TRAIN, ...SEED_ABBREVIATION_HELDOUT].find((c) => c.identifier.toLowerCase().replace(/_/g, '') === flat);
+    expect(find('custcd')?.label).toBe('고객 코드');
+    expect(find('regid')).toBeUndefined(); // already a generic train identifier, so skipped here
+    expect(find('regdtm')?.label).toBe('등록일시');
+    expect(find('apprnm')?.label).toBe('승인자명');
+    for (const entry of [...SEED_ABBREVIATION_TRAIN, ...SEED_ABBREVIATION_HELDOUT]) {
+      const rows = labelsOf(entry.identifier);
+      expect(rows.filter((c) => c.correct).map((c) => c.subject.koreanLabel), entry.identifier).toEqual([entry.label]);
+      const wrong = rows.filter((c) => !c.correct).map((c) => c.subject.koreanLabel!);
+      expect(wrong, entry.identifier).toHaveLength(2);
+      expect(new Set(wrong).size).toBe(2);
+      expect(wrong).not.toContain(entry.label);
+    }
+    // Neither near-synonym pair is used as a "wrong" label: a date vs a date-time, a customer vs a member.
+    expect(labelsOf(find('cncldt')?.identifier ?? '').some((c) => !c.correct && c.subject.koreanLabel === '취소일시')).toBe(false);
+    expect(cases.some((c) => !c.correct && c.subject.identifier?.toLowerCase().startsWith('cust') && c.subject.koreanLabel?.startsWith('회원'))).toBe(false);
   });
 
   it('writes laya-train / laya-evals lines with the evaluated question wording', () => {
