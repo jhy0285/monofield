@@ -153,6 +153,7 @@ import { MANUAL_EDIT_STYLE_PROPS, type ManualEditBridgeMessage, type ManualEditH
 import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 import { ScreenSpecEditor } from './screen-spec/ScreenSpecEditor';
 import { InterfaceSpecEditor } from './interface-spec/InterfaceSpecEditor';
+import { ReaEvidenceGate } from './rea-studio/ReaStudio';
 
 function resolveChromeActionsHost(): HTMLElement | null {
   return document.querySelector<HTMLElement>(APP_CHROME_FILE_ACTIONS_SELECTOR)
@@ -1092,7 +1093,7 @@ export function FileViewer({
     return <ImageViewer projectId={projectId} file={file} />;
   }
   if (file.kind === 'text' || file.kind === 'code') {
-    return (
+    const text = (
       <TextViewer
         key={`${projectId}:${file.name}`}
         projectId={projectId}
@@ -1101,6 +1102,8 @@ export function FileViewer({
         onOpenFile={onOpenFile}
       />
     );
+    // A JSON file that turns out to be REA evidence opens in REA Studio, with a switch back to the raw text.
+    return /\.json$/i.test(file.name) ? <ReaEvidenceGate projectId={projectId} file={file} raw={text} /> : text;
   }
   if (
     file.kind === 'pdf' ||

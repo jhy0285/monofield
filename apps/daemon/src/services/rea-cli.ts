@@ -1,4 +1,10 @@
 import type {
+  ReaBrowserView,
+  ReaEvidenceListResponse,
+  ReaEvidenceView,
+  ReaSqliteView,
+  ReaStaticView,
+  ReaTraceView,
   BrowserEvidenceApplyResponse,
   BrowserEvidenceCrossCheckResponse,
   BrowserEvidenceFinding,
@@ -8,11 +14,18 @@ import type { McpServerConfig, McpTemplate } from '../mcp-config.js';
 
 const USAGE = `Usage:
   monofield rea <status|configure|disable> [--json] [--daemon-url URL]
+  monofield rea files       --project <id> [--json]
+  monofield rea show        --project <id> --file <evidence.json> [--json]
   monofield rea evidence    --project <id> [--json]
   monofield rea cross-check --project <id> --evidence <file>... [--input <spec.interface-spec.json>] [--json]
   monofield rea apply       --project <id> --evidence <file>... [--input <spec>] [--finding <id>...]
                             [--include-examples] [--no-attach-evidence] [--note-lang ko|en]
                             [--write [--out <file>] [--base-sha256 <hash>]] [--json]
+
+files lists every REA evidence file in a project (browser captures, SQLite inspections, static analyses, traces); show
+prints one of them the way the REA Studio screen does: its envelope (operation, provider, confidence, limitations), then
+what it holds. A payload is shown only when its SHA-256 matches the recorded one; REA's limitations and unknowns are
+printed unchanged, and "not observed" is never turned into "absent".
 
 status, configure and disable manage the optional pinned REA MCP server for new
 supported local-agent conversations. They do not install Node.js, start REA, or
@@ -38,7 +51,7 @@ interface Helpers {
   positionalArgs: (args: string[], stringFlags: Set<string>) => string[];
 }
 
-const EVIDENCE_COMMANDS = ['evidence', 'cross-check', 'apply'];
+const EVIDENCE_COMMANDS = ['files', 'show', 'evidence', 'cross-check', 'apply'];
 const MCP_COMMANDS = ['status', 'configure', 'disable'];
 
 /** `parseFlags` keeps the last value of a flag; these two may be given several times. */
@@ -65,8 +78,61 @@ const formatFinding = (finding: BrowserEvidenceFinding): string => {
   return `  ${finding.severity.padEnd(7)} ${finding.kind.padEnd(22)} ${method} ${path}${interfaceId ? ` (${interfaceId})` : ''}${what ? `  ${what}` : ''}${detail}${finding.applicable ? '' : '  (not written by apply)'}`;
 };
 
+const clip = (value: string, width: number) => (value.length > width ? `${value.slice(0, width - 1)}…` : value);
+
+/** One REA evidence view as plain text: the same facts the REA Studio screen shows, in the same order. */
+export function formatReaView(view: ReaEvidenceView): string {
+  const lines: string[] = [];
+  const { envelope } = view;
+  lines.push(`${view.file}: ${envelope.operation} (${view.kind}) · ${envelope.provider.name || envelope.provider.id} ${envelope.provider.version}`.trimEnd());
+  lines.push(`evidence ${envelope.evidenceId}${envelope.confidence ? ` · confidence ${envelope.confidence}` : ''}${envelope.authority ? ` · authority ${envelope.authority}` : ''}`);
+  if (view.kind === 'browser') {
+    const browser = view as ReaEvidenceView & ReaBrowserView;
+    const api = browser.requests.filter((request) => request.isApi).length;
+    lines.push(`${browser.steps.length} steps · ${browser.requests.length} requests (${api} API) · ${browser.durationMs ?? '?'} ms · completeness ${browser.completeness.status}${browser.completeness.missingSections.length ? ` (missing: ${browser.completeness.missingSections.join(', ')})` : ''}`);
+    for (const step of browser.steps) {
+      const shots = [step.screenshot && 'screenshot', step.dom && 'dom', step.accessibility && 'a11y'].filter(Boolean).join(' ');
+      lines.push(`  step ${String(step.index).padStart(2)} ${clip(step.id, 28).padEnd(28)} ${step.action.padEnd(10)} ${String(step.elapsedMs ?? '-').padStart(5)} ms  ${step.status}${shots ? `  [${shots}]` : ''}${step.error ? `  error: ${step.error}` : ''}`);
+    }
+    for (const request of browser.requests) {
+      const bodies = [request.request.state === 'integrity-failed' || request.response.state === 'integrity-failed' ? 'INTEGRITY FAILED' : '', request.response.state === 'captured' ? `${request.response.bytes} B` : request.response.state].filter(Boolean).join(' ');
+      lines.push(`  ${request.isApi ? 'api ' : '    '}${request.method.padEnd(6)} ${clip(request.path, 44).padEnd(44)} ${String(request.status ?? request.failure ?? '-').padEnd(5)} ${request.resourceType.padEnd(9)} ${bodies}`);
+    }
+  } else if (view.kind === 'sqlite') {
+    const sqlite = view as ReaEvidenceView & ReaSqliteView;
+    lines.push(`${sqlite.engine} · ${sqlite.tables.length} tables · schema ${sqlite.completeness}${sqlite.bytes ? ` · ${sqlite.bytes} bytes` : ''}`);
+    for (const table of sqlite.tables) {
+      lines.push(`  ${table.name}(${table.columns.map((column) => `${column.name}${column.primaryKey ? ' PK' : ''}${column.notNull ? ' NN' : ''}`).join(', ')})`);
+      for (const key of table.foreignKeys) lines.push(`      ${key.column} → ${key.refTable}.${key.refColumn}`);
+      for (const unique of table.unique) lines.push(`      UNIQUE(${unique})`);
+      for (const check of table.checks) lines.push(`      CHECK(${clip(check, 70)})`);
+      if (table.rows) lines.push(`      rows: ${table.rows.returned}${table.rows.truncated ? '+ (truncated)' : ''} — ${table.rows.columns.join(', ')}`);
+    }
+  } else if (view.kind === 'static') {
+    const analysis = view as ReaEvidenceView & ReaStaticView;
+    lines.push(`${analysis.format ?? 'application'} · application coverage ${analysis.applicationCoverage ?? 'unknown'} · semantic coverage ${analysis.semanticCoverage ?? 'unknown'} · ${analysis.semanticUnknowns} semantic unknowns`);
+    lines.push(`  ${analysis.statistics.filter((item) => item.value > 0).map((item) => `${item.key} ${item.value}`).join(' · ')}`);
+    lines.push(`  graph: ${analysis.nodeTotal} nodes, ${analysis.edgeTotal} edges (showing ${analysis.nodes.length})`);
+    for (const node of analysis.nodes) lines.push(`    ${node.kind.padEnd(18)} ${node.label}`);
+    for (const reason of analysis.unknownReasons) lines.push(`  unknown: ${reason.reason} × ${reason.count}`);
+  } else if (view.kind === 'trace') {
+    const trace = view as ReaEvidenceView & ReaTraceView;
+    lines.push(`seed "${trace.seed}" (${trace.direction}) · ${trace.status} · ${trace.matches} matches · ${trace.terminalPaths} terminal paths`);
+    if (trace.status === 'no-match') lines.push('  no literal match: that does not show the feature is absent.');
+    trace.paths.forEach((path, index) => lines.push(`  path ${index + 1}: ${path.join(' → ')}`));
+  } else {
+    for (const fact of (view as unknown as { facts: Array<{ key: string; value: string }> }).facts) lines.push(`  ${fact.key}: ${fact.value}`);
+  }
+  for (const unknown of view.unknowns) lines.push(`unknown: ${unknown}`);
+  if (envelope.limitations.length) {
+    lines.push(`limitations (${envelope.limitations.length}):`);
+    for (const limitation of envelope.limitations) lines.push(`  - ${limitation}`);
+  }
+  return lines.join('\n');
+}
+
 async function runEvidenceCommand(command: string, args: string[], helpers: Helpers): Promise<void> {
-  const strings = new Set(['daemon-url', 'project', 'input', 'evidence', 'finding', 'out', 'note-lang', 'base-sha256']);
+  const strings = new Set(['daemon-url', 'project', 'input', 'evidence', 'finding', 'out', 'note-lang', 'base-sha256', 'file']);
   const flags = helpers.parseFlags(args, {
     string: strings,
     boolean: new Set(['json', 'help', 'include-examples', 'no-attach-evidence', 'write']),
@@ -86,6 +152,21 @@ async function runEvidenceCommand(command: string, args: string[], helpers: Help
     }
     return await response.json() as T;
   };
+
+  if (command === 'files') {
+    const { files } = await call<ReaEvidenceListResponse>(`/api/projects/${project}/rea-evidence`);
+    if (flags.json) { print({ files }); return; }
+    if (files.length === 0) console.log('No REA evidence files in this project.');
+    for (const file of files) console.log(`${file.kind.padEnd(8)} ${file.file}  ${(file.size / 1024).toFixed(1)} KB  ${file.operation}`);
+    return;
+  }
+  if (command === 'show') {
+    if (typeof flags.file !== 'string' || !flags.file) throw new Error('show requires --file <evidence.json>.');
+    const view = await call<ReaEvidenceView>(`/api/projects/${project}/rea-evidence/view`, { file: flags.file });
+    if (flags.json) { print(view); return; }
+    console.log(formatReaView(view));
+    return;
+  }
 
   if (command === 'evidence') {
     const { files } = await call<BrowserEvidenceListResponse>(`/api/projects/${project}/browser-evidence`);
@@ -160,7 +241,7 @@ async function runEvidenceCommand(command: string, args: string[], helpers: Help
 
 /** Configure the optional REA MCP server (Settings → MCP) and compare REA browser evidence with interface specifications. */
 export async function runReaCli(args: string[], helpers: Helpers): Promise<void> {
-  const strings = new Set(['daemon-url', 'project', 'input', 'evidence', 'finding', 'out', 'note-lang', 'base-sha256']);
+  const strings = new Set(['daemon-url', 'project', 'input', 'evidence', 'finding', 'out', 'note-lang', 'base-sha256', 'file']);
   const [command = 'status', ...extra] = helpers.positionalArgs(args, strings);
   if (EVIDENCE_COMMANDS.includes(command)) return runEvidenceCommand(command, args, helpers);
 

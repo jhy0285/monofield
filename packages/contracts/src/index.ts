@@ -27,6 +27,7 @@ export * from './api/handoff.js';
 export * from './api/jev.js';
 export * from './api/judgments.js';
 export * from './api/browser-evidence.js';
+export * from './api/rea-evidence.js';
 export * from './api/verification.js';
 export * from './api/library.js';
 export * from './api/live-artifacts.js';
