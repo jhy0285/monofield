@@ -311,10 +311,14 @@ REA Studio (see the 2026-11-03 Log entry):
 
 Judgment checks (Laya fine-tune):
 
-- v3 (abbreviation families added to the seed, see the 2026-11-03 Log entry) was training when this was written; its checkpoint and
-  numbers are not in the repository. Next: run it per question and per subset (original / generic / abbreviation held-out), against
-  v1 and v2, and on a fresh planted-error spec; repeat a recipe two or three times to see the run-to-run spread. `id`/`status` still
-  score low on the v2 planted spec; the checkpoints (1.3 GB each) are outside Git; hosted JEV was never measured (no key).
+- v3 (abbreviation families added to the seed) is measured and written up in `docs/judgment-checks.md` ("A third fine-tune") and in
+  the newest Log entry: abbreviation held-out AUC 0.687 (v2) → 0.899, but on the planted-error spec v3 missed `memberId → 주문번호`
+  (0.94) that v1 and v2 had caught. Open: (1) test the guess that the `Id`/`No` shared family in `ABBREVIATION_SUFFIXES` causes the
+  miss (add `Id` ↔ `No` swaps as wrong labels, retrain, rerun the planted spec); (2) repeat one recipe two or three times to see the
+  run-to-run spread, since every number here comes from a single run; (3) `rgstDt`, `statCd → 상태`, `id → 주문 ID` and
+  `ordAmt → 주문 금액` are right labels that stay flagged; (4) the held-out abbreviations are built from the same suffix tables as the
+  training ones, so nothing here measures abbreviations from outside the tables except `rgstDt` (fails). The checkpoints (1.3 GB
+  each) are outside Git; hosted JEV was never measured (no key).
 
 Execution permissions (see the newest Log entry):
 
@@ -457,6 +461,24 @@ Code health:
 
 ## Log
 
+### 2026-11-03 — measured the abbreviation fine-tune (v3) (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** "아 백그라운드로 하던거는계속해" (continue the background training and measurement).
+- **Training:** `laya-train --base multilingual --max-len 128 --head-max-len 192 --epochs 8 --micro-batch 8 --grad-accum 4
+  --shuffle-options` (recipe of `docs/judgment-checks.md`) on the 1,326-line train file, own held-out evaluation on 588 lines:
+  accuracy 0.5238 → 0.8707, ECE 0.2706 → 0.0978, mean confidence 0.7944 → 0.9685; calibration temperature at the 5.0 clamp. Epoch
+  losses 0.526, 0.355, 0.238, 0.531, 0.468, 0.180, 0.165, 0.110.
+- **Measured:** stock, v1, v2 and v3 served together (`LAYA_EXTRA_MODELS`) and scored per question with the same batch wire format
+  the daemon uses; abbreviation held-out (96 items, 64 wrong) AUC stock 0.539, v1 0.629, v2 0.687, v3 0.899; generic v2 0.949 → v3
+  0.975; original v2 0.958 → v3 0.981; business names v2 0.924 → v3 0.907 (flat or slightly lower). Planted-error spec (15 items,
+  `monofield judge check` in observe mode with the model switched to v3): 3 flags, 2 of them planted, `memberId → 주문번호` missed
+  (0.94). `userNm` and `dlvAddr` right labels pass (0.98 / 0.99), `rgstDt` and `id → 주문 ID` stay flagged. All tables are in
+  `docs/judgment-checks.md`.
+- **Not done:** a repeat run to measure run-to-run spread (every figure is from one run); a test of why `memberId` was missed; hosted
+  JEV (no key). The checkpoints and the scored files stay in the scratch area, outside Git.
+- **Next agent:** see Open items, "Judgment checks". The held-out abbreviations share their suffix tables with the training ones, so
+  do not read 0.899 as a result on outside abbreviations.
+
 ### 2026-11-03 — abbreviation families in the judgment seed (training pending) (`ccr-8432aecf-n9xdfd`)
 
 - **Request:** "약어 데이터 보강해서 다시 학습해줘" (add abbreviation data and retrain).
@@ -470,7 +492,7 @@ Code health:
   492 → 588. `tests/judgment-seed.test.ts` +2 tests (7 in the file pass). A first version compared a suffix family through a tuple
   property that does not exist, so every swap passed the family check; found by printing the labels, fixed.
 - **Training:** `laya-train` with the documented recipe on the 1,326-line train file was started detached (`setsid nohup`) and had
-  finished 1 of 8 epochs when this entry was written. **No result is recorded yet**; the repository has no new numbers.
+  finished 1 of 8 epochs when this entry was written. The result is in the newer entry above ("measured the abbreviation fine-tune").
 - **Next agent:** see Open items, "Judgment checks".
 
 ### 2026-11-03 — REA Studio: REA evidence as a screen, and `monofield rea files|show` (`ccr-8432aecf-n9xdfd`)

@@ -117,29 +117,78 @@ a trade-off. Per generic identifier, v2's mean probability for the right labels 
 about 0.04 for the abbreviations `ordAmt` and `userNm`, and 0.03 for `rgstDt` (v1 gave `rgstDt` 0.99): abbreviations the
 training set did not contain are not generalized.
 
+### A third fine-tune: Korean legacy abbreviations
+
+Legacy Korean schemas write `CUST_NM`, `ordAmt`, `rgstDt`. `SEED_ABBREVIATION_TRAIN` / `SEED_ABBREVIATION_HELDOUT` in
+`apps/daemon/src/services/judgment-seed.ts` generate such identifiers from a prefix table (`cust` 고객, `ord` 주문, ...) and
+a suffix table (`Nm` 명, `Amt` 금액, `Dt` 일자, ...): 72 identifiers for training, 32 held out. Two stems (`comp`, `rsv`) are
+held out whole and one combination in four of every other stem; each right label comes with two wrong ones (another suffix
+family, or another prefix group). **The held-out set is therefore new stems and combinations built from the same suffix
+vocabulary, not abbreviations from outside the tables.** A third fine-tune with the same recipe on the 1,326-line train split
+(`laya-train` held-out evaluation on 588 lines: accuracy 0.524 → 0.871, ECE 0.271 → 0.098, mean confidence 0.794 → 0.969; the
+calibration temperature again hit the 5.0 clamp, so read the probabilities as rankings) was served next to the other three
+and scored on the 588 held-out lines. Field label, per held-out subset:
+
+| Held-out subset | Model | Accuracy at 0.5 | AUC | Flag precision / recall at ≤ 0.3 |
+| --- | --- | --- | --- | --- |
+| Abbreviation (96 items, 64 wrong) | stock | 0.469 | 0.539 | 0.652 / 0.234 |
+| | v1 | 0.698 | 0.629 | 0.727 / 0.875 |
+| | v2 | 0.719 | 0.687 | 0.765 / 0.812 |
+| | v3 | 0.844 | 0.899 | 0.857 / 0.938 |
+| Generic (114 items, 76 wrong) | v2 | 0.877 | 0.949 | 0.878 / 0.947 |
+| | v3 | 0.912 | 0.975 | 0.922 / 0.934 |
+| Original (90 items, 60 wrong) | v2 | 0.889 | 0.958 | 0.902 / 0.917 |
+| | v3 | 0.933 | 0.981 | 0.951 / 0.967 |
+
+Business names (288 items): v3 accuracy 0.844, AUC 0.907, flag precision/recall 0.863 / 0.922, against v2 0.865, 0.924,
+0.882 / 0.938 and v1 0.847, 0.915, 0.868 / 0.922, so no gain there and a slightly lower number, within what one run can
+move. v3 flags 70 of the 96 abbreviation items and 10 of those flags are right labels. Probability that a right label is
+right, for identifiers that scored low before (one request per label, the two labels of a row separated by a slash):
+
+| Identifier → label | v1 | v2 | v3 |
+| --- | --- | --- | --- |
+| `userNm` → 사용자명 / 사용자 이름 | 0.03 / 0.02 | 0.04 / 0.04 | **0.98 / 0.98** |
+| `dlvAddr` → 배송 주소 / 배송지 주소 | 0.02 / 0.79 | 0.03 / 0.71 | **0.99 / 0.99** |
+| `ordAmt` → 주문액 / 주문 금액 | 0.01 / 0.01 | 0.04 / 0.03 | **0.99** / 0.03 |
+| `rgstDt` → 등록일자 / 등록일시 | 0.99 / 0.99 | 0.03 / 0.03 | 0.02 / 0.06 |
+| `status` → 주문 상태 / 배송 상태 | 0.02 / 0.03 | 0.03 / 0.39 | **0.99** / 0.02 |
+| `statCd` → 상태 | 0.01 | 0.02 | 0.02 |
+| `id` → 주문 ID | 0.01 | 0.02 | 0.08 |
+
+So the tables help where they were built to (new stems, unseen `userNm`, `dlvAddr`), and `rgstDt` is still wrong: `rgst` is
+not a stem in the tables, which is the fair test of an abbreviation from outside them. `ordAmt → 주문 금액` (0.03) and
+`status → 배송 상태` (0.02) are right labels that stay flagged even though their sibling labels pass. These are single
+training runs (the loss per epoch was 0.526, 0.355, 0.238, 0.531, 0.468, 0.180, 0.165, 0.110, not a smooth curve); the
+earlier runs showed the original subset moving by about 0.02 AUC between recipes, so differences of that size say little.
+
 ### Against a specification with planted errors
 
 `monofield judge check` on a 3-endpoint specification with three planted errors (`POST /api/v1/orders → 회원 탈퇴`,
 `memberId → 주문번호`, `createdAt → 삭제일시`), observe mode, local backend, two batch calls (about 1.2–1.4 s on CPU).
 Probability that the item is right, for each distinct item (a label that appears on two endpoints is one item):
 
-| Item | Stock | v1 | v2 |
-| --- | --- | --- | --- |
-| `POST /api/v1/orders → 회원 탈퇴` (planted) | 0.73 | **0.01** | **0.01** |
-| `memberId → 주문번호` (planted) | 0.77 | **0.01** | **0.06** |
-| `createdAt → 삭제일시` (planted) | 0.96 | **0.03** | **0.03** |
-| `id → 주문 ID` | 0.03 | 0.01 | 0.02 |
-| `status → 주문 상태` | 0.38 | 0.02 | 0.03 |
-| `amount → 결제 금액` | 0.95 | 0.16 | 0.99 |
-| `deletedAt → 탈퇴 일시` | 0.44 | 0.98 | 0.50 |
-| `orderNo → 주문번호` | 0.21 | 0.99 | 0.99 |
-| the other five correct items | 0.82 – 0.96 | 0.99 | 0.89 – 0.99 |
+| Item | Stock | v1 | v2 | v3 |
+| --- | --- | --- | --- | --- |
+| `POST /api/v1/orders → 회원 탈퇴` (planted) | 0.73 | **0.01** | **0.01** | **0.01** |
+| `memberId → 주문번호` (planted) | 0.77 | **0.01** | **0.06** | 0.94 (missed) |
+| `createdAt → 삭제일시` (planted) | 0.96 | **0.03** | **0.03** | **0.02** |
+| `id → 주문 ID` | 0.03 | 0.01 | 0.02 | 0.08 |
+| `status → 주문 상태` | 0.38 | 0.02 | 0.03 | 0.99 |
+| `amount → 결제 금액` | 0.95 | 0.16 | 0.99 | 0.99 |
+| `deletedAt → 탈퇴 일시` | 0.44 | 0.98 | 0.50 | 0.98 |
+| `orderNo → 주문번호` | 0.21 | 0.99 | 0.99 | 0.99 |
+| the other five correct items | 0.82 – 0.96 | 0.99 | 0.89 – 0.99 | 0.97 – 0.99 |
 
-The stock model misses all three planted errors and flags two correct items. Both fine-tuned models rank all three planted
-errors lowest. With flags at ≤ 0.3, v1 raised 6 flags (3 planted, precision 0.50) and v2 raised 5 (3 planted, precision
-0.60); the held-out files say 0.84 – 0.94. v2 fixed `amount → 결제 금액` but `id → 주문 ID` and `status → 주문 상태` stay low
-(`id` and `status` are held out of the generic training set on purpose, so they stay an honest test), and it now doubts
-`deletedAt → 탈퇴 일시` (0.50). Which of these were unseen: `memberId` and every generic item are held out of both training
+The stock model misses all three planted errors and flags two correct items. v1 and v2 rank all three planted errors lowest.
+With flags at ≤ 0.3, v1 raised 6 flags (3 planted, precision 0.50) and v2 raised 5 (3 planted, precision 0.60); the held-out
+files say 0.84 – 0.94. v2 fixed `amount → 결제 금액` but `id → 주문 ID` and `status → 주문 상태` stay low (`id` and `status`
+are held out of the generic training set on purpose, so they stay an honest test), and it now doubts `deletedAt → 탈퇴 일시`
+(0.50). **v3 raised 3 flags (2 planted, precision 0.67, recall 0.67): it fixed `status`, `amount` and `deletedAt`, kept the
+`id → 주문 ID` false flag, and missed the planted `memberId → 주문번호` (0.94), which both earlier checkpoints had caught.**
+The cause is not tested. One reading: the abbreviation tables put `Id` and `No` in the same family and never offer one as
+the wrong label for the other, so a "member identifier" paired with "주문번호" was never shown as an error. With three planted
+errors one miss is a third of the recall, and these are single runs, so this is a warning about trusting v3 over v2 on
+identifier/number swaps, not a ranking of the checkpoints. Which of these were unseen: `memberId` and every generic item are held out of both training
 sets, while `createdAt` and the resource `orders` are in the seed's train split, so those two planted catches are not a
 generalization test. That is why the default stays observe mode and why a policy needs your own labels (the 성적표 section)
 before flags turn on: mark the generic fields correct and they become training data for the next `laya-train` run
