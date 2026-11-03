@@ -502,9 +502,10 @@ Code health:
   and `rea-studio-cli` 5 (real server, `dist/cli.js`) pass; web `ReaStudio` 10 and `rea-studio-layout` 6 pass; web and daemon typecheck
   clean. A Playwright run on a real daemon + web stack opened the SQLite file and showed the relationship diagram (viewed: customers ←
   orders ← settlements/audit_log with PK/NN badges) and, in an earlier run, the browser capture with a hash-checked screenshot.
-  `pnpm guard`, root `pnpm typecheck` and `pnpm i18n:check` pass. The whole web unit suite (it now makes a probe request when a JSON
-  file is opened, which an existing test could trip over) was still running when this was committed: **its result is not recorded**; run it
-  before trusting this commit.
+  `pnpm guard`, root `pnpm typecheck` and `pnpm i18n:check` pass. The whole web unit suite (run while a fine-tune used the CPU, after the
+  commit): 408 of 410 files, 3,959 tests passed, 13 skipped; the 2 failures are `tests/i18n/locales.test.ts` (timed out at 5,000 ms loading
+  all 19 locales) and `tests/components/ProductTutorial.test.tsx` (timing); both pass when run alone (14 and 2 tests), so no regression from
+  the probe request `FileViewer` now makes for JSON files was found.
 - **Not done:** an end-to-end UI spec (the draft's deep-link navigation was flaky, see Open items); the static pane and the browser pane
   were not viewed in a browser in their final form; Laya was not wired into Studio; local personal-data screening is only a proposal.
 - **Next agent:** this was built without the user choosing it; ask before extending. Evidence is read through the daemon so hashing stays
