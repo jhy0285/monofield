@@ -255,17 +255,40 @@ describe('the REA setup check', () => {
     expect(by.browser).toMatchObject({ status: 'ok', required: false, found: '/usr/bin/chromium' });
     expect(by.jadx).toMatchObject({ status: 'ok', found: '/opt/tools/bin/jadx' });
     expect(by.native).toMatchObject({ status: 'missing', required: false });
-    expect(result.checks.map((check) => check.id)).toEqual(['node', 'npx', 'mcp', 'browser', 'native', 'java', 'jadx', 'apktool', 'tshark', 'adb']);
+    expect(by.ghidra).toEqual({ id: 'ghidra', required: false, found: null, status: 'missing', note: 'not-set' });
+    expect(result.checks.map((check) => check.id)).toEqual(['node', 'npx', 'mcp', 'browser', 'ghidra', 'native', 'java', 'jadx', 'apktool', 'tshark', 'adb']);
   });
 
   it('is not ready when a required item is missing or out of range, and says why', async () => {
     const missing = await runReaDoctor(linuxDeps({ nodeVersion: async () => null, mcpServers: async () => [] }));
     expect(missing.ready).toBe(false);
-    expect(missing.checks.filter((check) => check.status === 'missing').map((check) => check.id)).toEqual(['node', 'npx', 'mcp', 'browser', 'native', 'java', 'jadx', 'apktool', 'tshark', 'adb']);
+    expect(missing.checks.filter((check) => check.status === 'missing').map((check) => check.id)).toEqual(['node', 'npx', 'mcp', 'browser', 'ghidra', 'native', 'java', 'jadx', 'apktool', 'tshark', 'adb']);
     const old = await runReaDoctor(linuxDeps({ nodeVersion: async () => 'v20.18.0', mcpServers: async () => [{ id: 'rea', templateId: 'rea', enabled: false, command: 'npx', args: ['-y', 'rea-agents@6.4.0', '--mcp'] }] }, ['/usr/bin/npx']));
     expect(old.ready).toBe(false);
     expect(old.checks.find((check) => check.id === 'node')).toMatchObject({ status: 'warn', note: 'outside-range', found: 'v20.18.0' });
     expect(old.checks.find((check) => check.id === 'mcp')).toMatchObject({ status: 'warn', note: 'disabled' });
+  });
+
+  it('finds Ghidra and Java the way REA does: GHIDRA_INSTALL_DIR and JAVA_HOME, the REA entry first, not PATH', async () => {
+    const rea = (env: Record<string, string>) => async () => [{ id: 'rea', templateId: 'rea', enabled: true, command: 'npx', args: ['-y', 'rea-agents@6.7.0', '--mcp'], env }];
+    const set = await runReaDoctor(linuxDeps({ env: { PATH: '/usr/bin', GHIDRA_INSTALL_DIR: '/srv/old-ghidra' }, mcpServers: rea({ GHIDRA_INSTALL_DIR: '/opt/ghidra_11.3_PUBLIC', JAVA_HOME: '/usr/lib/jvm/jdk-21' }) },
+      ['/usr/bin/npx', '/opt/ghidra_11.3_PUBLIC/support/analyzeHeadless', '/usr/lib/jvm/jdk-21/bin/java', '/usr/bin/ghidraRun']));
+    const by = Object.fromEntries(set.checks.map((check) => [check.id, check]));
+    expect(by.ghidra).toEqual({ id: 'ghidra', required: false, found: '/opt/ghidra_11.3_PUBLIC', status: 'ok' });
+    expect(by.java).toEqual({ id: 'java', required: false, found: '/usr/lib/jvm/jdk-21', status: 'ok' });
+    expect(by.native).toMatchObject({ status: 'missing' }); // ghidraRun on PATH is not how REA finds Ghidra
+    expect(set.ready).toBe(true);
+
+    const fromSystem = await runReaDoctor(linuxDeps({ env: { PATH: '/usr/bin', GHIDRA_INSTALL_DIR: '/opt/ghidra' } }, ['/usr/bin/npx']));
+    expect(fromSystem.checks.find((check) => check.id === 'ghidra')).toMatchObject({ status: 'warn', found: '/opt/ghidra', note: 'no-analyze-headless', required: false });
+
+    // REA validates these as non-empty absolute paths when it starts, so a bad value stops REA altogether.
+    const empty = await runReaDoctor(linuxDeps({ mcpServers: rea({ GHIDRA_INSTALL_DIR: '' }) }, ['/usr/bin/npx']));
+    expect(empty.checks.find((check) => check.id === 'ghidra')).toMatchObject({ status: 'warn', required: true, note: 'empty-value' });
+    expect(empty.ready).toBe(false);
+    const relative = await runReaDoctor(linuxDeps({ mcpServers: rea({ JAVA_HOME: 'jdk-21' }) }, ['/usr/bin/npx']));
+    expect(relative.checks.find((check) => check.id === 'java')).toMatchObject({ status: 'warn', required: true, note: 'not-absolute', found: 'jdk-21' });
+    expect(relative.ready).toBe(false);
   });
 
   it('finds Windows executables through PATHEXT and Chrome in Program Files', async () => {
@@ -273,8 +296,9 @@ describe('the REA setup check', () => {
       platform: 'win32',
       env: { Path: 'C:\\nodejs;C:\\tools', PATHEXT: '.COM;.EXE;.CMD', ProgramFiles: 'C:\\Program Files' },
       nodeVersion: async () => 'v22.19.0',
-      exists: async (file) => ['C:\\nodejs\\npx.cmd', 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', 'C:\\tools\\adb.exe'].includes(file),
-      mcpServers: async () => [{ id: 'rea', templateId: 'rea', enabled: true, command: 'node', args: ['C:\\rea-yj\\scripts\\rea.mjs', '--mcp'] }],
+      exists: async (file) => ['C:\\nodejs\\npx.cmd', 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', 'C:\\tools\\adb.exe',
+        'C:\\ghidra_11.3_PUBLIC\\support\\analyzeHeadless.bat'].includes(file),
+      mcpServers: async () => [{ id: 'rea', templateId: 'rea', enabled: true, command: 'node', args: ['C:\\rea-yj\\scripts\\rea.mjs', '--mcp'], env: { GHIDRA_INSTALL_DIR: 'C:\\ghidra_11.3_PUBLIC' } }],
     });
     const by = Object.fromEntries(result.checks.map((check) => [check.id, check]));
     expect(result.ready).toBe(true);
@@ -282,5 +306,6 @@ describe('the REA setup check', () => {
     expect(by.browser!.found).toBe('C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe');
     expect(by.adb!.found).toBe('C:\\tools\\adb.exe');
     expect(by.mcp).toMatchObject({ status: 'ok', note: 'custom-command' });
+    expect(by.ghidra).toMatchObject({ status: 'ok', found: 'C:\\ghidra_11.3_PUBLIC' });
   });
 });

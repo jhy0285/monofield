@@ -451,7 +451,7 @@ export interface ReaCompareRequest {
 /** The REA release MonoField's MCP template pins, and the Node.js range its package declares (`engines.node`). */
 export const REA_PACKAGE = { name: 'rea-agents', version: '6.7.0', node: '^22.19.0 || ^24.11.0 || >=26.0.0' } as const;
 
-export type ReaDoctorCheckId = 'node' | 'npx' | 'browser' | 'mcp' | 'native' | 'java' | 'jadx' | 'apktool' | 'tshark' | 'adb';
+export type ReaDoctorCheckId = 'node' | 'npx' | 'browser' | 'mcp' | 'ghidra' | 'native' | 'java' | 'jadx' | 'apktool' | 'tshark' | 'adb';
 export type ReaDoctorStatus = 'ok' | 'warn' | 'missing';
 
 export interface ReaDoctorCheck {
@@ -461,7 +461,11 @@ export interface ReaDoctorCheck {
   required: boolean;
   /** What was found: a version, an executable path, an MCP command line. */
   found: string | null;
-  /** A short machine-readable note, e.g. `outside-range`, `disabled`, `not-saved`. */
+  /**
+   * A short machine-readable note: `outside-range`, `disabled`, `other-version`, `custom-command`; for GHIDRA_INSTALL_DIR
+   * and JAVA_HOME `not-set`, `empty-value` or `not-absolute` (REA refuses to start with either, so the check is then
+   * required), `no-analyze-headless`, `no-java`.
+   */
   note?: string;
 }
 

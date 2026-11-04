@@ -7,12 +7,15 @@ import { useI18n } from '../../i18n';
 import styles from './ReaDoctorPanel.module.css';
 
 const NEED_KEY = {
-  node: 'reaDoctor.need.node', npx: 'reaDoctor.need.npx', mcp: 'reaDoctor.need.mcp', browser: 'reaDoctor.need.browser', native: 'reaDoctor.need.native',
+  node: 'reaDoctor.need.node', npx: 'reaDoctor.need.npx', mcp: 'reaDoctor.need.mcp', browser: 'reaDoctor.need.browser', ghidra: 'reaDoctor.need.ghidra', native: 'reaDoctor.need.native',
   java: 'reaDoctor.need.java', jadx: 'reaDoctor.need.jadx', apktool: 'reaDoctor.need.apktool', tshark: 'reaDoctor.need.tshark', adb: 'reaDoctor.need.adb',
 } as const satisfies Record<ReaDoctorCheckId, string>;
-const NOTE_KEY: Readonly<Record<string, 'reaDoctor.note.outsideRange' | 'reaDoctor.note.disabled' | 'reaDoctor.note.otherVersion' | 'reaDoctor.note.customCommand'>> = {
+const NOTE_KEY = {
   'outside-range': 'reaDoctor.note.outsideRange', disabled: 'reaDoctor.note.disabled', 'other-version': 'reaDoctor.note.otherVersion', 'custom-command': 'reaDoctor.note.customCommand',
-};
+  'not-set': 'reaDoctor.note.notSet', 'empty-value': 'reaDoctor.note.emptyValue', 'not-absolute': 'reaDoctor.note.notAbsolute',
+  'no-analyze-headless': 'reaDoctor.note.noAnalyzeHeadless', 'no-java': 'reaDoctor.note.noJava',
+} as const;
+const noteKey = (note: string | undefined) => (note && note in NOTE_KEY ? NOTE_KEY[note as keyof typeof NOTE_KEY] : null);
 const GLYPH: Readonly<Record<ReaDoctorCheck['status'], string>> = { ok: '✓', warn: '!', missing: '✕' };
 
 /**
@@ -45,7 +48,7 @@ export function ReaDoctorPanel({ mcpRow, onAddRea, refreshKey }: {
 
   const label = (id: ReaDoctorCheckId) => (id === 'node' ? `Node.js ${result?.package.node ?? ''}`.trim()
     : id === 'mcp' ? t('reaDoctor.label.mcp') : id === 'browser' ? t('reaDoctor.label.browser') : id === 'native' ? t('reaDoctor.label.native')
-      : ({ npx: 'npx', java: 'Java', jadx: 'JADX', apktool: 'Apktool', tshark: 'tshark', adb: 'adb' } as const)[id]);
+      : ({ npx: 'npx', ghidra: 'Ghidra', java: 'Java', jadx: 'JADX', apktool: 'Apktool', tshark: 'tshark', adb: 'adb' } as const)[id]);
   const checks = result ? [...result.checks].sort((a, b) => Number(b.required) - Number(a.required)) : [];
 
   return <section className={styles.root} data-testid="rea-doctor" aria-label={t('reaDoctor.title')}>
@@ -64,7 +67,7 @@ export function ReaDoctorPanel({ mcpRow, onAddRea, refreshKey }: {
           <div className={styles.line}>
             <b>{label(check.id)}</b>
             <span className={styles.tag}>{t(check.required ? 'reaDoctor.required' : 'reaDoctor.optional')}</span>
-            {check.note && NOTE_KEY[check.note] ? <span className={styles.note}>{t(NOTE_KEY[check.note]!)}</span> : null}
+            {noteKey(check.note) ? <span className={styles.note}>{t(noteKey(check.note)!)}</span> : null}
           </div>
           <p className={styles.need}>{t(NEED_KEY[check.id])}</p>
           <code className={styles.found}>{check.found ?? t('reaDoctor.notFound')}</code>

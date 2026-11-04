@@ -134,7 +134,7 @@ describe('monofield rea cite / compare / doctor (real server)', () => {
   it('doctor reports every check through the same endpoint the settings screen uses', async () => {
     const result = JSON.parse((await cli('doctor', '--json')).stdout) as Json;
     expect(result).toMatchObject({ ok: true, package: { name: 'rea-agents', version: '6.7.0' } });
-    expect(result.checks.map((check: Json) => check.id)).toEqual(['node', 'npx', 'mcp', 'browser', 'native', 'java', 'jadx', 'apktool', 'tshark', 'adb']);
+    expect(result.checks.map((check: Json) => check.id)).toEqual(['node', 'npx', 'mcp', 'browser', 'ghidra', 'native', 'java', 'jadx', 'apktool', 'tshark', 'adb']);
     const text = (await cli('doctor')).stdout;
     expect(text).toMatch(/^REA 6\.7\.0 \(rea-agents, Node \^22\.19\.0 \|\| \^24\.11\.0 \|\| >=26\.0\.0\) on \w+: (ready|not ready)/);
     expect(text).toContain('Looked on PATH and in the usual install locations only.');

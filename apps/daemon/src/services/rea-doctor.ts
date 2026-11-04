@@ -8,6 +8,10 @@ import { REA_PACKAGE, satisfiesNodeRange, type ReaDoctorCheck, type ReaDoctorChe
  * template runs `npx -y rea-agents@<version> --mcp`), a Chromium-family browser for browser capture, the REA MCP
  * server in MonoField's settings, and the optional engines some targets use. Executables are looked up on PATH and in
  * the usual install locations only; something installed elsewhere is reported missing, and nothing is installed here.
+ *
+ * Ghidra is found the way REA 6.7.0 finds it: through GHIDRA_INSTALL_DIR (and Java through JAVA_HOME), taken from the
+ * REA MCP entry's environment or else from the process environment, not from PATH. REA validates both as non-empty
+ * absolute paths when it starts, so an empty value stops REA altogether and is reported as such.
  */
 export interface ReaDoctorDeps {
   platform: NodeJS.Platform;
@@ -15,8 +19,8 @@ export interface ReaDoctorDeps {
   /** `node --version` of the Node.js on PATH (the one npx uses), or null when it does not run. */
   nodeVersion: () => Promise<string | null>;
   exists: (file: string) => Promise<boolean>;
-  /** MonoField's saved MCP servers. */
-  mcpServers: () => Promise<Array<{ id: string; templateId?: string; enabled?: boolean; command?: string; args?: string[] }>>;
+  /** MonoField's saved MCP servers, with their environment values (the doctor reads only GHIDRA_INSTALL_DIR and JAVA_HOME). */
+  mcpServers: () => Promise<Array<{ id: string; templateId?: string; enabled?: boolean; command?: string; args?: string[]; env?: Record<string, string> }>>;
 }
 
 export function defaultReaDoctorDeps(mcpServers: ReaDoctorDeps['mcpServers']): ReaDoctorDeps {
@@ -83,8 +87,26 @@ export async function runReaDoctor(deps: ReaDoctorDeps): Promise<ReaDoctorRespon
   }
 
   add('browser', false, await findBrowser(deps));
-  add('native', false, await which(deps, ['ghidraRun', 'analyzeHeadless', 'idat64', 'idat', 'ida64', 'ida', 'hopper']));
-  add('java', false, await which(deps, ['java']));
+
+  // The REA entry's own environment wins over the process environment, as it does when the agent starts REA. REA checks
+  // both values when it starts: an empty or relative one stops REA altogether, so it counts as required then.
+  const joiner = deps.platform === 'win32' ? path.win32 : path.posix;
+  const fromRea = (key: string) => (rea?.env && key in rea.env ? rea.env[key] : undefined);
+  const pathSetting = async (id: 'ghidra' | 'java', value: string | undefined, probe: string[], fallback: () => Promise<string | null>) => {
+    if (value === undefined) {
+      const found = await fallback();
+      return add(id, false, found, undefined, found || id !== 'ghidra' ? undefined : 'not-set');
+    }
+    if (value.trim() === '') return add(id, true, null, 'warn', 'empty-value');
+    if (!joiner.isAbsolute(value)) return add(id, true, value, 'warn', 'not-absolute');
+    const present = await deps.exists(joiner.join(value, ...probe));
+    return add(id, false, value, present ? 'ok' : 'warn', present ? undefined : id === 'ghidra' ? 'no-analyze-headless' : 'no-java');
+  };
+  await pathSetting('ghidra', fromRea('GHIDRA_INSTALL_DIR') ?? deps.env.GHIDRA_INSTALL_DIR,
+    ['support', deps.platform === 'win32' ? 'analyzeHeadless.bat' : 'analyzeHeadless'], async () => null);
+  add('native', false, await which(deps, ['idat64', 'idat', 'ida64', 'ida', 'hopper']));
+  await pathSetting('java', fromRea('JAVA_HOME') ?? deps.env.JAVA_HOME, ['bin', deps.platform === 'win32' ? 'java.exe' : 'java'],
+    () => which(deps, ['java']));
   add('jadx', false, await which(deps, ['jadx']));
   add('apktool', false, await which(deps, ['apktool']));
   add('tshark', false, await which(deps, ['tshark']));

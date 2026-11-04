@@ -45,11 +45,23 @@
 4. 브라우저 캡처에는 설치된 Chrome/Edge 등 Chromium 계열 브라우저가 필요합니다.
 5. **한 화면에서 점검**: Settings → MCP(또는 Integrations → MCP) 맨 위의 **REA 설치·연결 점검**이
    Node.js 버전(rea-agents 6.7.0 패키지가 선언한 `^22.19.0 || ^24.11.0 || >=26.0.0`), npx, MCP 등록(이상 필수)과
-   Chromium 계열 브라우저, 네이티브 분석 엔진(Ghidra·IDA·Hopper), Java·JADX·Apktool·tshark·adb(선택)를 한 번에 보여 줍니다.
+   Chromium 계열 브라우저, Ghidra, 다른 네이티브 엔진(Hopper·IDA), Java·JADX·Apktool·tshark·adb(선택)를 한 번에 보여 줍니다.
    MCP에 REA가 없으면 **REA를 MCP 목록에 추가**를 누른 뒤 저장합니다. 터미널에서는 `monofield rea doctor [--json]`.
    PATH와 일반 설치 위치만 확인하고 아무것도 설치하지 않으므로, 다른 곳에 설치한 도구는 "찾지 못함"으로 나올 수 있습니다.
    "준비됨"이어도 실제 연결은 새 에이전트 대화에서 REA 도구가 보이는지로 확인합니다.
-6. 사용자님의 포크(`jhy0285/rea-yj`)를 쓰려면 MCP 명령을
+6. **실행 파일(exe·dll)까지 보려면 Ghidra**: REA는 Ghidra를 포함하지 않고, 설치된 Ghidra를 `GHIDRA_INSTALL_DIR`
+   환경 변수(절대 경로)로 찾습니다. Java는 `JAVA_HOME`(없으면 PATH의 java)을 씁니다. PATH에 Ghidra가 있어도 이 변수가
+   없으면 찾지 못합니다.
+   1. [Ghidra](https://github.com/NationalSecurityAgency/ghidra/releases)와 그 버전이 요구하는 JDK를 설치합니다.
+   2. Settings → MCP의 REA 항목 **Env (KEY=VALUE)** 칸에 `GHIDRA_INSTALL_DIR=C:\ghidra_<버전>_PUBLIC`(필요하면
+      `JAVA_HOME=C:\Program Files\...\jdk-<버전>`) 한 줄씩 넣고 저장합니다. 시스템 환경 변수로 넣어도 됩니다.
+   3. 점검 화면의 **Ghidra**가 초록이면 됩니다(폴더 안에 `support\analyzeHeadless.bat`가 있는지까지 봅니다).
+
+   주의: REA는 이 두 값이 **비어 있거나 상대 경로면 시작 자체를 하지 않습니다.** 칸에 `GHIDRA_INSTALL_DIR=`처럼 값 없이
+   남기지 마세요(점검 화면이 빨간 필수 항목으로 알려 줍니다). REA 6.7.0의 Windows Ghidra 지원은 "P0(실험적)"이며 일반
+   PE 실행 파일·DLL만 받습니다(.NET 어셈블리는 REA의 별도 .NET 분석으로). 근거: rea-agents 6.7.0 패키지의 README와
+   환경 변수 검사 코드(npm 레지스트리에서 받아 읽기만 함, 실행하지 않음).
+7. 사용자님의 포크(`jhy0285/rea-yj`)를 쓰려면 MCP 명령을
    `node <rea-yj 경로>/scripts/rea.mjs --mcp`로 바꿉니다. 포크는 현재 6.4.0이고
    프리셋은 6.7.0이라 도구 목록이 다를 수 있습니다. 둘 중 하나로 통일하세요.
 

@@ -313,6 +313,9 @@ REA Studio (see the 2026-11-03 Log entry):
   REA's real outputs from `docs/testing/evidence/rea-handover-2026-10-22` and on remakes made by editing those files, not on a second
   real recording. The setup check was run on Linux only; its Windows paths (Program Files, PATHEXT) are covered by unit tests.
 - No screen yet for native-binary evidence (function lists, disassembly), which the game-mechanic showcases of REA produce.
+- Ghidra: proposed, not built: a "Ghidra folder" / "JAVA_HOME" field on the REA MCP preset. Before adding `envFields`, make empty env
+  values be dropped on save or spawn (`textToMap` in `McpClientSection.tsx` keeps `KEY=` with an empty value, and REA refuses to
+  start with an empty GHIDRA_INSTALL_DIR or JAVA_HOME); ask the user, since dropping empties changes every MCP server.
 - Local PII screening of captured bodies with a local judgment model was only proposed (rules first, observe mode), not started.
 
 Judgment checks (Laya fine-tune):
@@ -466,6 +469,26 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-04 — REA setup check finds Ghidra the way REA does (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** the user asked why MonoField's REA "has no Ghidra" and why it does not work.
+- **Found (read from the rea-agents 6.7.0 npm tarball, not executed):** REA does not bundle Ghidra; it finds an installed one only
+  through `GHIDRA_INSTALL_DIR` (absolute) and Java through `JAVA_HOME`, and it validates both as non-empty absolute paths when it
+  starts, so an empty or relative value stops REA altogether. Windows Ghidra support is "P0" (experimental), native PE and DLL only.
+  MonoField passes an MCP entry's env to the agent's `.mcp.json`, but the REA preset has no field for it, and the MCP screen keeps
+  `KEY=` lines with empty values.
+- **Changed:** `apps/daemon/src/services/rea-doctor.ts` had looked for `ghidraRun` on PATH (not how REA finds it). New `ghidra`
+  check reads GHIDRA_INSTALL_DIR from the REA entry's env, else the process env, and checks `support/analyzeHeadless(.bat)`; `java`
+  prefers JAVA_HOME (`bin/java(.exe)`) over PATH; an empty or relative value of either is reported as required (`empty-value`,
+  `not-absolute`) so `ready` turns false; `native` is now Hopper/IDA only. The doctor route reads the full MCP config (env values)
+  and returns only those two paths. Contracts note list, `ReaDoctorPanel` row and notes, 6 new and 2 reworded i18n keys × 19.
+  Docs: `docs/rea-laya-practical-guide.md` (Ghidra steps), `skills/legacy-system-handover/SKILL.md`.
+- **Verified:** daemon `rea-cite-compare` (+1 Ghidra test, Windows case extended) and `rea-studio-cli` 28 pass, `rea-evidence`,
+  `browser-evidence(-cli)` 50 pass; web `ReaStudio.cite-compare` 7 pass; `pnpm guard`, `pnpm typecheck`, `pnpm i18n:check` pass.
+  Not run: REA itself with Ghidra (REA cannot run in this environment), the panel on Windows.
+- **Not done:** a dedicated "Ghidra folder" field on the REA preset: it needs empty env values dropped first (today an empty
+  `GHIDRA_INSTALL_DIR=` would stop REA). See Open items, "REA Studio".
 
 ### 2026-11-03 — REA Studio: evidence into the chat, original vs remake, setup check (`ccr-8432aecf-n9xdfd`)
 

@@ -1553,6 +1553,7 @@ export interface Dict {
   'reaDoctor.need.npx': string;
   'reaDoctor.need.mcp': string;
   'reaDoctor.need.browser': string;
+  'reaDoctor.need.ghidra': string;
   'reaDoctor.need.native': string;
   'reaDoctor.need.java': string;
   'reaDoctor.need.jadx': string;
@@ -1563,6 +1564,11 @@ export interface Dict {
   'reaDoctor.note.disabled': string;
   'reaDoctor.note.otherVersion': string;
   'reaDoctor.note.customCommand': string;
+  'reaDoctor.note.notSet': string;
+  'reaDoctor.note.emptyValue': string;
+  'reaDoctor.note.notAbsolute': string;
+  'reaDoctor.note.noAnalyzeHeadless': string;
+  'reaDoctor.note.noJava': string;
   'workspaceTabs.project': string;
   'workspaceTabs.pluginDetails': string;
   'workspaceTabs.marketplace': string;

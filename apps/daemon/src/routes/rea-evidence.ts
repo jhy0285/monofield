@@ -1,5 +1,5 @@
 import type { Express, Response } from 'express';
-import { readPublicMcpConfig } from '../mcp-config.js';
+import { readMcpConfig } from '../mcp-config.js';
 import { classifyBrowserEvidenceError } from '../services/browser-evidence.js';
 import { citeReaEvidence } from '../services/rea-cite.js';
 import { compareReaFiles } from '../services/rea-compare.js';
@@ -37,7 +37,9 @@ export function registerReaEvidenceRoutes(app: Express, deps: RegisterBrowserEvi
   });
   app.get('/api/rea/doctor', deps.http.requireLocalDaemonRequest, async (_req, res) => {
     try {
-      const doctorDeps = deps.reaDoctor ?? defaultReaDoctorDeps(async () => (await readPublicMcpConfig(deps.paths.RUNTIME_DATA_DIR)).servers);
+      // The full configuration, because GHIDRA_INSTALL_DIR and JAVA_HOME may be set on the REA entry; the response carries
+      // those two paths only, never another server's values.
+      const doctorDeps = deps.reaDoctor ?? defaultReaDoctorDeps(async () => (await readMcpConfig(deps.paths.RUNTIME_DATA_DIR)).servers);
       res.set('Cache-Control', 'no-store').json(await runReaDoctor(doctorDeps));
     } catch (error) { fail(res, error); }
   });

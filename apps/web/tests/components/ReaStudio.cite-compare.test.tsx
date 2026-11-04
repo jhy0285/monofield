@@ -151,6 +151,7 @@ describe('REA setup check panel', () => {
       { id: 'npx', required: true, status: 'ok', found: 'C:\\nodejs\\npx.cmd' },
       { id: 'mcp', required: true, status: 'missing', found: null },
       { id: 'browser', required: false, status: 'ok', found: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' },
+      { id: 'ghidra', required: true, status: 'warn', found: null, note: 'empty-value' },
       { id: 'native', required: false, status: 'missing', found: null },
     ],
     ...over,
@@ -167,7 +168,11 @@ describe('REA setup check panel', () => {
     expect(node.textContent).toContain('지원 범위 밖');
     expect(node.textContent).toContain('v20.18.0');
     expect(screen.getByTestId('rea-doctor-native').textContent).toContain('찾지 못함');
-    expect(screen.getAllByRole('listitem').map((item) => item.getAttribute('data-testid'))).toEqual(['rea-doctor-node', 'rea-doctor-npx', 'rea-doctor-mcp', 'rea-doctor-browser', 'rea-doctor-native']);
+    expect(screen.getAllByRole('listitem').map((item) => item.getAttribute('data-testid'))).toEqual(['rea-doctor-node', 'rea-doctor-npx', 'rea-doctor-mcp', 'rea-doctor-ghidra', 'rea-doctor-browser', 'rea-doctor-native']);
+    const ghidra = screen.getByTestId('rea-doctor-ghidra');
+    expect(ghidra.textContent).toContain('Ghidra');
+    expect(ghidra.textContent).toContain('빈 값: 채우거나 지우기 전에는 REA가 시작되지 않음');
+    expect(ghidra.textContent).toContain('GHIDRA_INSTALL_DIR=Ghidra 폴더');
     fireEvent.click(screen.getByTestId('rea-doctor-add'));
     expect(onAddRea).toHaveBeenCalledTimes(1);
   });
