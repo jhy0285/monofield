@@ -5,11 +5,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   completeCreationWorkspaceTutorial,
-  completeDevelopmentWorkspaceTutorial,
   CreationWorkspaceTutorial,
   DevelopmentWorkspaceTutorial,
   shouldOpenCreationWorkspaceTutorial,
-  shouldOpenDevelopmentWorkspaceTutorial,
 } from '../../src/components/DevelopmentWorkspaceTutorial';
 import { I18nProvider } from '../../src/i18n';
 import { en } from '../../src/i18n/locales/en';
@@ -46,12 +44,6 @@ describe('DevelopmentWorkspaceTutorial', () => {
     expect(allGuideCopy).not.toMatch(
       /\bOSE\b|aauserver|acrserver|agwserver|aopserver|Hellenic|National Railway|그리스 OSE/i,
     );
-  });
-
-  it('opens once by default and persists completion', () => {
-    expect(shouldOpenDevelopmentWorkspaceTutorial()).toBe(true);
-    completeDevelopmentWorkspaceTutorial();
-    expect(shouldOpenDevelopmentWorkspaceTutorial()).toBe(false);
   });
 
   it('follows the real development controls in order', async () => {
@@ -101,7 +93,6 @@ describe('DevelopmentWorkspaceTutorial', () => {
     fireEvent.click(screen.getByTestId('development-open-changes'));
 
     await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
-    expect(shouldOpenDevelopmentWorkspaceTutorial()).toBe(false);
   });
 
   it('recalculates the spotlight and callout from the live viewport and measured content', async () => {

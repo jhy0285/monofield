@@ -28,6 +28,8 @@ type Props = {
   agentBusy?: boolean;
   showOntology?: boolean;
   active?: boolean;
+  /** Forwarded from the verification panel: the selected checks passed on the current code. */
+  onVerified?: () => void;
 };
 
 type GitWorkspaceUiSnapshot = {
@@ -94,6 +96,7 @@ export function GitChangesPanel({
   agentBusy = false,
   showOntology = true,
   active = true,
+  onVerified,
 }: Props) {
   const t = useT();
   const [status, setStatus] = useState<GitWorkspaceStatusResponse | null>(null);
@@ -448,6 +451,7 @@ export function GitChangesPanel({
           revisionKey={`${status?.generatedAt ?? ''}:${filesRefreshKey ?? ''}`}
           agentBusy={agentBusy}
           onRequestRepair={onRequestRepair}
+          onVerified={onVerified}
         />
       </Suspense>
       <header className={styles.header}>
@@ -565,7 +569,7 @@ export function GitChangesPanel({
       {error ? <div className={styles.message} role="alert">{error}</div> : null}
       {actionNotice ? <div className={styles.notice} role="status">{actionNotice}</div> : null}
       {!statusLoading && status && !status.repository ? <div className={styles.message}>{t('gitChanges.noRepository')}</div> : null}
-      {!statusLoading && status?.repository && files.length === 0 ? <div className={styles.message}>{t('gitChanges.noChanges')}</div> : null}
+      {!statusLoading && status?.repository && files.length === 0 ? <div className={styles.message}>{t('gitChanges.noChanges')}{scope === 'working' ? <><br />{t('gitChanges.emptyHint')}</> : null}</div> : null}
 
       {status?.repository && files.length > 0 ? (
         <div className={styles.content}>

@@ -12,6 +12,8 @@ type Props = {
   revisionKey?: string;
   agentBusy?: boolean;
   onRequestRepair?: (prompt: string) => void;
+  /** Called when the selected checks passed against the current code. */
+  onVerified?: () => void;
 };
 async function json<T>(response: Response): Promise<T> {
   const data = await response.json();
@@ -19,7 +21,7 @@ async function json<T>(response: Response): Promise<T> {
   return data as T;
 }
 
-export function DevelopmentVerificationPanel({ projectId, projectPath, ready = true, revisionKey, agentBusy = false, onRequestRepair }: Props) {
+export function DevelopmentVerificationPanel({ projectId, projectPath, ready = true, revisionKey, agentBusy = false, onRequestRepair, onVerified }: Props) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const [plan, setPlan] = useState<VerificationPlan | null>(null);
@@ -118,6 +120,7 @@ export function DevelopmentVerificationPanel({ projectId, projectPath, ready = t
   };
   const running = status?.run?.state === 'running';
   const verified = status?.verified && !agentBusy;
+  useEffect(() => { if (verified) onVerified?.(); }, [verified, onVerified]);
   const badge = verified ? t('verification.verified')
     : running ? t('verification.running')
       : status?.freshness === 'stale' ? t('verification.stale')

@@ -15,10 +15,12 @@ const labels = { changes: 'gitChanges.title', terminal: 'development.dock.termin
 const testIds = { changes: 'development-open-changes', terminal: 'development-open-terminal', logs: 'development-server-logs-toggle', impact: 'development-open-impact' } as const;
 
 /** One tool surface below the editor. Visited tools retain their UI/session state. */
-export function DevelopmentToolsDock({ active, onSelect, renderPanel }: {
+export function DevelopmentToolsDock({ active, onSelect, renderPanel, trailing }: {
   active: DevelopmentTool | null;
   onSelect: (tool: DevelopmentTool | null) => void;
   renderPanel: (tool: DevelopmentTool, visible: boolean) => ReactNode;
+  /** Optional chip shown at the end of the toolbar, e.g. the first-run checklist. */
+  trailing?: ReactNode;
 }) {
   const t = useT(), id = useId();
   const [visited, setVisited] = useState<DevelopmentTool[]>([]);
@@ -50,10 +52,13 @@ export function DevelopmentToolsDock({ active, onSelect, renderPanel }: {
             if (event.key === 'Escape' && active) { event.preventDefault(); onSelect(null); }
           }}>{t(labels[tool])}</button>)}
       </div>
-      {active ? <div className={styles.actions}>
-        <Button variant="ghost" size="icon" aria-label={t(expanded ? 'development.dock.shrink' : 'development.dock.expand')}
-          onClick={() => setExpanded(value => !value)}><Icon name={expanded ? 'chevron-down' : 'maximize'} size={14} /></Button>
-        <Button variant="ghost" size="icon" aria-label={t('development.dock.close')} onClick={() => { buttons.current[tools.indexOf(active)]?.focus(); onSelect(null); }}><Icon name="close" size={14} /></Button>
+      {trailing || active ? <div className={styles.end}>
+        {trailing}
+        {active ? <div className={styles.actions}>
+          <Button variant="ghost" size="icon" aria-label={t(expanded ? 'development.dock.shrink' : 'development.dock.expand')}
+            onClick={() => setExpanded(value => !value)}><Icon name={expanded ? 'chevron-down' : 'maximize'} size={14} /></Button>
+          <Button variant="ghost" size="icon" aria-label={t('development.dock.close')} onClick={() => { buttons.current[tools.indexOf(active)]?.focus(); onSelect(null); }}><Icon name="close" size={14} /></Button>
+        </div> : null}
       </div> : null}
     </div>
     {visited.map(tool => <div key={tool} id={`${id}-${tool}`} role="tabpanel" aria-labelledby={`${id}-${tool}-tab`}

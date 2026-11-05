@@ -57,6 +57,17 @@ afterEach(() => {
 });
 
 describe('GitChangesPanel', () => {
+  it('tells a clean working tree what to do next, and says nothing extra for the other views', async () => {
+    vi.mocked(fetch).mockImplementation(async input => Response.json(String(input).includes('/git/diff') ? DIFF
+      : String(input).includes('/git/branches') ? BRANCHES : { ...STATUS, files: [] }));
+    render(<I18nProvider initial="en"><GitChangesPanel projectId="clean-tree" onOpenFile={vi.fn()} /></I18nProvider>);
+    await screen.findByText(/No changes in this view\./);
+    expect(screen.getByText(/Ask it for a change\./)).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: /^Staged/ }));
+    await screen.findByText(/^No changes in this view\.$/);
+    expect(screen.queryByText(/Ask it for a change\./)).toBeNull();
+  });
+
   it('refreshes a mounted diff when the editor saves a new source revision', async () => {
     let edited = false;
     vi.mocked(fetch).mockImplementation(async input => Response.json(String(input).includes('/git/diff') ? DIFF

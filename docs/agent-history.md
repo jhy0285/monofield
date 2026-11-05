@@ -485,6 +485,26 @@ Code health:
 
 ## Log
 
+### 2026-11-05 — development workspace: a self-ticking "Getting started" chip instead of an automatic tour (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** the user found the 7-step 개발 가이드 that pops up on first open annoying and asked for the alternative proposed in chat:
+  a checklist that ticks itself, hints in empty screens, and the tour only on request.
+- **Changed:** `DevelopmentWorkspaceControls.tsx` no longer opens the tour by itself; the 개발 가이드 button in the 환경 panel still opens it
+  (`DevelopmentWorkspaceTutorial.tsx` lost its now-unused "done" flag and `shouldOpen…`/`complete…` functions for the development kind; the
+  creation tour is unchanged). New `DevelopmentChecklist.tsx` (+ CSS module): a chip "시작하기 n/4" at the end of the dock toolbar
+  (`DevelopmentToolsDock` got a `trailing` slot) with a popover of four steps, each ticked by the real event and never by a click: project ready
+  (`FileWorkspace`), app ready (new `onRunReady` from the controls), changes view opened, selected checks passed on the current code (new
+  `onVerified` through `GitChangesPanel` → `DevelopmentVerificationPanel`). Buttons on the open steps jump to Run or the changes view; "숨기기"
+  hides it for that project. State is per project in browser storage only. Empty-state hints: run log ("press Run") and a clean working tree
+  ("ask the AI for a change"). 20 new i18n keys × 19 locales (`development.checklist.*`, `development.logsEmptyHint`, `gitChanges.emptyHint`).
+- **Verified:** web `DevelopmentChecklist` (new, 9 tests), `DevelopmentToolsDock`, `DevelopmentWorkspaceTutorial`, `DevelopmentWorkspaceControls`,
+  `DevelopmentVerificationPanel`, `GitChangesPanel` (+1), `FileWorkspace*` pass; `pnpm --filter @open-design/web typecheck` and `pnpm i18n:check`
+  pass. In a scratch runtime (Korean UI, Playwright) on the sample project: no tour on open; chip showed 1/4, then 2/4 after the changes view,
+  4/4 after the app became ready and a Maven verification passed; the help button still opens the tour.
+- **Not run:** the Playwright suites under `e2e/ui/development-*` (they still write the old tour flag, which is now unused and harmless; clean
+  that up when next touching them), a screen reader pass on the popover, the other 17 locales' wording by a native speaker.
+- **Next agent:** a step ticks only while its panel is mounted: "verify" needs the 변경 검증 section open once on a passing run.
+
 ### 2026-11-05 — walked the user guide's legacy flow through the real app (`ccr-8432aecf-n9xdfd`)
 
 - **Request:** check that the Claude Doc "MonoField 총정리 가이드" matches what the app really does, and fix the doc.

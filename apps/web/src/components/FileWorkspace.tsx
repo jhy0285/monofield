@@ -108,6 +108,7 @@ import {
 } from './DevelopmentWorkspaceTutorial';
 import { GitChangesPanel } from './GitChangesPanel';
 import focusStyles from './FileWorkspace.module.css';
+import { DevelopmentChecklist, useDevelopmentChecklist, type DevelopmentChecklistItem } from './DevelopmentChecklist';
 import { DevelopmentToolsDock, type DevelopmentTool } from './workspace/DevelopmentToolsDock';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
 import { MissingBrandFontsBanner } from './MissingBrandFontsBanner';
@@ -562,6 +563,22 @@ export function FileWorkspace({
   const terminalStarting = useRef(false);
   const dockProjectRef = useRef(projectId); dockProjectRef.current = projectId;
   useEffect(() => { setDevelopmentTool(null); setDockTerminal(null); }, [projectId]);
+  const checklist = useDevelopmentChecklist(isDevelopment ? projectId : null);
+  const markChecklist = checklist.mark;
+  const markRunReady = useCallback(() => markChecklist('run'), [markChecklist]);
+  const markVerified = useCallback(() => markChecklist('verify'), [markChecklist]);
+  const developmentProjectReady = isDevelopment && activeDevelopmentProjectSelection.ready;
+  useEffect(() => { if (developmentProjectReady) markChecklist('project'); }, [developmentProjectReady, markChecklist]);
+  useEffect(() => { if (isDevelopment && developmentTool === 'changes') markChecklist('changes'); }, [developmentTool, isDevelopment, markChecklist]);
+  const handleChecklistAction = useCallback((item: Exclude<DevelopmentChecklistItem, 'project'>) => {
+    if (item === 'run') {
+      const run = document.querySelector<HTMLElement>('[data-testid="development-run-action"]');
+      run?.scrollIntoView({ block: 'nearest' });
+      run?.focus();
+      return;
+    }
+    setDevelopmentTool('changes');
+  }, []);
   const defaultRootTab = designSystemProject ? DESIGN_SYSTEM_TAB : DESIGN_FILES_TAB;
   // Persisted tabs come from the parent. Active tab can transiently point
   // at a pending sketch — pending sketches are not in tabsState.tabs.
@@ -2245,6 +2262,7 @@ export function FileWorkspace({
             logsHost={logsHost}
             onOpenChanges={() => setDevelopmentTool('changes')}
             onActiveProjectStateChange={handleActiveDevelopmentProjectStateChange}
+            onRunReady={markRunReady}
           />
         </div>
       ) : null}
@@ -2594,6 +2612,7 @@ export function FileWorkspace({
         )}
       </div>
       {isDevelopment ? <DevelopmentToolsDock key={`tools:${projectId}`} active={developmentTool}
+        trailing={checklist.hidden ? null : <DevelopmentChecklist done={checklist.done} onAction={handleChecklistAction} onHide={checklist.hide} />}
         onSelect={tool => {
           if (tool !== 'terminal') { setDevelopmentTool(tool); return; }
           const existing = dockTerminal ?? persistedTabs.find(isTerminalTabId);
@@ -2611,7 +2630,7 @@ export function FileWorkspace({
         }} renderPanel={(tool, visible) => tool === 'logs' ? <div ref={setLogsHost} />
           : tool === 'changes' ? <GitChangesPanel projectId={projectId} projectPath={activeDevelopmentProjectSelection.projectPath}
             projectSelectionReady={activeDevelopmentProjectSelection.ready} onOpenFile={openFile} onRequestRepair={onRequestVerificationRepair}
-            filesRefreshKey={filesRefreshKey} agentBusy={streaming || !visible} active={visible} showOntology={false} />
+            filesRefreshKey={filesRefreshKey} agentBusy={streaming || !visible} active={visible} showOntology={false} onVerified={markVerified} />
           : tool === 'impact' ? <Suspense fallback={null}><DockOntologyPanel projectId={projectId}
             projectPath={activeDevelopmentProjectSelection.projectPath} ready={activeDevelopmentProjectSelection.ready}
             revisionKey={String(filesRefreshKey)} agentBusy={streaming || !visible} initiallyOpen sourceFile={activeFile?.name}

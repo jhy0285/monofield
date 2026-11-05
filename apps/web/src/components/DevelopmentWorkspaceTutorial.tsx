@@ -6,7 +6,6 @@ import { useT } from '../i18n';
 import { Icon } from './Icon';
 import styles from './ProductTutorial.module.css';
 
-const DEVELOPMENT_STORAGE_KEY = 'monofield:development-workspace-tutorial:v2';
 const CREATION_STORAGE_KEY = 'monofield:creation-workspace-tutorial:v1';
 const SPOTLIGHT_PADDING = 9;
 const CALLOUT_GAP = 14;
@@ -128,24 +127,6 @@ const CREATION_STEPS: readonly Step[] = [
     advanceOn: 'click',
   },
 ] as const;
-
-export function shouldOpenDevelopmentWorkspaceTutorial(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    return window.localStorage.getItem(DEVELOPMENT_STORAGE_KEY) !== 'done';
-  } catch {
-    return false;
-  }
-}
-
-export function completeDevelopmentWorkspaceTutorial(): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(DEVELOPMENT_STORAGE_KEY, 'done');
-  } catch {
-    // The guide can still close when storage is unavailable.
-  }
-}
 
 export function shouldOpenCreationWorkspaceTutorial(): boolean {
   if (typeof window === 'undefined') return false;
@@ -330,8 +311,7 @@ function WorkspaceTutorial({
   useEffect(() => {
     if (!open) return;
     function finish() {
-      if (kind === 'development') completeDevelopmentWorkspaceTutorial();
-      else completeCreationWorkspaceTutorial();
+      if (kind === 'creation') completeCreationWorkspaceTutorial();
       onClose();
     }
     function advance(event: Event) {
@@ -360,8 +340,7 @@ function WorkspaceTutorial({
   if (!open || typeof document === 'undefined') return null;
 
   function close() {
-    if (kind === 'development') completeDevelopmentWorkspaceTutorial();
-    else completeCreationWorkspaceTutorial();
+    if (kind === 'creation') completeCreationWorkspaceTutorial();
     onClose();
   }
 

@@ -21,10 +21,7 @@ import {
   subscribeActiveBrowserVerification,
 } from '../runtime/browser-verification';
 import styles from './DevelopmentWorkspaceControls.module.css';
-import {
-  DevelopmentWorkspaceTutorial,
-  shouldOpenDevelopmentWorkspaceTutorial,
-} from './DevelopmentWorkspaceTutorial';
+import { DevelopmentWorkspaceTutorial } from './DevelopmentWorkspaceTutorial';
 
 type Props = {
   projectId: string;
@@ -37,6 +34,8 @@ type Props = {
   dockLogsOpen?: boolean;
   logsHost?: HTMLElement | null;
   onActiveProjectStateChange?: (state: { projectPath: string | null; ready: boolean }) => void;
+  /** Called whenever an app started from here is ready, so the first-run checklist can tick "run". */
+  onRunReady?: () => void;
 };
 
 function runtimePath(status: DevelopmentServerStatus): string {
@@ -241,6 +240,7 @@ export function DevelopmentWorkspaceControls({
   dockLogsOpen,
   logsHost,
   onActiveProjectStateChange,
+  onRunReady,
 }: Props) {
   const { locale, t } = useI18n();
   const runCopy = locale === 'ko'
@@ -293,7 +293,6 @@ export function DevelopmentWorkspaceControls({
   const [draftPort, setDraftPort] = useState('');
   const [draftUrl, setDraftUrl] = useState('');
   const [draftEnvironment, setDraftEnvironment] = useState('');
-  const guideAutoOpenChecked = useRef(false);
   const openBrowserWhenReady = useRef(false);
   const activeProjectPathRef = useRef(activeProjectPath);
   const detectedByProjectPathRef = useRef(new Map<string, DevelopmentConfigsResponse>());
@@ -549,17 +548,14 @@ export function DevelopmentWorkspaceControls({
     resolvedDir,
     resolvedProjectSelection,
   ]);
-  useEffect(() => {
-    if (!resolvedDir || !detected || busy != null || guideAutoOpenChecked.current) return;
-    guideAutoOpenChecked.current = true;
-    if (shouldOpenDevelopmentWorkspaceTutorial()) setGuideOpen(true);
-  }, [busy, detected, resolvedDir]);
   useEffect(() => subscribeActiveBrowserVerification((changedProjectId) => {
     if (changedProjectId === projectId) {
       setBrowserVerificationActive(Boolean(getActiveBrowserVerification(projectId)));
     }
   }), [projectId]);
   const hasActiveRuntimes = runtimeStatuses.some((status) => status.state === 'starting' || status.state === 'ready');
+  const hasReadyRuntime = runtimeStatuses.some((status) => status.state === 'ready');
+  useEffect(() => { if (hasReadyRuntime) onRunReady?.(); }, [hasReadyRuntime, onRunReady]);
   useEffect(() => {
     const onVisibilityChange = () => {
       setDocumentVisible(!document.hidden);
@@ -984,7 +980,7 @@ export function DevelopmentWorkspaceControls({
               const viewport = event.currentTarget;
               logFollowRef.current = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 40;
             }}
-          >{runtime?.logs.length ? runtime.logs.join('\n') : t('development.logsEmpty')}</pre>
+          >{runtime?.logs.length ? runtime.logs.join('\n') : `${t('development.logsEmpty')}\n${t('development.logsEmptyHint')}`}</pre>
         </section>
   );
   return (
