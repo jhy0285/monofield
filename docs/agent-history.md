@@ -57,7 +57,7 @@ Entry template:
 
 ## Current state
 
-As of 2026-11-03.
+As of 2026-11-05.
 
 - Product: MonoField, a local Windows workbench that takes Codex or Claude Code
   CLI work to Korean SI deliverables (interface-spec XLSX, screen-spec PPTX,
@@ -295,6 +295,21 @@ exercise is unchanged by it.
 
 Newest first within each group. Remove an item when it is done.
 
+Getting-started sample and the legacy-continuation flow (see the 2026-11-05 Log entry):
+
+- The downloadable sample `apps/monofield-site/downloads/monofield-sample-legacy-order.zip` does not start: its
+  `SecurityConfig.java` calls `.oauth2ResourceServer().jwt()` but `pom.xml` has no `spring-boot-starter-oauth2-resource-server`,
+  so `mvn spring-boot:run` (and MonoField's 실행) fails with `NoClassDefFoundError ... BearerTokenResolver`. It also ships no
+  `.gitignore`, so after one build `target/` shows as 15 untracked files in 변경사항 and every 변경 검증 run ends "재검증 필요"
+  (Maven writes `target/` while the check runs). Fix proposed, not made: add the dependency (or drop the call) and a
+  `.gitignore` with `target/`, rebuild the zip; ask the user first, since the site links this download.
+- Spec impact (`apps/daemon/src/services/document-impact.ts`, `matchDocumentImpact`) matches changed files only against an
+  endpoint's `sourceFile` and code `evidenceRefs`; `plugins/_official/interface-spec/scripts/scan_spring.py` records neither the
+  request/response DTO files nor field-level evidence, so a change to a DTO alone reports "영향받은 항목: 0". The update prompt
+  still lists the changed files. Proposed, not built: have the scanners add the DTO file as a code `evidenceRef` (endpoint or
+  field level). Ask the user before changing it.
+- 변경 검증's "no checks" message (`verification.noChecks`) names only package.json, Cargo and Go, though Maven is supported.
+
 REA browser evidence cross-check (see the 2026-11-02 Log entry):
 
 - Known gaps: response fields are compared only on 2xx bodies; error bodies only feed `undocumented-error`. A path
@@ -469,6 +484,24 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-05 — walked the user guide's legacy flow through the real app (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** check that the Claude Doc "MonoField 총정리 가이드" matches what the app really does, and fix the doc.
+- **Verified (scratch tools-dev runtime, Korean UI via Playwright, on an unpacked copy of the sample zip):** Home has
+  소프트웨어 개발 / 문서/디자인 제작, the 질문 / 문서 composer modes, 작업 폴더 선택 and the result-format cards (프로토타입 sits
+  under 템플릿 더보기); settings opens from the gear menu's 설정, with 실행 권한 (읽기 전용 / 기본 권장 / 전체 접근), 외부 MCP
+  and 데이터베이스 연결 (desktop only). A development project shows the 7-step 개발 가이드, detects Spring Boot · Maven, and 실행
+  starts the app (HTTP answered on its port) once the sample's broken security line was removed in the copy; 중지 stops it.
+  변경사항 shows a side-by-side diff; 변경 검증 ran Maven test + test-compile (pass, 7.9 s). `scan_spring.py` with the sample's
+  term dictionary found 6 endpoints; the spec editor's Git 변경 분석, AI 갱신 요청 작성 (fills the composer), XLSX 내보내기 and
+  OpenAPI 내보내기 (both downloaded) work.
+- **Found:** the sample zip does not run and ignores no build output; DTO-only changes are invisible to spec impact. See Open
+  items, "Getting-started sample".
+- **Changed:** only the Claude Doc (labels: 홈으로 이동, the Home headline, 설정 path, 전체 접근, 외부 MCP, 데이터베이스 연결,
+  템플릿 더보기 → 프로토타입, where 변경 검증 lives, the 7-step guide, the DTO caveat). No product code changed.
+- **Not run:** anything that needs a real agent turn (질문 answers, spec generation through the skill's question forms, AI 제안
+  검토 and applying a proposal), REA, the desktop-only database screen, Windows.
 
 ### 2026-11-04 — REA setup check finds Ghidra the way REA does (`ccr-8432aecf-n9xdfd`)
 
