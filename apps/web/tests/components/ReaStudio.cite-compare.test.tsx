@@ -172,7 +172,7 @@ describe('REA setup check panel', () => {
     const ghidra = screen.getByTestId('rea-doctor-ghidra');
     expect(ghidra.textContent).toContain('Ghidra');
     expect(ghidra.textContent).toContain('빈 값: 채우거나 지우기 전에는 REA가 시작되지 않음');
-    expect(ghidra.textContent).toContain('GHIDRA_INSTALL_DIR=Ghidra 폴더');
+    expect(ghidra.textContent).toContain('Ghidra 폴더 칸을 채웁니다');
     fireEvent.click(screen.getByTestId('rea-doctor-add'));
     expect(onAddRea).toHaveBeenCalledTimes(1);
   });

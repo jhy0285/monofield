@@ -1569,6 +1569,15 @@ export interface Dict {
   'reaDoctor.note.notAbsolute': string;
   'reaDoctor.note.noAnalyzeHeadless': string;
   'reaDoctor.note.noJava': string;
+  'mcpClient.folder.title': string;
+  'mcpClient.folder.intro': string;
+  'mcpClient.folder.ghidra': string;
+  'mcpClient.folder.ghidraHint': string;
+  'mcpClient.folder.java': string;
+  'mcpClient.folder.javaHint': string;
+  'mcpClient.folder.saved': string;
+  'mcpClient.folder.clear': string;
+  'mcpClient.folder.notAbsolute': string;
   'development.checklist.title': string;
   'development.checklist.progress': string;
   'development.checklist.project': string;

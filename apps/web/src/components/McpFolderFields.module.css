@@ -1,0 +1,8 @@
+.group { border: 1px solid var(--border); border-radius: 8px; margin: 0; padding: 8px 12px 10px; display: grid; gap: 8px; min-width: 0; }
+.group legend { padding: 0 6px; font-size: 12px; font-weight: 500; }
+.intro { margin: 0; font-size: 11px; line-height: 1.6; color: var(--text-muted); }
+.inputRow { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.inputRow input { flex: 1 1 auto; min-width: 0; }
+.hint { font-size: 11px; line-height: 1.5; color: var(--text-muted); overflow-wrap: anywhere; }
+.hint code { font-size: 10px; }
+.warning { font-size: 11px; line-height: 1.5; color: var(--amber); }

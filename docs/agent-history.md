@@ -328,9 +328,10 @@ REA Studio (see the 2026-11-03 Log entry):
   REA's real outputs from `docs/testing/evidence/rea-handover-2026-10-22` and on remakes made by editing those files, not on a second
   real recording. The setup check was run on Linux only; its Windows paths (Program Files, PATHEXT) are covered by unit tests.
 - No screen yet for native-binary evidence (function lists, disassembly), which the game-mechanic showcases of REA produce.
-- Ghidra: proposed, not built: a "Ghidra folder" / "JAVA_HOME" field on the REA MCP preset. Before adding `envFields`, make empty env
-  values be dropped on save or spawn (`textToMap` in `McpClientSection.tsx` keeps `KEY=` with an empty value, and REA refuses to
-  start with an empty GHIDRA_INSTALL_DIR or JAVA_HOME); ask the user, since dropping empties changes every MCP server.
+- Ghidra / Java folders on the REA preset are built (see the 2026-11-05 "REA preset: Ghidra and Java folder inputs" entry). Open: the folders
+  are not secrets but are stored like every MCP env value, in the desktop credential vault, so saving them in a plain web session fails with
+  "Desktop credential vault authorization is unavailable" (same for any env-bearing server), and the form can only show them as "saved
+  (hidden)"; the setup check shows the path it found. Storing non-secret folder values outside the vault would fix both; not done.
 - Local PII screening of captured bodies with a local judgment model was only proposed (rules first, observe mode), not started.
 
 Judgment checks (Laya fine-tune):
@@ -484,6 +485,28 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-05 — REA preset: Ghidra and Java folder inputs (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** the user approved the proposal from chat: Ghidra folder and JAVA_HOME boxes on the REA MCP preset.
+- **Correction to the 2026-11-04 entry:** it says an empty `GHIDRA_INSTALL_DIR=` line would reach REA and stop it, and asks to drop empty env values
+  first. The daemon already drops empty and whitespace-only env and header values on every save (`sanitizeStringMap` in `apps/daemon/src/mcp-config.ts`),
+  so a saved config never carries one; only a draft in the form does. Nothing global had to change.
+- **Changed:** contracts: `McpTemplateField.folder` and the `MCP_MASKED_SECRET` constant (the daemon keeps its own copy; a test keeps them equal).
+  The REA template declares `GHIDRA_INSTALL_DIR` and `JAVA_HOME` as `folder` fields. Web: new `McpFolderFields.tsx` (+ CSS module) and
+  `mcp-env-text.ts` show them as two labelled inputs above the Env box, reading and writing the same `KEY=VALUE` lines (an empty input removes
+  its line, a relative path is warned about, a stored value shows as "saved (hidden)" with a Remove button); a preset no longer seeds an empty
+  `KEY=` line for `folder` fields. CLI: `monofield rea configure [--ghidra-dir <folder> | --clear-ghidra-dir] [--java-home <folder> | --clear-java-home]`
+  (full paths only; status/configure print whether each is set, never the value). 10 i18n keys × 19 locales (`mcpClient.folder.*`, reworded
+  `reaDoctor.need.ghidra`). Docs: `docs/rea-laya-practical-guide.md` step 6, `skills/legacy-system-handover/SKILL.md`.
+- **Verified:** daemon `rea-route-cli` (+4: set, keep encrypted, clear, reject relative/empty/conflicting flags, template and mask equality),
+  `rea-cite-compare`, `rea-studio-cli`, `mcp-config` pass (92 and 120 tests in two runs); web `mcp-env-text` (new, 7), `McpFolderFields`
+  (new, 7), `McpClientSection.rea-folders` (new, 2), `McpClientSection.oauth`, `McpJsonHelper`, `ReaStudio.cite-compare` (one assertion updated to the
+  new wording), `DevelopmentChecklist`, `SettingsDialog*` pass; `pnpm typecheck`, `pnpm guard`, `pnpm i18n:check` pass. In the scratch runtime
+  (Korean UI): the preset shows both inputs, the relative-path warning, and the typed paths in the Env box; saving the REA entry without folders works
+  and the setup check turns the MCP row green.
+- **Not run:** saving an entry with folders from the UI (the scratch daemon has no desktop credential vault: the PUT returns 400, as for any env
+  value; the CLI path is covered by the vault test double), REA itself with Ghidra, Windows paths in the UI.
 
 ### 2026-11-05 — development workspace: a self-ticking "Getting started" chip instead of an automatic tour (`ccr-8432aecf-n9xdfd`)
 

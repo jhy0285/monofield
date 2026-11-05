@@ -74,6 +74,8 @@ export interface McpTemplateField {
   required?: boolean;
   placeholder?: string;
   secret?: boolean;
+  /** Optional absolute folder (an install location, not a secret). Mirrors `McpTemplateField.folder` in contracts. */
+  folder?: boolean;
 }
 
 // Mirrors `McpTemplateCategory` in `packages/contracts/src/api/mcp.ts`.
@@ -866,6 +868,12 @@ export const MCP_TEMPLATES: McpTemplate[] = [
       'Use REA to investigate the selected legacy application, preserve Evidence IDs and unknowns, and prepare reviewed interface and screen specifications for handover.',
     command: 'npx',
     args: ['-y', 'rea-agents@6.7.0', '--mcp'],
+    // REA finds Ghidra and Java only through these two variables, and refuses to
+    // start when one is set to something that is not an absolute path.
+    envFields: [
+      { key: 'GHIDRA_INSTALL_DIR', label: 'Ghidra folder', folder: true, placeholder: 'C:\\ghidra_PUBLIC' },
+      { key: 'JAVA_HOME', label: 'Java (JDK) folder', folder: true, placeholder: 'C:\\Program Files\\Java\\jdk' },
+    ],
   },
   // ── image-generation ────────────────────────────────────────────────
   {

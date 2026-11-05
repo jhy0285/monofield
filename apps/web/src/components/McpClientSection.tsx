@@ -35,6 +35,7 @@ import type {
 } from '../state/mcp';
 import { fetchAgents } from '../providers/registry';
 import type { AgentInfo } from '../types';
+import { McpFolderFields } from './McpFolderFields';
 import { ReaDoctorPanel } from './rea-studio/ReaDoctorPanel';
 import { Icon } from './Icon';
 import { useT } from '../i18n';
@@ -180,7 +181,7 @@ function rowFromTemplate(
 ): DraftRow {
   const id = suggestMcpServerId(tpl.id, taken);
   const env: Record<string, string> = {};
-  for (const f of tpl.envFields ?? []) env[f.key] = '';
+  for (const f of tpl.envFields ?? []) if (!f.folder) env[f.key] = '';
   const headers: Record<string, string> = {};
   for (const f of tpl.headerFields ?? []) headers[f.key] = '';
   return {
@@ -977,6 +978,13 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
                   spellCheck={false}
                 />
               </label>
+              {template?.envFields?.some((field) => field.folder) ? (
+                <McpFolderFields
+                  fields={template.envFields.filter((field) => field.folder)}
+                  envText={row._envText ?? ''}
+                  onChange={(next) => onChange({ _envText: next })}
+                />
+              ) : null}
               <label className="mcp-row-field mcp-row-field-stack">
                 <span className="mcp-row-field-label">Env (KEY=VALUE)</span>
                 <textarea

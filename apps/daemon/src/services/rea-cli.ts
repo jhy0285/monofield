@@ -17,6 +17,7 @@ import type { McpServerConfig, McpTemplate } from '../mcp-config.js';
 
 const USAGE = `Usage:
   monofield rea <status|configure|disable> [--json] [--daemon-url URL]
+  monofield rea configure   [--ghidra-dir <folder> | --clear-ghidra-dir] [--java-home <folder> | --clear-java-home]
   monofield rea doctor      [--json]
   monofield rea files       --project <id> [--json]
   monofield rea show        --project <id> --file <evidence.json> [--json]
@@ -51,6 +52,10 @@ can loop until the remake matches. A pass means the recorded runs matched, not t
 status, configure and disable manage the optional pinned REA MCP server for new
 supported local-agent conversations. They do not install Node.js, start REA, or
 test server availability.
+
+--ghidra-dir and --java-home save the folders REA reads as GHIDRA_INSTALL_DIR and JAVA_HOME (the same two boxes as in
+Settings → MCP). They must be full paths: REA does not start with a relative one. --clear-ghidra-dir and --clear-java-home
+remove a saved folder. The values are stored with the server's other environment and are not printed back.
 
 evidence lists the project's REA browser capture files (rea.browser-scenario-capture).
 cross-check compares what a recorded browser scenario sent and received with an
@@ -302,9 +307,46 @@ async function runEvidenceCommand(command: string, args: string[], helpers: Help
   } else console.log('Nothing was written (add --write to save the result).');
 }
 
+const REA_FOLDER_FLAGS = [
+  { flag: 'ghidra-dir', clear: 'clear-ghidra-dir', key: 'GHIDRA_INSTALL_DIR' },
+  { flag: 'java-home', clear: 'clear-java-home', key: 'JAVA_HOME' },
+] as const;
+type ReaFolderEdit = { key: string; value: string | null };
+
+/** A POSIX, Windows drive or UNC path: the same shapes REA accepts. Checked on both flavours so the CLI works from any shell. */
+function isAbsoluteFolder(value: string): boolean {
+  return /^(?:\/|[A-Za-z]:[\\/]|\\\\)/.test(value);
+}
+
+/** The folder edits asked for on the command line; a value is a full path, null removes the saved one. */
+export function reaFolderEdits(flags: Flags): ReaFolderEdit[] {
+  const edits: ReaFolderEdit[] = [];
+  for (const { flag, clear, key } of REA_FOLDER_FLAGS) {
+    const raw = flags[flag];
+    if (raw !== undefined) {
+      const value = typeof raw === 'string' ? raw.trim() : '';
+      if (!value) throw new Error(`--${flag} needs a folder. Use --${clear} to remove the saved one.`);
+      if (!isAbsoluteFolder(value)) throw new Error(`--${flag} must be a full path: REA does not start with a relative ${key}.`);
+      if (flags[clear]) throw new Error(`Use either --${flag} or --${clear}, not both.`);
+      edits.push({ key, value });
+    } else if (flags[clear]) edits.push({ key, value: null });
+  }
+  return edits;
+}
+
+/** The env with the requested folders set or removed (undefined when nothing is left). Other entries are kept as the daemon returned them; masked values are restored on save. */
+export function applyReaFolderEdits(env: Record<string, string> | undefined, edits: ReaFolderEdit[]): Record<string, string> | undefined {
+  if (!edits.length) return env;
+  const next = { ...(env ?? {}) };
+  for (const { key, value } of edits) {
+    if (value === null) delete next[key]; else next[key] = value;
+  }
+  return Object.keys(next).length ? next : undefined;
+}
+
 /** Configure the optional REA MCP server (Settings → MCP) and compare REA browser evidence with interface specifications. */
 export async function runReaCli(args: string[], helpers: Helpers): Promise<void> {
-  const strings = new Set(['daemon-url', 'project', 'input', 'evidence', 'finding', 'out', 'note-lang', 'base-sha256', 'file']);
+  const strings = new Set(['daemon-url', 'project', 'input', 'evidence', 'finding', 'out', 'note-lang', 'base-sha256', 'file', 'ghidra-dir', 'java-home']);
   const [command = 'status', ...extra] = helpers.positionalArgs(args, new Set([...strings, ...STRING_FLAGS]));
   if (EVIDENCE_COMMANDS.includes(command)) return runEvidenceCommand(command, args, helpers);
   if (command === 'doctor') {
@@ -319,8 +361,12 @@ export async function runReaCli(args: string[], helpers: Helpers): Promise<void>
     return;
   }
 
-  const flags = helpers.parseFlags(args, { string: new Set(['daemon-url']), boolean: new Set(['json', 'help']) });
+  const flags = helpers.parseFlags(args, {
+    string: new Set(['daemon-url', 'ghidra-dir', 'java-home']),
+    boolean: new Set(['json', 'help', 'clear-ghidra-dir', 'clear-java-home']),
+  });
   if (flags.help) { console.log(USAGE); return; }
+  const folderEdits = reaFolderEdits(flags);
   if (extra.length || !MCP_COMMANDS.includes(command)) throw new Error('Use monofield rea <status|configure|disable|doctor|files|show|cite|compare|evidence|cross-check|apply> --help.');
   const base = (await helpers.baseUrl(flags)).replace(/\/$/, '');
   const endpoint = `${base}/api/mcp/servers`;
@@ -331,13 +377,16 @@ export async function runReaCli(args: string[], helpers: Helpers): Promise<void>
   let server = current.servers.find(entry => entry.id === 'rea');
   if (command !== 'status') {
     if (server && server.templateId !== 'rea') throw new Error('A custom server already uses the rea ID. Manage it in Settings → MCP; it was not changed.');
+    if (command !== 'configure' && folderEdits.length) throw new Error('--ghidra-dir and --java-home belong to "monofield rea configure".');
     if (command === 'configure' && !server) {
       const template = current.templates.find(entry => entry.id === 'rea');
       if (!template?.command || template.transport !== 'stdio' || !template.args) throw new Error('This daemon does not provide the REA template. Update MonoField first.');
       server = { id: 'rea', templateId: 'rea', label: template.label, transport: 'stdio', command: template.command, args: template.args, enabled: true };
     }
     if (server) {
-      const changed = { ...server, enabled: command === 'configure' };
+      const { env: previousEnv, ...rest } = server;
+      const nextEnv = applyReaFolderEdits(previousEnv, folderEdits);
+      const changed: McpServerConfig = { ...rest, enabled: command === 'configure', ...(nextEnv ? { env: nextEnv } : {}) };
       const servers = current.servers.some(entry => entry.id === 'rea')
         ? current.servers.map(entry => entry.id === 'rea' ? changed : entry)
         : [...current.servers, changed];
@@ -349,6 +398,7 @@ export async function runReaCli(args: string[], helpers: Helpers): Promise<void>
     }
   }
   process.stdout.write(`${JSON.stringify({ configured: Boolean(server), enabled: server?.enabled ?? false, availability: 'not-probed',
-    ...(server ? { server: { id: server.id, templateId: server.templateId, transport: server.transport, command: server.command, args: server.args } } : {}),
+    ...(server ? { server: { id: server.id, templateId: server.templateId, transport: server.transport, command: server.command, args: server.args },
+      folders: { GHIDRA_INSTALL_DIR: Boolean(server.env?.GHIDRA_INSTALL_DIR), JAVA_HOME: Boolean(server.env?.JAVA_HOME) } } : {}),
     nextStep: 'Start a new supported local-agent conversation; use the legacy-system-handover skill. REA runtime and Laya model/server are installed separately.' }, null, 2)}\n`);
 }

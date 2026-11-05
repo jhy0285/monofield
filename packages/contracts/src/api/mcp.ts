@@ -50,6 +50,13 @@ export interface McpConfig {
 
 /** An optional environment variable / header field a template needs the user
  * to supply before the server can start. The UI renders these as inputs. */
+/**
+ * What the daemon shows in place of a stored env or header value (they live in
+ * the credential vault and are never sent back). The daemon keeps its own copy
+ * of this literal; a daemon test keeps the two equal.
+ */
+export const MCP_MASKED_SECRET = '••••••••';
+
 export interface McpTemplateField {
   key: string;
   label?: string;
@@ -57,6 +64,12 @@ export interface McpTemplateField {
   placeholder?: string;
   /** Render the value with a password-style input (api keys, tokens). */
   secret?: boolean;
+  /**
+   * An optional absolute folder (an install location, not a secret). The web
+   * form shows it as its own input and the template does not seed an empty
+   * `KEY=` line for it; an empty value is never saved.
+   */
+  folder?: boolean;
 }
 
 /** Coarse-grained category used to group templates in the picker UI so the

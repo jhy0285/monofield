@@ -53,12 +53,16 @@
    환경 변수(절대 경로)로 찾습니다. Java는 `JAVA_HOME`(없으면 PATH의 java)을 씁니다. PATH에 Ghidra가 있어도 이 변수가
    없으면 찾지 못합니다.
    1. [Ghidra](https://github.com/NationalSecurityAgency/ghidra/releases)와 그 버전이 요구하는 JDK를 설치합니다.
-   2. Settings → MCP의 REA 항목 **Env (KEY=VALUE)** 칸에 `GHIDRA_INSTALL_DIR=C:\ghidra_<버전>_PUBLIC`(필요하면
-      `JAVA_HOME=C:\Program Files\...\jdk-<버전>`) 한 줄씩 넣고 저장합니다. 시스템 환경 변수로 넣어도 됩니다.
+   2. Settings → **외부 MCP**의 REA 항목을 펼쳐 **선택 폴더**의 **Ghidra 폴더**(`C:\ghidra_<버전>_PUBLIC`)와, 필요하면
+      **Java(JDK) 폴더**(`C:\Program Files\...\jdk-<버전>`)를 입력하고 저장합니다. 터미널에서는
+      `monofield rea configure --ghidra-dir <폴더> [--java-home <폴더>]`이고, 지우려면 `--clear-ghidra-dir`,
+      `--clear-java-home`입니다. 두 입력은 아래 **Env (KEY=VALUE)** 칸의 `GHIDRA_INSTALL_DIR`·`JAVA_HOME` 줄과 같은
+      값입니다. 시스템 환경 변수로 넣어도 됩니다.
    3. 점검 화면의 **Ghidra**가 초록이면 됩니다(폴더 안에 `support\analyzeHeadless.bat`가 있는지까지 봅니다).
 
-   주의: REA는 이 두 값이 **비어 있거나 상대 경로면 시작 자체를 하지 않습니다.** 칸에 `GHIDRA_INSTALL_DIR=`처럼 값 없이
-   남기지 마세요(점검 화면이 빨간 필수 항목으로 알려 줍니다). REA 6.7.0의 Windows Ghidra 지원은 "P0(실험적)"이며 일반
+   주의: REA는 이 두 값이 **비어 있거나 상대 경로면 시작 자체를 하지 않습니다.** 입력 칸을 비워 두면 그 값은 아예 저장되지
+   않으니 안전하고, 상대 경로는 입력 칸이 경고하며 점검 화면이 빨간 필수 항목으로 알려 줍니다. 저장된 폴더는 다른
+   환경 변수처럼 암호화 저장소에 들어가 화면에는 "저장됨(숨김)"으로만 보이며, 바꾸려면 새 경로를 입력합니다. REA 6.7.0의 Windows Ghidra 지원은 "P0(실험적)"이며 일반
    PE 실행 파일·DLL만 받습니다(.NET 어셈블리는 REA의 별도 .NET 분석으로). 근거: rea-agents 6.7.0 패키지의 README와
    환경 변수 검사 코드(npm 레지스트리에서 받아 읽기만 함, 실행하지 않음).
 7. 사용자님의 포크(`jhy0285/rea-yj`)를 쓰려면 MCP 명령을
