@@ -242,6 +242,7 @@ describe('the REA setup check', () => {
     nodeVersion: async () => 'v24.11.1',
     exists: async (file) => present.includes(file),
     mcpServers: async () => [{ id: 'rea', templateId: 'rea', enabled: true, command: 'npx', args: ['-y', 'rea-agents@6.7.0', '--mcp'] }],
+    bundled: () => ({ available: false, reason: 'not-installed', found: null }),
     ...overrides,
   });
 
@@ -256,13 +257,15 @@ describe('the REA setup check', () => {
     expect(by.jadx).toMatchObject({ status: 'ok', found: '/opt/tools/bin/jadx' });
     expect(by.native).toMatchObject({ status: 'missing', required: false });
     expect(by.ghidra).toEqual({ id: 'ghidra', required: false, found: null, status: 'missing', note: 'not-set' });
-    expect(result.checks.map((check) => check.id)).toEqual(['node', 'npx', 'mcp', 'browser', 'ghidra', 'native', 'java', 'jadx', 'apktool', 'tshark', 'adb']);
+    expect(result.checks.map((check) => check.id)).toEqual(['bundled', 'node', 'npx', 'mcp', 'browser', 'ghidra', 'native', 'java', 'jadx', 'apktool', 'tshark', 'adb']);
+    expect(by.bundled).toEqual({ id: 'bundled', required: false, found: null, status: 'missing', note: 'not-installed' });
+    expect(result.bundled).toBeNull();
   });
 
   it('is not ready when a required item is missing or out of range, and says why', async () => {
     const missing = await runReaDoctor(linuxDeps({ nodeVersion: async () => null, mcpServers: async () => [] }));
     expect(missing.ready).toBe(false);
-    expect(missing.checks.filter((check) => check.status === 'missing').map((check) => check.id)).toEqual(['node', 'npx', 'mcp', 'browser', 'ghidra', 'native', 'java', 'jadx', 'apktool', 'tshark', 'adb']);
+    expect(missing.checks.filter((check) => check.status === 'missing').map((check) => check.id)).toEqual(['bundled', 'node', 'npx', 'mcp', 'browser', 'ghidra', 'native', 'java', 'jadx', 'apktool', 'tshark', 'adb']);
     const old = await runReaDoctor(linuxDeps({ nodeVersion: async () => 'v20.18.0', mcpServers: async () => [{ id: 'rea', templateId: 'rea', enabled: false, command: 'npx', args: ['-y', 'rea-agents@6.4.0', '--mcp'] }] }, ['/usr/bin/npx']));
     expect(old.ready).toBe(false);
     expect(old.checks.find((check) => check.id === 'node')).toMatchObject({ status: 'warn', note: 'outside-range', found: 'v20.18.0' });
@@ -299,6 +302,8 @@ describe('the REA setup check', () => {
       exists: async (file) => ['C:\\nodejs\\npx.cmd', 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', 'C:\\tools\\adb.exe',
         'C:\\ghidra_11.3_PUBLIC\\support\\analyzeHeadless.bat'].includes(file),
       mcpServers: async () => [{ id: 'rea', templateId: 'rea', enabled: true, command: 'node', args: ['C:\\rea-yj\\scripts\\rea.mjs', '--mcp'], env: { GHIDRA_INSTALL_DIR: 'C:\\ghidra_11.3_PUBLIC' } }],
+      // A custom command is the user's own REA: the copy inside MonoField does not replace it, so npx and Node.js stay required.
+      bundled: () => ({ available: true, runtime: { entry: 'C:\\MonoField\\rea\\scripts\\rea.mjs', version: '6.7.0', command: 'C:\\MonoField\\MonoField.exe', env: { ELECTRON_RUN_AS_NODE: '1' }, nodeVersion: '24.11.1' } }),
     });
     const by = Object.fromEntries(result.checks.map((check) => [check.id, check]));
     expect(result.ready).toBe(true);
@@ -306,6 +311,33 @@ describe('the REA setup check', () => {
     expect(by.browser!.found).toBe('C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe');
     expect(by.adb!.found).toBe('C:\\tools\\adb.exe');
     expect(by.mcp).toMatchObject({ status: 'ok', note: 'custom-command' });
+    expect(by.node).toMatchObject({ required: true });
     expect(by.ghidra).toMatchObject({ status: 'ok', found: 'C:\\ghidra_11.3_PUBLIC' });
+  });
+
+  it('needs neither Node.js nor npx while the REA copy inside MonoField runs the pinned entry', async () => {
+    const runtime = { entry: '/opt/MonoField/resources/app/node_modules/rea-agents/scripts/rea.mjs', version: '6.7.0', command: '/opt/MonoField/monofield', env: { ELECTRON_RUN_AS_NODE: '1' }, nodeVersion: '24.14.0' };
+    const result = await runReaDoctor(linuxDeps({ nodeVersion: async () => null, bundled: () => ({ available: true, runtime }) }));
+    const by = Object.fromEntries(result.checks.map((check) => [check.id, check]));
+    expect(result.ready).toBe(true);
+    expect(by.bundled).toEqual({ id: 'bundled', required: false, found: 'rea-agents 6.7.0 · Node.js 24.14.0', status: 'ok' });
+    expect(by.node).toEqual({ id: 'node', required: false, found: null, status: 'missing', note: 'not-needed' });
+    expect(by.npx).toMatchObject({ required: false, status: 'missing', note: 'not-needed' });
+    expect(by.mcp).toMatchObject({ status: 'ok', note: 'runs-bundled', found: 'npx -y rea-agents@6.7.0 --mcp' });
+    expect(result.bundled).toEqual({ version: '6.7.0', command: '/opt/MonoField/monofield', args: [runtime.entry, '--mcp'], env: { ELECTRON_RUN_AS_NODE: '1' } });
+
+    // Not added yet: the template saves the pinned entry, so the copy will be used and only the MCP entry is missing.
+    const notAdded = await runReaDoctor(linuxDeps({ nodeVersion: async () => null, mcpServers: async () => [], bundled: () => ({ available: true, runtime }) }));
+    expect(notAdded.ready).toBe(false);
+    expect(notAdded.checks.filter((check) => check.required && check.status !== 'ok').map((check) => check.id)).toEqual(['mcp']);
+  });
+
+  it('says why the copy inside MonoField cannot be used, and falls back to Node.js and npx', async () => {
+    const result = await runReaDoctor(linuxDeps({ bundled: () => ({ available: false, reason: 'outside-range', found: '22.12.0' }) }, ['/usr/bin/npx']));
+    const by = Object.fromEntries(result.checks.map((check) => [check.id, check]));
+    expect(by.bundled).toEqual({ id: 'bundled', required: false, found: '22.12.0', status: 'warn', note: 'outside-range' });
+    expect(by.node).toMatchObject({ required: true, status: 'ok' });
+    expect(by.mcp!.note).toBeUndefined();
+    expect(result.bundled).toBeNull();
   });
 });

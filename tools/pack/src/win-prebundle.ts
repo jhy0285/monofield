@@ -14,9 +14,14 @@ export const WIN_PREBUNDLE_ESM_REQUIRE_BANNER =
 export const WIN_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER = WIN_PREBUNDLE_ESM_REQUIRE_BANNER;
 export const WIN_PREBUNDLE_ENTRYPOINTS_DIR_NAME = "prebundle-entrypoints";
 
+// Installed next to the prebundled daemon rather than bundled into it. REA is not
+// imported: the daemon starts it as its own process for agent conversations, so
+// the whole package (launcher, dist, native helpers) must exist on disk. Keep its
+// version equal to `rea-agents` in apps/daemon/package.json.
 export const WIN_PREBUNDLE_RUNTIME_DEPENDENCIES = {
   "better-sqlite3": "12.9.0",
   "blake3-wasm": "2.1.5",
+  "rea-agents": "6.7.0",
 } as const;
 
 export const WIN_STANDALONE_PREBUNDLE_EXCLUDED_INTERNAL_PACKAGES = [
@@ -49,6 +54,7 @@ export const WIN_PREBUNDLE_POLICIES = {
       "/node_modules/better-sqlite3/",
       "/node_modules/blake3-wasm/",
       "/node_modules/electron/",
+      "/node_modules/rea-agents/",
       "/node_modules/next/",
       "/node_modules/openai/",
       "/node_modules/react/",
@@ -63,6 +69,7 @@ export const WIN_PREBUNDLE_POLICIES = {
       "/node_modules/better-sqlite3/",
       "/node_modules/blake3-wasm/",
       "/node_modules/electron/",
+      "/node_modules/rea-agents/",
       "/node_modules/next/",
       "/node_modules/openai/",
       "/node_modules/react/",

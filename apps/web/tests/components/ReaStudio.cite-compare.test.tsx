@@ -154,6 +154,7 @@ describe('REA setup check panel', () => {
       { id: 'ghidra', required: true, status: 'warn', found: null, note: 'empty-value' },
       { id: 'native', required: false, status: 'missing', found: null },
     ],
+    bundled: null,
     ...over,
   });
 
@@ -187,5 +188,32 @@ describe('REA setup check panel', () => {
     stub({ doctor: doctor({ ready: true, checks: [{ id: 'node', required: true, status: 'ok', found: 'v24.11.1' }] }) });
     render(<I18nProvider initial="en"><ReaDoctorPanel mcpRow="saved" /></I18nProvider>);
     expect((await screen.findByRole('status')).textContent).toBe('Ready: a new agent conversation can start REA.');
+  });
+  it('shows the built-in REA, why Node.js and npx are not needed, and how to register it elsewhere', async () => {
+    stub({ doctor: doctor({ ready: true, platform: 'win32',
+      checks: [
+        { id: 'bundled', required: false, status: 'ok', found: 'rea-agents 6.7.0 · Node.js 24.14.0' },
+        { id: 'node', required: false, status: 'missing', found: null, note: 'not-needed' },
+        { id: 'npx', required: false, status: 'missing', found: null, note: 'not-needed' },
+        { id: 'mcp', required: true, status: 'ok', found: 'npx -y rea-agents@6.7.0 --mcp', note: 'runs-bundled' },
+      ],
+      bundled: { version: '6.7.0', command: 'C:\\MonoField\\MonoField.exe', args: ['C:\\MonoField\\resources\\app\\node_modules\\rea-agents\\scripts\\rea.mjs', '--mcp'], env: { ELECTRON_RUN_AS_NODE: '1' } } }) });
+    render(<I18nProvider initial="ko"><ReaDoctorPanel mcpRow="saved" /></I18nProvider>);
+    const bundled = await screen.findByTestId('rea-doctor-bundled');
+    expect(bundled.textContent).toContain('내장 REA');
+    expect(bundled.textContent).toContain('rea-agents 6.7.0 · Node.js 24.14.0');
+    expect(screen.getByTestId('rea-doctor-node').textContent).toContain('필요 없음: 내장 REA를 씀');
+    expect(screen.getByTestId('rea-doctor-mcp').textContent).toContain('내장 REA로 실행');
+    const launch = screen.getByTestId('rea-doctor-launch');
+    expect(launch.textContent).toContain('C:\\MonoField\\MonoField.exe');
+    expect(launch.textContent).toContain('rea.mjs --mcp');
+    expect(launch.textContent).toContain('ELECTRON_RUN_AS_NODE=1');
+  });
+
+  it('leaves out the launch details when MonoField has no usable copy', async () => {
+    stub({ doctor: doctor() });
+    render(<I18nProvider initial="en"><ReaDoctorPanel mcpRow="none" onAddRea={vi.fn()} /></I18nProvider>);
+    await screen.findByTestId('rea-doctor-mcp');
+    expect(screen.queryByTestId('rea-doctor-launch')).toBeNull();
   });
 });

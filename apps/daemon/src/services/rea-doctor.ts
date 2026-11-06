@@ -2,11 +2,13 @@ import { execFile } from 'node:child_process';
 import { access } from 'node:fs/promises';
 import path from 'node:path';
 import { REA_PACKAGE, satisfiesNodeRange, type ReaDoctorCheck, type ReaDoctorCheckId, type ReaDoctorResponse } from '@open-design/contracts';
+import { isPinnedNpxRea, locateBundledRea, type BundledReaLookup } from './bundled-rea.js';
 
 /**
- * What REA needs on this machine, checked in one place: Node.js in the range REA's package declares, npx (the MCP
- * template runs `npx -y rea-agents@<version> --mcp`), a Chromium-family browser for browser capture, the REA MCP
- * server in MonoField's settings, and the optional engines some targets use. Executables are looked up on PATH and in
+ * What REA needs on this machine, checked in one place: the REA copy that ships with MonoField (when it is usable a
+ * pinned REA entry runs it, and Node.js and npx are not needed), otherwise Node.js in the range REA's package declares
+ * and npx (the MCP template runs `npx -y rea-agents@<version> --mcp`), a Chromium-family browser for browser capture,
+ * the REA MCP server in MonoField's settings, and the optional engines some targets use. Executables are looked up on PATH and in
  * the usual install locations only; something installed elsewhere is reported missing, and nothing is installed here.
  *
  * Ghidra is found the way REA 6.7.0 finds it: through GHIDRA_INSTALL_DIR (and Java through JAVA_HOME), taken from the
@@ -20,7 +22,9 @@ export interface ReaDoctorDeps {
   nodeVersion: () => Promise<string | null>;
   exists: (file: string) => Promise<boolean>;
   /** MonoField's saved MCP servers, with their environment values (the doctor reads only GHIDRA_INSTALL_DIR and JAVA_HOME). */
-  mcpServers: () => Promise<Array<{ id: string; templateId?: string; enabled?: boolean; command?: string; args?: string[]; env?: Record<string, string> }>>;
+  mcpServers: () => Promise<Array<{ id: string; templateId?: string; transport?: string; enabled?: boolean; command?: string; args?: string[]; env?: Record<string, string> }>>;
+  /** The REA copy inside MonoField. */
+  bundled: () => BundledReaLookup;
 }
 
 export function defaultReaDoctorDeps(mcpServers: ReaDoctorDeps['mcpServers']): ReaDoctorDeps {
@@ -32,6 +36,7 @@ export function defaultReaDoctorDeps(mcpServers: ReaDoctorDeps['mcpServers']): R
     }),
     exists: async (file) => { try { await access(file); return true; } catch { return false; } },
     mcpServers,
+    bundled: () => locateBundledRea(),
   };
 }
 
@@ -70,19 +75,30 @@ export async function runReaDoctor(deps: ReaDoctorDeps): Promise<ReaDoctorRespon
   const add = (id: ReaDoctorCheckId, required: boolean, found: string | null, status?: ReaDoctorCheck['status'], note?: string) =>
     checks.push({ id, required, found, status: status ?? (found ? 'ok' : 'missing'), ...(note ? { note } : {}) });
 
-  const version = await deps.nodeVersion();
-  if (!version) add('node', true, null);
-  else if (satisfiesNodeRange(version, REA_PACKAGE.node)) add('node', true, version);
-  else add('node', true, version, 'warn', 'outside-range');
-  add('npx', true, await which(deps, ['npx']));
-
   const servers = await deps.mcpServers().catch(() => []);
   const rea = servers.find((server) => server.id === 'rea' || server.templateId === 'rea');
+  const bundled = deps.bundled();
+  // The REA template and `monofield rea configure` save the pinned npx command, which runs the bundled copy.
+  const runsBundled = bundled.available && (!rea || isPinnedNpxRea(rea));
+  if (bundled.available) add('bundled', false, `${REA_PACKAGE.name} ${bundled.runtime.version} · Node.js ${bundled.runtime.nodeVersion}`);
+  else add('bundled', false, bundled.found, bundled.reason === 'not-installed' ? 'missing' : 'warn', bundled.reason);
+
+  const version = await deps.nodeVersion();
+  if (runsBundled) add('node', false, version, undefined, 'not-needed');
+  else if (!version) add('node', true, null);
+  else if (satisfiesNodeRange(version, REA_PACKAGE.node)) add('node', true, version);
+  else add('node', true, version, 'warn', 'outside-range');
+  const npx = await which(deps, ['npx']);
+  if (runsBundled) add('npx', false, npx, undefined, 'not-needed');
+  else add('npx', true, npx);
+
   if (!rea) add('mcp', true, null);
   else {
     const command = [rea.command, ...(rea.args ?? [])].filter(Boolean).join(' ');
     const pinned = (rea.args ?? []).find((arg) => arg.startsWith(`${REA_PACKAGE.name}@`));
-    const note = rea.enabled === false ? 'disabled' : pinned && pinned !== `${REA_PACKAGE.name}@${REA_PACKAGE.version}` ? 'other-version' : !pinned ? 'custom-command' : undefined;
+    const note = rea.enabled === false ? 'disabled'
+      : pinned && pinned !== `${REA_PACKAGE.name}@${REA_PACKAGE.version}` ? 'other-version'
+        : !pinned ? 'custom-command' : runsBundled ? 'runs-bundled' : undefined;
     add('mcp', true, command || rea.id, rea.enabled === false ? 'warn' : 'ok', note);
   }
 
@@ -113,5 +129,10 @@ export async function runReaDoctor(deps: ReaDoctorDeps): Promise<ReaDoctorRespon
   add('adb', false, await which(deps, ['adb']));
 
   const ready = checks.filter((check) => check.required).every((check) => check.status === 'ok');
-  return { ok: true, ready, platform: deps.platform, package: REA_PACKAGE, checks };
+  return {
+    ok: true, ready, platform: deps.platform, package: REA_PACKAGE, checks,
+    bundled: bundled.available
+      ? { version: bundled.runtime.version, command: bundled.runtime.command, args: [bundled.runtime.entry, '--mcp'], env: bundled.runtime.env }
+      : null,
+  };
 }

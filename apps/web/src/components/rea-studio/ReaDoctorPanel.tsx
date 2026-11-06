@@ -7,19 +7,20 @@ import { useI18n } from '../../i18n';
 import styles from './ReaDoctorPanel.module.css';
 
 const NEED_KEY = {
-  node: 'reaDoctor.need.node', npx: 'reaDoctor.need.npx', mcp: 'reaDoctor.need.mcp', browser: 'reaDoctor.need.browser', ghidra: 'reaDoctor.need.ghidra', native: 'reaDoctor.need.native',
+  bundled: 'reaDoctor.need.bundled', node: 'reaDoctor.need.node', npx: 'reaDoctor.need.npx', mcp: 'reaDoctor.need.mcp', browser: 'reaDoctor.need.browser', ghidra: 'reaDoctor.need.ghidra', native: 'reaDoctor.need.native',
   java: 'reaDoctor.need.java', jadx: 'reaDoctor.need.jadx', apktool: 'reaDoctor.need.apktool', tshark: 'reaDoctor.need.tshark', adb: 'reaDoctor.need.adb',
 } as const satisfies Record<ReaDoctorCheckId, string>;
 const NOTE_KEY = {
   'outside-range': 'reaDoctor.note.outsideRange', disabled: 'reaDoctor.note.disabled', 'other-version': 'reaDoctor.note.otherVersion', 'custom-command': 'reaDoctor.note.customCommand',
   'not-set': 'reaDoctor.note.notSet', 'empty-value': 'reaDoctor.note.emptyValue', 'not-absolute': 'reaDoctor.note.notAbsolute',
   'no-analyze-headless': 'reaDoctor.note.noAnalyzeHeadless', 'no-java': 'reaDoctor.note.noJava',
+  'not-installed': 'reaDoctor.note.notInstalled', 'not-needed': 'reaDoctor.note.notNeeded', 'runs-bundled': 'reaDoctor.note.runsBundled',
 } as const;
 const noteKey = (note: string | undefined) => (note && note in NOTE_KEY ? NOTE_KEY[note as keyof typeof NOTE_KEY] : null);
 const GLYPH: Readonly<Record<ReaDoctorCheck['status'], string>> = { ok: '✓', warn: '!', missing: '✕' };
 
 /**
- * Everything REA needs, checked in one place: Node.js and npx, the REA MCP server in these settings, and the browser and
+ * Everything REA needs, checked in one place: the REA copy that ships with MonoField (or else Node.js and npx), the REA MCP server in these settings, and the browser and
  * engines some targets use. The daemon looks; this shows what it found, what each item is for, and adds REA to the MCP
  * list (saved with the section's own Save button) when it is missing.
  */
@@ -46,7 +47,7 @@ export function ReaDoctorPanel({ mcpRow, onAddRea, refreshKey }: {
   }, []);
   useEffect(() => { void run(); }, [run, refreshKey]);
 
-  const label = (id: ReaDoctorCheckId) => (id === 'node' ? `Node.js ${result?.package.node ?? ''}`.trim()
+  const label = (id: ReaDoctorCheckId) => (id === 'bundled' ? t('reaDoctor.label.bundled') : id === 'node' ? `Node.js ${result?.package.node ?? ''}`.trim()
     : id === 'mcp' ? t('reaDoctor.label.mcp') : id === 'browser' ? t('reaDoctor.label.browser') : id === 'native' ? t('reaDoctor.label.native')
       : ({ npx: 'npx', ghidra: 'Ghidra', java: 'Java', jadx: 'JADX', apktool: 'Apktool', tshark: 'tshark', adb: 'adb' } as const)[id]);
   const checks = result ? [...result.checks].sort((a, b) => Number(b.required) - Number(a.required)) : [];
@@ -78,6 +79,15 @@ export function ReaDoctorPanel({ mcpRow, onAddRea, refreshKey }: {
         </div>
       </li>)}
     </ul> : null}
+    {result?.bundled ? <details className={styles.launch} data-testid="rea-doctor-launch">
+      <summary>{t('reaDoctor.launchTitle')}</summary>
+      <dl>
+        <dt>{t('reaDoctor.launchCommand')}</dt><dd><code>{result.bundled.command}</code></dd>
+        <dt>{t('reaDoctor.launchArgs')}</dt><dd><code>{result.bundled.args.join(' ')}</code></dd>
+        {Object.keys(result.bundled.env).length ? <><dt>{t('reaDoctor.launchEnv')}</dt>
+          <dd><code>{Object.entries(result.bundled.env).map(([key, value]) => `${key}=${value}`).join(' ')}</code></dd></> : null}
+      </dl>
+    </details> : null}
     <p className={styles.scope}>{t('reaDoctor.scope')} <code>monofield rea doctor</code></p>
   </section>;
 }

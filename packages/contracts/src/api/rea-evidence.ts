@@ -451,7 +451,7 @@ export interface ReaCompareRequest {
 /** The REA release MonoField's MCP template pins, and the Node.js range its package declares (`engines.node`). */
 export const REA_PACKAGE = { name: 'rea-agents', version: '6.7.0', node: '^22.19.0 || ^24.11.0 || >=26.0.0' } as const;
 
-export type ReaDoctorCheckId = 'node' | 'npx' | 'browser' | 'mcp' | 'ghidra' | 'native' | 'java' | 'jadx' | 'apktool' | 'tshark' | 'adb';
+export type ReaDoctorCheckId = 'bundled' | 'node' | 'npx' | 'browser' | 'mcp' | 'ghidra' | 'native' | 'java' | 'jadx' | 'apktool' | 'tshark' | 'adb';
 export type ReaDoctorStatus = 'ok' | 'warn' | 'missing';
 
 export interface ReaDoctorCheck {
@@ -464,9 +464,19 @@ export interface ReaDoctorCheck {
   /**
    * A short machine-readable note: `outside-range`, `disabled`, `other-version`, `custom-command`; for GHIDRA_INSTALL_DIR
    * and JAVA_HOME `not-set`, `empty-value` or `not-absolute` (REA refuses to start with either, so the check is then
-   * required), `no-analyze-headless`, `no-java`.
+   * required), `no-analyze-headless`, `no-java`. For the copy of REA that ships with MonoField (`bundled`):
+   * `not-installed`, `other-version`, `outside-range`; while it is used, Node.js and npx are `not-needed` and the MCP
+   * entry `runs-bundled`.
    */
   note?: string;
+}
+
+/** How the REA copy inside MonoField is started; agents that do not take MonoField's MCP list (Codex) can register it. */
+export interface ReaBundledLaunch {
+  version: string;
+  command: string;
+  args: string[];
+  env: Record<string, string>;
 }
 
 export interface ReaDoctorResponse {
@@ -476,6 +486,8 @@ export interface ReaDoctorResponse {
   platform: string;
   package: typeof REA_PACKAGE;
   checks: ReaDoctorCheck[];
+  /** The REA copy that ships with MonoField, when it can be used. */
+  bundled: ReaBundledLaunch | null;
 }
 
 /**

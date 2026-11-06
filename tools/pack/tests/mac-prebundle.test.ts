@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -83,10 +84,20 @@ describe("mac standalone prebundle policy", () => {
     expect(MAC_PREBUNDLE_RUNTIME_DEPENDENCIES).toEqual({
       "better-sqlite3": "12.9.0",
       "blake3-wasm": "2.1.5",
+      "rea-agents": "6.7.0",
     });
     expect(MAC_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH).toBe("app/prebundled/daemon/daemon-cli.mjs");
     expect(MAC_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH).toBe("app/prebundled/daemon/daemon-sidecar.mjs");
     expect(MAC_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH).toBe("app/prebundled/web-sidecar.mjs");
+  });
+});
+
+describe("REA shipped with the packaged app", () => {
+  it("is the release the daemon depends on, and is never bundled into the daemon", () => {
+    const daemon = JSON.parse(readFileSync(new URL("../../../apps/daemon/package.json", import.meta.url), "utf8")) as { dependencies: Record<string, string> };
+    expect(MAC_PREBUNDLE_RUNTIME_DEPENDENCIES["rea-agents"]).toBe(daemon.dependencies["rea-agents"]);
+    expect(MAC_PREBUNDLE_POLICIES.daemonCli.forbiddenInputs).toContain("/node_modules/rea-agents/");
+    expect(MAC_PREBUNDLE_POLICIES.daemonSidecar.forbiddenInputs).toContain("/node_modules/rea-agents/");
   });
 });
 

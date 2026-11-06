@@ -30,13 +30,18 @@
 
 ## REA 연결 (Windows 기준)
 
-1. **Node.js 24.15 이상**과 npm을 설치합니다(REA는 Node 22.19+, 24.11+, 26+를
-   지원하지만 SQLite 검사는 24.15+가 필요).
-2. MonoField **Settings → MCP → Add MCP server**에서 **REA**를 추가하거나
-   `monofield rea configure --json`을 실행합니다. 프리셋은
-   `npx -y rea-agents@6.7.0 --mcp`입니다.
+1. **REA는 모노필드에 들어 있습니다.** `rea-agents` 6.7.0이 데몬의 고정 의존성으로 함께 설치되고(잠금 파일이 해시를
+   기록), 모노필드 자신의 실행 환경(개발 중에는 Node.js, 설치본에서는 Node.js로 동작하는 Electron)으로 실행됩니다.
+   그래서 **Node.js 설치와 npx 다운로드가 필요 없습니다.** 내장본을 쓸 수 없을 때(설치본에 없거나 실행 환경의 Node.js가
+   REA 지원 범위 밖)만 예전처럼 `npx -y rea-agents@6.7.0 --mcp`가 REA를 내려받아 실행합니다. 이때는 Node.js 24.15
+   이상과 npm이 필요합니다(REA는 Node 22.19+, 24.11+, 26+를 지원하지만 SQLite 검사는 24.15+가 필요).
+2. MonoField **Settings → 외부 MCP**에서 **REA를 MCP 목록에 추가**를 누르고 저장하거나 `monofield rea configure --json`을
+   실행합니다. 저장되는 명령은 그대로 `npx -y rea-agents@6.7.0 --mcp`이지만, 대화가 시작될 때 이 고정 버전 항목은
+   내장본으로 바뀌어 실행됩니다. 명령이나 버전을 직접 바꾼 항목은 바꾸지 않습니다.
 3. **Claude Code**를 쓰면 새 대화에서 바로 REA 도구가 보입니다.
-   **Codex**는 MonoField 설정이 자동 전달되지 않으므로 한 번 직접 등록합니다.
+   **Codex**는 MonoField 설정이 자동 전달되지 않으므로 한 번 직접 등록합니다. 내장본을 등록하려면 점검 화면 아래쪽
+   "다른 AI 도구에 내장 REA를 직접 등록할 때 쓰는 실행 정보"(또는 `monofield rea doctor`)에 나오는 명령·인자·환경 변수를
+   씁니다. 내장본 대신 npx를 쓰려면:
 
    ```sh
    codex mcp add rea -- npx -y rea-agents@6.7.0 --mcp
@@ -44,7 +49,8 @@
 
 4. 브라우저 캡처에는 설치된 Chrome/Edge 등 Chromium 계열 브라우저가 필요합니다.
 5. **한 화면에서 점검**: Settings → MCP(또는 Integrations → MCP) 맨 위의 **REA 설치·연결 점검**이
-   Node.js 버전(rea-agents 6.7.0 패키지가 선언한 `^22.19.0 || ^24.11.0 || >=26.0.0`), npx, MCP 등록(이상 필수)과
+   내장 REA(쓸 수 있으면 Node.js와 npx는 "필요 없음"으로 표시), Node.js 버전(rea-agents 6.7.0 패키지가 선언한
+   `^22.19.0 || ^24.11.0 || >=26.0.0`), npx, MCP 등록(이상 내장본이 없을 때 필수)과
    Chromium 계열 브라우저, Ghidra, 다른 네이티브 엔진(Hopper·IDA), Java·JADX·Apktool·tshark·adb(선택)를 한 번에 보여 줍니다.
    MCP에 REA가 없으면 **REA를 MCP 목록에 추가**를 누른 뒤 저장합니다. 터미널에서는 `monofield rea doctor [--json]`.
    PATH와 일반 설치 위치만 확인하고 아무것도 설치하지 않으므로, 다른 곳에 설치한 도구는 "찾지 못함"으로 나올 수 있습니다.

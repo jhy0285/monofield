@@ -35,9 +35,10 @@ prints one of them the way the REA Studio screen does: its envelope (operation, 
 what it holds. A payload is shown only when its SHA-256 matches the recorded one; REA's limitations and unknowns are
 printed unchanged, and "not observed" is never turned into "absent".
 
-doctor checks what REA needs on this machine: Node.js in the range rea-agents declares, npx, the REA MCP server in
-MonoField's settings (required), a Chromium-family browser for browser capture and the engines some targets use
-(optional). It looks on PATH and in the usual install locations only and installs nothing.
+doctor checks what REA needs on this machine: the REA copy that ships with MonoField (when it is used, Node.js and npx
+are not needed), otherwise Node.js in the range rea-agents declares and npx, the REA MCP server in MonoField's settings
+(required), a Chromium-family browser for browser capture and the engines some targets use (optional). It looks on PATH
+and in the usual install locations only and installs nothing.
 
 cite prints one evidence item (a step, request, table, graph node or trace path; the whole file without a selector) as
 a <rea-evidence> block to quote in a prompt, the same block the REA Studio screen puts into the chat. A step's verified
@@ -165,6 +166,11 @@ export function formatReaDoctor(result: ReaDoctorResponse): string {
   const lines = [`REA ${result.package.version} (${result.package.name}, Node ${result.package.node}) on ${result.platform}: ${result.ready ? 'ready' : 'not ready'}`];
   for (const check of [...result.checks].sort((a, b) => Number(b.required) - Number(a.required))) {
     lines.push(`  ${check.status.padEnd(7)} ${check.id.padEnd(8)} ${check.required ? 'required' : 'optional'}  ${check.found ?? 'not found'}${check.note ? `  (${check.note})` : ''}`);
+  }
+  if (result.bundled) {
+    const env = Object.entries(result.bundled.env).map(([key, value]) => `${key}=${value}`).join(' ');
+    lines.push(`Built-in REA ${result.bundled.version} runs the pinned entry without npx. To register it with another agent yourself:`,
+      `  command: ${result.bundled.command}`, `  args:    ${result.bundled.args.join(' ')}`, ...(env ? [`  env:     ${env}`] : []));
   }
   lines.push('Looked on PATH and in the usual install locations only. A ready setup still has to be seen working: start a new agent conversation and check that it lists REA tools.');
   return lines.join('\n');

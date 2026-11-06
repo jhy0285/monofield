@@ -460,6 +460,7 @@ import {
   reconcileMediaTasksOnBoot,
   updateMediaTask,
 } from './media/tasks.js';
+import { locateBundledRea, withBundledRea } from './services/bundled-rea.js';
 import {
   MCP_TEMPLATES,
   buildAcpMcpServers,
@@ -6553,13 +6554,16 @@ export async function startServer({
       ? run.toolBundle.mcpServers
       : [];
     const {
-      enabledServers: enabledExternalMcp,
+      enabledServers: selectedExternalMcp,
       persistedTokenServerIds,
     } = resolveExternalMcpServersForRun({
       persistedServers: externalMcpConfig.servers,
       runScopedServers: runScopedMcpServers,
       sandboxMode: SANDBOX_RUNTIME.enabled,
     });
+    // A pinned `npx rea-agents@<pinned>` entry runs the REA copy that ships with
+    // MonoField (same release, no download); without a usable copy it stays npx.
+    const enabledExternalMcp = withBundledRea(selectedExternalMcp, locateBundledRea());
     // This map is deliberately run-scoped: only enabled, persisted MCP ids
     // selected for this run are read and forwarded. Disabled/unselected
     // server secrets must never enter the agent child environment.

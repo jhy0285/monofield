@@ -860,7 +860,7 @@ export const MCP_TEMPLATES: McpTemplate[] = [
     id: 'rea',
     label: 'REA (Reverse Engineer Anything)',
     description:
-      'Investigate shipped JavaScript applications, SQLite snapshots and browser behavior with source-linked Evidence. Use the bundled legacy-system-handover skill to turn findings into MonoField interface and screen specifications. Requires a separately installed supported Node.js runtime and npm; npx downloads pinned rea-agents 6.7.0 on first use. Browser capture requires an installed Chromium browser. Native analysis engines are separate prerequisites.',
+      'Investigate shipped JavaScript applications, SQLite snapshots and browser behavior with source-linked Evidence. Use the bundled legacy-system-handover skill to turn findings into MonoField interface and screen specifications. rea-agents 6.7.0 ships with MonoField and runs on the MonoField runtime, so no Node.js install or download is needed; without that copy, npx downloads the same pinned release on first use. Browser capture requires an installed Chromium browser. Native analysis engines are separate prerequisites.',
     transport: 'stdio',
     category: 'utilities',
     homepage: 'https://github.com/jhy0285/rea-yj',

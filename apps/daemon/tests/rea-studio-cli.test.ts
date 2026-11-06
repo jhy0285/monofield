@@ -134,9 +134,15 @@ describe('monofield rea cite / compare / doctor (real server)', () => {
   it('doctor reports every check through the same endpoint the settings screen uses', async () => {
     const result = JSON.parse((await cli('doctor', '--json')).stdout) as Json;
     expect(result).toMatchObject({ ok: true, package: { name: 'rea-agents', version: '6.7.0' } });
-    expect(result.checks.map((check: Json) => check.id)).toEqual(['node', 'npx', 'mcp', 'browser', 'ghidra', 'native', 'java', 'jadx', 'apktool', 'tshark', 'adb']);
+    expect(result.checks.map((check: Json) => check.id)).toEqual(['bundled', 'node', 'npx', 'mcp', 'browser', 'ghidra', 'native', 'java', 'jadx', 'apktool', 'tshark', 'adb']);
+    // The daemon under test has rea-agents installed as its own dependency, so the built-in copy is found and used.
+    expect(result.checks[0]).toMatchObject({ id: 'bundled', status: 'ok', required: false });
+    expect(result.checks.find((check: Json) => check.id === 'node')).toMatchObject({ required: false, note: 'not-needed' });
+    expect(result.bundled).toMatchObject({ version: '6.7.0', command: process.execPath });
+    expect(result.bundled.args[0].replace(/\\/g, '/')).toMatch(/\/rea-agents\/scripts\/rea\.mjs$/);
     const text = (await cli('doctor')).stdout;
     expect(text).toMatch(/^REA 6\.7\.0 \(rea-agents, Node \^22\.19\.0 \|\| \^24\.11\.0 \|\| >=26\.0\.0\) on \w+: (ready|not ready)/);
+    expect(text).toContain('Built-in REA 6.7.0 runs the pinned entry without npx.');
     expect(text).toContain('Looked on PATH and in the usual install locations only.');
   });
 });

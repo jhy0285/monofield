@@ -1569,6 +1569,15 @@ export interface Dict {
   'reaDoctor.note.notAbsolute': string;
   'reaDoctor.note.noAnalyzeHeadless': string;
   'reaDoctor.note.noJava': string;
+  'reaDoctor.label.bundled': string;
+  'reaDoctor.need.bundled': string;
+  'reaDoctor.note.notInstalled': string;
+  'reaDoctor.note.notNeeded': string;
+  'reaDoctor.note.runsBundled': string;
+  'reaDoctor.launchTitle': string;
+  'reaDoctor.launchCommand': string;
+  'reaDoctor.launchArgs': string;
+  'reaDoctor.launchEnv': string;
   'mcpClient.folder.title': string;
   'mcpClient.folder.intro': string;
   'mcpClient.folder.ghidra': string;

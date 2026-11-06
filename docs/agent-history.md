@@ -295,6 +295,19 @@ exercise is unchanged by it.
 
 Newest first within each group. Remove an item when it is done.
 
+Built-in REA (see the 2026-11-06 "REA ships inside MonoField" entry):
+
+- `pnpm-lock.yaml` changed (rea-agents and its dependency tree), so `nix/pnpm-deps.nix` needs its hash refreshed
+  (`pnpm nix:update-hash`, then `nix flake check`). It was tried and failed: Nix could not download the flake input
+  `numtide/flake-utils` from GitHub (HTTP 403 in that session), so the file is unchanged. The PR "Validate workspace" gate
+  uploads or applies the hash-only fix.
+- Not run: a packaged build (`tools-pack mac|win|linux build`). Only the constants and their tests changed, and the packaged
+  path depends on two things not checked here: the Node.js version inside Electron 41 must be in REA's range (the setup
+  check reports `outside-range` and conversations fall back to npx otherwise), and REA must start under
+  `ELECTRON_RUN_AS_NODE=1` from the unpacked app (asar is off). Its native helpers (`@lydell/node-pty`, optional `frida`)
+  are not rebuilt for Electron; frida's binary is not installed at all (its install script is blocked).
+- Size: rea-agents is 32 MB and its installed dependency tree about 116 MB before compression.
+
 Getting-started sample and the legacy-continuation flow (see the 2026-11-06 Log entry):
 
 - 변경 검증's "no checks" message (`verification.noChecks`) names only package.json, Cargo and Go, though Maven is supported.
@@ -477,6 +490,27 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-06 — REA ships inside MonoField (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** the user chose option B1 from the chat: take REA as it is and build it into MonoField instead of having each machine
+  download it with npx (they had asked on 2026-11-03 for "REA as is, with a GUI added").
+- **Changed:** `rea-agents` 6.7.0 is an exact dependency of `apps/daemon` (pnpm 10 blocks its dependencies' install scripts; frida's was
+  reported and skipped). New `apps/daemon/src/services/bundled-rea.ts`: `locateBundledRea` finds the installed copy (same version as
+  `REA_PACKAGE`, Node.js in REA's range), `isPinnedNpxRea` recognizes exactly `npx -y rea-agents@6.7.0 --mcp`, and `withBundledRea` points
+  such entries at `<MonoField runtime> <copy>/scripts/rea.mjs --mcp` (adding `ELECTRON_RUN_AS_NODE=1` under Electron). `server.ts` applies
+  it to the MCP servers a conversation gets; saved settings are not rewritten and changed commands are left alone, so npx stays the
+  fallback. Setup check: new `bundled` row; while the copy is used Node.js and npx are `not-needed` (optional) and the MCP row says
+  `runs-bundled`; the response carries the launch (`bundled`), shown in the panel and `monofield rea doctor` for registering it with
+  another agent (Codex). Packaging: `rea-agents` added to the mac/Windows prebundle runtime dependencies and forbidden in the daemon
+  bundles (Linux installs it through the daemon tarball's dependencies). 9 i18n keys x 19. Docs: practical guide, handover skill.
+- **Verified:** REA from the installed copy prints 6.7.0 and, started exactly as a conversation would, answers MCP `initialize`
+  (server `rea` 6.7.0) and lists 207 tools. Daemon `bundled-rea` (new, 6), `rea-cite-compare` (+2), `rea-studio-cli` (real server sees the
+  copy), `rea-route-cli`, `mcp-config`, `run-tool-bundle`; web `ReaStudio.cite-compare` (+2); tools-pack `win-prebundle`/`mac-prebundle`
+  (+1 each: the shipped version equals the daemon's); `pnpm typecheck`, `pnpm guard`, `pnpm i18n:check` pass. In the scratch runtime the
+  check shows the built-in row and turns ready once REA is in the list, with Node.js and npx not required. The user's feature guide
+  (private artifact) was updated to match.
+- **Not run:** a real agent conversation using REA tools, a packaged build, Windows. See Open items, "Built-in REA".
 
 ### 2026-11-06 — sample zip runs; a DTO-only change now reaches the change analysis (`ccr-8432aecf-n9xdfd`)
 
