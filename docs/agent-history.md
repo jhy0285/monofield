@@ -305,7 +305,14 @@ Next up: a "reference board" in REA Studio (proposed to the user on 2026-11-06, 
   comparison. UI: a "레퍼런스 보드" tab inside REA Studio, not a new screen. Recommended order: board + (1) + (3) first, (2) later.
 - Guards to design in: take patterns (structure, flow, fields), not copies; leave images, copy text and branding out by default
   (REA's own DISCLAIMER.md refuses copying proprietary code and assets); never bypass logins or bot protection.
-- Check first: the built-in browser is made for the local app; whether it can browse external sites is unverified.
+- Checked on 2026-11-06 (code reading only, Electron not run): the built-in browser (`apps/web/src/components/DesignBrowserPanel.tsx`,
+  opened from the workspace launcher in every project, development included) is an Electron `<webview>` in the desktop app whose
+  every navigation is limited to http(s) and about:blank (`isAllowedEmbeddedBrowserUrl` in `apps/desktop/src/main/runtime.ts`), so
+  external sites load. It already saves a screenshot (`captureHostRegionSnapshot`, else `capturePage`) and a page brief (title,
+  headings, image and link URLs, colours) into the project's `browser/` folder. Without the desktop host it falls back to an
+  `<iframe>`: most external sites refuse framing, and screenshot and brief are unavailable. Its start page is already called
+  "reference board" in code and analytics (`DesignBrowserStart`, `trackReferenceBoardSurfaceView`): a curated list of inspiration
+  sites, not saved references. REA Studio is a per-file evidence viewer (`ReaEvidenceGate`), with no tabs of its own.
 - The user prefers an opinion and a short plan before a large build; confirm the scope with them, then build UI + CLI + API together.
 
 Built-in REA (see the 2026-11-06 "REA ships inside MonoField" entry):
