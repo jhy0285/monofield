@@ -655,6 +655,7 @@ import { registerDocumentImpactRoutes } from './routes/document-impact.js';
 import { registerJudgmentRoutes } from './routes/judgments.js';
 import { registerBrowserEvidenceRoutes } from './routes/browser-evidence.js';
 import { registerReaEvidenceRoutes } from './routes/rea-evidence.js';
+import { registerReferenceRoutes } from './routes/references.js';
 import { registerCodeOntologyRoutes } from './routes/code-ontology.js';
 import { registerJavaToolsRoutes } from './routes/java-tools.js';
 import { JavaLanguageService } from './services/java/language-service.js';
@@ -3761,6 +3762,8 @@ export async function startServer({
   // wall — well past 4mb for image/markup-heavy sites. Give it a dedicated limit
   // (registered before the global parser so it claims the body first).
   app.use('/api/brands/:id/extract-from-html', express.json({ limit: '32mb' }));
+  // A kept reference carries the browser tab's screenshot as base64 (a high-DPI window is several MB).
+  app.use('/api/projects/:id/references', express.json({ limit: '24mb' }));
   app.use(express.json({ limit: '4mb' }));
   const projectPreviewScopes = createProjectPreviewScopeRegistry();
 
@@ -5373,6 +5376,7 @@ export async function startServer({
   registerJudgmentRoutes(app, { db, http: httpDeps, paths: pathDeps, projectFiles: projectFileDeps });
   registerBrowserEvidenceRoutes(app, { db, http: httpDeps, paths: pathDeps, projectFiles: projectFileDeps });
   registerReaEvidenceRoutes(app, { db, http: httpDeps, paths: pathDeps, projectFiles: projectFileDeps });
+  registerReferenceRoutes(app, { db, http: httpDeps, paths: pathDeps, projectFiles: projectFileDeps });
   registerCodeOntologyRoutes(app, { db, http: httpDeps, paths: pathDeps, projectFiles: projectFileDeps, verification, schemaWatch });
   registerJavaToolsRoutes(app,{db,http:httpDeps,paths:pathDeps,projectFiles:projectFileDeps,javaLanguage,javaDebug,verification});
   registerPluginAssetRoutes(app, {

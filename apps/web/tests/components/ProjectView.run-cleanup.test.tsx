@@ -261,6 +261,13 @@ describe('selectPrimaryProjectFile', () => {
     expect(selectPrimaryProjectFile([newer, primary])).toBe(primary);
   });
 
+  it('never opens a kept reference screenshot as the project\'s primary file', () => {
+    const reference = projectFile('references/ref-1.png', 'image', 3_000);
+    const design = projectFile('design/home.png', 'image', 1_000);
+    expect(selectPrimaryProjectFile([reference, design])).toBe(design);
+    expect(selectPrimaryProjectFile([reference])).toBeNull();
+  });
+
   it('ignores sidecar manifest files when choosing a fallback', () => {
     const sidecar = projectFile('index.html.artifact.json', 'text', 2_000);
     const html = projectFile('index.html', 'html', 1_000);

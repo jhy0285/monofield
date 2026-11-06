@@ -2342,6 +2342,7 @@ export function FileWorkspace({
               onSendBoardCommentAttachments={onSendBoardCommentAttachments}
               onSendBrowserReviewBatch={onSendBrowserReviewBatch}
               onRequestBrowserUsePrompt={onRequestBrowserUsePrompt}
+              onAppendToChat={onAppendToChat}
               autoVerify={
                 projectMetadata?.workMode === 'development' &&
                 projectMetadata.development?.autoVerify !== false

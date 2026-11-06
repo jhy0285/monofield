@@ -120,6 +120,10 @@ As of 2026-11-06.
 - Judgment checks (2026-11-01, branch only, not on `main`): `monofield judge`, `/api/judgments/*` and the 판단 검토
   panel ask JEV or a local Laya server yes/no questions about Korean field labels and business names, rules first,
   observe mode until labels support a policy; see `docs/judgment-checks.md`.
+- Reference board (2026-11-06, branch only): the built-in browser's "레퍼런스로 담기" keeps a page's URL (secrets removed),
+  screenshot and structure outline with a note in the project's `references/`; the browser start page lists them under "담은 레퍼런스";
+  "프로젝트에 넣기" puts a `<reference-board-apply>` block with pattern-only rules into the chat composer. Same routes
+  (`/api/projects/:id/references*`) for `monofield refs list|add|note|remove|apply`. Guide: `docs/reference-board.ko.md`.
 - REA browser evidence cross-check (2026-11-02, branch only): an REA `capture_browser_scenario` recording is compared with an
   interface spec from the editor ("브라우저 증거 대조 (REA)" panel, next to the judgment check) or `monofield rea
   evidence|cross-check|apply`, all through `/api/projects/:id/browser-evidence*`. Tests, CLI, panel, 19-locale keys
@@ -295,25 +299,20 @@ exercise is unchanged by it.
 
 Newest first within each group. Remove an item when it is done.
 
-Next up: a "reference board" in REA Studio (proposed to the user on 2026-11-06, not started; the user handed it to the next agent):
+Reference board (see the 2026-11-06 "reference board" Log entry; steps 1 and 3 of the proposal are built):
 
-- Idea: while working in MonoField, look for good references on other sites, keep the ones you like, and apply them to the
-  current project. Proposed flow: (1) collect: a "keep as reference" action saves URL, screenshot and a note to a per-project
-  board (no REA needed for most references); (2) deepen, only when needed: "record the flow with REA" drafts the capture
-  request for the agent; (3) apply: pick a reference and a target screen or file, and MonoField drafts the request with the
-  evidence and the target (an extension of "add to chat"); (4) check: compare the flow afterwards with the existing remake
-  comparison. UI: a "레퍼런스 보드" tab inside REA Studio, not a new screen. Recommended order: board + (1) + (3) first, (2) later.
-- Guards to design in: take patterns (structure, flow, fields), not copies; leave images, copy text and branding out by default
-  (REA's own DISCLAIMER.md refuses copying proprietary code and assets); never bypass logins or bot protection.
-- Checked on 2026-11-06 (code reading only, Electron not run): the built-in browser (`apps/web/src/components/DesignBrowserPanel.tsx`,
-  opened from the workspace launcher in every project, development included) is an Electron `<webview>` in the desktop app whose
-  every navigation is limited to http(s) and about:blank (`isAllowedEmbeddedBrowserUrl` in `apps/desktop/src/main/runtime.ts`), so
-  external sites load. It already saves a screenshot (`captureHostRegionSnapshot`, else `capturePage`) and a page brief (title,
-  headings, image and link URLs, colours) into the project's `browser/` folder. Without the desktop host it falls back to an
-  `<iframe>`: most external sites refuse framing, and screenshot and brief are unavailable. Its start page is already called
-  "reference board" in code and analytics (`DesignBrowserStart`, `trackReferenceBoardSurfaceView`): a curated list of inspiration
-  sites, not saved references. REA Studio is a per-file evidence viewer (`ReaEvidenceGate`), with no tabs of its own.
-- The user prefers an opinion and a short plan before a large build; confirm the scope with them, then build UI + CLI + API together.
+- Not built yet, by the agreed order: (2) a "record the flow with REA" action on a kept reference that drafts the
+  `capture_browser_scenario` request for the agent (no login or bot-protection bypass), and (4) after applying, a link to the
+  existing original-vs-remake comparison (`monofield rea compare`). The user said to build board + keep + apply first.
+- Not run: the desktop app. Keeping from the Electron `<webview>` (outline through `executeJavaScript`, screenshot through
+  `captureHostRegionSnapshot`) is covered by `DesignBrowserPanel.webview.test.tsx` with a mock host only; the outline script itself
+  was run in real Chromium through Playwright. Check on Windows: keep a real site, confirm the dialog is not in the captured PNG
+  (it hides itself for two frames first) and that a signed-in page's capture is what the user saw.
+- In the web build (no desktop host) most external sites refuse to load in the iframe; the dialog then keeps the URL and note
+  only and says so. That is a limit of the existing browser, not of the board.
+- The board folder `references/` is written into the project (in a code project, into the user's repository) with its own
+  `.gitignore` (`*`). Its files are hidden from the project's first-open file choice (`selectPrimaryProjectFile`) but still listed
+  in Design Files.
 
 Built-in REA (see the 2026-11-06 "REA ships inside MonoField" entry):
 
@@ -510,6 +509,35 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-06 — reference board: keep pages from the built-in browser and apply their pattern (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** the reference board proposed on 2026-11-06 (handed over in Open items). The user approved the plan in chat: board on
+  the built-in browser's start page (REA Studio is a per-file viewer with no tabs), files in the project's `references/` with its
+  own `.gitignore`, CLI `monofield refs`; collect (1) and apply (3) now, REA recording (2) and the after-check (4) later.
+- **Changed:** contracts `packages/contracts/src/api/references.ts` (item and outline types, `sanitizeReferenceUrl`,
+  `normalizeReferenceOutline` for the untrusted page outline, `referenceApplyBlock` with `REFERENCE_APPLY_RULES`: rebuild the pattern
+  in the project's own code; no text, images, logos, brand colours or fonts; no login or bot-protection bypass; free text cannot
+  open or close block elements). Daemon `services/references.ts` (board file, PNG/JPEG check, serialized writes per project,
+  `.gitignore` written beside the board through the real project root and refused when `references/` links out of the project,
+  remove deletes only the item's own screenshot, apply re-hashes each screenshot: verified/changed/missing), `routes/references.ts`
+  (GET/POST `/api/projects/:id/references`, PATCH/DELETE `…/:refId`, POST `…/apply`; 24 MB JSON limit for that path only),
+  `services/refs-cli.ts` + `refs` in `SUBCOMMAND_MAP` (`--prompt-file <path|->`, repeated `--id`). Web
+  `components/references/` (outline script run in the page, `ReferenceCaptureDialog` that hides itself while the screenshot is
+  taken, `ReferenceBoard` with the apply form and project-file suggestions; copies the block when there is no composer),
+  `DesignBrowserPanel` bookmark button and start-page section, `FileWorkspace` passes `onAppendToChat`, `ProjectView` skips
+  `references/` when choosing the file to open first (found in the real app: a kept PNG opened itself and joined the chat
+  context). 39 `references.*` keys x 19 locales. Docs: `docs/reference-board.ko.md`, a section in `docs/rea-laya-practical-guide.md`.
+- **Verified:** contracts `references` 7 (suite 319/319); daemon `references` 6 + `references-route-cli` 3 (real server, `dist/cli.js`,
+  a 7 MB screenshot body, stdin prompt file) with `rea-route-cli`, `rea-studio-cli`, `browser-evidence(-cli)`, `bundled-rea`: 64 pass;
+  web `ReferenceBoard` 6, `DesignBrowserPanel.webview` (+1 keep test), `DesignBrowserPanel`, `ProjectView.run-cleanup` (+1),
+  `design-browser-styles`, `FileWorkspace*`: 211 pass. `pnpm guard` 67, `pnpm typecheck`, `pnpm i18n:check` pass. Real run (scratch
+  tools-dev runtime, Korean UI, Playwright): the outline script in Chromium on two synthetic pages returned the form labels
+  (이메일, 비밀번호, required) and table headers; the start page showed both cards with thumbnails; select, apply with a target and
+  request put the block in the composer; the keep dialog in the web build says capture needs the desktop app; no horizontal
+  overflow at 390 px. Before the daemon tests passed, this container needed `pnpm install` (the `rea-agents` dependency from the
+  previous entry was not installed here; `rea-studio-cli`'s doctor test failed until then).
+- **Not run:** the Electron desktop app, Windows, a real external site, dark theme screenshots. See Open items, "Reference board".
 
 ### 2026-11-06 — REA ships inside MonoField (`ccr-8432aecf-n9xdfd`)
 

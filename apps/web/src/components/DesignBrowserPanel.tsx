@@ -82,6 +82,9 @@ import { Icon } from './Icon';
 import { BoardComposerPopover } from './BoardComposerPopover';
 import { PreviewDrawOverlay, type AnnotationReviewDraft } from './PreviewDrawOverlay';
 import { RemixIcon } from './RemixIcon';
+import { ReferenceBoard } from './references/ReferenceBoard';
+import { ReferenceCaptureDialog, referenceAnchorClass } from './references/ReferenceCaptureDialog';
+import { REFERENCE_OUTLINE_SCRIPT } from './references/outline-script';
 
 type BrowserHistoryEntry = {
   iconUrl?: string;
@@ -289,6 +292,8 @@ interface DesignBrowserPanelProps {
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[], images?: File[]) => Promise<boolean | void> | boolean | void;
   onSendBrowserReviewBatch?: (prompt: string, attachments: ChatCommentAttachment[], images?: File[]) => Promise<boolean | void> | boolean | void;
   onRequestBrowserUsePrompt?: (prompt: string) => void;
+  /** Appends text to the chat composer (the reference board's "put into the project"). */
+  onAppendToChat?: (text: string, introIfEmpty?: string) => void;
   /** Include the currently approved browser automation session in review-batch
    * implementation requests so the agent can reload and verify its own edits. */
   autoVerify?: boolean;
@@ -856,6 +861,7 @@ export function DesignBrowserPanel({
   onSendBoardCommentAttachments,
   onSendBrowserReviewBatch,
   onRequestBrowserUsePrompt,
+  onAppendToChat,
   autoVerify = false,
   sendDisabled = false,
   browserTabId,
@@ -911,6 +917,7 @@ export function DesignBrowserPanel({
   const [textDraft, setTextDraft] = useState('');
   const [captureChromeHidden, setCaptureChromeHidden] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [referenceOpen, setReferenceOpen] = useState(false);
   const [savingAction, setSavingAction] = useState<'brief' | 'evidence' | 'screenshot' | null>(null);
   const [loadError, setLoadError] = useState<BrowserLoadError | null>(null);
   const addressInputRef = useRef<HTMLInputElement | null>(null);
@@ -2647,6 +2654,42 @@ export function DesignBrowserPanel({
               </IconTooltipButton>
             </>
           ) : null}
+          {!isBlank && isHttpLikeUrl(currentUrl) ? (
+            <span className={referenceAnchorClass}>
+              <IconTooltipButton
+                label={t('references.keep')}
+                wrapperClassName="db-action-item"
+                className={referenceOpen ? 'is-active' : ''}
+                aria-haspopup="dialog"
+                aria-expanded={referenceOpen}
+                data-testid="browser-keep-reference"
+                onClick={() => {
+                  setReferenceOpen((open) => !open);
+                  setMenuOpen(false);
+                  setBrowserUseOpen(false);
+                  setBrowserAccessOpen(false);
+                  setSuggestionsOpen(false);
+                }}
+              >
+                <RemixIcon name="bookmark-line" size={15} />
+              </IconTooltipButton>
+              {referenceOpen ? (
+                <ReferenceCaptureDialog
+                  projectId={projectId}
+                  url={currentUrl}
+                  title={pageTitle}
+                  canCapture={Boolean(webviewNode)}
+                  capture={captureBrowserPageDataUrl}
+                  readOutline={async () => (webviewNode ? webviewNode.executeJavaScript(REFERENCE_OUTLINE_SCRIPT, false) : undefined)}
+                  onClose={() => setReferenceOpen(false)}
+                  onSaved={() => {
+                    setReferenceOpen(false);
+                    setStatusMessage(t('references.saved'));
+                  }}
+                />
+              ) : null}
+            </span>
+          ) : null}
           <span className="db-browser-access">
             <IconTooltipButton
               label={`${browserAccessText.access}: ${browserAccessText.mode[browserAccessMode]}`}
@@ -2848,6 +2891,7 @@ export function DesignBrowserPanel({
             {isBlank ? (
               <DesignBrowserStart
                 onNavigate={navigateTo}
+                onAppendToChat={onAppendToChat}
                 projectId={projectId}
               />
             ) : desktopHostAvailable ? (
@@ -3900,9 +3944,11 @@ function referenceGroupTitle(group: ReferenceGroup, locale?: string): string {
 
 function DesignBrowserStart({
   onNavigate,
+  onAppendToChat,
   projectId,
 }: {
   onNavigate: (url: string) => void;
+  onAppendToChat?: (text: string, introIfEmpty?: string) => void;
   projectId?: string;
 }) {
   const analytics = useAnalytics();
@@ -3968,6 +4014,8 @@ function DesignBrowserStart({
           </p>
         </div>
       </div>
+
+      {projectId ? <ReferenceBoard projectId={projectId} onNavigate={onNavigate} onAppendToChat={onAppendToChat} /> : null}
 
       <div className="db-reference-toolbar">
         <div

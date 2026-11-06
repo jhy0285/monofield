@@ -362,6 +362,11 @@ const SUBCOMMAND_MAP = {
     const { runJudgeCli } = await import('./services/judge-cli.js');
     return runJudgeCli(args, { baseUrl: cliDaemonBaseUrl, parseFlags, positionalArgs: collectCliPositionals });
   },
+  // The built-in browser's reference board, against /api/projects/:id/references.
+  refs: async (args: string[]) => {
+    const { runRefsCli } = await import('./services/refs-cli.js');
+    return runRefsCli(args, { baseUrl: cliDaemonBaseUrl, parseFlags, positionalArgs: collectCliPositionals });
+  },
   // Settings → Execution permissions, against /api/execution-permissions.
   permissions: async (args: string[]) => {
     const { runPermissionsCli } = await import('./services/permissions-cli.js');

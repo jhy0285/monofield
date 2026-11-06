@@ -64,6 +64,7 @@ import { useCoalescedCallback } from '../hooks/useCoalescedCallback';
 import {
   composeSystemPrompt,
   isStructuredSpecificationArtifactRequest,
+  REFERENCE_BOARD_FOLDER,
   type AudioVoiceOption,
   type MemorySystemPromptResponse,
   type ResearchOptions,
@@ -8463,6 +8464,8 @@ export function selectPrimaryProjectFile(files: ProjectFile[]): ProjectFile | nu
 }
 
 function isProcessArtifactFile(name: string): boolean {
+  // The reference board's screenshots and board file are material the person kept, not the project's output.
+  if (name.startsWith(`${REFERENCE_BOARD_FOLDER}/`)) return true;
   const base = name.split('/').pop()?.toLowerCase() ?? name.toLowerCase();
   return (
     base === 'critique.json'

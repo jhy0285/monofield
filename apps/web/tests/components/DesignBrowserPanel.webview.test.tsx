@@ -880,6 +880,47 @@ describe('DesignBrowserPanel <webview> navigation', () => {
     expect(container.querySelector('.db-comment-marker')).toBeNull();
   });
 
+  it('keeps the open page as a reference with its outline and screenshot', async () => {
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit = {}) => new Response(JSON.stringify({
+      item: { id: 'ref-1', ...JSON.parse(String(init.body)), screenshot: null, outline: null, capturedAt: '', takes: ['structure'] },
+    }), { status: 201, headers: { 'content-type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    // The desktop compositor capture of the page region, as the real host returns it.
+    restoreHost?.();
+    restoreHost = installMockOpenDesignHost({ host: { capture: { page: async () => ({ ok: true, dataUrl: 'data:image/png;base64,QUJD', h: 1, w: 1 }) } } });
+    try {
+      const { container } = render(
+        <I18nProvider initial="ko">
+          <DesignBrowserPanel
+            initialTitle="Example"
+            initialUrl="https://example.com/join"
+            projectId="proj-webview-reference"
+            onOpenFile={() => {}}
+            onRefreshFiles={() => {}}
+          />
+        </I18nProvider>,
+      );
+      const webview = container.querySelector('webview.db-webview') as HTMLElement & {
+        executeJavaScript?: ReturnType<typeof vi.fn>;
+      };
+      webview.executeJavaScript = vi.fn(async () => ({ regions: ['header', 'main'], forms: [] }));
+      fireEvent.click(screen.getByTestId('browser-keep-reference'));
+      expect(screen.getByRole('dialog', { name: '레퍼런스로 담기' })).toBeTruthy();
+      fireEvent.click(screen.getByTestId('reference-capture-save'));
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+      const [url, init] = fetchMock.mock.calls[0]!;
+      expect(url).toBe('/api/projects/proj-webview-reference/references');
+      const body = JSON.parse(String(init?.body));
+      expect(body).toMatchObject({ url: 'https://example.com/join', source: 'browser', outline: { regions: ['header', 'main'] } });
+      expect(webview.executeJavaScript.mock.calls[0]?.[0]).toContain('regions');
+      expect(body.screenshotBase64).toBe('QUJD');
+      expect(await screen.findByText('레퍼런스 보드에 담았습니다.')).toBeTruthy();
+      expect(screen.queryByRole('dialog', { name: '레퍼런스로 담기' })).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('localizes visual annotation controls without exposing source tools in the external browser', () => {
     const { container } = render(
       <I18nProvider initial="ko">
