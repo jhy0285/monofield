@@ -295,20 +295,12 @@ exercise is unchanged by it.
 
 Newest first within each group. Remove an item when it is done.
 
-Getting-started sample and the legacy-continuation flow (see the 2026-11-05 Log entry):
+Getting-started sample and the legacy-continuation flow (see the 2026-11-06 Log entry):
 
-- The downloadable sample `apps/monofield-site/downloads/monofield-sample-legacy-order.zip` does not start: its
-  `SecurityConfig.java` calls `.oauth2ResourceServer().jwt()` but `pom.xml` has no `spring-boot-starter-oauth2-resource-server`,
-  so `mvn spring-boot:run` (and MonoField's 실행) fails with `NoClassDefFoundError ... BearerTokenResolver`. It also ships no
-  `.gitignore`, so after one build `target/` shows as 15 untracked files in 변경사항 and every 변경 검증 run ends "재검증 필요"
-  (Maven writes `target/` while the check runs). Fix proposed, not made: add the dependency (or drop the call) and a
-  `.gitignore` with `target/`, rebuild the zip; ask the user first, since the site links this download.
-- Spec impact (`apps/daemon/src/services/document-impact.ts`, `matchDocumentImpact`) matches changed files only against an
-  endpoint's `sourceFile` and code `evidenceRefs`; `plugins/_official/interface-spec/scripts/scan_spring.py` records neither the
-  request/response DTO files nor field-level evidence, so a change to a DTO alone reports "영향받은 항목: 0". The update prompt
-  still lists the changed files. Proposed, not built: have the scanners add the DTO file as a code `evidenceRef` (endpoint or
-  field level). Ask the user before changing it.
 - 변경 검증's "no checks" message (`verification.noChecks`) names only package.json, Cargo and Go, though Maven is supported.
+- The fixed sample zip is in the repository, but monofield.vercel.app still serves the previous one until the site is redeployed.
+- Only the Spring scanner records DTO source files as evidence; the other collectors (Django, Express, FastAPI, Go, NestJS, OpenAPI) still do not,
+  so a DTO-only change shows "영향받은 항목: 0" for their specs. Specs generated before 2026-11-06 need a rescan to get the DTO references.
 
 REA browser evidence cross-check (see the 2026-11-02 Log entry):
 
@@ -485,6 +477,25 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-06 — sample zip runs; a DTO-only change now reaches the change analysis (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** "에러 마저고치고": the two defects reported on 2026-11-05.
+- **Changed (sample):** `plugins/_official/interface-spec/fixtures/spring/` is the source of `apps/monofield-site/downloads/monofield-sample-legacy-order.zip`
+  (the zip adds a README). `pom.xml` gained `spring-boot-starter-oauth2-resource-server` (the security config already called `.oauth2ResourceServer().jwt()`),
+  `application.yml` gained a placeholder `jwk-set-uri` (a JwtDecoder bean is needed to start; nothing is fetched until a token arrives), and a `.gitignore`
+  with `target/` keeps build output out of 변경사항 and out of 변경 검증's stale check. The Java sources are untouched, so scanner output and the demo
+  script's line numbers stay the same. The zip was rebuilt from the fixture (README gets a note that the service bodies are stubs: calling an API returns the
+  "demo fixture" error). Verified: unzip, `git init`/commit, `mvn package` passes and `git status` stays empty; `mvn spring-boot:run` starts (public join
+  reaches the stub, a protected API answers 401).
+- **Changed (scanner):** red test first (`tests/test_spring_dto_evidence.py`, 3 of 5 failed). `scan_spring.py` now appends, after the auth reference, a
+  code reference per DTO source file of each endpoint (`referenced_classes` in `dto_expander.py`: the request body, form objects and response types, each
+  followed by its parent class and the classes its fields use; summary `요청 DTO: X` / `응답 DTO: X`, symbol X, no line). `matchDocumentImpact` already
+  matched any code reference, so no daemon change. The auth tests in `test_spring_auth.py` now read only the security references (`_auth_refs`).
+- **Verified:** `python3 -m unittest discover -s tests` in the plugin's `scripts/`: 36 pass; daemon `document-impact` (+1 test with endpoint-level DTO
+  references), `judgments`, `judgments-route-cli`, `interface-spec-render-xlsx` and contracts `interface-spec-openapi` pass. Replaying the real case:
+  scan the fixture, edit only `MemberJoinRequest.java`, run the daemon's matcher: before `[]`, now `POST /api/v1/members/join`.
+- **Not run:** the Playwright suites, `e2e/scripts/spring-spec-demo.ts`, the non-Spring collectors.
 
 ### 2026-11-05 — REA preset: Ghidra and Java folder inputs (`ccr-8432aecf-n9xdfd`)
 

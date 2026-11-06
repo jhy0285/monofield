@@ -46,6 +46,7 @@ from tools.excel_generator.collector.controller_scanner import (  # noqa: E402
 )
 from tools.excel_generator.collector.spring_security import production_java_files  # noqa: E402
 from tools.excel_generator.collector.dto_expander import (  # noqa: E402
+    referenced_classes,
     expand_dto_to_spec_fields,
     expand_type_to_spec_fields,
     parse_java_classes,
@@ -215,6 +216,29 @@ def main() -> int:
             fields, _conflicts = expand_type_to_spec_fields(classes, ep.response_type, "RESPONSE", name_dict)
             ep.response_fields.extend(fields)
 
+    def dto_evidence(ep) -> list[dict]:
+        """Code references to the DTO files the endpoint's fields were read from.
+
+        Without them a change to a DTO alone never reaches the change analysis, which only matches changed files
+        against the controller and the references listed here.
+        """
+        refs: list[dict] = []
+        seen: set[tuple[str, str]] = set()
+        roles = [("요청", ep.request_body_type)]
+        roles += [("요청", part.strip()) for part in (ep.query_dto_type or "").split(",")]
+        roles.append(("응답", ep.response_type))
+        for role, type_raw in roles:
+            for cls in referenced_classes(classes, type_raw or ""):
+                try:
+                    relative = cls.path.resolve().relative_to(codebase).as_posix()
+                except ValueError:
+                    continue
+                if (role, relative) in seen:
+                    continue
+                seen.add((role, relative))
+                refs.append({"kind": "code", "ref": relative, "symbol": cls.name, "summary": f"{role} DTO: {cls.name}"})
+        return refs
+
     def korean_name(ep) -> str:
         provided = (ep.interface_name or "").strip()
         if provided and _HANGUL.search(provided):
@@ -255,7 +279,7 @@ def main() -> int:
                 # Undecided stays visible as a TBD auth row instead of a guessed one.
                 "authRequired": ep.auth_required is not False,
                 **({"auth": {"type": "undecided"}} if ep.auth_required is None else {}),
-                **({"evidenceRefs": ep.auth_evidence} if ep.auth_evidence else {}),
+                **({"evidenceRefs": refs} if (refs := [*(ep.auth_evidence or []), *dto_evidence(ep)]) else {}),
                 "requestBodyType": ep.request_body_type or "",
                 "queryDtoType": ep.query_dto_type or "",
                 "responseType": ep.response_type or "",

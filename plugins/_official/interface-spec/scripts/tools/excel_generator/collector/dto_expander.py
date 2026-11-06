@@ -178,6 +178,32 @@ def parse_java_classes(codebase_path: Path) -> dict[str, JavaClass]:
     return classes
 
 
+def referenced_classes(classes: dict[str, JavaClass], type_raw: str) -> list[JavaClass]:
+    """The project classes a type expression stands for, in reading order.
+
+    Each class is followed by its parent and then by the classes its fields use, so the list is every source file
+    whose edit can change the expanded field list of that type. Containers and leaf types add nothing.
+    """
+    found: list[JavaClass] = []
+    seen: set[str] = set()
+
+    def visit(name: str) -> None:
+        cls = classes.get(name)
+        if cls is None or name in seen:
+            return
+        seen.add(name)
+        found.append(cls)
+        if cls.extends:
+            visit(cls.extends)
+        for f in cls.fields:
+            for nested in _candidate_nested_classes(f.type_raw, classes):
+                visit(nested)
+
+    for name in _candidate_nested_classes(type_raw, classes):
+        visit(name)
+    return found
+
+
 def resolve_dto_fields(classes: dict[str, JavaClass], cls_name: str, visited: set[str] | None = None) -> list[JavaField]:
     if visited is None:
         visited = set()

@@ -43,6 +43,27 @@ describe('document change impact', () => {
     expect(report.contentSha256).toMatch(/^[a-f0-9]{64}$/);
   });
 
+  it('flags an endpoint when only a DTO file it cites changed, as the Spring scanner records them', async () => {
+    git('init', '--quiet');
+    await mkdir(path.join(root, 'member/dto'), { recursive: true });
+    await writeFile(path.join(root, 'member/MemberController.java'), 'controller');
+    await writeFile(path.join(root, 'member/dto/MemberJoinRequest.java'), 'class MemberJoinRequest { String loginId; }');
+    await writeFile(path.join(root, 'member/dto/MemberResponse.java'), 'class MemberResponse { Long memberId; }');
+    git('add', '.'); git('commit', '--quiet', '--no-verify', '-m', 'initial');
+    await writeFile(path.join(root, 'member/dto/MemberJoinRequest.java'), 'class MemberJoinRequest { String loginId; String email; }');
+    const doc = InterfaceSpecDocumentSchema.parse({ schemaVersion: 1, kind: 'interface-spec', source: { codebaseName: 'members' },
+      endpoints: [
+        { method: 'POST', path: '/members/join', sourceFile: 'member/MemberController.java', evidenceRefs: [
+          { kind: 'code', ref: 'member/dto/MemberJoinRequest.java', symbol: 'MemberJoinRequest', summary: '요청 DTO: MemberJoinRequest' },
+          { kind: 'code', ref: 'member/dto/MemberResponse.java', symbol: 'MemberResponse', summary: '응답 DTO: MemberResponse' }] },
+        { method: 'GET', path: '/members/{id}', sourceFile: 'member/MemberController.java', evidenceRefs: [
+          { kind: 'code', ref: 'member/dto/MemberResponse.java', symbol: 'MemberResponse', summary: '응답 DTO: MemberResponse' }] },
+      ] });
+    const report = await analyzeDocumentImpact({ projectRoot: root, inputFile: 'docs/members.json', content: Buffer.from(JSON.stringify(doc)), doc });
+    expect(report.changedFiles).toEqual(['member/dto/MemberJoinRequest.java']);
+    expect(report.affected.map((item) => [item.endpointIndex, item.changedFiles])).toEqual([[0, ['member/dto/MemberJoinRequest.java']]]);
+  });
+
   it('tracks deletion through a staged rename', async () => {
     git('init', '--quiet'); await writeFile(path.join(root, 'orders.ts'), 'same');
     git('add', '.'); git('commit', '--quiet', '--no-verify', '-m', 'initial');

@@ -1,0 +1,2 @@
+# Maven build output: keeps it out of the change list
+target/

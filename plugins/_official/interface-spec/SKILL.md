@@ -555,6 +555,8 @@ empty `codebasePath`, and the selected root `templatePreset`. For a codebase
 document, use `source.mode: "codebase"` and the current default
 `templatePreset: "si-standard"` unless an explicit supported override exists.
 
+The Spring scanner already lists the request and response DTO source files of each endpoint as code references (`요청 DTO: …`, `응답 DTO: …`, no line number) after the security rule it cites. They are how a change to a DTO alone reaches the change analysis, so keep them when you rewrite an endpoint.
+
 Preserve field-level `evidence` from the reviewed manual draft. Add
 `evidenceRefs` to endpoints and fields when a source was actually inspected:
 each reference has `kind` (`code`, `requirement`, `browser`, `database`, or

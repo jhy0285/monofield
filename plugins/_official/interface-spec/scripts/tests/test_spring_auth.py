@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -48,6 +49,11 @@ def _status(endpoint: dict) -> str:
     return "required" if endpoint["authRequired"] else "public"
 
 
+def _auth_refs(endpoint: dict) -> list[dict]:
+    """The security rules an endpoint cites. DTO source references (`요청 DTO: …`) are covered by test_spring_dto_evidence."""
+    return [ref for ref in endpoint.get("evidenceRefs", []) if not re.match(r"^(?:요청|응답) DTO: ", ref.get("summary", ""))]
+
+
 def _by_route(document: dict) -> dict[tuple[str, str], dict]:
     return {(endpoint["method"], endpoint["path"]): endpoint for endpoint in document["endpoints"]}
 
@@ -61,7 +67,7 @@ class SpringAuthFixtureTest(unittest.TestCase):
         join = endpoints[("POST", "/api/v1/members/join")]
         self.assertEqual(_status(join), "public")
         self.assertNotIn("auth", join)
-        self.assertEqual(join["evidenceRefs"], [{
+        self.assertEqual(_auth_refs(join), [{
             "kind": "code",
             "ref": "src/main/java/kr/example/legacy/config/SecurityConfig.java",
             "line": 15,
@@ -75,7 +81,7 @@ class SpringAuthFixtureTest(unittest.TestCase):
             with self.subTest(route=route):
                 self.assertEqual(_status(endpoint), "required")
                 self.assertEqual(endpoint["note"], "")
-                self.assertEqual([(ref["line"], ref["summary"]) for ref in endpoint["evidenceRefs"]],
+                self.assertEqual([(ref["line"], ref["summary"]) for ref in _auth_refs(endpoint)],
                                  [(16, "인증 필요: anyRequest().authenticated()")])
 
     def test_egov_fixture_without_security_config_keeps_auth_undecided(self) -> None:
@@ -85,7 +91,7 @@ class SpringAuthFixtureTest(unittest.TestCase):
             with self.subTest(route=route):
                 self.assertEqual(_status(endpoint), "undecided")
                 self.assertIn("인증 여부 확인 필요: Java 보안 설정", endpoint["note"])
-                self.assertNotIn("evidenceRefs", endpoint)
+                self.assertEqual(_auth_refs(endpoint), [])
 
     def test_egov_security_overlay_decides_do_urls(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -138,11 +144,11 @@ class SpringAuthFixtureTest(unittest.TestCase):
         })
 
         cost = endpoints[("GET", "/api/products/{productId}/cost")]
-        self.assertEqual([(ref["ref"].rsplit("/", 1)[-1], ref["summary"]) for ref in cost["evidenceRefs"]], [
+        self.assertEqual([(ref["ref"].rsplit("/", 1)[-1], ref["summary"]) for ref in _auth_refs(cost)], [
             ("SecurityConfig.java", '인증 불필요: requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()'),
             ("ProductController.java", "인증 필요: @PreAuthorize(\"hasRole('MANAGER')\")"),
         ])
-        self.assertEqual(cost["evidenceRefs"][1]["symbol"], "ProductController.getProductCost")
+        self.assertEqual(_auth_refs(cost)[1]["symbol"], "ProductController.getProductCost")
 
         search = endpoints[("GET/POST", "/api/products/search")]
         self.assertIn("HTTP 메서드별 판정이 다름(GET 인증 불필요, POST 인증 필요)", search["note"])
@@ -151,9 +157,9 @@ class SpringAuthFixtureTest(unittest.TestCase):
         self.assertIn("hasIpAddress", endpoints[("POST", "/partner/orders/callback")]["note"])
 
         guide = endpoints[("GET", "/docs/guide")]
-        self.assertEqual(guide["evidenceRefs"][-1]["summary"], '인증 불필요: @PreAuthorize("permitAll()")')
+        self.assertEqual(_auth_refs(guide)[-1]["summary"], '인증 불필요: @PreAuthorize("permitAll()")')
         changelog = endpoints[("GET", "/docs/changelog")]
-        self.assertEqual(changelog["evidenceRefs"][-1]["symbol"], "DocsController")
+        self.assertEqual(_auth_refs(changelog)[-1]["symbol"], "DocsController")
 
         # src/test security configuration never decides production endpoints.
         refs = [ref["ref"] for endpoint in document["endpoints"] for ref in endpoint.get("evidenceRefs", [])]
