@@ -1,0 +1,27 @@
+/* "Record the flow with REA" for one kept reference, on the browser start page. */
+.root { display: grid; gap: 10px; margin-top: 14px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); min-width: 0; }
+.hint { margin: 0; font-size: 11px; line-height: 1.5; color: var(--text-muted); }
+.rows { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.row select, .row input, .advanced input {
+  box-sizing: border-box; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text-strong, inherit); font: inherit; font-size: 12px;
+}
+.row select { flex: 0 0 auto; width: auto; }
+.row input { flex: 1 1 140px; min-width: 0; width: auto; }
+.row input[type="number"] { flex: 0 0 110px; }
+.advanced { font-size: 12px; color: var(--text-muted); }
+.advanced summary { cursor: pointer; }
+.advanced input { width: 100%; margin-top: 6px; }
+.running { margin: 0; font-size: 12px; color: var(--text-muted); }
+.status { margin: 0; font-size: 12px; color: var(--green, var(--text-muted)); }
+.error { margin: 0; font-size: 12px; color: var(--red); white-space: pre-wrap; overflow-wrap: anywhere; }
+.actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.result { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-panel); font-size: 12px; min-width: 0; }
+.result button { justify-self: start; }
+.steps { margin: 0; padding-left: 18px; display: grid; gap: 2px; }
+.steps li[data-status="failed"] { color: var(--red); }
+.steps li[data-status="cancelled"] { color: var(--text-muted); }
+.stepError { color: var(--text-muted); overflow-wrap: anywhere; }
+.calls { margin: 0; padding-left: 18px; display: grid; gap: 2px; }
+.calls code { font: 11px var(--font-mono); overflow-wrap: anywhere; }

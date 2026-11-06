@@ -92,3 +92,53 @@ describe('reference apply block', () => {
     ]);
   });
 });
+
+describe('reference flows', () => {
+  it('validates steps and refuses credential fields', async () => {
+    const { normalizeReferenceFlowSteps } = await import('../src/api/references');
+    expect(normalizeReferenceFlowSteps(undefined)).toEqual({ ok: true, steps: [] });
+    expect(normalizeReferenceFlowSteps([{ kind: 'click', target: '  조회 ' }, { kind: 'fill', target: '이메일', value: 'a@b.c' }, { kind: 'wait', ms: 1500.4 }, { kind: 'wait-text', target: '2건' }]))
+      .toEqual({ ok: true, steps: [{ kind: 'click', target: '조회', role: 'button' }, { kind: 'fill', target: '이메일', value: 'a@b.c' }, { kind: 'wait', ms: 1500 }, { kind: 'wait-text', target: '2건' }] });
+    for (const label of ['비밀번호', 'Password', '인증번호', '카드 번호', 'CVC', 'otp']) {
+      expect(normalizeReferenceFlowSteps([{ kind: 'fill', target: label, value: 'x' }])).toMatchObject({ ok: false, error: expect.stringContaining('does not type') });
+    }
+    expect(normalizeReferenceFlowSteps([{ kind: 'wait', ms: 60_000 }]).ok).toBe(false);
+    expect(normalizeReferenceFlowSteps([{ kind: 'click', target: 'x', role: 'iframe' }]).ok).toBe(false);
+    expect(normalizeReferenceFlowSteps(Array.from({ length: 13 }, () => ({ kind: 'wait', ms: 200 }))).ok).toBe(false);
+  });
+
+  it('builds a REA scenario with a fresh profile, per-step deadlines and network capture', async () => {
+    const { referenceFlowScenario } = await import('../src/api/references');
+    const scenario = referenceFlowScenario('https://a.example/orders', [{ kind: 'click', target: '조회', role: 'button' }, { kind: 'fill', target: '주문번호', value: '1001' }, { kind: 'wait-text', target: '결과 "1"건' }], '/usr/bin/chromium');
+    expect(scenario).toMatchObject({
+      browser: { mode: 'launch', executable_path: '/usr/bin/chromium', headless: true },
+      start_url: { url: 'https://a.example/orders', query: [] },
+      actions: [
+        { step_id: 'step-1', action: 'click', locator: { kind: 'role', role: 'button', name: '조회' }, timeout_ms: 10_000 },
+        { step_id: 'step-2', action: 'fill', locator: { kind: 'role', role: 'textbox', name: '주문번호' }, value: { source: 'literal', value: '1001' } },
+        { step_id: 'step-3', action: 'wait_for', locator: { kind: 'css', selector: 'text="결과 \\"1\\"건"' }, state: 'visible' },
+      ],
+      capture: { after_each_step: ['screenshot', 'accessibility'], events: ['network', 'page-errors'], network: { response_body: true, header_values: false } },
+    });
+    expect(scenario).not.toHaveProperty('storage');
+    expect(scenario).not.toHaveProperty('secrets');
+    expect((referenceFlowScenario('https://a.example', [], '/b') as { actions: unknown[] }).actions).toEqual([{ step_id: 'page-settled', action: 'wait_for_timeout', duration_ms: 1500 }]);
+  });
+
+  it('puts the flow into the apply block and writes an agent request with the same rules', async () => {
+    const { referenceApplyBlock, referenceFlowAgentRequest } = await import('../src/api/references');
+    const flow = { file: 'references/ref-1.flow.json', evidenceId: 'ev_1', sha256: 'b'.repeat(64), recordedAt: '2026-11-06T00:00:00.000Z', browser: 'chrome',
+      steps: [{ id: 'step-1', label: 'press button "조회"', status: 'completed' }], completed: 1, total: 1,
+      apiCalls: [{ method: 'GET', path: '/api/orders', status: 200 }], completeness: 'incomplete' };
+    const block = referenceApplyBlock([{ ...ITEM, flow }]);
+    expect(block).toContain('flow: references/ref-1.flow.json (REA evidence ev_1, 1/1 steps, capture incomplete)');
+    expect(block).toContain('  1. press button "조회" → completed');
+    expect(block).toContain('api: GET /api/orders → 200');
+    const request = referenceFlowAgentRequest(ITEM, [{ kind: 'click', target: '다음', role: 'button' }], '가입 흐름');
+    expect(request).toContain('<reference-flow-request id="ref-1" url="https://example.com/join">');
+    expect(request).toContain('capture_browser_scenario');
+    expect(request).toContain('references/ref-1.flow.json');
+    expect(request).toContain('Do not sign in');
+    expect(request).toContain('1. press button "다음"');
+  });
+});

@@ -49,6 +49,54 @@ export interface ReferenceItem {
   outline: ReferenceOutline | null;
   capturedAt: string;
   source: 'browser' | 'cli';
+  /** The last flow recorded with REA for this reference, if any. */
+  flow?: ReferenceFlowSummary | null;
+}
+
+/**
+ * One step of a flow recorded with REA, in the person's terms: press a button, link, tab, checkbox or radio by its
+ * visible name, type a public value into a field by its label, wait for a text to appear, or wait a moment.
+ */
+export type ReferenceFlowStep =
+  | { kind: 'click'; target: string; role?: ReferenceFlowClickRole }
+  | { kind: 'fill'; target: string; value: string }
+  | { kind: 'wait-text'; target: string }
+  | { kind: 'wait'; ms: number };
+export type ReferenceFlowClickRole = 'button' | 'link' | 'tab' | 'menuitem' | 'checkbox' | 'radio';
+export const REFERENCE_FLOW_CLICK_ROLES: readonly ReferenceFlowClickRole[] = ['button', 'link', 'tab', 'menuitem', 'checkbox', 'radio'];
+
+export interface ReferenceFlowSummary {
+  /** The REA evidence file, project-relative (`references/<id>.flow.json`); REA Studio opens it. */
+  file: string;
+  evidenceId: string;
+  sha256: string;
+  recordedAt: string;
+  /** The browser executable's file name (not its path). */
+  browser: string;
+  /** `request` is the step as it was asked for, so screens can describe it in their own language. */
+  steps: Array<{ id: string; label: string; status: string; error?: string; request?: ReferenceFlowStep }>;
+  completed: number;
+  total: number;
+  /** The last screen REA captured, saved beside the evidence (`references/<id>.flow.png`), when its hash matched. */
+  screenshot?: string;
+  /** API calls seen during the flow, with identifiers generalized (`/orders/{id}`), at most 30. */
+  apiCalls: Array<{ method: string; path: string; status: number | null }>;
+  completeness: string;
+}
+
+export interface ReferenceFlowRequest {
+  steps?: ReferenceFlowStep[];
+  /** An absolute path to a Chromium-family browser; otherwise the one the REA setup check finds. */
+  browserPath?: string;
+}
+
+export interface ReferenceFlowResponse {
+  item: ReferenceItem;
+  flow: ReferenceFlowSummary;
+}
+
+export interface ReferenceFlowAgentRequestResponse {
+  text: string;
 }
 
 export interface ReferenceBoardFile {
@@ -75,6 +123,11 @@ export const REFERENCE_LIMITS = {
   columns: 16,
   screenshotBytes: 16 * 1024 * 1024,
   applyItems: 12,
+  flowSteps: 12,
+  flowTarget: 120,
+  flowValue: 500,
+  flowWaitMs: 10_000,
+  flowStepTimeoutMs: 10_000,
 } as const;
 
 export interface ReferenceListResponse {
@@ -205,6 +258,110 @@ export function normalizeReferenceOutline(value: unknown): ReferenceOutline | nu
   };
 }
 
+/** Fields a recorded flow never types into: a flow must not carry credentials or payment data. */
+const SENSITIVE_FIELD = /pass(?:word|wd|code)?|pwd|비밀번호|패스워드|암호|otp|인증\s*번호|card|카드\s*번호|cvc|cvv|주민|ssn|secret|token/i;
+
+/** Validated steps, or why they are refused. No steps means "open the page and let it settle". */
+export function normalizeReferenceFlowSteps(value: unknown): { ok: true; steps: ReferenceFlowStep[] } | { ok: false; error: string } {
+  if (value === undefined || value === null) return { ok: true, steps: [] };
+  if (!Array.isArray(value)) return { ok: false, error: 'steps must be a list.' };
+  if (value.length > REFERENCE_LIMITS.flowSteps) return { ok: false, error: `A flow has at most ${REFERENCE_LIMITS.flowSteps} steps.` };
+  const steps: ReferenceFlowStep[] = [];
+  for (const [index, raw] of value.entries()) {
+    const step = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+    const target = typeof step.target === 'string' ? step.target.replace(/\s+/g, ' ').trim() : '';
+    const where = `Step ${index + 1}`;
+    if (step.kind === 'wait') {
+      const ms = typeof step.ms === 'number' && Number.isFinite(step.ms) ? Math.round(step.ms) : NaN;
+      if (!(ms >= 100 && ms <= REFERENCE_LIMITS.flowWaitMs)) return { ok: false, error: `${where}: wait between 100 and ${REFERENCE_LIMITS.flowWaitMs} ms.` };
+      steps.push({ kind: 'wait', ms });
+      continue;
+    }
+    if (step.kind !== 'click' && step.kind !== 'fill' && step.kind !== 'wait-text') return { ok: false, error: `${where}: unknown kind.` };
+    if (!target || target.length > REFERENCE_LIMITS.flowTarget) return { ok: false, error: `${where}: name the button, field or text (at most ${REFERENCE_LIMITS.flowTarget} characters).` };
+    if (step.kind === 'click') {
+      const role = step.role === undefined ? 'button' : step.role;
+      if (!(REFERENCE_FLOW_CLICK_ROLES as readonly unknown[]).includes(role)) return { ok: false, error: `${where}: unknown control type.` };
+      steps.push({ kind: 'click', target, role: role as ReferenceFlowClickRole });
+    } else if (step.kind === 'fill') {
+      const text = typeof step.value === 'string' ? step.value : '';
+      if (text.length > REFERENCE_LIMITS.flowValue) return { ok: false, error: `${where}: the value is longer than ${REFERENCE_LIMITS.flowValue} characters.` };
+      if (SENSITIVE_FIELD.test(target)) return { ok: false, error: `${where}: a recorded flow does not type into password, verification, card or ID fields.` };
+      steps.push({ kind: 'fill', target, value: text });
+    } else steps.push({ kind: 'wait-text', target });
+  }
+  return { ok: true, steps };
+}
+
+/** How a step reads in the board and in prompts. */
+export function referenceFlowStepLabel(step: ReferenceFlowStep): string {
+  if (step.kind === 'click') return `press ${step.role ?? 'button'} "${step.target}"`;
+  if (step.kind === 'fill') return `type into "${step.target}"`;
+  if (step.kind === 'wait-text') return `wait for "${step.target}"`;
+  return `wait ${step.ms} ms`;
+}
+
+/**
+ * The REA `capture_browser_scenario` input for a reference: a fresh temporary browser profile (so nothing signed in
+ * is reused), the person's steps with a per-step deadline, a screenshot and accessibility snapshot after each step,
+ * network and page errors with response bodies. Values typed into fields are public literals; no secrets are declared.
+ */
+export function referenceFlowScenario(url: string, steps: ReferenceFlowStep[], browserPath: string): Record<string, unknown> {
+  const timeout = REFERENCE_LIMITS.flowStepTimeoutMs;
+  const actions = steps.length === 0
+    ? [{ step_id: 'page-settled', action: 'wait_for_timeout', duration_ms: 1500 }]
+    : steps.map((step, index) => {
+      const step_id = `step-${index + 1}`;
+      if (step.kind === 'wait') return { step_id, action: 'wait_for_timeout', duration_ms: step.ms };
+      if (step.kind === 'click') return { step_id, action: 'click', locator: { kind: 'role', role: step.role ?? 'button', name: step.target }, timeout_ms: timeout };
+      if (step.kind === 'fill') return { step_id, action: 'fill', locator: { kind: 'role', role: 'textbox', name: step.target }, value: { source: 'literal', value: step.value }, timeout_ms: timeout };
+      return { step_id, action: 'wait_for', locator: { kind: 'css', selector: `text=${JSON.stringify(step.target)}` }, state: 'visible', timeout_ms: timeout };
+    });
+  return {
+    browser: { mode: 'launch', executable_path: browserPath, headless: true },
+    start_url: { url, query: [] },
+    environment: { viewport: { width: 1280, height: 720, device_scale_factor: 1 }, locale: 'ko-KR', timezone: 'Asia/Seoul', color_scheme: 'light', reduced_motion: 'reduce', service_workers: 'block' },
+    actions,
+    capture: {
+      after_each_step: ['screenshot', 'accessibility'],
+      at_end: ['url'],
+      events: ['network', 'page-errors'],
+      network: { request_body: true, response_body: true, header_values: false },
+    },
+  };
+}
+
+/** The flow as short lines for a prompt or the CLI. */
+export function referenceFlowLines(flow: ReferenceFlowSummary): string[] {
+  const lines = [`flow: ${flow.file} (REA evidence ${flow.evidenceId}, ${flow.completed}/${flow.total} steps, capture ${flow.completeness}) — open it in REA Studio for screens and API bodies`];
+  flow.steps.forEach((step, index) => lines.push(`  ${index + 1}. ${step.label} → ${step.status}${step.error ? ` (${step.error})` : ''}`));
+  if (flow.screenshot) lines.push(`last screen: ${flow.screenshot} — layout reference only`);
+  if (flow.apiCalls.length) lines.push(`api: ${flow.apiCalls.map((call) => `${call.method} ${call.path} → ${call.status ?? 'no response'}`).join('; ')}`);
+  return lines;
+}
+
+/**
+ * For flows the step editor cannot express (a signed-in screen, a long wizard): a request for the agent to record it
+ * with the REA MCP tools, under the same rules.
+ */
+export function referenceFlowAgentRequest(item: ReferenceItem, steps: ReferenceFlowStep[], request?: string): string {
+  const lines = [`<reference-flow-request id="${attr(item.id)}" url="${attr(item.url)}">`];
+  lines.push(`request: ${request?.trim() ? inline(request.trim().slice(0, REFERENCE_LIMITS.request)) : 'Record how this page behaves so its flow can be rebuilt in this project.'}`);
+  lines.push('how: use the REA MCP tool capture_browser_scenario with a screenshot and accessibility snapshot after each step and network events with response bodies.');
+  lines.push(`save: the evidence JSON as ${REFERENCE_BOARD_FOLDER}/${item.id}.flow.json in this project, then summarize the steps and API calls.`);
+  if (steps.length) {
+    lines.push('steps:');
+    steps.forEach((step, index) => lines.push(`  ${index + 1}. ${inline(referenceFlowStepLabel(step))}${step.kind === 'fill' ? ` with "${inline(step.value)}"` : ''}`));
+  } else lines.push('steps: open the page, decide the steps that show its main flow, and tell me what you chose.');
+  lines.push('rules:',
+    '- Do not sign in, create accounts, solve CAPTCHAs or get around bot protection; if the flow needs that, stop and tell me.',
+    '- Do not type passwords, verification codes, card numbers or personal data; do not submit orders, payments or messages.',
+    '- Record the pattern only; do not copy text, images, logos or branding into this project.');
+  if (item.note) lines.push(`note: ${inline(item.note)}`);
+  lines.push('</reference-flow-request>');
+  return lines.join('\n');
+}
+
 const TAKE_TEXT: Record<ReferenceTake, string> = {
   structure: 'layout structure (regions and their order)',
   flow: 'flow (steps, order of screens and actions)',
@@ -269,6 +426,7 @@ export function referenceApplyBlock(items: Array<ReferenceItem & { screenshotSta
     }
     if (item.outline) lines.push(...referenceOutlineLines(item.outline).map(inline));
     else lines.push('outline: not captured');
+    if (item.flow) lines.push(...referenceFlowLines(item.flow).map(inline));
     lines.push('</reference>');
   }
   lines.push('</reference-board-apply>');

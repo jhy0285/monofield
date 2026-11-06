@@ -41,6 +41,27 @@
 - 규칙: 이 프로젝트의 코드·컴포넌트·스타일로 패턴만 다시 만들 것, 문구·이미지·아이콘·로고·브랜드 색·글꼴을 복사하거나 원래 사이트에서 불러오지 말 것, 로그인·봇 차단을 우회하지 말 것
 - 레퍼런스마다 주소, 메모, 가져올 것, 캡처 경로(파일이 담을 때와 같은지 SHA-256으로 확인한 결과), 구조 요약
 
+## 4. REA로 흐름 기록 (필요할 때만)
+
+담기는 한 순간의 화면입니다. 버튼을 눌렀을 때 무엇이 바뀌는지, 어떤 API를 부르는지가 중요하면 카드의 **REA로 흐름 기록**을 누릅니다.
+
+1. 단계를 적습니다: 버튼·링크·탭 누르기(보이는 이름), 입력하기(칸 이름 + 공개 값), 글자가 보일 때까지 기다리기, 잠시 기다리기. 최대 12단계입니다.
+   단계가 없으면 페이지를 열고 안정된 상태만 기록합니다.
+2. **기록 시작**을 누르면 MonoField에 들어 있는 REA가 Chrome·Edge·Chromium을 **새 임시 프로필**로 열어 단계를 실행합니다(최대 2분).
+   브라우저를 못 찾으면 "브라우저 직접 지정"에 실행 파일의 전체 경로를 넣습니다.
+3. 결과로 단계별 완료·실패, 호출한 API(경로의 번호는 `{id}`로 일반화), 마지막 화면이 카드에 붙습니다. **REA 스튜디오로 열기**를 누르면 단계별 화면과
+   요청·응답 본문을 볼 수 있습니다. 파일은 `references/<id>.flow.json`(REA 증거)과 `references/<id>.flow.png`(마지막 화면)입니다.
+4. 이후 **프로젝트에 넣기** 부탁문에 흐름 요약(단계, API, 마지막 화면 경로)이 함께 들어갑니다.
+
+지키는 것:
+
+- 새 임시 프로필로 열기 때문에 로그인한 화면은 기록되지 않습니다. 로그인·봇 차단을 우회하지 않습니다.
+- 비밀번호·인증번호·카드번호·주민번호 같은 칸에는 입력 단계를 만들 수 없습니다. 주문·결제·전송 버튼은 단계에 넣지 마세요.
+- 입력하는 값은 공개해도 되는 값만 쓰세요. 증거 파일에 그대로 남습니다.
+
+단계로 표현하기 어려운 흐름(로그인 뒤 화면, 긴 마법사 등)은 **AI에게 맡기기**를 누르면, 같은 규칙을 담은 기록 요청이 입력창에 들어갑니다. AI가 REA 도구로
+기록해 `references/<id>.flow.json`에 저장하도록 부탁하는 문장입니다.
+
 ## CLI
 
 화면과 같은 API(`/api/projects/:id/references`)를 씁니다.
@@ -52,11 +73,16 @@ monofield refs note    --project <id> --id <ref-id> --note "버튼 배치가 좋
 monofield refs remove  --project <id> --id <ref-id>
 monofield refs apply   --project <id> --id <ref-id> [--id <ref-id>...] --target src/pages/Join.tsx --request "가입을 두 단계로"
 monofield refs apply   --project <id> --id <ref-id> --prompt-file - < request.txt
+monofield refs record  --project <id> --id <ref-id> --fill "주문번호=1001" --click 조회 --wait-text "조회 결과" [--browser <path>]
+monofield refs record  --project <id> --id <ref-id> --click 다음 --for-agent     # 기록 대신 AI용 요청문 출력
 ```
 
-CLI는 화면을 직접 캡처하지 않습니다. 캡처가 필요하면 `--screenshot`으로 이미지 파일(PNG·JPEG)을 넘깁니다.
+`record`는 단계 플래그를 적은 순서대로 실행합니다(`--click`, `--click-link`, `--fill "칸=값"`, `--wait-text`, `--wait <ms>`, `--steps-file <json>`).
+실패한 단계가 있으면 종료 코드 1로 끝납니다.
+
+`add`는 화면을 직접 캡처하지 않습니다. 캡처가 필요하면 `--screenshot`으로 이미지 파일(PNG·JPEG)을 넘기거나, `record`로 흐름을 기록하세요(기록한
+마지막 화면이 카드 그림이 됩니다).
 
 ## 다음 단계 (아직 없음)
 
-- 동작 순서나 서버 요청까지 필요한 레퍼런스를 REA로 기록하는 버튼
-- 적용한 뒤 원본 기록과 재현본을 [REA Studio의 대조](rea-laya-practical-guide.md#원본과-재현본-대조)로 비교하는 연결
+- 적용한 뒤 우리 화면도 같은 단계로 기록해서, 레퍼런스의 흐름 기록과 [REA Studio의 대조](rea-laya-practical-guide.md#원본과-재현본-대조)로 비교하는 연결

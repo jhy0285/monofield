@@ -2,6 +2,9 @@ import type {
   ReferenceApplyRequest,
   ReferenceApplyResponse,
   ReferenceCreateRequest,
+  ReferenceFlowAgentRequestResponse,
+  ReferenceFlowRequest,
+  ReferenceFlowResponse,
   ReferenceItem,
   ReferenceListResponse,
   ReferenceUpdateRequest,
@@ -32,4 +35,8 @@ export const referencesApi = {
   update: (projectId: string, id: string, body: ReferenceUpdateRequest) => call<{ item: ReferenceItem }>(`${base(projectId)}/${encodeURIComponent(id)}`, json('PATCH', body)),
   remove: (projectId: string, id: string) => call<{ removed: string; files: string[] }>(`${base(projectId)}/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   apply: (projectId: string, body: ReferenceApplyRequest) => call<ReferenceApplyResponse>(`${base(projectId)}/apply`, json('POST', body)),
+  /** Runs the bundled REA on the reference; can take up to a couple of minutes. */
+  recordFlow: (projectId: string, id: string, body: ReferenceFlowRequest) => call<ReferenceFlowResponse>(`${base(projectId)}/${encodeURIComponent(id)}/flow`, json('POST', body)),
+  flowRequest: (projectId: string, id: string, body: ReferenceFlowRequest & { request?: string }) =>
+    call<ReferenceFlowAgentRequestResponse>(`${base(projectId)}/${encodeURIComponent(id)}/flow-request`, json('POST', body)),
 };

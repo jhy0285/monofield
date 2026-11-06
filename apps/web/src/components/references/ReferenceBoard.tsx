@@ -7,6 +7,7 @@ import { useI18n } from '../../i18n';
 import { fetchProjectFiles, projectRawUrl } from '../../providers/registry';
 import { referencesApi } from './api';
 import { TAKE_KEY } from './ReferenceCaptureDialog';
+import { ReferenceFlowPanel } from './ReferenceFlowPanel';
 import styles from './ReferenceBoard.module.css';
 
 const hostOf = (url: string) => { try { return new URL(url).host; } catch { return url; } };
@@ -16,10 +17,12 @@ const hostOf = (url: string) => { try { return new URL(url).host; } catch { retu
  * to do, and the request lands in the chat composer with the references' notes, screenshots and outlines and the
  * rules that keep it a pattern, not a copy. Without a composer the block is copied instead.
  */
-export function ReferenceBoard({ projectId, onNavigate, onAppendToChat }: {
+export function ReferenceBoard({ projectId, onNavigate, onAppendToChat, onOpenFile }: {
   projectId: string;
   onNavigate: (url: string) => void;
   onAppendToChat?: (text: string, introIfEmpty?: string) => void;
+  /** Opens a project file (the recorded flow opens in REA Studio). */
+  onOpenFile?: (name: string) => void;
 }) {
   const { t } = useI18n();
   const [items, setItems] = useState<ReferenceItem[] | null>(null);
@@ -28,6 +31,7 @@ export function ReferenceBoard({ projectId, onNavigate, onAppendToChat }: {
   const [selected, setSelected] = useState<string[]>([]);
   const [editing, setEditing] = useState<{ id: string; note: string } | null>(null);
   const [applying, setApplying] = useState(false);
+  const [recording, setRecording] = useState<string | null>(null);
   const scope = useRef(0);
 
   const load = useCallback(async () => {
@@ -39,7 +43,7 @@ export function ReferenceBoard({ projectId, onNavigate, onAppendToChat }: {
     if (result.network) { setItems(null); return; }
     setItems([]); setError(result.message);
   }, [projectId]);
-  useEffect(() => { setSelected([]); setEditing(null); setApplying(false); setStatus(''); void load(); }, [load]);
+  useEffect(() => { setSelected([]); setEditing(null); setApplying(false); setRecording(null); setStatus(''); void load(); }, [load]);
 
   const toggle = (id: string) => setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
 
@@ -61,6 +65,7 @@ export function ReferenceBoard({ projectId, onNavigate, onAppendToChat }: {
 
   if (items === null) return null;
   const chosen = items.filter((item) => selected.includes(item.id));
+  const recordingItem = items.find((item) => item.id === recording);
   return <section className={styles.root} aria-label={t('references.board.title')} data-testid="reference-board">
     <div className={styles.heading}>
       <div>
@@ -75,10 +80,15 @@ export function ReferenceBoard({ projectId, onNavigate, onAppendToChat }: {
     {status ? <p className={styles.status} role="status">{status}</p> : null}
     {applying && chosen.length ? <ReferenceApplyForm projectId={projectId} items={chosen} onAppendToChat={onAppendToChat}
       onCancel={() => setApplying(false)} onDone={(message) => { setApplying(false); setStatus(message); setSelected([]); }} /> : null}
+    {recordingItem ? <ReferenceFlowPanel key={recordingItem.id} projectId={projectId} item={recordingItem} onClose={() => setRecording(null)}
+      onRecorded={(updated) => setItems((current) => current?.map((item) => item.id === updated.id ? updated : item) ?? current)}
+      {...(onAppendToChat ? { onAppendToChat } : {})} {...(onOpenFile ? { onOpenFile } : {})} /> : null}
     {items.length === 0 ? <p className={styles.empty}>{t('references.board.empty')}</p> : <ul className={styles.cards}>
       {items.map((item) => <li key={item.id} className={styles.card} data-selected={selected.includes(item.id) || undefined}>
         <button type="button" className={styles.thumb} onClick={() => onNavigate(item.url)} title={t('references.board.open')}>
-          {item.screenshot ? <img src={projectRawUrl(projectId, item.screenshot.file)} alt="" loading="lazy" /> : <span>{t('references.board.noScreenshot')}</span>}
+          {item.screenshot || item.flow?.screenshot
+            ? <img src={projectRawUrl(projectId, item.screenshot?.file ?? item.flow!.screenshot!)} alt="" loading="lazy" />
+            : <span>{t('references.board.noScreenshot')}</span>}
         </button>
         <div className={styles.body}>
           <label className={styles.select}>
@@ -93,8 +103,13 @@ export function ReferenceBoard({ projectId, onNavigate, onAppendToChat }: {
                 <Button variant="ghost" onClick={() => void saveNote()}>{t('common.save')}</Button>
               </span>
             : item.note ? <p className={styles.note}>{item.note}</p> : null}
+          {item.flow ? <span className={styles.flow}>
+              {t('references.flow.summary', { completed: item.flow.completed, total: item.flow.total, count: item.flow.apiCalls.length })}
+              {onOpenFile ? <Button variant="ghost" onClick={() => onOpenFile(item.flow!.file)}>{t('references.flow.openStudio')}</Button> : null}
+            </span> : null}
           <span className={styles.actions}>
             <Button variant="ghost" onClick={() => onNavigate(item.url)}>{t('references.board.open')}</Button>
+            <Button variant="ghost" onClick={() => { setRecording(item.id); setApplying(false); setStatus(''); }} data-testid="reference-flow-open">{t('references.flow.record')}</Button>
             <Button variant="ghost" onClick={() => setEditing({ id: item.id, note: item.note })}>{t('references.board.editNote')}</Button>
             <Button variant="ghost" onClick={() => void remove(item)}>{t('common.delete')}</Button>
           </span>

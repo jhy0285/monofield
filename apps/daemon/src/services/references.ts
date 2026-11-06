@@ -53,7 +53,7 @@ function serialized<T>(key: string, task: () => Promise<T>): Promise<T> {
   return next;
 }
 
-async function readBoard(files: ReferenceFileAccess): Promise<ReferenceBoardFile> {
+export async function readReferenceBoard(files: ReferenceFileAccess): Promise<ReferenceBoardFile> {
   const buffer = await files.read(REFERENCE_BOARD_FILE);
   if (!buffer) return { schemaVersion: 1, kind: 'reference-board', items: [] };
   let parsed: unknown;
@@ -96,7 +96,7 @@ const cleanText = (value: unknown, limit: number) => (typeof value === 'string' 
 const newId = () => `ref-${Date.now().toString(36)}-${randomBytes(3).toString('hex')}`;
 
 export async function listReferences(files: ReferenceFileAccess): Promise<ReferenceListResponse> {
-  return { folder: REFERENCE_BOARD_FOLDER, items: (await readBoard(files)).items };
+  return { folder: REFERENCE_BOARD_FOLDER, items: (await readReferenceBoard(files)).items };
 }
 
 export async function addReference(files: ReferenceFileAccess, key: string, body: Record<string, unknown>): Promise<ReferenceItem> {
@@ -112,7 +112,7 @@ export async function addReference(files: ReferenceFileAccess, key: string, body
     screenshot = { bytes, mediaType };
   }
   return serialized(key, async () => {
-    const board = await readBoard(files);
+    const board = await readReferenceBoard(files);
     if (board.items.length >= REFERENCE_LIMITS.items) throw new ReferenceBoardError(`The board holds at most ${REFERENCE_LIMITS.items} references; remove some first.`, 409, 'REFERENCE_BOARD_FULL');
     await ensureGitignore(files);
     const id = newId();
@@ -139,7 +139,7 @@ export async function addReference(files: ReferenceFileAccess, key: string, body
 
 export async function updateReference(files: ReferenceFileAccess, key: string, id: string, body: Record<string, unknown>): Promise<ReferenceItem> {
   return serialized(key, async () => {
-    const board = await readBoard(files);
+    const board = await readReferenceBoard(files);
     const item = board.items.find((entry) => entry.id === id);
     if (!item) throw new ReferenceBoardError(`No reference ${id} on this board.`, 404, 'REFERENCE_NOT_FOUND');
     if (body.title !== undefined) item.title = cleanText(body.title, REFERENCE_LIMITS.title) || item.title;
@@ -150,16 +150,29 @@ export async function updateReference(files: ReferenceFileAccess, key: string, i
   });
 }
 
+/** Changes one item under the board's write queue; the item is read again, so a concurrent edit is not lost. */
+export async function updateReferenceItem(files: ReferenceFileAccess, key: string, id: string, mutate: (item: ReferenceItem) => void): Promise<ReferenceItem> {
+  return serialized(key, async () => {
+    const board = await readReferenceBoard(files);
+    const item = board.items.find((entry) => entry.id === id);
+    if (!item) throw new ReferenceBoardError(`No reference ${id} on this board.`, 404, 'REFERENCE_NOT_FOUND');
+    mutate(item);
+    await writeBoard(files, board);
+    return item;
+  });
+}
+
 export async function removeReference(files: ReferenceFileAccess, key: string, id: string): Promise<{ removed: string; files: string[] }> {
   return serialized(key, async () => {
-    const board = await readBoard(files);
+    const board = await readReferenceBoard(files);
     const item = board.items.find((entry) => entry.id === id);
     if (!item) throw new ReferenceBoardError(`No reference ${id} on this board.`, 404, 'REFERENCE_NOT_FOUND');
     await writeBoard(files, { ...board, items: board.items.filter((entry) => entry.id !== id) });
     const removed: string[] = [];
-    // Only the board's own screenshot file, never a path the board file was edited to point at.
-    if (item.screenshot && item.screenshot.file.startsWith(`${REFERENCE_BOARD_FOLDER}/${id}.`)) {
-      try { await files.remove(item.screenshot.file); removed.push(item.screenshot.file); } catch (error) {
+    // Only the board's own files for this item, never a path the board file was edited to point at.
+    const own = [item.screenshot?.file, item.flow?.file, item.flow?.screenshot].filter((file): file is string => typeof file === 'string' && file.startsWith(`${REFERENCE_BOARD_FOLDER}/${id}.`));
+    for (const file of own) {
+      try { await files.remove(file); removed.push(file); } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
       }
     }
@@ -171,7 +184,7 @@ export async function applyReferences(files: ReferenceFileAccess, body: Record<s
   const ids = Array.isArray(body.referenceIds) ? body.referenceIds.filter((id): id is string => typeof id === 'string') : [];
   if (ids.length === 0) throw new ReferenceBoardError('referenceIds must name at least one reference.');
   if (ids.length > REFERENCE_LIMITS.applyItems) throw new ReferenceBoardError(`At most ${REFERENCE_LIMITS.applyItems} references can be applied at once.`);
-  const board = await readBoard(files);
+  const board = await readReferenceBoard(files);
   const includeScreenshot = body.includeScreenshot !== false;
   const items = await Promise.all([...new Set(ids)].map(async (id) => {
     const item = board.items.find((entry) => entry.id === id);

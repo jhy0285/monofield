@@ -40,7 +40,7 @@ export function defaultReaDoctorDeps(mcpServers: ReaDoctorDeps['mcpServers']): R
   };
 }
 
-async function which(deps: ReaDoctorDeps, names: string[]): Promise<string | null> {
+async function which(deps: Pick<ReaDoctorDeps, 'platform' | 'env' | 'exists'>, names: string[]): Promise<string | null> {
   const joiner = deps.platform === 'win32' ? path.win32 : path.posix;
   const dirs = (deps.env.PATH ?? deps.env.Path ?? '').split(deps.platform === 'win32' ? ';' : ':').filter(Boolean);
   const extensions = deps.platform === 'win32' ? (deps.env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean).map((ext) => ext.toLowerCase()) : [''];
@@ -55,7 +55,8 @@ async function which(deps: ReaDoctorDeps, names: string[]): Promise<string | nul
   return null;
 }
 
-async function findBrowser(deps: ReaDoctorDeps): Promise<string | null> {
+/** A Chromium-family browser REA can launch, from the usual install locations and PATH. */
+export async function findBrowser(deps: Pick<ReaDoctorDeps, 'platform' | 'env' | 'exists'>): Promise<string | null> {
   const fixed: string[] = [];
   if (deps.platform === 'darwin') {
     fixed.push('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/Applications/Chromium.app/Contents/MacOS/Chromium',

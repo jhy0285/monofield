@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ReferenceItem } from '@open-design/contracts';
+import type { ReferenceFlowSummary, ReferenceItem } from '@open-design/contracts';
 import { I18nProvider } from '../../src/i18n';
 import { ReferenceBoard } from '../../src/components/references/ReferenceBoard';
 import { ReferenceCaptureDialog } from '../../src/components/references/ReferenceCaptureDialog';
@@ -139,5 +139,78 @@ describe('ReferenceCaptureDialog', () => {
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(capture).not.toHaveBeenCalled();
     expect(calls.find((call) => call.method === 'POST')?.body).toEqual({ url: 'https://a.example/', title: 'A', note: '', takes: ['structure'], source: 'browser' });
+  });
+});
+
+describe('Recording a reference flow with REA', () => {
+  const FLOW: ReferenceFlowSummary = {
+    file: 'references/ref-1.flow.json', evidenceId: 'ev_1', sha256: 'b'.repeat(64), recordedAt: '2026-11-06T00:00:00.000Z', browser: 'chrome',
+    steps: [{ id: 'step-1', label: 'type into "주문번호"', status: 'completed', request: { kind: 'fill', target: '주문번호', value: '1001' } },
+      { id: 'step-2', label: 'press button "조회"', status: 'failed', error: 'Timeout 10000ms exceeded.', request: { kind: 'click', target: '조회', role: 'button' } }],
+    screenshot: 'references/ref-1.flow.png',
+    completed: 1, total: 2, apiCalls: [{ method: 'GET', path: '/api/orders', status: 200 }], completeness: 'incomplete',
+  };
+
+  function installFlowFetch() {
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
+      const method = init.method ?? 'GET';
+      const body = init.body ? JSON.parse(String(init.body)) : undefined;
+      calls.push({ url, method, body });
+      const respond = (status: number, value: unknown) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } });
+      if (url.endsWith('/references') && method === 'GET') return respond(200, { folder: 'references', items });
+      if (url.endsWith('/flow')) { items = [{ ...ITEM, flow: FLOW }]; return respond(200, { item: items[0], flow: FLOW }); }
+      if (url.endsWith('/flow-request')) return respond(200, { text: '<reference-flow-request id="ref-1">' });
+      return respond(404, { error: { message: 'no' } });
+    }));
+  }
+
+  it('records typed steps, shows each step and the API calls, and opens the evidence in REA Studio', async () => {
+    installFlowFetch();
+    const onOpenFile = vi.fn();
+    renderKo(<ReferenceBoard projectId="p1" onNavigate={vi.fn()} onOpenFile={onOpenFile} />);
+    fireEvent.click(await screen.findByTestId('reference-flow-open'));
+    const panel = screen.getByTestId('reference-flow-panel');
+    expect(panel.textContent).toContain('로그인이 필요한 화면은 기록되지 않고');
+    fireEvent.click(screen.getByTestId('reference-flow-add'));
+    fireEvent.click(screen.getByTestId('reference-flow-add'));
+    const kinds = screen.getAllByLabelText('단계 종류') as HTMLSelectElement[];
+    fireEvent.change(kinds[0]!, { target: { value: 'fill' } });
+    fireEvent.change(screen.getByPlaceholderText('칸 이름 (예: 주문번호)'), { target: { value: '주문번호' } });
+    fireEvent.change(screen.getByPlaceholderText('입력할 값 (공개 값만)'), { target: { value: '1001' } });
+    fireEvent.change(screen.getByPlaceholderText('보이는 이름 (예: 조회)'), { target: { value: '조회' } });
+    fireEvent.click(screen.getByTestId('reference-flow-start'));
+    const result = await screen.findByTestId('reference-flow-result');
+    expect(calls.find((call) => call.url.endsWith('/references/ref-1/flow'))?.body).toEqual({
+      steps: [{ kind: 'fill', target: '주문번호', value: '1001' }, { kind: 'click', target: '조회', role: 'button' }],
+    });
+    expect(result.textContent).toContain('1/2단계 완료 · API 1개');
+    expect(result.textContent).toContain('입력하기 "주문번호" · 완료');
+    expect(result.textContent).toContain('버튼 누르기 "조회" · 실패');
+    expect(result.textContent).toContain('GET /api/orders');
+    // The card shows the flow too, and the item's own screenshot stays its picture.
+    expect(await screen.findByText(/흐름: 1\/2단계 · API 1개/)).toBeTruthy();
+    fireEvent.click(screen.getAllByRole('button', { name: 'REA 스튜디오로 열기' })[0]!);
+    expect(onOpenFile).toHaveBeenCalledWith('references/ref-1.flow.json');
+  });
+
+  it('hands a flow the steps cannot express to the AI instead of recording it', async () => {
+    installFlowFetch();
+    const onAppendToChat = vi.fn();
+    renderKo(<ReferenceBoard projectId="p1" onNavigate={vi.fn()} onAppendToChat={onAppendToChat} />);
+    fireEvent.click(await screen.findByTestId('reference-flow-open'));
+    fireEvent.click(screen.getByTestId('reference-flow-agent'));
+    await waitFor(() => expect(onAppendToChat).toHaveBeenCalledWith('<reference-flow-request id="ref-1">', '아래 레퍼런스의 흐름을 REA로 기록해 주세요.'));
+    expect(calls.some((call) => call.url.endsWith('/flow'))).toBe(false);
+    expect(await screen.findByText('AI에게 보낼 기록 요청을 입력창에 넣었습니다.')).toBeTruthy();
+  });
+
+  it('shows why a recording was refused', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => url.endsWith('/flow')
+      ? new Response(JSON.stringify({ error: { message: 'Recording needs Chrome, Edge or Chromium.' } }), { status: 409 })
+      : new Response(JSON.stringify({ folder: 'references', items }), { status: 200 })));
+    renderKo(<ReferenceBoard projectId="p1" onNavigate={vi.fn()} />);
+    fireEvent.click(await screen.findByTestId('reference-flow-open'));
+    fireEvent.click(screen.getByTestId('reference-flow-start'));
+    expect((await screen.findByRole('alert')).textContent).toContain('Chrome, Edge or Chromium');
   });
 });

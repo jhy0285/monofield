@@ -2892,6 +2892,7 @@ export function DesignBrowserPanel({
               <DesignBrowserStart
                 onNavigate={navigateTo}
                 onAppendToChat={onAppendToChat}
+                onOpenFile={onOpenFile}
                 projectId={projectId}
               />
             ) : desktopHostAvailable ? (
@@ -3945,10 +3946,12 @@ function referenceGroupTitle(group: ReferenceGroup, locale?: string): string {
 function DesignBrowserStart({
   onNavigate,
   onAppendToChat,
+  onOpenFile,
   projectId,
 }: {
   onNavigate: (url: string) => void;
   onAppendToChat?: (text: string, introIfEmpty?: string) => void;
+  onOpenFile?: (name: string) => void;
   projectId?: string;
 }) {
   const analytics = useAnalytics();
@@ -4015,7 +4018,7 @@ function DesignBrowserStart({
         </div>
       </div>
 
-      {projectId ? <ReferenceBoard projectId={projectId} onNavigate={onNavigate} onAppendToChat={onAppendToChat} /> : null}
+      {projectId ? <ReferenceBoard projectId={projectId} onNavigate={onNavigate} onAppendToChat={onAppendToChat} onOpenFile={onOpenFile} /> : null}
 
       <div className="db-reference-toolbar">
         <div

@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { createServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
@@ -75,4 +77,60 @@ describe('reference board HTTP and CLI surfaces', () => {
     expect(unknown.status).toBe(404);
     await expect(cli(['add', '--project', projectId])).rejects.toMatchObject({ stderr: expect.stringContaining('--url') });
   });
+});
+
+// End to end with the REA copy that ships with MonoField and a real Chromium-family browser. Skipped where none is
+// installed; set OD_TEST_CHROMIUM to an absolute browser path to run it elsewhere.
+const CHROMIUM = process.env.OD_TEST_CHROMIUM ?? ['/opt/pw-browsers/chromium', '/usr/bin/chromium', '/usr/bin/google-chrome'].find((file) => existsSync(file));
+
+describe.skipIf(!CHROMIUM)('reference flow recording with the bundled REA', () => {
+  let server: StartServerResult, site: Server, siteUrl: string, projectId: string;
+  beforeAll(async () => {
+    site = createServer((req, res) => {
+      if (req.url === '/api/orders') { res.setHeader('content-type', 'application/json'); res.end('[{"id":1001,"status":"PAID"},{"id":1002,"status":"PENDING"}]'); return; }
+      res.setHeader('content-type', 'text/html; charset=utf-8');
+      res.end('<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>주문</title></head><body><main><h1>주문</h1>'
+        + '<label>주문번호 <input name="q"></label><button onclick="fetch(\'/api/orders\').then(r=>r.json()).then(d=>{document.getElementById(\'out\').textContent=d.length+\'건 조회됨\'})">조회</button>'
+        + '<p id="out"></p></main></body></html>');
+    });
+    await new Promise<void>((resolve) => site.listen(0, '127.0.0.1', resolve));
+    const address = site.address(); if (!address || typeof address === 'string') throw new Error('No site port');
+    siteUrl = `http://127.0.0.1:${address.port}/`;
+    server = await startServer({ port: 0, returnServer: true }) as StartServerResult;
+    projectId = randomUUID();
+    await fetch(`${server.url}/api/projects`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: projectId, name: 'flow' }) });
+  }, 30_000);
+  afterAll(async () => {
+    await server?.shutdown(); server?.server.closeAllConnections?.();
+    await new Promise<void>((resolve) => site?.close(() => resolve()));
+  });
+  const cli = (args: string[]) => execute(process.execPath, [path.resolve('dist/cli.js'), 'refs', ...args, '--daemon-url', server.url], { timeout: 180_000 });
+
+  it('records typed steps through the CLI, keeps the evidence, and the card and REA Studio see it', async () => {
+    const added = JSON.parse((await cli(['add', '--project', projectId, '--url', siteUrl, '--note', '조회 흐름', '--json'])).stdout);
+    const result = JSON.parse((await cli(['record', '--project', projectId, '--id', added.id, '--fill', '주문번호=1001', '--click', '조회',
+      '--wait-text', '2건 조회됨', '--browser', CHROMIUM!, '--json'])).stdout);
+    expect(result.flow).toMatchObject({ file: `references/${added.id}.flow.json`, completed: 3, total: 3 });
+    expect(result.flow.steps.map((step: { label: string }) => step.label)).toEqual(['type into "주문번호"', 'press button "조회"', 'wait for "2건 조회됨"']);
+    expect(result.flow.apiCalls).toContainEqual({ method: 'GET', path: '/api/orders', status: 200 });
+    expect(result.flow.steps[1]).toMatchObject({ status: 'completed', request: { kind: 'click', target: '조회', role: 'button' } });
+    expect(result.flow.screenshot).toBe(`references/${added.id}.flow.png`);
+    expect((await fetch(`${server.url}/api/projects/${projectId}/raw/${result.flow.screenshot}`)).ok).toBe(true);
+    const listed = (await cli(['list', '--project', projectId])).stdout;
+    expect(listed).toContain('api: GET /api/orders → 200');
+    const view = await (await fetch(`${server.url}/api/projects/${projectId}/rea-evidence/view`, { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ file: result.flow.file }) })).json() as { kind: string; steps: unknown[] };
+    expect(view.kind).toBe('browser');
+    expect(view.steps.length).toBeGreaterThanOrEqual(3);
+    const agent = (await cli(['record', '--project', projectId, '--id', added.id, '--click', '다음', '--for-agent'])).stdout;
+    expect(agent).toContain('<reference-flow-request');
+    await expect(cli(['record', '--project', projectId, '--id', added.id, '--fill', '비밀번호=x', '--browser', CHROMIUM!])).rejects.toMatchObject({ stderr: expect.stringContaining('does not type') });
+  }, 200_000);
+
+  it('reports a step that could not be done and exits with status 1', async () => {
+    const added = JSON.parse((await cli(['add', '--project', projectId, '--url', siteUrl, '--json'])).stdout);
+    const failed = await cli(['record', '--project', projectId, '--id', added.id, '--click', '없는 버튼', '--browser', CHROMIUM!]).then(() => null, (error: { code?: number; stdout?: string }) => error);
+    expect(failed?.code).toBe(1);
+    expect(failed?.stdout).toContain('press button "없는 버튼" → failed');
+  }, 200_000);
 });

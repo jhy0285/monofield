@@ -122,8 +122,10 @@ As of 2026-11-06.
   observe mode until labels support a policy; see `docs/judgment-checks.md`.
 - Reference board (2026-11-06, branch only): the built-in browser's "레퍼런스로 담기" keeps a page's URL (secrets removed),
   screenshot and structure outline with a note in the project's `references/`; the browser start page lists them under "담은 레퍼런스";
-  "프로젝트에 넣기" puts a `<reference-board-apply>` block with pattern-only rules into the chat composer. Same routes
-  (`/api/projects/:id/references*`) for `monofield refs list|add|note|remove|apply`. Guide: `docs/reference-board.ko.md`.
+  "프로젝트에 넣기" puts a `<reference-board-apply>` block with pattern-only rules into the chat composer. "REA로 흐름 기록" on a
+  card runs the bundled REA (`capture-browser-scenario`, fresh browser profile) with plain steps and links the evidence, step
+  outcomes, API calls and last screen to the card. Same routes (`/api/projects/:id/references*`) for
+  `monofield refs list|add|note|remove|apply|record`. Guide: `docs/reference-board.ko.md`.
 - REA browser evidence cross-check (2026-11-02, branch only): an REA `capture_browser_scenario` recording is compared with an
   interface spec from the editor ("브라우저 증거 대조 (REA)" panel, next to the judgment check) or `monofield rea
   evidence|cross-check|apply`, all through `/api/projects/:id/browser-evidence*`. Tests, CLI, panel, 19-locale keys
@@ -299,11 +301,16 @@ exercise is unchanged by it.
 
 Newest first within each group. Remove an item when it is done.
 
-Reference board (see the 2026-11-06 "reference board" Log entry; steps 1 and 3 of the proposal are built):
+Reference board (see the two 2026-11-06 "reference board" Log entries; steps 1, 2 and 3 are built):
 
-- Not built yet, by the agreed order: (2) a "record the flow with REA" action on a kept reference that drafts the
-  `capture_browser_scenario` request for the agent (no login or bot-protection bypass), and (4) after applying, a link to the
-  existing original-vs-remake comparison (`monofield rea compare`). The user said to build board + keep + apply first.
+- Not built yet: (4) after applying, record the project's own screen with the same steps and compare it with the reference's
+  flow through the existing original-vs-remake comparison (`monofield rea compare`; both are REA browser captures).
+- Flow recording was run with the bundled REA and a Linux Chromium only (`/opt/pw-browsers/chromium` in the test environment;
+  the route test skips without one, `OD_TEST_CHROMIUM` points it elsewhere). Not run: Windows with Edge or Chrome as found by
+  `findBrowser` in `rea-doctor.ts`, the packaged app (REA runs under `ELECTRON_RUN_AS_NODE=1` there), a real external site.
+- A flow step finds controls by role and visible name (`getByRole(..., { exact: true })`) and fields by their accessible name;
+  pages whose buttons have no accessible name need the "AI에게 맡기기" route. Typed values are public literals and stay in the
+  evidence file. A test page served without a charset garbles Korean names and the click times out: not an REA fault.
 - Not run: the desktop app. Keeping from the Electron `<webview>` (outline through `executeJavaScript`, screenshot through
   `captureHostRegionSnapshot`) is covered by `DesignBrowserPanel.webview.test.tsx` with a mock host only; the outline script itself
   was run in real Chromium through Playwright. Check on Windows: keep a real site, confirm the dialog is not in the captured PNG
@@ -509,6 +516,37 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-06 — reference board: record a reference's flow with the bundled REA (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** step (2) of the reference board, plus the user's question whether "레퍼런스로 담기" is a good idea. Answered in chat:
+  keep it as the light default (a still screen and outline cover most references) and let REA record only the flows that matter.
+  Proposed and approved: MonoField runs its own REA copy instead of drafting a request for the agent, with "AI에게 맡기기" kept for
+  flows the step editor cannot express.
+- **Found first:** the bundled `rea-agents` 6.7.0 runs `capture-browser-scenario <inline JSON>` here with Playwright's Chromium.
+  A click by role name failed only because the scratch test page had no charset (Korean garbled); with `<meta charset>` it passes.
+- **Changed:** contracts `references.ts`: `ReferenceFlowStep` (click by role and name, fill by field label with a public value,
+  wait for text, wait), `normalizeReferenceFlowSteps` (12 steps, refuses password, verification, card and ID fields),
+  `referenceFlowScenario` (launch with a temporary profile, per-step 10 s deadline, screenshot + accessibility after each step,
+  network and page errors with bodies, ko-KR), `ReferenceFlowSummary` on items, flow lines in the apply block,
+  `referenceFlowAgentRequest`. Daemon `services/reference-flow.ts` (runs `locateBundledRea()` with `execFile`, 150 s timeout, abort
+  on disconnect; browser from `findBrowser`, now exported from `rea-doctor.ts`, or an absolute `browserPath`; one run per
+  reference; saves `references/<id>.flow.json`, the last screenshot whose hash matches as `references/<id>.flow.png`; summary of
+  steps and generalized API calls via `readBrowserEvidence`), routes `POST …/references/:refId/flow` and `…/flow-request`,
+  `removeReference` deletes the flow files, CLI `monofield refs record` (ordered `--click`, `--click-link`, `--fill "label=value"`,
+  `--wait-text`, `--wait`, `--steps-file`, `--browser`, `--for-agent`; exit 1 when a step fails). Web `ReferenceFlowPanel` (step
+  editor, result with localized step names, open in REA Studio through `onOpenFile`), card summary and the flow screen as the
+  card picture. 33 `references.flow.*` keys x 19 locales. Docs: `docs/reference-board.ko.md` section 4 and CLI,
+  `docs/rea-laya-practical-guide.md`.
+- **Verified:** contracts `references` 10 (suite 322/322); daemon `reference-flow` 5 (fixture REA output: summary, API calls
+  `POST /api/orders/{id}/settle` 201 and 409, screenshot hash check, one run at a time, refusals) and `references-route-cli` 5,
+  two of them end to end with the real bundled REA and Chromium (`refs record --fill 주문번호=1001 --click 조회 --wait-text "2건
+  조회됨"` → 3/3 steps, `GET /api/orders → 200`, REA Studio view of the saved file, a failing step exits 1); related daemon REA and
+  browser-evidence files 93 pass; web `ReferenceBoard` 9, browser panel, `ProjectView.run-cleanup`, `FileWorkspace*` 214 pass.
+  `pnpm guard` 67, `pnpm typecheck`, `pnpm i18n:check` pass. In the scratch app (Korean UI, Playwright): card → REA로 흐름 기록 →
+  steps "조회" and wait for "2건" with the browser path set → 2/2 done, `GET /api/orders.json → 200`, opened in REA Studio, card
+  picture taken from the last screen.
+- **Not run:** Windows, Edge, the packaged app, an external site. See Open items, "Reference board".
 
 ### 2026-11-06 — reference board: keep pages from the built-in browser and apply their pattern (`ccr-8432aecf-n9xdfd`)
 

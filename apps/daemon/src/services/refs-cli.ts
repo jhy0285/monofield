@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
-import type { ReferenceApplyResponse, ReferenceItem, ReferenceListResponse } from '@open-design/contracts';
-import { referenceOutlineLines } from '@open-design/contracts';
+import type { ReferenceApplyResponse, ReferenceFlowResponse, ReferenceFlowStep, ReferenceItem, ReferenceListResponse } from '@open-design/contracts';
+import { referenceFlowLines, referenceOutlineLines } from '@open-design/contracts';
 import { repeatedFlag } from './rea-cli.js';
 
 const USAGE = `Usage:
@@ -11,6 +11,9 @@ const USAGE = `Usage:
   monofield refs remove  --project <id> --id <ref-id> [--json]
   monofield refs apply   --project <id> --id <ref-id>... [--target <file or screen>] [--request <text> | --prompt-file <path|->]
                          [--take <list>] [--no-screenshot] [--json]
+  monofield refs record  --project <id> --id <ref-id> [--click <name> | --click-link <name> | --fill <label=value>
+                         | --wait-text <text> | --wait <ms>]... [--steps-file <steps.json>] [--browser <path>] [--json]
+  monofield refs record  --project <id> --id <ref-id> [steps...] --for-agent [--request <text>]
 
 The reference board keeps pages you liked while browsing, to borrow a pattern from: the URL (secret-looking query values
 removed), an optional screenshot, an outline of the page's structure (regions, heading levels, form fields, table
@@ -21,7 +24,16 @@ The built-in browser keeps the screenshot and outline with "레퍼런스로 담�
 image you took. apply prints the block the browser's "프로젝트에 넣기" puts into the chat: your request, the target, the
 rules (rebuild the pattern in this project's own code and style; copy no text, images, logos or branding; never get
 around a login or bot protection), then each reference with its note, what to take, the screenshot path (with whether its
-bytes still match) and the outline.`;
+bytes still match), the outline and, when one was recorded, the flow.
+
+record runs the REA copy that ships with MonoField on the reference's URL with the steps you give, in order: press a
+button (--click) or link (--click-link) by its visible name, type a public value into a field by its label (--fill
+"이메일=demo@example.com"; password, verification, card and ID fields are refused), wait for a text (--wait-text) or a
+moment (--wait 1500). Without steps it opens the page and lets it settle. REA starts Chrome, Edge or Chromium (found
+the way "monofield rea doctor" finds it, or --browser) with a temporary profile, so signed-in screens are not reached.
+The evidence is saved as references/<ref-id>.flow.json and opens in REA Studio; the card keeps each step's outcome and
+the API calls. --for-agent prints a request for an agent with the REA tools instead of recording; use it for flows the
+steps cannot express.`;
 
 type Flags = Record<string, unknown>;
 interface Helpers {
@@ -42,16 +54,43 @@ export function formatReference(item: ReferenceItem): string {
   if (item.note) lines.push(`  note: ${item.note}`);
   if (item.screenshot) lines.push(`  screenshot: ${item.screenshot.file} (${item.screenshot.bytes} B)`);
   if (item.outline) lines.push(...referenceOutlineLines(item.outline).map((line) => `  ${line}`));
+  if (item.flow) lines.push(...referenceFlowLines(item.flow).map((line) => `  ${line}`));
   return lines.join('\n');
 }
 
+/** The step flags in the order they were given (parseFlags keeps only the last value of each). */
+export function orderedSteps(args: string[]): ReferenceFlowStep[] {
+  const steps: ReferenceFlowStep[] = [];
+  const kinds = ['click', 'click-link', 'fill', 'wait-text', 'wait'];
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i]!;
+    if (arg === '--') break;
+    const eq = arg.indexOf('=');
+    const name = arg.startsWith('--') ? (eq >= 0 ? arg.slice(2, eq) : arg.slice(2)) : '';
+    if (!kinds.includes(name)) continue;
+    const value = eq >= 0 ? arg.slice(eq + 1) : args[++i];
+    if (value === undefined) throw new Error(`flag --${name} requires a value`);
+    if (name === 'click') steps.push({ kind: 'click', target: value, role: 'button' });
+    else if (name === 'click-link') steps.push({ kind: 'click', target: value, role: 'link' });
+    else if (name === 'wait-text') steps.push({ kind: 'wait-text', target: value });
+    else if (name === 'wait') steps.push({ kind: 'wait', ms: Number(value) });
+    else {
+      const split = value.indexOf('=');
+      if (split <= 0) throw new Error('--fill takes "<field label>=<value>".');
+      steps.push({ kind: 'fill', target: value.slice(0, split), value: value.slice(split + 1) });
+    }
+  }
+  return steps;
+}
+
 export async function runRefsCli(args: string[], helpers: Helpers): Promise<void> {
-  const strings = new Set(['daemon-url', 'project', 'url', 'title', 'note', 'take', 'screenshot', 'id', 'target', 'request', 'prompt-file']);
-  const flags = helpers.parseFlags(args, { string: strings, boolean: new Set(['json', 'help', 'no-screenshot']) });
+  const strings = new Set(['daemon-url', 'project', 'url', 'title', 'note', 'take', 'screenshot', 'id', 'target', 'request', 'prompt-file',
+    'click', 'click-link', 'fill', 'wait-text', 'wait', 'steps-file', 'browser']);
+  const flags = helpers.parseFlags(args, { string: strings, boolean: new Set(['json', 'help', 'no-screenshot', 'for-agent']) });
   const [command, ...extra] = helpers.positionalArgs(args, strings);
-  if (flags.help || !command || !['list', 'add', 'note', 'remove', 'apply'].includes(command) || extra.length) {
+  if (flags.help || !command || !['list', 'add', 'note', 'remove', 'apply', 'record'].includes(command) || extra.length) {
     console.log(USAGE);
-    if (!flags.help) throw new Error('Use monofield refs <list|add|note|remove|apply> --help.');
+    if (!flags.help) throw new Error('Use monofield refs <list|add|note|remove|apply|record> --help.');
     return;
   }
   if (typeof flags.project !== 'string' || !flags.project) throw new Error(`${command} requires --project.`);
@@ -105,6 +144,21 @@ export async function runRefsCli(args: string[], helpers: Helpers): Promise<void
   if (command === 'remove') {
     const result = await call<{ removed: string; files: string[] }>(`${root}/${encodeURIComponent(id())}`, { method: 'DELETE' });
     if (flags.json) print(result); else console.log(`Removed ${result.removed}${result.files.length ? ` and ${result.files.join(', ')}` : ''}.`);
+    return;
+  }
+  if (command === 'record') {
+    const steps = [...(typeof flags['steps-file'] === 'string' ? JSON.parse(await readFile(flags['steps-file'], 'utf8')) as ReferenceFlowStep[] : []), ...orderedSteps(args)];
+    if (flags['for-agent']) {
+      const { text } = await call<{ text: string }>(`${root}/${encodeURIComponent(id())}/flow-request`, json('POST', {
+        steps, ...(typeof flags.request === 'string' ? { request: flags.request } : {}) }));
+      if (flags.json) print({ text }); else process.stdout.write(`${text}\n`);
+      return;
+    }
+    const result = await call<ReferenceFlowResponse>(`${root}/${encodeURIComponent(id())}/flow`, json('POST', {
+      steps, ...(typeof flags.browser === 'string' ? { browserPath: flags.browser } : {}) }));
+    if (flags.json) { print(result); return; }
+    console.log(referenceFlowLines(result.flow).join('\n'));
+    if (result.flow.completed < result.flow.total) process.exitCode = 1;
     return;
   }
   const ids = repeatedFlag(args, 'id');
