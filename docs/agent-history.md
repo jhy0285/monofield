@@ -57,7 +57,7 @@ Entry template:
 
 ## Current state
 
-As of 2026-11-05.
+As of 2026-11-06.
 
 - Product: MonoField, a local Windows workbench that takes Codex or Claude Code
   CLI work to Korean SI deliverables (interface-spec XLSX, screen-spec PPTX,
@@ -294,6 +294,19 @@ exercise is unchanged by it.
 ## Open items
 
 Newest first within each group. Remove an item when it is done.
+
+Next up: a "reference board" in REA Studio (proposed to the user on 2026-11-06, not started; the user handed it to the next agent):
+
+- Idea: while working in MonoField, look for good references on other sites, keep the ones you like, and apply them to the
+  current project. Proposed flow: (1) collect: a "keep as reference" action saves URL, screenshot and a note to a per-project
+  board (no REA needed for most references); (2) deepen, only when needed: "record the flow with REA" drafts the capture
+  request for the agent; (3) apply: pick a reference and a target screen or file, and MonoField drafts the request with the
+  evidence and the target (an extension of "add to chat"); (4) check: compare the flow afterwards with the existing remake
+  comparison. UI: a "레퍼런스 보드" tab inside REA Studio, not a new screen. Recommended order: board + (1) + (3) first, (2) later.
+- Guards to design in: take patterns (structure, flow, fields), not copies; leave images, copy text and branding out by default
+  (REA's own DISCLAIMER.md refuses copying proprietary code and assets); never bypass logins or bot protection.
+- Check first: the built-in browser is made for the local app; whether it can browse external sites is unverified.
+- The user prefers an opinion and a short plan before a large build; confirm the scope with them, then build UI + CLI + API together.
 
 Built-in REA (see the 2026-11-06 "REA ships inside MonoField" entry):
 
