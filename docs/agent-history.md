@@ -497,6 +497,10 @@ Code health:
   scan the fixture, edit only `MemberJoinRequest.java`, run the daemon's matcher: before `[]`, now `POST /api/v1/members/join`.
 - **Not run:** the Playwright suites, `e2e/scripts/spring-spec-demo.ts`, the non-Spring collectors.
 
+- **Also:** a feature guide for the user (every screen, each Settings item, REA and Laya how-to) was published as a private HTML artifact; it is not in the
+  repository. Its screenshots were taken from a scratch runtime in Korean; the Settings entries 메모리, 데이터베이스 연결 and 사전함 open a first-visit
+  "기능 가이드" popup, so their descriptions in the guide come from the product's own text, not a screenshot of the page.
+
 ### 2026-11-05 — REA preset: Ghidra and Java folder inputs (`ccr-8432aecf-n9xdfd`)
 
 - **Request:** the user approved the proposal from chat: Ghidra folder and JAVA_HOME boxes on the REA MCP preset.
