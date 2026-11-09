@@ -1,0 +1,17 @@
+/* "Compare with our screen": the reference's steps replayed on the project's own screen. */
+.field { display: grid; gap: 4px; font-size: 12px; color: var(--text-muted); }
+.field input {
+  width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text-strong, inherit); font: inherit; font-size: 12px;
+}
+.result { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-panel); font-size: 12px; min-width: 0; }
+.tableWrap { overflow-x: auto; min-width: 0; }
+.table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.table th, .table td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.table th { font-weight: 600; color: var(--text-muted); white-space: nowrap; }
+.table tr[data-verdict="pass"] td { color: var(--text-muted); }
+.roles { margin-top: 2px; font-size: 11px; color: var(--text-muted); overflow-wrap: anywhere; }
+.verdict { display: inline-block; padding: 1px 8px; border: 1px solid var(--border); border-radius: var(--radius-pill, 999px); font-size: 11px; font-weight: 600; white-space: nowrap; }
+.verdict[data-verdict="pass"] { color: var(--green, var(--text-muted)); }
+.verdict[data-verdict="fail"], .verdict[data-verdict="missing"] { color: var(--red); border-color: color-mix(in srgb, var(--red) 40%, var(--border)); }
+.buttons { display: flex; flex-wrap: wrap; gap: 8px; }

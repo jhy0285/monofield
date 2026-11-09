@@ -4,12 +4,16 @@ import { access } from 'node:fs/promises';
 import path from 'node:path';
 import {
   REFERENCE_BOARD_FOLDER,
+  compareReferenceFlows,
   generalizeObservedPath,
   isApiTransaction,
   normalizeReferenceFlowSteps,
   referenceFlowAgentRequest,
   referenceFlowScenario,
+  referenceComparisonBlock,
   referenceFlowStepLabel,
+  sanitizeReferenceUrl,
+  type ReferenceCompareResponse,
   type ReferenceFlowResponse,
   type ReferenceFlowStep,
   type ReferenceFlowSummary,
@@ -17,6 +21,7 @@ import {
 import { locateBundledRea } from './bundled-rea.js';
 import { BROWSER_EVIDENCE_PREDICATE, readBrowserEvidence } from './browser-evidence.js';
 import { findBrowser } from './rea-doctor.js';
+import { buildReaEvidenceView } from './rea-evidence.js';
 import { ReferenceBoardError, readReferenceBoard, updateReferenceItem, type ReferenceFileAccess } from './references.js';
 
 /**
@@ -122,6 +127,33 @@ async function chooseBrowser(deps: ReferenceFlowDeps, requested: unknown): Promi
   return found;
 }
 
+/**
+ * Runs REA on one URL with the steps and keeps the evidence and its last matching screen as `references/<name>.json`
+ * and `.png`. One run per reference at a time, whether it records the reference or compares the project's screen.
+ */
+async function captureFlow(files: ReferenceFileAccess, runKey: string, name: string, url: string, steps: ReferenceFlowStep[], browser: string,
+  deps: ReferenceFlowDeps, signal?: AbortSignal): Promise<{ output: Buffer; flow: ReferenceFlowSummary }> {
+  if (running.has(runKey)) throw new ReferenceBoardError('This reference is already being recorded.', 409, 'REFERENCE_FLOW_RUNNING');
+  running.add(runKey);
+  try {
+    const output = await deps.runRea(referenceFlowScenario(url, steps, browser), signal);
+    let predicate: unknown;
+    try { predicate = (JSON.parse(output.toString('utf8')) as { predicate_type?: unknown }).predicate_type; } catch { predicate = undefined; }
+    if (predicate !== BROWSER_EVIDENCE_PREDICATE) throw new ReferenceBoardError('REA did not return a browser capture.', 502, 'REFERENCE_FLOW_FAILED');
+    const file = `${REFERENCE_BOARD_FOLDER}/${name}.json`;
+    const flow = summarizeFlowEvidence(output, file, steps, path.basename(browser.replace(/\\/g, '/')), deps.now().toISOString());
+    await files.write(file, output);
+    const screen = lastFlowScreenshot(output);
+    if (screen) {
+      flow.screenshot = `${REFERENCE_BOARD_FOLDER}/${name}.png`;
+      await files.write(flow.screenshot, screen);
+    }
+    return { output, flow };
+  } finally {
+    running.delete(runKey);
+  }
+}
+
 export async function recordReferenceFlow(files: ReferenceFileAccess, key: string, id: string, body: Record<string, unknown>,
   deps: ReferenceFlowDeps = defaultReferenceFlowDeps(), signal?: AbortSignal): Promise<ReferenceFlowResponse> {
   const parsed = normalizeReferenceFlowSteps(body.steps);
@@ -129,27 +161,40 @@ export async function recordReferenceFlow(files: ReferenceFileAccess, key: strin
   const item = (await readReferenceBoard(files)).items.find((entry) => entry.id === id);
   if (!item) throw new ReferenceBoardError(`No reference ${id} on this board.`, 404, 'REFERENCE_NOT_FOUND');
   const browser = await chooseBrowser(deps, body.browserPath);
-  const runKey = `${key}\u0000${id}`;
-  if (running.has(runKey)) throw new ReferenceBoardError('This reference is already being recorded.', 409, 'REFERENCE_FLOW_RUNNING');
-  running.add(runKey);
-  try {
-    const output = await deps.runRea(referenceFlowScenario(item.url, parsed.steps, browser), signal);
-    let predicate: unknown;
-    try { predicate = (JSON.parse(output.toString('utf8')) as { predicate_type?: unknown }).predicate_type; } catch { predicate = undefined; }
-    if (predicate !== BROWSER_EVIDENCE_PREDICATE) throw new ReferenceBoardError('REA did not return a browser capture.', 502, 'REFERENCE_FLOW_FAILED');
-    const file = `${REFERENCE_BOARD_FOLDER}/${id}.flow.json`;
-    const flow = summarizeFlowEvidence(output, file, parsed.steps, path.basename(browser.replace(/\\/g, '/')), deps.now().toISOString());
-    await files.write(file, output);
-    const screen = lastFlowScreenshot(output);
-    if (screen) {
-      flow.screenshot = `${REFERENCE_BOARD_FOLDER}/${id}.flow.png`;
-      await files.write(flow.screenshot, screen);
-    }
-    const updated = await updateReferenceItem(files, key, id, (entry) => { entry.flow = flow; });
-    return { item: updated, flow };
-  } finally {
-    running.delete(runKey);
-  }
+  const { flow } = await captureFlow(files, `${key}\u0000${id}`, `${id}.flow`, item.url, parsed.steps, browser, deps, signal);
+  // A new reference flow makes an earlier comparison with our screen stale.
+  const stale = [item.remake?.flow.file, item.remake?.flow.screenshot].filter((file): file is string => typeof file === 'string' && file.startsWith(`${REFERENCE_BOARD_FOLDER}/${id}.`));
+  const updated = await updateReferenceItem(files, key, id, (entry) => { entry.flow = flow; entry.remake = null; });
+  for (const file of stale) await files.remove(file).catch(() => undefined);
+  return { item: updated, flow };
+}
+
+/**
+ * Records the project's own screen (`url`, usually the app running locally) with the steps the reference's flow was
+ * recorded with, or with `steps`, and compares the two as patterns (`compareReferenceFlows`).
+ */
+export async function compareReferenceFlow(files: ReferenceFileAccess, key: string, id: string, body: Record<string, unknown>,
+  deps: ReferenceFlowDeps = defaultReferenceFlowDeps(), signal?: AbortSignal): Promise<ReferenceCompareResponse> {
+  const url = typeof body.url === 'string' ? sanitizeReferenceUrl(body.url) : null;
+  if (!url) throw new ReferenceBoardError('url must be the http(s) address of our screen.');
+  const item = (await readReferenceBoard(files)).items.find((entry) => entry.id === id);
+  if (!item) throw new ReferenceBoardError(`No reference ${id} on this board.`, 404, 'REFERENCE_NOT_FOUND');
+  if (!item.flow) throw new ReferenceBoardError('Record the reference\'s flow first; the comparison replays its steps on our screen.', 409, 'REFERENCE_FLOW_MISSING');
+  const reference = await files.read(item.flow.file);
+  if (!reference) throw new ReferenceBoardError(`${item.flow.file} is missing; record the reference's flow again.`, 409, 'REFERENCE_FLOW_MISSING');
+  const parsed = body.steps === undefined
+    ? { ok: true as const, steps: item.flow.steps.flatMap((step) => (step.request ? [step.request] : [])) }
+    : normalizeReferenceFlowSteps(body.steps);
+  if (!parsed.ok) throw new ReferenceBoardError(parsed.error);
+  const browser = await chooseBrowser(deps, body.browserPath);
+  const { output, flow } = await captureFlow(files, `${key}\u0000${id}`, `${id}.remake.flow`, url, parsed.steps, browser, deps, signal);
+  const referenceView = buildReaEvidenceView(reference, item.flow.file);
+  const oursView = buildReaEvidenceView(output, flow.file);
+  if (referenceView.kind !== 'browser' || oursView.kind !== 'browser') throw new ReferenceBoardError('Both recordings must be REA browser captures.', 409, 'REFERENCE_FLOW_MISSING');
+  const labels = Object.fromEntries([...item.flow.steps, ...flow.steps].map((step) => [step.id, step.label]));
+  const remake = { url, flow, comparison: compareReferenceFlows(referenceView, oursView, labels), comparedAt: deps.now().toISOString() };
+  const updated = await updateReferenceItem(files, key, id, (entry) => { entry.remake = remake; });
+  return { item: updated, remake, block: referenceComparisonBlock(updated) };
 }
 
 /** The request for the agent when the step editor cannot express the flow; nothing is run. */

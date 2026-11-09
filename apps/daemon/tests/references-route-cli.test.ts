@@ -89,6 +89,13 @@ describe.skipIf(!CHROMIUM)('reference flow recording with the bundled REA', () =
     site = createServer((req, res) => {
       if (req.url === '/api/orders') { res.setHeader('content-type', 'application/json'); res.end('[{"id":1001,"status":"PAID"},{"id":1002,"status":"PENDING"}]'); return; }
       res.setHeader('content-type', 'text/html; charset=utf-8');
+      // "Our" screen: the same controls and wording in another order, but the search never asks the server.
+      if (req.url === '/ours') {
+        res.end('<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>우리 주문</title></head><body><main><h1>우리 주문 화면</h1>'
+          + '<label>주문번호 <input name="q"></label><button onclick="document.getElementById(\'out\').textContent=\'2건 조회됨\'">조회</button>'
+          + '<p id="out"></p></main></body></html>');
+        return;
+      }
       res.end('<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>주문</title></head><body><main><h1>주문</h1>'
         + '<label>주문번호 <input name="q"></label><button onclick="fetch(\'/api/orders\').then(r=>r.json()).then(d=>{document.getElementById(\'out\').textContent=d.length+\'건 조회됨\'})">조회</button>'
         + '<p id="out"></p></main></body></html>');
@@ -126,6 +133,23 @@ describe.skipIf(!CHROMIUM)('reference flow recording with the bundled REA', () =
     expect(agent).toContain('<reference-flow-request');
     await expect(cli(['record', '--project', projectId, '--id', added.id, '--fill', '비밀번호=x', '--browser', CHROMIUM!])).rejects.toMatchObject({ stderr: expect.stringContaining('does not type') });
   }, 200_000);
+
+  it('replays the reference steps on our screen and reports where the pattern differs', async () => {
+    const added = JSON.parse((await cli(['add', '--project', projectId, '--url', siteUrl, '--json'])).stdout);
+    await cli(['record', '--project', projectId, '--id', added.id, '--fill', '주문번호=1001', '--click', '조회', '--wait-text', '2건 조회됨', '--browser', CHROMIUM!]);
+    const differs = await cli(['compare', '--project', projectId, '--id', added.id, '--url', `${siteUrl}ours`, '--browser', CHROMIUM!])
+      .then(() => null, (error: { code?: number; stdout?: string }) => error);
+    expect(differs?.code).toBe(1);
+    expect(differs?.stdout).toContain('our screen: ' + `${siteUrl}ours`);
+    expect(differs?.stdout).toMatch(/press button "조회": fail \(calls\)/);
+    expect(differs?.stdout).toContain('reference: completed, GET 2xx');
+    expect(differs?.stdout).toContain('ours:      completed, no API call');
+    const block = await cli(['compare', '--project', projectId, '--id', added.id, '--url', `${siteUrl}ours`, '--browser', CHROMIUM!, '--block']).then(() => '', (error: { stdout?: string }) => error.stdout ?? '');
+    expect(block).toContain('<reference-flow-comparison');
+    const same = JSON.parse((await cli(['compare', '--project', projectId, '--id', added.id, '--url', siteUrl, '--browser', CHROMIUM!, '--json'])).stdout);
+    expect(same.remake.comparison.summary).toMatchObject({ fail: 0, missing: 0, extra: 0 });
+    expect(same.block).toBe('');
+  }, 300_000);
 
   it('reports a step that could not be done and exits with status 1', async () => {
     const added = JSON.parse((await cli(['add', '--project', projectId, '--url', siteUrl, '--json'])).stdout);

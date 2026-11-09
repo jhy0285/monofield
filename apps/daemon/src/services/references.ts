@@ -170,7 +170,7 @@ export async function removeReference(files: ReferenceFileAccess, key: string, i
     await writeBoard(files, { ...board, items: board.items.filter((entry) => entry.id !== id) });
     const removed: string[] = [];
     // Only the board's own files for this item, never a path the board file was edited to point at.
-    const own = [item.screenshot?.file, item.flow?.file, item.flow?.screenshot].filter((file): file is string => typeof file === 'string' && file.startsWith(`${REFERENCE_BOARD_FOLDER}/${id}.`));
+    const own = [item.screenshot?.file, item.flow?.file, item.flow?.screenshot, item.remake?.flow.file, item.remake?.flow.screenshot].filter((file): file is string => typeof file === 'string' && file.startsWith(`${REFERENCE_BOARD_FOLDER}/${id}.`));
     for (const file of own) {
       try { await files.remove(file); removed.push(file); } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;

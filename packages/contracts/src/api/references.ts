@@ -1,3 +1,5 @@
+import type { ReaBrowserStep, ReaBrowserView } from './rea-evidence.js';
+
 /**
  * Reference board: pages a person kept while browsing, to borrow a pattern from (layout structure, flow, field
  * composition, interaction) and apply it to the project they are building.
@@ -51,6 +53,59 @@ export interface ReferenceItem {
   source: 'browser' | 'cli';
   /** The last flow recorded with REA for this reference, if any. */
   flow?: ReferenceFlowSummary | null;
+  /** The project's own screen recorded with the same steps and compared with {@link flow}. */
+  remake?: ReferenceRemake | null;
+}
+
+export type ReferenceCompareDifference = 'action' | 'status' | 'navigation' | 'calls' | 'structure';
+
+/** One side of a compared step, as patterns: no text, no concrete paths. */
+export interface ReferenceCompareSide {
+  status: string;
+  /** The page path changed during this step. */
+  navigated: boolean;
+  /** API calls of the step as `METHOD 2xx`, sorted. */
+  calls: string[];
+}
+
+export interface ReferenceCompareRow {
+  position: number;
+  id: string;
+  label: string;
+  verdict: 'pass' | 'fail' | 'missing' | 'extra';
+  differences: ReferenceCompareDifference[];
+  reference: ReferenceCompareSide | null;
+  ours: ReferenceCompareSide | null;
+  /** Kinds of screen elements (accessibility roles) present on one side only after the step. */
+  onlyReference: string[];
+  onlyOurs: string[];
+}
+
+export interface ReferenceFlowComparison {
+  rows: ReferenceCompareRow[];
+  summary: { pass: number; fail: number; missing: number; extra: number; total: number };
+}
+
+export interface ReferenceRemake {
+  /** The project's screen that was recorded. */
+  url: string;
+  flow: ReferenceFlowSummary;
+  comparison: ReferenceFlowComparison;
+  comparedAt: string;
+}
+
+export interface ReferenceCompareRequest {
+  url: string;
+  /** Defaults to the steps the reference's flow was recorded with. */
+  steps?: ReferenceFlowStep[];
+  browserPath?: string;
+}
+
+export interface ReferenceCompareResponse {
+  item: ReferenceItem;
+  remake: ReferenceRemake;
+  /** The differences as a request for the agent (empty when every step matched). */
+  block: string;
 }
 
 /**
@@ -362,6 +417,111 @@ export function referenceFlowAgentRequest(item: ReferenceItem, steps: ReferenceF
   return lines.join('\n');
 }
 
+/** Accessibility roles that say nothing about a screen's pattern. */
+const NOISE_ROLES = new Set(['document', 'generic', 'text', 'paragraph', 'group', 'none', 'presentation', 'img', 'separator', 'strong', 'emphasis']);
+
+/** The kinds of elements in a Playwright accessibility snapshot (`- button "조회"` → `button`), without their names. */
+export function accessibilityRoles(snapshot: string): string[] {
+  const roles = new Set<string>();
+  for (const line of snapshot.split('\n')) {
+    const match = /^\s*-\s+([a-z][a-z-]*)\b/.exec(line);
+    if (match && !NOISE_ROLES.has(match[1]!)) roles.add(match[1]!);
+  }
+  return [...roles].sort();
+}
+
+const pathOf = (url: string | null) => {
+  if (!url) return null;
+  try { return new URL(url).pathname; } catch { return url.split(/[?#]/)[0] ?? url; }
+};
+const statusClass = (status: number | null) => (status === null || status === 0 ? 'no response' : `${Math.floor(status / 100)}xx`);
+
+function sides(view: ReaBrowserView): Map<string, { step: ReaBrowserStep; side: ReferenceCompareSide; roles: string[] | null; position: number }> {
+  const steps = [...view.steps].sort((a, b) => a.index - b.index);
+  const out = new Map<string, { step: ReaBrowserStep; side: ReferenceCompareSide; roles: string[] | null; position: number }>();
+  steps.forEach((step, position) => {
+    const previous = position > 0 ? pathOf(steps[position - 1]!.url) : null;
+    const current = pathOf(step.url);
+    const calls = view.requests.filter((request) => request.stepIndex === step.index && request.isApi)
+      .map((request) => `${request.method} ${statusClass(request.status)}`).sort();
+    const accessibility = step.accessibility;
+    const roles = accessibility && accessibility.state === 'captured' && typeof accessibility.text === 'string' && !accessibility.truncated
+      ? accessibilityRoles(accessibility.text) : null;
+    out.set(step.id || `#${position}`, { step, position, roles, side: { status: step.status, navigated: position === 0 || (previous !== null && current !== null && previous !== current), calls } });
+  });
+  return out;
+}
+
+/**
+ * The reference's recorded flow next to the project's own screen recorded with the same steps, compared as patterns:
+ * whether each step could be done, whether it moved to another page, the API calls it made (method and status class,
+ * not paths), and the kinds of elements on the screen after it (roles, not names). Text, paths and styling are expected
+ * to differ and are not compared.
+ */
+export function compareReferenceFlows(reference: ReaBrowserView, ours: ReaBrowserView, labels: Record<string, string> = {}): ReferenceFlowComparison {
+  const left = sides(reference);
+  const right = sides(ours);
+  const ids = [...left.keys()];
+  for (const id of right.keys()) if (!left.has(id)) ids.push(id);
+  const rows: ReferenceCompareRow[] = ids.map((id, position) => {
+    const a = left.get(id);
+    const b = right.get(id);
+    const label = labels[id] ?? (id === 'scenario_start' ? 'open the page' : id === 'page-settled' ? 'let the page settle' : id);
+    if (!a || !b) {
+      return { position, id, label, verdict: a ? 'missing' : 'extra', differences: [], reference: a?.side ?? null, ours: b?.side ?? null, onlyReference: [], onlyOurs: [] };
+    }
+    const differences: ReferenceCompareDifference[] = [];
+    if (a.step.action !== b.step.action) differences.push('action');
+    if (a.side.status !== b.side.status) differences.push('status');
+    if (a.side.navigated !== b.side.navigated) differences.push('navigation');
+    if (a.side.calls.join(',') !== b.side.calls.join(',')) differences.push('calls');
+    let onlyReference: string[] = [];
+    let onlyOurs: string[] = [];
+    if (a.roles && b.roles) {
+      onlyReference = a.roles.filter((role) => !b.roles!.includes(role)).slice(0, 12);
+      onlyOurs = b.roles.filter((role) => !a.roles!.includes(role)).slice(0, 12);
+      if (onlyReference.length || onlyOurs.length) differences.push('structure');
+    }
+    return { position, id, label, verdict: differences.length ? 'fail' : 'pass', differences, reference: a.side, ours: b.side, onlyReference, onlyOurs };
+  });
+  const count = (verdict: ReferenceCompareRow['verdict']) => rows.filter((row) => row.verdict === verdict).length;
+  return { rows, summary: { pass: count('pass'), fail: count('fail'), missing: count('missing'), extra: count('extra'), total: rows.length } };
+}
+
+const sideText = (side: ReferenceCompareSide | null) => side
+  ? `${side.status}${side.navigated ? ', moved to another page' : ''}, ${side.calls.length ? side.calls.join(' + ') : 'no API call'}`
+  : 'not recorded';
+
+/** The comparison as short lines: the totals, then every step that did not match. */
+export function referenceComparisonLines(remake: ReferenceRemake): string[] {
+  const { summary } = remake.comparison;
+  const lines = [`our screen: ${remake.url} (${remake.flow.file}) — ${summary.pass}/${summary.total} steps match the reference's pattern`];
+  for (const row of remake.comparison.rows.filter((entry) => entry.verdict !== 'pass')) {
+    lines.push(`  ${row.position + 1}. ${row.label}: ${row.verdict}${row.differences.length ? ` (${row.differences.join(', ')})` : ''}`);
+    lines.push(`     reference: ${sideText(row.reference)}`);
+    lines.push(`     ours:      ${sideText(row.ours)}`);
+    if (row.onlyReference.length) lines.push(`     only on the reference's screen: ${row.onlyReference.join(', ')}`);
+    if (row.onlyOurs.length) lines.push(`     only on our screen: ${row.onlyOurs.join(', ')}`);
+  }
+  return lines;
+}
+
+/**
+ * The differences as a request for the agent: make our screen follow the reference's pattern where it does not, in
+ * this project's own code and wording. Empty when nothing differs.
+ */
+export function referenceComparisonBlock(item: ReferenceItem): string {
+  const remake = item.remake;
+  if (!remake || remake.comparison.rows.every((row) => row.verdict === 'pass')) return '';
+  const lines = [`<reference-flow-comparison id="${attr(item.id)}" reference="${attr(item.url)}" ours="${attr(remake.url)}">`];
+  lines.push('request: Our screen does not yet follow the reference\'s flow at the steps below. Change our screen so each of them behaves like the reference: the same step can be done, it moves (or stays) like the reference, it makes the same kind of server call with the same kind of result, and the same kinds of elements appear.');
+  lines.push('rules:', ...REFERENCE_APPLY_RULES.map((rule) => `- ${rule}`), '- Compare against the recorded evidence; do not guess behaviour the evidence does not show.');
+  lines.push(...referenceComparisonLines(remake).map(inline));
+  lines.push(`evidence: reference ${item.flow?.file ?? '(not recorded)'}; ours ${remake.flow.file} — open both in REA Studio`);
+  lines.push('</reference-flow-comparison>');
+  return lines.join('\n');
+}
+
 const TAKE_TEXT: Record<ReferenceTake, string> = {
   structure: 'layout structure (regions and their order)',
   flow: 'flow (steps, order of screens and actions)',
@@ -427,6 +587,7 @@ export function referenceApplyBlock(items: Array<ReferenceItem & { screenshotSta
     if (item.outline) lines.push(...referenceOutlineLines(item.outline).map(inline));
     else lines.push('outline: not captured');
     if (item.flow) lines.push(...referenceFlowLines(item.flow).map(inline));
+    if (item.remake) lines.push(...referenceComparisonLines(item.remake).map(inline));
     lines.push('</reference>');
   }
   lines.push('</reference-board-apply>');

@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
-import type { ReferenceApplyResponse, ReferenceFlowResponse, ReferenceFlowStep, ReferenceItem, ReferenceListResponse } from '@open-design/contracts';
-import { referenceFlowLines, referenceOutlineLines } from '@open-design/contracts';
+import type { ReferenceApplyResponse, ReferenceCompareResponse, ReferenceFlowResponse, ReferenceFlowStep, ReferenceItem, ReferenceListResponse } from '@open-design/contracts';
+import { referenceComparisonLines, referenceFlowLines, referenceOutlineLines } from '@open-design/contracts';
 import { repeatedFlag } from './rea-cli.js';
 
 const USAGE = `Usage:
@@ -14,6 +14,7 @@ const USAGE = `Usage:
   monofield refs record  --project <id> --id <ref-id> [--click <name> | --click-link <name> | --fill <label=value>
                          | --wait-text <text> | --wait <ms>]... [--steps-file <steps.json>] [--browser <path>] [--json]
   monofield refs record  --project <id> --id <ref-id> [steps...] --for-agent [--request <text>]
+  monofield refs compare --project <id> --id <ref-id> --url <our screen> [steps...] [--browser <path>] [--block] [--json]
 
 The reference board keeps pages you liked while browsing, to borrow a pattern from: the URL (secret-looking query values
 removed), an optional screenshot, an outline of the page's structure (regions, heading levels, form fields, table
@@ -33,7 +34,13 @@ moment (--wait 1500). Without steps it opens the page and lets it settle. REA st
 the way "monofield rea doctor" finds it, or --browser) with a temporary profile, so signed-in screens are not reached.
 The evidence is saved as references/<ref-id>.flow.json and opens in REA Studio; the card keeps each step's outcome and
 the API calls. --for-agent prints a request for an agent with the REA tools instead of recording; use it for flows the
-steps cannot express.`;
+steps cannot express.
+
+compare records our own screen (--url, usually the app running locally) with the steps the reference's flow was recorded
+with (or the step flags given) and compares the two as patterns: whether each step could be done, whether it moved to
+another page, the API calls it made (method and status class, not paths) and the kinds of elements on screen (roles, not
+names). Text and paths are expected to differ and are not compared. It exits with status 1 when a step does not match;
+--block prints the differences as a request for an agent instead of the report.`;
 
 type Flags = Record<string, unknown>;
 interface Helpers {
@@ -55,6 +62,7 @@ export function formatReference(item: ReferenceItem): string {
   if (item.screenshot) lines.push(`  screenshot: ${item.screenshot.file} (${item.screenshot.bytes} B)`);
   if (item.outline) lines.push(...referenceOutlineLines(item.outline).map((line) => `  ${line}`));
   if (item.flow) lines.push(...referenceFlowLines(item.flow).map((line) => `  ${line}`));
+  if (item.remake) lines.push(...referenceComparisonLines(item.remake).map((line) => `  ${line}`));
   return lines.join('\n');
 }
 
@@ -86,11 +94,11 @@ export function orderedSteps(args: string[]): ReferenceFlowStep[] {
 export async function runRefsCli(args: string[], helpers: Helpers): Promise<void> {
   const strings = new Set(['daemon-url', 'project', 'url', 'title', 'note', 'take', 'screenshot', 'id', 'target', 'request', 'prompt-file',
     'click', 'click-link', 'fill', 'wait-text', 'wait', 'steps-file', 'browser']);
-  const flags = helpers.parseFlags(args, { string: strings, boolean: new Set(['json', 'help', 'no-screenshot', 'for-agent']) });
+  const flags = helpers.parseFlags(args, { string: strings, boolean: new Set(['json', 'help', 'no-screenshot', 'for-agent', 'block']) });
   const [command, ...extra] = helpers.positionalArgs(args, strings);
-  if (flags.help || !command || !['list', 'add', 'note', 'remove', 'apply', 'record'].includes(command) || extra.length) {
+  if (flags.help || !command || !['list', 'add', 'note', 'remove', 'apply', 'record', 'compare'].includes(command) || extra.length) {
     console.log(USAGE);
-    if (!flags.help) throw new Error('Use monofield refs <list|add|note|remove|apply|record> --help.');
+    if (!flags.help) throw new Error('Use monofield refs <list|add|note|remove|apply|record|compare> --help.');
     return;
   }
   if (typeof flags.project !== 'string' || !flags.project) throw new Error(`${command} requires --project.`);
@@ -159,6 +167,17 @@ export async function runRefsCli(args: string[], helpers: Helpers): Promise<void
     if (flags.json) { print(result); return; }
     console.log(referenceFlowLines(result.flow).join('\n'));
     if (result.flow.completed < result.flow.total) process.exitCode = 1;
+    return;
+  }
+  if (command === 'compare') {
+    if (typeof flags.url !== 'string') throw new Error('compare requires --url (the address of our screen).');
+    const given = [...(typeof flags['steps-file'] === 'string' ? JSON.parse(await readFile(flags['steps-file'], 'utf8')) as ReferenceFlowStep[] : []), ...orderedSteps(args)];
+    const result = await call<ReferenceCompareResponse>(`${root}/${encodeURIComponent(id())}/compare`, json('POST', {
+      url: flags.url, ...(given.length ? { steps: given } : {}), ...(typeof flags.browser === 'string' ? { browserPath: flags.browser } : {}) }));
+    if (flags.json) print(result);
+    else if (flags.block) process.stdout.write(result.block ? `${result.block}\n` : 'Every step matches the reference\'s pattern.\n');
+    else console.log(referenceComparisonLines(result.remake).join('\n'));
+    if (result.remake.comparison.summary.pass < result.remake.comparison.summary.total) process.exitCode = 1;
     return;
   }
   const ids = repeatedFlag(args, 'id');

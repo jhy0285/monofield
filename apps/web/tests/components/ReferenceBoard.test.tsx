@@ -214,3 +214,77 @@ describe('Recording a reference flow with REA', () => {
     expect((await screen.findByRole('alert')).textContent).toContain('Chrome, Edge or Chromium');
   });
 });
+
+describe('Comparing our screen with a reference flow', () => {
+  const FLOW: ReferenceFlowSummary = {
+    file: 'references/ref-1.flow.json', evidenceId: 'ev_1', sha256: 'b'.repeat(64), recordedAt: '2026-11-09T00:00:00.000Z', browser: 'chrome',
+    steps: [{ id: 'step-1', label: 'press button "조회"', status: 'completed', request: { kind: 'click', target: '조회', role: 'button' } }],
+    completed: 1, total: 1, apiCalls: [{ method: 'GET', path: '/api/orders', status: 200 }], completeness: 'incomplete',
+  };
+  const REMAKE = {
+    url: 'http://localhost:8080/orders', comparedAt: '2026-11-09T00:01:00.000Z',
+    flow: { ...FLOW, file: 'references/ref-1.remake.flow.json', apiCalls: [] },
+    comparison: {
+      rows: [
+        { position: 0, id: 'scenario_start', label: 'open the page', verdict: 'pass' as const, differences: [], reference: { status: 'completed', navigated: true, calls: [] }, ours: { status: 'completed', navigated: true, calls: [] }, onlyReference: [], onlyOurs: [] },
+        { position: 1, id: 'step-1', label: 'press button "조회"', verdict: 'fail' as const, differences: ['calls' as const, 'structure' as const],
+          reference: { status: 'completed', navigated: false, calls: ['GET 2xx'] }, ours: { status: 'completed', navigated: false, calls: [] }, onlyReference: ['table'], onlyOurs: [] },
+      ],
+      summary: { pass: 1, fail: 1, missing: 0, extra: 0, total: 2 },
+    },
+  };
+
+  function installCompareFetch() {
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
+      const method = init.method ?? 'GET';
+      const body = init.body ? JSON.parse(String(init.body)) : undefined;
+      calls.push({ url, method, body });
+      const respond = (status: number, value: unknown) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } });
+      if (url.endsWith('/references') && method === 'GET') return respond(200, { folder: 'references', items });
+      if (url.endsWith('/compare')) { items = [{ ...items[0]!, remake: REMAKE }]; return respond(200, { item: items[0], remake: REMAKE, block: 'unused' }); }
+      return respond(404, { error: { message: 'no' } });
+    }));
+  }
+
+  it('replays the reference steps on our screen, shows each step side by side and puts the differences into the chat', async () => {
+    items = [{ ...ITEM, flow: FLOW }];
+    installCompareFetch();
+    const onAppendToChat = vi.fn();
+    const onOpenFile = vi.fn();
+    renderKo(<ReferenceBoard projectId="p1" onNavigate={vi.fn()} onAppendToChat={onAppendToChat} onOpenFile={onOpenFile} />);
+    fireEvent.click(await screen.findByTestId('reference-compare-open'));
+    const panel = screen.getByTestId('reference-compare-panel');
+    // The reference's own steps are there to edit.
+    expect((screen.getByPlaceholderText('보이는 이름 (예: 조회)') as HTMLInputElement).value).toBe('조회');
+    expect((screen.getByTestId('reference-compare-start') as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByTestId('reference-compare-url'), { target: { value: 'http://localhost:8080/orders' } });
+    fireEvent.click(screen.getByTestId('reference-compare-start'));
+    const result = await screen.findByTestId('reference-compare-result');
+    expect(calls.find((call) => call.url.endsWith('/references/ref-1/compare'))?.body).toEqual({
+      url: 'http://localhost:8080/orders', steps: [{ kind: 'click', target: '조회', role: 'button' }],
+    });
+    expect(result.textContent).toContain('레퍼런스와 같은 단계 1/2');
+    expect(result.textContent).toContain('서버 요청 없음');
+    expect(result.textContent).toContain('GET 2xx');
+    expect(result.textContent).toContain('레퍼런스에만: table');
+    expect(result.textContent).toContain('서버 요청, 화면 요소');
+    expect(panel.textContent).toContain('다름');
+    fireEvent.click(screen.getByTestId('reference-compare-to-chat'));
+    expect(onAppendToChat).toHaveBeenCalledTimes(1);
+    expect(onAppendToChat.mock.calls[0]![0]).toContain('<reference-flow-comparison id="ref-1"');
+    expect(onAppendToChat.mock.calls[0]![0]).toContain('ours:      completed, no API call');
+    expect(onAppendToChat.mock.calls[0]![1]).toBe('아래 비교에서 레퍼런스와 다른 단계를 우리 화면에 맞춰 고쳐 주세요.');
+    // The card keeps the outcome after the panel closes.
+    expect(screen.getByTestId('reference-card-remake').textContent).toContain('우리 화면: 1/2 같음');
+    fireEvent.click(screen.getByRole('button', { name: '우리 화면 기록 열기' }));
+    expect(onOpenFile).toHaveBeenCalledWith('references/ref-1.remake.flow.json');
+  });
+
+  it('offers the comparison only once the reference has a recorded flow', async () => {
+    items = [ITEM];
+    installCompareFetch();
+    renderKo(<ReferenceBoard projectId="p1" onNavigate={vi.fn()} />);
+    await screen.findByText('Join flow');
+    expect(screen.queryByTestId('reference-compare-open')).toBeNull();
+  });
+});

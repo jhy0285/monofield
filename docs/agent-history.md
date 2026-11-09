@@ -124,8 +124,10 @@ As of 2026-11-06.
   screenshot and structure outline with a note in the project's `references/`; the browser start page lists them under "담은 레퍼런스";
   "프로젝트에 넣기" puts a `<reference-board-apply>` block with pattern-only rules into the chat composer. "REA로 흐름 기록" on a
   card runs the bundled REA (`capture-browser-scenario`, fresh browser profile) with plain steps and links the evidence, step
-  outcomes, API calls and last screen to the card. Same routes (`/api/projects/:id/references*`) for
-  `monofield refs list|add|note|remove|apply|record`. Guide: `docs/reference-board.ko.md`.
+  outcomes, API calls and last screen to the card. "우리 화면과 비교" replays those steps on the project's own screen and
+  compares the two as patterns; the differences go into the chat as a `<reference-flow-comparison>` block. Same routes
+  (`/api/projects/:id/references*`) for `monofield refs list|add|note|remove|apply|record|compare`. Guide:
+  `docs/reference-board.ko.md`.
 - REA browser evidence cross-check (2026-11-02, branch only): an REA `capture_browser_scenario` recording is compared with an
   interface spec from the editor ("브라우저 증거 대조 (REA)" panel, next to the judgment check) or `monofield rea
   evidence|cross-check|apply`, all through `/api/projects/:id/browser-evidence*`. Tests, CLI, panel, 19-locale keys
@@ -301,10 +303,12 @@ exercise is unchanged by it.
 
 Newest first within each group. Remove an item when it is done.
 
-Reference board (see the two 2026-11-06 "reference board" Log entries; steps 1, 2 and 3 are built):
+Reference board (see the 2026-11-06 and 2026-11-09 "reference board" Log entries; steps 1 to 4 of the proposal are built):
 
-- Not built yet: (4) after applying, record the project's own screen with the same steps and compare it with the reference's
-  flow through the existing original-vs-remake comparison (`monofield rea compare`; both are REA browser captures).
+- The comparison with our screen is a pattern comparison (`compareReferenceFlows` in contracts): step outcome, page move, API
+  calls as method + status class, accessibility roles after the step. It does not use `monofield rea compare`, which expects a
+  replay of the same scenario and compares paths and visible text. Roles come from Playwright's accessibility snapshot, so a
+  custom widget without ARIA roles looks like no element; flows of one recorded run only.
 - Flow recording was run with the bundled REA and a Linux Chromium only (`/opt/pw-browsers/chromium` in the test environment;
   the route test skips without one, `OD_TEST_CHROMIUM` points it elsewhere). Not run: Windows with Edge or Chrome as found by
   `findBrowser` in `rea-doctor.ts`, the packaged app (REA runs under `ELECTRON_RUN_AS_NODE=1` there), a real external site.
@@ -516,6 +520,35 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-09 — reference board: compare our screen with the reference's flow (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** "비교 연결도 이어서 진행해": step (4), after applying a reference, record our screen with the same steps and compare.
+- **Decision:** the existing original-vs-remake comparison (`rea-compare.ts`) expects a replay of the same scenario and fails on
+  any different path or visible text, which a reference and our own screen always have. Added a pattern comparison instead,
+  in line with the board's rule to take patterns, not copies.
+- **Changed:** contracts `references.ts`: `accessibilityRoles` (element kinds from a Playwright accessibility snapshot, noise roles
+  dropped), `compareReferenceFlows(referenceView, oursView, labels)` (pairs steps by ID, else position; compares action, outcome,
+  page move, API calls as `METHOD Nxx`, roles; pass/fail/missing/extra), `ReferenceRemake` on items, `referenceComparisonLines`,
+  `referenceComparisonBlock` (`<reference-flow-comparison>` with the board's rules; empty when all steps match), comparison lines in
+  the apply block. Daemon `reference-flow.ts`: shared `captureFlow`, `compareReferenceFlow` (needs a recorded reference flow;
+  replays its requested steps unless steps are given; saves `references/<id>.remake.flow.json`/`.png`; views through
+  `buildReaEvidenceView`); re-recording the reference clears the comparison and its files; remove deletes them. Route
+  `POST …/references/:refId/compare`; CLI `monofield refs compare --url … [steps] [--block] [--json]` (exit 1 on any difference).
+  Web: `FlowStepsEditor` (shared step editor), `ReferenceComparePanel` + `ReferenceComparisonResult` (side-by-side table with
+  localized step names, "차이를 입력창에 넣기", open our recording), card summary and quick "put the differences into the chat".
+  33 `references.compare.*` keys x 19 locales. Docs: `docs/reference-board.ko.md` section 5, CLI and limits;
+  `docs/rea-laya-practical-guide.md`.
+- **Verified:** contracts `references` 13 (suite 325/325); daemon `reference-flow` 7 (fixture with the 201 settle transaction removed →
+  exactly one row fails on calls, `POST 2xx` vs none; re-record clears the comparison; refusals) and `references-route-cli` 6, one
+  of them end to end with the bundled REA and Chromium (`refs compare` against a page whose search never calls the server → exit 1,
+  `press button "조회": fail (calls)`; against the reference page itself → no differences, empty block); related REA and
+  browser-evidence daemon files 96 pass; web `ReferenceBoard` 11, `DesignBrowserPanel`, `DesignBrowserPanel.webview`,
+  `ProjectView.run-cleanup`, `design-browser-styles` 141 pass (the `FileWorkspace*` files were not rerun; nothing they cover changed).
+  `pnpm guard` 67, `pnpm typecheck`, `pnpm i18n:check` pass. Scratch app (Korean UI, Playwright): card → 우리 화면과 비교 →
+  `…/ours/` → 1/3 same: 조회 "서버 요청" different (GET 2xx vs none), the wait for "2건" "성공 여부" different; "차이를 입력창에 넣기" put
+  the block into the composer.
+- **Not run:** Windows, Edge, the packaged app, a real project app and a real external reference.
 
 ### 2026-11-06 — reference board: record a reference's flow with the bundled REA (`ccr-8432aecf-n9xdfd`)
 

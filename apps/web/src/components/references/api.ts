@@ -1,6 +1,8 @@
 import type {
   ReferenceApplyRequest,
   ReferenceApplyResponse,
+  ReferenceCompareRequest,
+  ReferenceCompareResponse,
   ReferenceCreateRequest,
   ReferenceFlowAgentRequestResponse,
   ReferenceFlowRequest,
@@ -37,6 +39,8 @@ export const referencesApi = {
   apply: (projectId: string, body: ReferenceApplyRequest) => call<ReferenceApplyResponse>(`${base(projectId)}/apply`, json('POST', body)),
   /** Runs the bundled REA on the reference; can take up to a couple of minutes. */
   recordFlow: (projectId: string, id: string, body: ReferenceFlowRequest) => call<ReferenceFlowResponse>(`${base(projectId)}/${encodeURIComponent(id)}/flow`, json('POST', body)),
+  /** Records our screen with the reference's steps and compares the two; can take a couple of minutes. */
+  compare: (projectId: string, id: string, body: ReferenceCompareRequest) => call<ReferenceCompareResponse>(`${base(projectId)}/${encodeURIComponent(id)}/compare`, json('POST', body)),
   flowRequest: (projectId: string, id: string, body: ReferenceFlowRequest & { request?: string }) =>
     call<ReferenceFlowAgentRequestResponse>(`${base(projectId)}/${encodeURIComponent(id)}/flow-request`, json('POST', body)),
 };

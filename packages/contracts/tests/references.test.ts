@@ -142,3 +142,64 @@ describe('reference flows', () => {
     expect(request).toContain('1. press button "다음"');
   });
 });
+
+describe('comparing our screen with a reference flow', () => {
+  type View = import('../src/api/rea-evidence').ReaBrowserView;
+  const a11y = (text: string) => ({ state: 'captured' as const, mediaType: 'text/plain', bytes: text.length, sha256: null, redacted: false, text });
+  const view = (steps: Array<{ id: string; action: string; status?: string; url: string; roles: string }>, calls: Array<{ step: number; method: string; status: number | null }>): View => ({
+    kind: 'browser', origin: null, durationMs: null, droppedEvents: 0, captured: { requestBodies: true, responseBodies: true },
+    completeness: { status: 'complete', missingSections: [], truncatedSections: [] },
+    steps: steps.map((step, index) => ({ index, id: step.id, action: step.action, status: step.status ?? 'completed', elapsedMs: 1, url: step.url, eventStart: 0, eventEnd: 0, error: null, accessibility: a11y(step.roles) })),
+    requests: calls.map((call, index) => ({ id: `r${index}`, stepIndex: call.step, method: call.method, origin: null, path: `/x/${index}`, queryNames: [], resourceType: 'fetch', status: call.status, isApi: true,
+      request: { state: 'not_exposed', mediaType: null, bytes: null, sha256: null, redacted: false }, response: { state: 'not_exposed', mediaType: null, bytes: null, sha256: null, redacted: false } })),
+  } as View);
+
+  it('reads element kinds from an accessibility snapshot without their names', async () => {
+    const { accessibilityRoles } = await import('../src/api/references');
+    expect(accessibilityRoles('- document:\n  - main:\n    - heading "주문" [level=1]\n    - button "조회"\n    - paragraph\n    - table:\n      - row "a"')).toEqual(['button', 'heading', 'main', 'row', 'table']);
+  });
+
+  it('compares steps as patterns: outcome, page move, call kinds and element kinds, not text or paths', async () => {
+    const { compareReferenceFlows, referenceComparisonBlock, referenceComparisonLines } = await import('../src/api/references');
+    const reference = view([
+      { id: 'scenario_start', action: 'goto_start', url: 'https://shop.example/orders', roles: '- main:\n  - button "Search"' },
+      { id: 'step-1', action: 'click', url: 'https://shop.example/orders', roles: '- main:\n  - button "Search"\n  - table:\n    - row "1"' },
+      { id: 'step-2', action: 'click', url: 'https://shop.example/orders/1', roles: '- main:\n  - heading "Order"' },
+    ], [{ step: 1, method: 'GET', status: 200 }]);
+    const same = view([
+      { id: 'scenario_start', action: 'goto_start', url: 'http://localhost:8080/orders', roles: '- main:\n  - button "조회"' },
+      { id: 'step-1', action: 'click', url: 'http://localhost:8080/orders', roles: '- main:\n  - button "조회"\n  - table:\n    - row "가"' },
+      { id: 'step-2', action: 'click', url: 'http://localhost:8080/orders/9', roles: '- main:\n  - heading "주문"' },
+    ], [{ step: 1, method: 'GET', status: 204 }]);
+    expect(compareReferenceFlows(reference, same).summary).toEqual({ pass: 3, fail: 0, missing: 0, extra: 0, total: 3 });
+
+    const ours = view([
+      { id: 'scenario_start', action: 'goto_start', url: 'http://localhost:8080/orders', roles: '- main:\n  - button "조회"' },
+      { id: 'step-1', action: 'click', url: 'http://localhost:8080/orders', roles: '- main:\n  - button "조회"\n  - list:\n    - listitem "가"' },
+      { id: 'step-2', action: 'click', status: 'failed', url: 'http://localhost:8080/orders', roles: '- main:\n  - button "조회"' },
+    ], [{ step: 1, method: 'POST', status: 500 }]);
+    const result = compareReferenceFlows(reference, ours, { 'step-1': 'press button "Search"' });
+    expect(result.summary).toEqual({ pass: 1, fail: 2, missing: 0, extra: 0, total: 3 });
+    expect(result.rows[1]).toMatchObject({ label: 'press button "Search"', verdict: 'fail', differences: ['calls', 'structure'],
+      reference: { calls: ['GET 2xx'] }, ours: { calls: ['POST 5xx'] }, onlyReference: ['row', 'table'], onlyOurs: ['list', 'listitem'] });
+    expect(result.rows[2]).toMatchObject({ differences: ['status', 'navigation', 'structure'], reference: { navigated: true }, ours: { navigated: false, status: 'failed' } });
+
+    const item = { ...ITEM, flow: { file: 'references/ref-1.flow.json' } as never, remake: { url: 'http://localhost:8080/orders', flow: { file: 'references/ref-1.remake.flow.json' } as never, comparison: result, comparedAt: '' } };
+    expect(referenceComparisonLines(item.remake)[0]).toContain('1/3 steps match');
+    const block = referenceComparisonBlock(item);
+    expect(block).toContain('<reference-flow-comparison id="ref-1"');
+    expect(block).toContain('reference: completed, GET 2xx');
+    expect(block).toContain('ours:      completed, POST 5xx');
+    expect(block).toContain('only on the reference\'s screen: row, table');
+    expect(block).toContain('Do not copy text, images');
+    expect(referenceComparisonBlock({ ...item, remake: { ...item.remake, comparison: compareReferenceFlows(reference, same) } })).toBe('');
+  });
+
+  it('marks steps one side did not record', async () => {
+    const { compareReferenceFlows } = await import('../src/api/references');
+    const two = view([{ id: 'scenario_start', action: 'goto_start', url: 'https://a/x', roles: '' }, { id: 'step-1', action: 'click', url: 'https://a/x', roles: '' }], []);
+    const one = view([{ id: 'scenario_start', action: 'goto_start', url: 'https://b/x', roles: '' }], []);
+    expect(compareReferenceFlows(two, one).rows.map((row) => row.verdict)).toEqual(['pass', 'missing']);
+    expect(compareReferenceFlows(one, two).rows.map((row) => row.verdict)).toEqual(['pass', 'extra']);
+  });
+});

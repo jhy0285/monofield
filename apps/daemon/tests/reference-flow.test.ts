@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { addReference, applyReferences, removeReference, type ReferenceFileAccess } from '../src/services/references.js';
-import { recordReferenceFlow, referenceFlowRequestText, type ReferenceFlowDeps } from '../src/services/reference-flow.js';
+import { compareReferenceFlow, recordReferenceFlow, referenceFlowRequestText, type ReferenceFlowDeps } from '../src/services/reference-flow.js';
 
 // A real REA 6.7.0 capture of a synthetic order screen (GET /api/orders, POST /api/orders/{id}/settle 201/409, GET /api/settlements).
 const FIXTURE = path.resolve('tests/fixtures/rea/browser-scenario-capture.json');
@@ -116,5 +116,61 @@ describe('recording a reference flow with REA', () => {
     expect(text).toContain('request: 흐름 기록');
     expect(text).toContain('note: 가입 2단계');
     expect(deps.runRea).not.toHaveBeenCalled();
+  });
+});
+
+describe('comparing our screen with a reference flow', () => {
+  let root: string;
+  let files: ReferenceFileAccess;
+  beforeEach(async () => { root = await mkdtemp(path.join(tmpdir(), 'ref-compare-')); files = folderAccess(root); });
+  afterEach(async () => { await rm(root, { recursive: true, force: true }); });
+  const depsWith = (outputs: Buffer[]): ReferenceFlowDeps & { scenarios: Array<Record<string, unknown>> } => {
+    const scenarios: Array<Record<string, unknown>> = [];
+    return { scenarios, runRea: async (scenario) => { scenarios.push(scenario); return outputs.shift()!; },
+      findBrowser: async () => '/opt/chromium/chrome', exists: async () => true, now: () => new Date('2026-11-09T00:00:00.000Z') };
+  };
+
+  it('replays the reference steps on our screen, compares as patterns and hands the differences to the agent', async () => {
+    const reference = await readFile(FIXTURE);
+    const evidence = JSON.parse(reference.toString('utf8'));
+    // Our screen: the same run, except that the successful settle request (201) never happens.
+    const settled = evidence.normalized_result.events.items.find((event: { kind: string; status?: number }) => event.kind === 'response' && event.status === 201).transaction_id;
+    evidence.normalized_result.events.items = evidence.normalized_result.events.items.filter((event: { transaction_id?: string }) => event.transaction_id !== settled);
+    const ours = Buffer.from(JSON.stringify(evidence));
+    const deps = depsWith([reference, ours]);
+    const item = await addReference(files, 'p', { url: 'http://127.0.0.1:4318/' });
+    const steps = [{ kind: 'click', target: '정산', role: 'button' }];
+    await recordReferenceFlow(files, 'p', item.id, { steps }, deps);
+    // The fixture was recorded with its own step IDs; mark one as recorded from our step so the replay can be seen.
+    const saved = JSON.parse(await readFile(path.join(root, 'references/board.json'), 'utf8'));
+    saved.items[0].flow.steps[0].request = steps[0];
+    await writeFile(path.join(root, 'references/board.json'), JSON.stringify(saved));
+    const result = await compareReferenceFlow(files, 'p', item.id, { url: 'http://localhost:8080/orders' }, deps);
+    // The reference's own steps are replayed on our URL.
+    expect(deps.scenarios[1]).toMatchObject({ start_url: { url: 'http://localhost:8080/orders' }, actions: [{ step_id: 'step-1', action: 'click', locator: { kind: 'role', role: 'button', name: '정산' } }] });
+    expect(result.remake.flow.file).toBe(`references/${item.id}.remake.flow.json`);
+    const failing = result.remake.comparison.rows.filter((row) => row.verdict !== 'pass');
+    expect(failing).toHaveLength(1);
+    expect(failing[0]).toMatchObject({ verdict: 'fail', differences: ['calls'], reference: { calls: ['POST 2xx'] }, ours: { calls: [] } });
+    expect(result.block).toContain('<reference-flow-comparison');
+    expect(result.block).toContain('ours:      completed, no API call');
+    expect(result.item.remake?.comparison.summary.fail).toBe(1);
+    expect((await applyReferences(files, { referenceIds: [item.id] })).block).toContain('our screen: http://localhost:8080/orders');
+    // Re-recording the reference drops the stale comparison and its files.
+    await recordReferenceFlow(files, 'p', item.id, { steps }, depsWith([reference]));
+    expect(existsSync(path.join(root, `references/${item.id}.remake.flow.json`))).toBe(false);
+    const board = JSON.parse(await readFile(path.join(root, 'references/board.json'), 'utf8'));
+    expect(board.items[0].remake).toBeNull();
+  });
+
+  it('needs a recorded reference flow and an http(s) address for our screen', async () => {
+    const item = await addReference(files, 'p', { url: 'https://a.example/' });
+    await expect(compareReferenceFlow(files, 'p', item.id, { url: 'http://localhost:8080/' }, depsWith([]))).rejects.toMatchObject({ status: 409, code: 'REFERENCE_FLOW_MISSING' });
+    await expect(compareReferenceFlow(files, 'p', item.id, { url: 'file:///etc/passwd' }, depsWith([]))).rejects.toThrow('http(s)');
+    await recordReferenceFlow(files, 'p', item.id, {}, depsWith([await readFile(FIXTURE)]));
+    const same = await compareReferenceFlow(files, 'p', item.id, { url: 'http://localhost:8080/' }, depsWith([await readFile(FIXTURE)]));
+    expect(same.remake.comparison.summary.fail).toBe(0);
+    expect(same.block).toBe('');
+    expect(await removeReference(files, 'p', item.id)).toEqual({ removed: item.id, files: [`references/${item.id}.flow.json`, `references/${item.id}.remake.flow.json`] });
   });
 });

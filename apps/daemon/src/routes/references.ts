@@ -10,7 +10,7 @@ import {
   updateReference,
   type ReferenceFileAccess,
 } from '../services/references.js';
-import { defaultReferenceFlowDeps, recordReferenceFlow, referenceFlowRequestText, type ReferenceFlowDeps } from '../services/reference-flow.js';
+import { compareReferenceFlow, defaultReferenceFlowDeps, recordReferenceFlow, referenceFlowRequestText, type ReferenceFlowDeps } from '../services/reference-flow.js';
 import type { RouteDeps } from '../server-context.js';
 
 export interface RegisterReferenceRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'projectFiles'> {
@@ -60,6 +60,17 @@ export function registerReferenceRoutes(app: Express, deps: RegisterReferenceRou
     res.once('close', onClose);
     try {
       res.set('Cache-Control', 'no-store').json(await recordReferenceFlow(access(req.params.id), req.params.id, req.params.refId, req.body ?? {},
+        deps.referenceFlow ?? defaultReferenceFlowDeps(), abort.signal));
+    } catch (error) { if (!res.destroyed) fail(res, error); }
+    finally { res.off('close', onClose); }
+  });
+  // Records our screen with the reference's steps and compares the two; can take a couple of minutes like /flow.
+  app.post('/api/projects/:id/references/:refId/compare', deps.http.requireLocalDaemonRequest, async (req, res) => {
+    const abort = new AbortController();
+    const onClose = () => { if (!res.writableEnded) abort.abort(); };
+    res.once('close', onClose);
+    try {
+      res.set('Cache-Control', 'no-store').json(await compareReferenceFlow(access(req.params.id), req.params.id, req.params.refId, req.body ?? {},
         deps.referenceFlow ?? defaultReferenceFlowDeps(), abort.signal));
     } catch (error) { if (!res.destroyed) fail(res, error); }
     finally { res.off('close', onClose); }
