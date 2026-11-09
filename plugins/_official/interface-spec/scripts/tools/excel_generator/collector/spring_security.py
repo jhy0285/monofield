@@ -1,9 +1,11 @@
 """Static Spring Security evidence for each endpoint's `authRequired`.
 
 Reads the Java security configuration — `SecurityFilterChain` beans and
-`WebSecurityConfigurerAdapter.configure(HttpSecurity)` — together with
-`web.ignoring()` rules and method-security annotations (`@PreAuthorize`,
-`@Secured`, `@RolesAllowed`, `@PermitAll`, `@DenyAll`). Every endpoint gets
+`WebSecurityConfigurerAdapter.configure(HttpSecurity)` — the XML namespace
+configuration (`<http>`, `<intercept-url>`, `security="none"` in
+`context-security.xml` and the like), `web.ignoring()` rules and method-security
+annotations (`@PreAuthorize`, `@Secured`, `@RolesAllowed`, `@PermitAll`,
+`@DenyAll`). Every endpoint gets
 one of three statuses and is never judged from the shape of its URL:
 
 - ``required``: a URL rule or an annotation rejects anonymous requests;
@@ -12,13 +14,15 @@ one of three statuses and is never judged from the shape of its URL:
 - ``undecided``: there is no Java security configuration, no rule matches, or
   a matcher/expression cannot be evaluated statically.
 
-Stdlib-only, like every interface-spec scanner. XML security configuration,
-servlet filters and HandlerInterceptors are not read.
+Stdlib-only, like every interface-spec scanner. Servlet filters,
+HandlerInterceptors and rules kept in a database (eGovFrame's
+`securedObjectService`) are not read.
 """
 
 from __future__ import annotations
 
 import re
+import xml.parsers.expat as expat
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable
@@ -30,7 +34,7 @@ _UNKNOWN = "unknown"  # a rule or annotation whose effect cannot be evaluated st
 
 STATUS_LABELS = {REQUIRED: "인증 필요", PUBLIC: "인증 불필요", UNDECIDED: "미확정", _UNKNOWN: "해석 불가"}
 UNDECIDED_NOTE = "인증 여부 확인 필요"
-NO_CONFIG_REASON = "Java 보안 설정(SecurityFilterChain/WebSecurityConfigurerAdapter) 없음"
+NO_CONFIG_REASON = "Java 보안 설정(SecurityFilterChain/WebSecurityConfigurerAdapter)과 XML 보안 설정(<http>) 없음"
 
 NON_PRODUCTION_DIRS = {"test", "tests", "build", "target"}
 
@@ -110,6 +114,35 @@ def production_java_files(root: Path) -> list[Path]:
         path for path in root.rglob("*.java")
         if not NON_PRODUCTION_DIRS.intersection(path.relative_to(root).parts[:-1])
     )
+
+
+def production_xml_files(root: Path) -> list[Path]:
+    """XML files outside test and build-output directories that name the Spring Security namespace."""
+    out = []
+    for path in sorted(root.rglob("*.xml")):
+        if NON_PRODUCTION_DIRS.intersection(path.relative_to(root).parts[:-1]):
+            continue
+        try:
+            if path.stat().st_size > 2_000_000:
+                continue
+        except OSError:
+            continue
+        out.append(path)
+    return out
+
+
+_XML_CONFIG_ATTRIBUTES = re.compile(r"(?:ROLE_|IS_AUTHENTICATED_)\w+|ANONYMOUS")
+
+
+def _xml_access_verdict(access: str) -> str:
+    """`access="..."` of an `<intercept-url>`: config attributes (`ROLE_A,ROLE_B`) or a SpEL expression."""
+    text = (access or "").strip()
+    if not text:
+        return _UNKNOWN
+    tokens = [token for token in re.split(r"[\s,]+", text) if token]
+    if tokens and all(_XML_CONFIG_ATTRIBUTES.fullmatch(token) for token in tokens):
+        return PUBLIC if _ANONYMOUS_ROLES.intersection(tokens) else REQUIRED
+    return _spel_verdict(text)
 
 
 def _read(path: Path) -> str:
@@ -558,6 +591,10 @@ class SpringSecurityModel:
             model._read_method_security(text)
             if "HttpSecurity" in text or "WebSecurity" in text:
                 model._read_config(path, text)
+        for path in production_xml_files(root):
+            raw = _read(path)
+            if "schema/security" in raw and ("<http" in raw or ":http" in raw):
+                model._read_xml_config(path, raw)
         model.chains.sort(key=lambda chain: (chain.order, chain.seq))
         return model
 
@@ -590,6 +627,66 @@ class SpringSecurityModel:
                                           [scope for scope in scopes if scope != []], [rule for _, rule in rules]))
             elif method.kind == "ignoring":
                 self._scan_ignoring(text, method, source, symbol)
+
+    def _read_xml_config(self, source: Path, raw: str) -> None:
+        """`<http>` chains of the XML namespace configuration, with their `<intercept-url>` rules in order."""
+        if "<!ENTITY" in raw:
+            return  # never expand entity declarations
+        parser = expat.ParserCreate()
+        current: dict | None = None
+        found: list[dict] = []
+
+        def start(name: str, attrs: dict) -> None:
+            nonlocal current
+            local = name.rsplit(":", 1)[-1]
+            line = parser.CurrentLineNumber
+            if local == "http":
+                current = {"attrs": attrs, "line": line, "rules": []}
+            elif local == "intercept-url" and current is not None:
+                current["rules"].append({"attrs": attrs, "line": line})
+
+        def end(name: str) -> None:
+            nonlocal current
+            if name.rsplit(":", 1)[-1] == "http" and current is not None:
+                found.append(current)
+                current = None
+
+        parser.StartElementHandler = start
+        parser.EndElementHandler = end
+        try:
+            parser.Parse(raw, True)
+        except expat.ExpatError:
+            return
+        symbol = f"{source.name}:<http>"
+        for chain in found:
+            attrs = chain["attrs"]
+            kind = "regex" if attrs.get("request-matcher", "ant") in ("regex", "ciRegex") else "ant"
+            pattern = attrs.get("pattern")
+            if attrs.get("security") == "none":
+                if pattern:
+                    snippet = f'http security="none" pattern="{pattern}"'
+                    self.ignored.append(_Rule([_Pattern(kind, pattern)], PUBLIC, snippet, source, chain["line"], symbol))
+                continue
+            if "request-matcher-ref" in attrs:
+                scopes: list[list[_Pattern] | None] = [None]
+            else:
+                scopes = [[_Pattern(kind, pattern)]] if pattern else []
+            rules: list[_Rule] = []
+            for item in chain["rules"]:
+                a = item["attrs"]
+                rule_pattern = a.get("pattern")
+                if not rule_pattern:
+                    continue
+                method = a.get("method")
+                patterns = [_Pattern(kind, rule_pattern, method.upper() if method else None)]
+                if a.get("filters") == "none":
+                    verdict = PUBLIC
+                else:
+                    verdict = _xml_access_verdict(a.get("access", ""))
+                snippet = f'intercept-url pattern="{rule_pattern}"' + (f' access="{a["access"]}"' if a.get("access") else "") \
+                    + (f' method="{method}"' if method else "")
+                rules.append(_Rule(patterns, verdict, snippet, source, item["line"], symbol))
+            self.chains.append(_Chain(_LOWEST, len(self.chains), symbol, scopes, rules))
 
     @staticmethod
     def _methods(text: str, class_order: int) -> Iterable[_Method]:

@@ -521,14 +521,18 @@ security configuration changes.
 
 When the evidence does not decide an endpoint, the scanner keeps it undecided:
 `authRequired: true`, `auth: { "type": "undecided" }`, and a note starting
-`인증 여부 확인 필요:` with the reason. Reasons include no Java security
+`인증 여부 확인 필요:` with the reason. Reasons include no Java or XML security
 configuration, no matching rule, a matcher or expression the parser cannot
 evaluate (for example a lambda `RequestMatcher` or `hasIpAddress`), or GET and
 POST getting different results on a method-less `@RequestMapping`. Resolve those
 endpoints from the code with the user; do not turn an undecided endpoint into
-`true` or `false` without evidence. XML security configuration
-(`context-security.xml`), servlet filters and `HandlerInterceptor`s are not
-read, so endpoints protected only by those stay undecided.
+`true` or `false` without evidence. The XML namespace configuration
+(`<http>`, `<intercept-url pattern access method>`, `security="none"`,
+`filters="none"` in `context-security.xml` and the like) is read like the Java
+one, and the rule's file and line are cited. Servlet filters,
+`HandlerInterceptor`s and rules kept in a database (eGovFrame's
+`securedObjectService`) are not read, so endpoints protected only by those stay
+undecided.
 
 Each scanner emits `requestExample` and `responseExample` with
 `exampleSource: "static-analysis"`. These examples combine traced request and

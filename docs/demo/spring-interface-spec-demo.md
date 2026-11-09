@@ -148,9 +148,11 @@ v1.0 워크북은 시트 8개(표지·목록 3개 + API 5개), v1.1은 `주문 �
   없을 때, 일치하는 규칙이 없을 때, 직접 만든 매처나 `hasIpAddress`처럼 정적으로
   해석할 수 없는 규칙일 때, method가 없는 `@RequestMapping`에서 GET과 POST의
   판정이 다를 때가 여기에 해당합니다.
-- XML 보안 설정(`context-security.xml` 등), 서블릿 필터, `HandlerInterceptor`는
-  읽지 않습니다. 이것으로만 보호하는 eGovFrame 프로젝트의 `.do` URL은 "인증 여부
-  확인 필요"로 남으므로 검토 단계에서 확정합니다. 서비스 계층의 메서드 보안
-  애너테이션과 직접 만든 메타 애너테이션도 보지 않습니다.
+- XML 보안 설정(`context-security.xml` 등)은 읽습니다. `<http>`(`pattern`, `security="none"`), `<intercept-url>`(`pattern`, `access`,
+  `method`, `filters="none"`)를 Java 설정과 같은 규칙으로 판정하고, 근거가 된 XML 파일과 줄을 `evidenceRefs`에 남깁니다.
+  `access`는 `ROLE_A,ROLE_B`·`IS_AUTHENTICATED_ANONYMOUSLY` 같은 속성 목록과 `hasRole('X')`·`permitAll` 같은 표현식을 모두 읽습니다.
+  `hasIpAddress`처럼 정적으로 풀 수 없는 규칙과 `request-matcher-ref`는 "인증 여부 확인 필요"로 남깁니다.
+  서블릿 필터, `HandlerInterceptor`, DB에 저장한 접근 규칙(eGovFrame `securedObjectService`)은 읽지 않으므로 이것으로만 보호하는
+  URL은 "인증 여부 확인 필요"로 남습니다. 서비스 계층의 메서드 보안 애너테이션과 직접 만든 메타 애너테이션도 보지 않습니다.
 - 스크립트의 제안은 실제 에이전트 출력이 아니라 재스캔 결과의 결정론적
   변경분입니다. 실제 에이전트 제안의 품질은 사용한 모델과 설정에 따라 다릅니다.

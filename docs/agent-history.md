@@ -529,6 +529,19 @@ Code health:
 
 ## Log
 
+### 2026-11-09 — Spring scanner reads XML security configuration (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** after the scanner fixes, "XML 보안 설정부터 고쳐줘" (the 7 undecided auth rows of the ABT benchmark, eGovFrame `.do` URLs).
+- **Changed:** `plugins/_official/interface-spec/scripts/tools/excel_generator/collector/spring_security.py`: `production_xml_files`, `_read_xml_config` (expat,
+  line numbers, prefixed or default namespace, entity declarations never expanded), `_xml_access_verdict` (`ROLE_*`/`IS_AUTHENTICATED_*` attributes and SpEL).
+  Reads `<http pattern request-matcher security="none">`, `<intercept-url pattern access method filters="none">`; chains join the Java ones
+  (order, then load order); a decision cites the XML file and line. Unevaluable rules (`hasIpAddress`, `request-matcher-ref`) stay undecided. The "no
+  configuration" reason now names the XML configuration too. SKILL.md, the demo document, the getting-started guide and the results document were updated.
+- **Tests:** `scripts/tests/test_spring_xml_security.py` (7 cases, red first). Scanner suite 54 pass.
+- **Verified:** benchmark rerun: auth 68 correct, 0 wrong, 0 undecided (was 61/0/7); the rest of the scores unchanged (routes 68/68, change detection 152/152).
+- **Not done:** servlet filters, `HandlerInterceptor`s and database-held rules (eGovFrame `securedObjectService`) are still not read; `<beans:bean>`
+  based `FilterSecurityInterceptor` configurations are not read; impact precision, the out-of-vocabulary changes, the guide and the release remain.
+
 ### 2026-11-09 — Spring scanner fixes from the ABT comparison (`ccr-8432aecf-n9xdfd`)
 
 - **Request:** "그 순서대로 진행해줘": fix the scanner gaps the comparison found, in the order proposed (records, constant paths, Jackson, header and
