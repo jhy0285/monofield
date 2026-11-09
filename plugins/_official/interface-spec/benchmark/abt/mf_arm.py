@@ -5,6 +5,7 @@ compatibility classifier, and write normalised specs/changes for scoring.
   python3 mf_arm.py <repo> <truth-dir> <out-dir> <base-sha> <head-sha>
 """
 import json
+import os
 import subprocess
 import sys
 import time
@@ -22,10 +23,10 @@ def run(cmd, cwd=None):
     return subprocess.run(cmd, cwd=cwd, check=True, capture_output=True, text=True)
 
 
-def scan(repo: Path, sha: str, out: Path) -> float:
+def scan(repo: Path, sha: str, out: Path, extra: list[str] | None = None) -> float:
     run(['git', 'checkout', '-q', sha], cwd=repo)
     t = time.time()
-    run(['python3', SCAN, '--codebase-path', str(repo), '--codebase-name', 'abt', '--out', str(out)])
+    run(['python3', SCAN, '--codebase-path', str(repo), '--codebase-name', 'abt', '--out', str(out), *(extra or [])])
     return time.time() - t
 
 
@@ -58,8 +59,9 @@ def main(repo, truth_dir, out_dir, base, head):
     repo, truth_dir, out_dir = Path(repo), Path(truth_dir), Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     dto_names = set(json.loads((truth_dir / 'dto_names.json').read_text()))
-    t1 = scan(repo, base, out_dir / 'mf_v1.raw.json')
-    t2 = scan(repo, head, out_dir / 'mf_v2.raw.json')
+    extra = os.environ.get('MF_SCAN_ARGS', '').split()
+    t1 = scan(repo, base, out_dir / 'mf_v1.raw.json', extra)
+    t2 = scan(repo, head, out_dir / 'mf_v2.raw.json', extra)
     v1 = json.loads((out_dir / 'mf_v1.raw.json').read_text())
     v2 = json.loads((out_dir / 'mf_v2.raw.json').read_text())
     (out_dir / 'mf_v1.norm.json').write_text(json.dumps(normalise(v1, dto_names), ensure_ascii=False, indent=1))

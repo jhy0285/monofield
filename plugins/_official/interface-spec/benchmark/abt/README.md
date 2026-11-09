@@ -12,6 +12,7 @@ python3 gen/build.py $PWD/work                     # work/abt-platform (git 2커
 B=$(python3 -c "import json;print(json.load(open('work/truth/stats.json'))['base'])")
 H=$(python3 -c "import json;print(json.load(open('work/truth/stats.json'))['head'])")
 python3 mf_arm.py work/abt-platform work/truth out/mf $B $H   # MonoField 스캐너 + 호환성 분류 (pnpm install 필요)
+# 스캐너 인자를 더 주려면: MF_SCAN_ARGS="--include-audit-fields" python3 mf_arm.py ...
 python3 eval_all.py > out/report.json              # 채점
 ```
 

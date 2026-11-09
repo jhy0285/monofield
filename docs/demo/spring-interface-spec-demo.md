@@ -107,7 +107,7 @@ monofield docs export-openapi --project <project-id> --input docs/orders.interfa
 ▸ 3. 코드 변경
   OrderController.java, OrderService.java, OrderCancelRequest.java, OrderCreateRequest.java
 ▸ 4. 명세서 갱신 diff 검토
-  2 changes (4234 chars vs 11653 chars full doc) → legacy-order/docs/orders-interface-spec-v1.1.xlsx
+  2 changes (4684 chars vs 13273 chars full doc) → legacy-order/docs/orders-interface-spec-v1.1.xlsx
 ▸ 5. OpenAPI 3.1 내보내기
   5 paths → legacy-order/docs/orders.openapi.json; re-collected 6 interfaces with identical field paths
 
@@ -118,6 +118,16 @@ monofield docs export-openapi --project <project-id> --input docs/orders.interfa
 
 v1.0 워크북은 시트 8개(표지·목록 3개 + API 5개), v1.1은 `주문 취소` 시트가 더해진
 9개입니다. `deliveryMemo`·`배송요청사항`·`IF-ORD-004`는 v1.1에만 있습니다.
+
+## 스캐너가 읽는 코드 모양
+
+`record` DTO, Lombok(`@Data`·`@Value` 등)과 직접 만든 getter/setter, 상속, `@ModelAttribute` 조회 객체, 제네릭 응답 래퍼,
+`@JsonProperty`·`@JsonIgnore`·`@JsonNaming(SnakeCase)`, `@Size`·`@Length`의 최대 길이, `@PathVariable`·`@RequestParam`·`@RequestHeader`의
+이름·필수 여부·타입, 어느 클래스에 있든 `static final String` 상수로 만든 경로와 결합(`ApiPaths.V1 + "/x"`), `{"/a", "/b"}` 별칭 경로,
+추상 컨트롤러가 가진 핸들러, `Map` 응답의 `put` 키(컨트롤러 안과 서비스 구현)를 읽습니다. 테스트 소스는 읽지 않습니다.
+`createdAt`·`updatedAt`·`regDate` 같은 감사 필드는 기본으로 뺍니다(낱말 단위로 판단하므로 `registeredAt`은 남습니다).
+넣으려면 `scan_spring.py --include-audit-fields`를 씁니다.
+근거: [ABT 비교 실험](../testing/abt-scanner-vs-claude-code-2026-11-09.md).
 
 ## 알려진 한계
 

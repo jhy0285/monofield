@@ -529,6 +529,29 @@ Code health:
 
 ## Log
 
+### 2026-11-09 — Spring scanner fixes from the ABT comparison (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** "그 순서대로 진행해줘": fix the scanner gaps the comparison found, in the order proposed (records, constant paths, Jackson, header and
+  named params, Map keys, audit rule, change detection).
+- **Changed:** `plugins/_official/interface-spec/scripts/tools/excel_generator/`: `collector/dto_expander.py` (records; class parser rewritten with
+  brace depth, inline annotations, modifier-less fields, `static`/`transient` skipped, `@JsonProperty`/`@JsonIgnore`/`@JsonNaming(SnakeCase)`,
+  `@Size`/`@Length` max, `extends` without a trailing space); `collector/controller_scanner.py` (constants from any class and `A.B` references,
+  controller-local constants, `{"/a","/b"}` paths, abstract base controllers served under each subclass path, test sources skipped,
+  `@RequestHeader`/`@PathVariable`/`@RequestParam` name, type and required, Map keys from the handler and from the service method);
+  `rules/audit_fields.py` (whole-word rule, opt-in switch), `models.py` (`max_size`), `scan_spring.py` (`maxSize` output, `--include-audit-fields`).
+  Behaviour changes to know: `@RequestParam` is required unless `required=false` or `defaultValue` (it was always optional); a path variable keeps
+  its Java type (it was always `String`); `regDate`-style names stay excluded but `registeredAt`/`region` are now kept.
+- **Tests:** `scripts/tests/test_spring_modern_java.py` (11 cases, written red first). Full scanner suite 47 pass (36 existing unchanged).
+- **Verified:** `python3 -m unittest discover -s tests` (47 OK); `pnpm exec tsx e2e/scripts/spring-spec-demo.ts --json` still 2 changes; benchmark rerun
+  (`benchmark/abt`): routes 68/68, request fields 100/100, response fields 98% recall (100% with `--include-audit-fields`), required and type 100%,
+  auth 61 correct/0 wrong/7 undecided, change detection 152/152 with 0 false positives and 100% level and kind; out-of-vocabulary 0/4; file-level
+  impact recall 97% and precision 57%. Numbers are in `docs/testing/abt-scanner-vs-claude-code-2026-11-09.md` (new section).
+- **Not done:** reading XML security (7 undecided), out-of-vocabulary changes (enum values, defaults, scopes), narrowing `docs impact` to the changed
+  fields, same-line `@PostMapping public ...` handlers, deeper Map call chains; plain Claude Code was not rerun after the fix; the exact-name audit
+  columns (`createdAt`, `updatedAt`, ...) are still excluded by default (a product decision: use `--include-audit-fields`); no release was cut.
+- **Next agent:** the demo document and the results document were updated; the plugin is Python, so no web/daemon test covers these paths except the
+  demo script. The guide rewrite and the strength wording wait for the user's answer on positioning.
+
 ### 2026-11-09 — MonoField scanner vs plain Claude Code on a large synthetic system (`ccr-8432aecf-n9xdfd`)
 
 - **Request:** the user doubted MonoField has a visible strength next to Codex/Claude Code and asked for a rigorous comparison on a very
