@@ -64,9 +64,8 @@ As of 2026-11-09.
   reviewed spec diffs). It is an independent fork of the Apache-2.0 Open Design
   project; see `docs/adr/0002-upstream-maintenance.md` (status: Proposed, only
   phase A done).
-- Version: `0.11.7-preview.8` (root `package.json`), prepared on 2026-11-09 to ship the reference board, flow recording
-  and comparison, and REA built in for conversations; `0.11.7-preview.7` (2026-11-01, from `b82aee0`) is the previous
-  published preview; stable `latest` is still `v0.11.6`. Workspace packages are
+- Version: `0.11.7-preview.8` (root `package.json`), published on 2026-11-09 as a GitHub prerelease (preview channel,
+  unsigned) from `d202b63` on `main`; stable `latest` is still `v0.11.6`. Workspace packages are
   still named `@open-design/*`; env vars still use the `OD_*` prefix.
 - Shape: pnpm monorepo. `apps/daemon` (Express + SQLite, `monofield` CLI) and
   `apps/web` (Next.js 16) hold most of the code (roughly 320k and 410k lines of
@@ -307,14 +306,6 @@ exercise is unchanged by it.
 
 Newest first within each group. Remove an item when it is done.
 
-Release 0.11.7-preview.8 (see the 2026-11-09 "preview.8 prepared" entry):
-
-- Blocked: GitHub Actions jobs are not started ("account is locked due to a billing issue"), so neither CI nor
-  `release-windows.yml` can run. The account owner has to resolve it in GitHub billing settings; then follow that entry's
-  "Next agent" steps. `main` and monofield.vercel.app still show preview.7.
-- `nix/pnpm-deps.nix` was not refreshed after the rea-agents lockfile change; the full CI run may fail "Validate Nix flake" and
-  produce the hash-only patch as a handoff artifact.
-
 Reference board (see the 2026-11-06 and 2026-11-09 "reference board" Log entries; steps 1 to 4 of the proposal are built):
 
 - The comparison with our screen is a pattern comparison (`compareReferenceFlows` in contracts): step outcome, page move, API
@@ -537,6 +528,21 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-09 — 0.11.7-preview.8 published from `main` (`ccr-8432aecf-n9xdfd`)
+
+- **Done:** after the account owner added a payment method, the billing lock lifted. Full CI on the branch head needed two
+  fixes first: the Nix pnpm hashes ("chore(nix): refresh pnpm deps hash", values from the CI `nix flake check` output) and an
+  ordering flake ("fix(ontology): list document reviews by document and item"); both were placed before the release commit.
+  Full CI run 42552179705 passed all jobs on the branch head (release commit plus the site/docs commit). The release commit
+  `d202b63` was pushed to `main` as a fast-forward. `release-windows.yml` (ref `d202b63…`, preview, unsigned allowed,
+  publish; run 42552935885) passed build, install and runtime smoke and published `v0.11.7-preview.8` (prerelease on
+  `d202b63`: setup.exe, portable ZIP, payload 7z, `latest.yml`, `SHA256SUMS.txt`; ranged GETs of the installer and ZIP answer
+  206; `releases/latest` is still `v0.11.6`).
+- **Changed here:** the release notes gained the `Source:` line and the run link; this commit and the prepared site/README commit
+  go to `main`, which deploys monofield.vercel.app and syncs the notes to the GitHub release.
+- **Billing note:** the lock came from GitHub billing ("not been able to charge it for another month") while the account had
+  no payment method and $0 billed; Actions usage on this public repository is billed at $0.
 
 ### 2026-11-09 — document reviews in a stable order (`ccr-8432aecf-n9xdfd`)
 
