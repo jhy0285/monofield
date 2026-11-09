@@ -120,12 +120,20 @@ structured deliverable.
   local server for typed classification, scoring, and uncertainty. The local
   Laya option runs without a TypeSafe key; it is a separate model. See the
   [decision model guide](docs/jev-decisions.md).
-- **REA can investigate a legacy application.** Enable the pinned REA preset in
-  Settings → MCP, then use the bundled `legacy-system-handover` skill with a
-  supported local agent. Preserve static, browser and SQLite Evidence; review
-  the findings and export structured interface/screen documents. The same
-  configuration is available through `monofield rea configure --json`.
-  See the [REA + Laya handover guide](docs/rea-laya-handover.md).
+- **REA is built in.** MonoField ships REA (`rea-agents` 6.7.0) and lets the AI
+  use it in conversations by default; Claude Code, Codex, OpenCode and supported
+  ACP adapters receive it without setup. Turn it off in Settings → MCP → REA setup
+  check or with `monofield rea disable --json`. Use the bundled
+  `legacy-system-handover` skill to investigate a legacy application, preserve
+  static, browser and SQLite Evidence, and export structured interface/screen
+  documents. See the [REA + Laya handover guide](docs/rea-laya-handover.md).
+- **Keep screens you like as references.** In the built-in browser, keep a page
+  on the reference board (address, screenshot, structure outline, your note),
+  then ask the AI to rebuild its structure, flow and fields with your project's
+  own code, without copying text, images or branding. Optionally record its flow
+  with the built-in REA and compare your screen against it step by step. The
+  same is available through `monofield refs`. See the
+  [reference board guide (Korean)](docs/reference-board.ko.md).
 - **Check the code you are reviewing.** Run discovered project checks from the
   Changes view, keep real exit codes and logs with a source fingerprint, and
   prepare a repair request in your existing agent's composer. Changed source

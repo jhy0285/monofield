@@ -7,7 +7,9 @@ import {
   defaultBundledReaProbe,
   isPinnedNpxRea,
   locateBundledRea,
+  reaForAgentsEnabled,
   withBundledRea,
+  withReaForAgents,
   type BundledReaProbe,
 } from '../src/services/bundled-rea.js';
 
@@ -74,5 +76,32 @@ describe('the REA copy that ships with MonoField', () => {
     const entry = path.join('/app/node_modules/rea-agents', 'scripts', 'rea.mjs');
     expect(buildClaudeMcpJson(servers)).toMatchObject({ mcpServers: { rea: { command: '/usr/local/bin/node', args: [entry, '--mcp'] } } });
     expect(buildAcpMcpServers(servers)).toContainEqual(expect.objectContaining({ name: 'rea', command: '/usr/local/bin/node', args: [entry, '--mcp'] }));
+  });
+});
+
+describe('the AI uses REA in conversations (on unless turned off)', () => {
+  const template = MCP_TEMPLATES.find((entry) => entry.id === 'rea');
+  const other: McpServerConfig = { id: 'other', transport: 'stdio', command: 'other-mcp', enabled: true };
+
+  it('is on when the setting is absent or anything but false', () => {
+    expect(reaForAgentsEnabled(undefined)).toBe(true);
+    expect(reaForAgentsEnabled(true)).toBe(true);
+    expect(reaForAgentsEnabled(false)).toBe(false);
+  });
+
+  it('adds REA from the template when nothing is saved, so the bundled copy reaches the agent', () => {
+    const servers = withReaForAgents([other], true, template);
+    expect(servers).toEqual([other, expect.objectContaining({ id: 'rea', templateId: 'rea', command: 'npx', args: ['-y', `rea-agents@${REA_PACKAGE.version}`, '--mcp'], enabled: true })]);
+    const bundled = withBundledRea(servers, { available: true, runtime: { entry: '/app/rea/scripts/rea.mjs', version: REA_PACKAGE.version, command: '/app/MonoField', env: { ELECTRON_RUN_AS_NODE: '1' }, nodeVersion: '24.11.0' } });
+    expect(buildClaudeMcpJson(bundled)).toMatchObject({ mcpServers: { rea: { command: '/app/MonoField', args: ['/app/rea/scripts/rea.mjs', '--mcp'] } } });
+  });
+
+  it('uses a saved REA entry (its folders) and enables it, and leaves every REA entry out when turned off', () => {
+    const saved: McpServerConfig = { id: 'rea', templateId: 'rea', transport: 'stdio', command: 'npx', args: ['-y', `rea-agents@${REA_PACKAGE.version}`, '--mcp'], env: { JAVA_HOME: '/jdk' }, enabled: false };
+    expect(withReaForAgents([other, saved], true, template)).toEqual([other, { ...saved, enabled: true }]);
+    const off = withReaForAgents([other, saved], false, template);
+    expect(off).toEqual([other, { ...saved, enabled: false }]);
+    expect(buildAcpMcpServers(off.filter((server) => server.enabled))).toEqual([expect.objectContaining({ name: 'other' })]);
+    expect(withReaForAgents([other], false, template)).toEqual([other]);
   });
 });

@@ -35,31 +35,29 @@
    그래서 **Node.js 설치와 npx 다운로드가 필요 없습니다.** 내장본을 쓸 수 없을 때(설치본에 없거나 실행 환경의 Node.js가
    REA 지원 범위 밖)만 예전처럼 `npx -y rea-agents@6.7.0 --mcp`가 REA를 내려받아 실행합니다. 이때는 Node.js 24.15
    이상과 npm이 필요합니다(REA는 Node 22.19+, 24.11+, 26+를 지원하지만 SQLite 검사는 24.15+가 필요).
-2. MonoField **Settings → 외부 MCP**에서 **REA를 MCP 목록에 추가**를 누르고 저장하거나 `monofield rea configure --json`을
-   실행합니다. 저장되는 명령은 그대로 `npx -y rea-agents@6.7.0 --mcp`이지만, 대화가 시작될 때 이 고정 버전 항목은
-   내장본으로 바뀌어 실행됩니다. 명령이나 버전을 직접 바꾼 항목은 바꾸지 않습니다.
-3. **Claude Code**를 쓰면 새 대화에서 바로 REA 도구가 보입니다.
-   **Codex**는 MonoField 설정이 자동 전달되지 않으므로 한 번 직접 등록합니다. 내장본을 등록하려면 점검 화면 아래쪽
-   "다른 AI 도구에 내장 REA를 직접 등록할 때 쓰는 실행 정보"(또는 `monofield rea doctor`)에 나오는 명령·인자·환경 변수를
-   씁니다. 내장본 대신 npx를 쓰려면:
-
-   ```sh
-   codex mcp add rea -- npx -y rea-agents@6.7.0 --mcp
-   ```
+2. **설정할 것이 없습니다.** Settings → 외부 MCP 맨 위의 **대화에서 AI가 REA 쓰기**가 기본으로 켜져 있어서, 새 대화의
+   AI(Claude Code·Codex·OpenCode·ACP 에이전트)가 내장 REA 도구를 바로 씁니다. MCP 목록에 REA를 추가할 필요가 없고,
+   AI가 쓰지 않으면 비용도 들지 않습니다. 끄려면 같은 스위치를 끄거나 `monofield rea disable`, 다시 켜려면
+   `monofield rea enable`(상태는 `monofield rea status`). 새 대화부터 적용됩니다.
+3. 전달 방식은 AI마다 다르지만 사용자는 신경 쓸 필요가 없습니다. Claude Code는 모노필드가 관리하는 프로젝트에서는
+   `.mcp.json`으로, 사용자가 연 코드 폴더에서는 그 폴더의 파일을 건드리지 않도록 실행 인자(`--mcp-config`)로 받습니다.
+   **Codex**도 이제 실행 인자(`-c mcp_servers.rea…`)로 자동으로 받으므로 `codex mcp add`가 필요 없습니다. 사용자의
+   `~/.codex/config.toml`은 바꾸지 않습니다. 모노필드 밖에서 Codex 등을 쓸 때만 점검 화면 아래쪽 실행 정보(또는
+   `monofield rea doctor`)로 직접 등록합니다.
 
 4. 브라우저 캡처에는 설치된 Chrome/Edge 등 Chromium 계열 브라우저가 필요합니다.
 5. **한 화면에서 점검**: Settings → MCP(또는 Integrations → MCP) 맨 위의 **REA 설치·연결 점검**이
    내장 REA(쓸 수 있으면 Node.js와 npx는 "필요 없음"으로 표시), Node.js 버전(rea-agents 6.7.0 패키지가 선언한
    `^22.19.0 || ^24.11.0 || >=26.0.0`), npx, MCP 등록(이상 내장본이 없을 때 필수)과
    Chromium 계열 브라우저, Ghidra, 다른 네이티브 엔진(Hopper·IDA), Java·JADX·Apktool·tshark·adb(선택)를 한 번에 보여 줍니다.
-   MCP에 REA가 없으면 **REA를 MCP 목록에 추가**를 누른 뒤 저장합니다. 터미널에서는 `monofield rea doctor [--json]`.
+   "대화에서 AI 사용" 줄은 스위치가 켜져 있으면 "내장 REA 연결됨"입니다. 터미널에서는 `monofield rea doctor [--json]`.
    PATH와 일반 설치 위치만 확인하고 아무것도 설치하지 않으므로, 다른 곳에 설치한 도구는 "찾지 못함"으로 나올 수 있습니다.
    "준비됨"이어도 실제 연결은 새 에이전트 대화에서 REA 도구가 보이는지로 확인합니다.
 6. **실행 파일(exe·dll)까지 보려면 Ghidra**: REA는 Ghidra를 포함하지 않고, 설치된 Ghidra를 `GHIDRA_INSTALL_DIR`
    환경 변수(절대 경로)로 찾습니다. Java는 `JAVA_HOME`(없으면 PATH의 java)을 씁니다. PATH에 Ghidra가 있어도 이 변수가
    없으면 찾지 못합니다.
    1. [Ghidra](https://github.com/NationalSecurityAgency/ghidra/releases)와 그 버전이 요구하는 JDK를 설치합니다.
-   2. Settings → **외부 MCP**의 REA 항목을 펼쳐 **선택 폴더**의 **Ghidra 폴더**(`C:\ghidra_<버전>_PUBLIC`)와, 필요하면
+   2. Settings → **외부 MCP**에서 REA 항목을 추가해 펼치고(폴더를 저장할 때만 필요) **선택 폴더**의 **Ghidra 폴더**(`C:\ghidra_<버전>_PUBLIC`)와, 필요하면
       **Java(JDK) 폴더**(`C:\Program Files\...\jdk-<버전>`)를 입력하고 저장합니다. 터미널에서는
       `monofield rea configure --ghidra-dir <폴더> [--java-home <폴더>]`이고, 지우려면 `--clear-ghidra-dir`,
       `--clear-java-home`입니다. 두 입력은 아래 **Env (KEY=VALUE)** 칸의 `GHIDRA_INSTALL_DIR`·`JAVA_HOME` 줄과 같은

@@ -465,8 +465,9 @@ export interface ReaDoctorCheck {
    * A short machine-readable note: `outside-range`, `disabled`, `other-version`, `custom-command`; for GHIDRA_INSTALL_DIR
    * and JAVA_HOME `not-set`, `empty-value` or `not-absolute` (REA refuses to start with either, so the check is then
    * required), `no-analyze-headless`, `no-java`. For the copy of REA that ships with MonoField (`bundled`):
-   * `not-installed`, `other-version`, `outside-range`; while it is used, Node.js and npx are `not-needed` and the MCP
-   * entry `runs-bundled`.
+   * `not-installed`, `other-version`, `outside-range`; while it is used, Node.js and npx are `not-needed`. For the
+   * conversation link (`mcp`): `built-in` (the REA that ships with MonoField reaches every conversation) or `agents-off`
+   * (turned off in the settings).
    */
   note?: string;
 }

@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { REA_PACKAGE, satisfiesNodeRange } from '@open-design/contracts';
-import type { McpServerConfig } from '../mcp-config.js';
+import type { McpServerConfig, McpTemplate } from '../mcp-config.js';
 
 /**
  * REA ships inside MonoField: `rea-agents` is a pinned dependency of the daemon (the lockfile records its hash), so a
@@ -95,4 +95,24 @@ export function withBundledRea<T extends McpServerConfig>(servers: T[], lookup: 
   return servers.map((server) => isPinnedNpxRea(server)
     ? { ...server, command: runtime.command, args: [runtime.entry, '--mcp'], env: { ...(server.env ?? {}), ...runtime.env } }
     : server);
+}
+
+/** The setting "the AI uses REA in conversations": on unless it was turned off. */
+export function reaForAgentsEnabled(value: unknown): boolean {
+  return value !== false;
+}
+
+const isReaEntry = (server: { id: string; templateId?: string | undefined }) => server.id === 'rea' || server.templateId === 'rea';
+
+/**
+ * The saved MCP servers a conversation starts from, with REA switched by the setting. On: a saved REA entry is used
+ * and enabled (it may carry the Ghidra and Java folders), or, when there is none, the REA template's entry is added, so
+ * REA needs no setup. Off: every REA entry is left out. Other servers are untouched.
+ */
+export function withReaForAgents<T extends McpServerConfig>(servers: T[], enabled: boolean, template: McpTemplate | undefined): T[] {
+  if (!enabled) return servers.map((server) => (isReaEntry(server) ? { ...server, enabled: false } : server));
+  if (servers.some(isReaEntry)) return servers.map((server) => (isReaEntry(server) ? { ...server, enabled: true } : server));
+  if (!template?.command || !template.args) return servers;
+  const entry = { id: 'rea', templateId: 'rea', label: template.label, transport: 'stdio', command: template.command, args: [...template.args], enabled: true } as McpServerConfig;
+  return [...servers, entry as T];
 }

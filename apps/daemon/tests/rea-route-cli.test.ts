@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startServer, type StartServerResult } from '../src/server.js';
 import { MCP_MASKED_SECRET as CONTRACT_MASK } from '@open-design/contracts';
-import { buildAcpMcpServers, buildClaudeMcpJson, MCP_MASKED_SECRET, MCP_TEMPLATES, type McpServerConfig } from '../src/mcp-config.js';
+import { MCP_MASKED_SECRET, MCP_TEMPLATES, type McpServerConfig } from '../src/mcp-config.js';
 import { applyReaFolderEdits, reaFolderEdits } from '../src/services/rea-cli.js';
 import { installTestCredentialVault, type TestCredentialVault } from './helpers/credential-vault.js';
 
@@ -22,28 +22,32 @@ describe('REA configuration through the public MCP API and CLI', () => {
     finally { vault?.restore(); }
   });
   const put = (servers: unknown[]) => fetch(`${server.url}/api/mcp/servers`, {method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({servers})});
-  it('preserves unrelated encrypted server credentials, enables once, exports to agent transports and disables without claiming a live connection', async () => {
+  it('is on without setup, turns off and on through the setting, and keeps unrelated encrypted credentials', async () => {
     expect((await put([{id:'other',transport:'stdio',command:'other-mcp',enabled:false,env:{API_KEY:'preserve-this-test-key'}}])).ok).toBe(true);
+    // On by default: no saved REA entry is needed.
     const before = JSON.parse((await cli('status')).stdout);
-    expect(before).toMatchObject({configured:false,enabled:false,availability:'not-probed'});
-    const configured = JSON.parse((await cli('configure')).stdout);
-    expect(configured).toMatchObject({configured:true,enabled:true,availability:'not-probed',server:{command:'npx',args:['-y','rea-agents@6.7.0','--mcp']}});
-    await cli('configure');
+    expect(before).toMatchObject({enabled:true,builtIn:true,configured:false,availability:'not-probed'});
+    const off = JSON.parse((await cli('disable')).stdout);
+    expect(off).toMatchObject({enabled:false,configured:false});
+    expect((await (await fetch(`${server.url}/api/app-config`)).json() as {config:{reaForAgents?:boolean}}).config.reaForAgents).toBe(false);
+    const doctorOff = await (await fetch(`${server.url}/api/rea/doctor`)).json() as {checks:Array<{id:string;status:string;note?:string;required:boolean}>};
+    expect(doctorOff.checks.find(c=>c.id==='mcp')).toMatchObject({status:'warn',note:'agents-off',required:false});
+    expect(JSON.parse((await cli('enable')).stdout)).toMatchObject({enabled:true,configured:false});
+    const doctorOn = await (await fetch(`${server.url}/api/rea/doctor`)).json() as {checks:Array<{id:string;status:string}>};
+    expect(doctorOn.checks.find(c=>c.id==='mcp')).toMatchObject({status:'ok'});
+    // "configure" with no folders only turns the setting on; it saves no entry.
+    expect(JSON.parse((await cli('configure')).stdout)).toMatchObject({enabled:true,configured:false});
     const settings = await (await fetch(`${server.url}/api/mcp/servers`)).json() as {servers: McpServerConfig[]};
-    expect(settings.servers.filter(s=>s.id==='rea')).toHaveLength(1);
+    expect(settings.servers.filter(s=>s.id==='rea')).toHaveLength(0);
     expect(settings.servers.find(s=>s.id==='other')).toMatchObject({enabled:false});
     expect([...vault.values.values()].some(value=>value.includes('preserve-this-test-key'))).toBe(true);
-    expect(buildClaudeMcpJson(settings.servers)).toMatchObject({mcpServers:{rea:{command:'npx',args:['-y','rea-agents@6.7.0','--mcp']}}});
-    expect(buildAcpMcpServers(settings.servers)).toContainEqual(expect.objectContaining({name:'rea',command:'npx',args:['-y','rea-agents@6.7.0','--mcp']}));
-    expect(JSON.parse((await cli('disable')).stdout)).toMatchObject({configured:true,enabled:false});
-    const disabled = await (await fetch(`${server.url}/api/mcp/servers`)).json() as {servers:McpServerConfig[]};
-    expect(buildAcpMcpServers(disabled.servers)).toEqual([]);
   });
   it('saves the Ghidra and Java folders from the command line, keeps them encrypted, and removes them again', async () => {
     expect((await put([{id:'other',transport:'stdio',command:'other-mcp',enabled:true,env:{API_KEY:'keep-this-too'}}])).ok).toBe(true);
     const ghidra = process.platform === 'win32' ? 'C:\\Tools\\ghidra' : '/opt/ghidra-test';
     const first = JSON.parse((await cli('configure', '--ghidra-dir', ghidra)).stdout);
     expect(first).toMatchObject({configured:true,enabled:true,folders:{GHIDRA_INSTALL_DIR:true,JAVA_HOME:false}});
+    expect(first.server).toMatchObject({command:'npx',args:['-y','rea-agents@6.7.0','--mcp']});
     expect(JSON.stringify(first)).not.toContain(ghidra);
     const second = JSON.parse((await cli('configure', '--java-home', '/opt/jdk-test')).stdout);
     expect(second.folders).toEqual({GHIDRA_INSTALL_DIR:true,JAVA_HOME:true});

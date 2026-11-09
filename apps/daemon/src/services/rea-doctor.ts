@@ -25,9 +25,11 @@ export interface ReaDoctorDeps {
   mcpServers: () => Promise<Array<{ id: string; templateId?: string; transport?: string; enabled?: boolean; command?: string; args?: string[]; env?: Record<string, string> }>>;
   /** The REA copy inside MonoField. */
   bundled: () => BundledReaLookup;
+  /** Settings: the AI uses REA in conversations. Absent or unreadable means on, the shipped default. */
+  reaForAgents?: () => Promise<boolean>;
 }
 
-export function defaultReaDoctorDeps(mcpServers: ReaDoctorDeps['mcpServers']): ReaDoctorDeps {
+export function defaultReaDoctorDeps(mcpServers: ReaDoctorDeps['mcpServers'], reaForAgents: ReaDoctorDeps['reaForAgents'] = async () => true): ReaDoctorDeps {
   return {
     platform: process.platform,
     env: process.env,
@@ -37,6 +39,7 @@ export function defaultReaDoctorDeps(mcpServers: ReaDoctorDeps['mcpServers']): R
     exists: async (file) => { try { await access(file); return true; } catch { return false; } },
     mcpServers,
     bundled: () => locateBundledRea(),
+    reaForAgents,
   };
 }
 
@@ -93,14 +96,19 @@ export async function runReaDoctor(deps: ReaDoctorDeps): Promise<ReaDoctorRespon
   if (runsBundled) add('npx', false, npx, undefined, 'not-needed');
   else add('npx', true, npx);
 
-  if (!rea) add('mcp', true, null);
-  else {
+  // "The AI uses REA in conversations": the built-in REA reaches every conversation unless this is off; a saved REA entry
+  // only adds its folders (or replaces the command, for a custom REA).
+  const forAgents = deps.reaForAgents ? await deps.reaForAgents().catch(() => true) : true;
+  if (!forAgents) add('mcp', false, null, 'warn', 'agents-off');
+  else if (!rea) {
+    const command = runsBundled ? `${REA_PACKAGE.name} ${REA_PACKAGE.version}` : `npx -y ${REA_PACKAGE.name}@${REA_PACKAGE.version} --mcp`;
+    add('mcp', true, command, 'ok', runsBundled ? 'built-in' : undefined);
+  } else {
     const command = [rea.command, ...(rea.args ?? [])].filter(Boolean).join(' ');
     const pinned = (rea.args ?? []).find((arg) => arg.startsWith(`${REA_PACKAGE.name}@`));
-    const note = rea.enabled === false ? 'disabled'
-      : pinned && pinned !== `${REA_PACKAGE.name}@${REA_PACKAGE.version}` ? 'other-version'
-        : !pinned ? 'custom-command' : runsBundled ? 'runs-bundled' : undefined;
-    add('mcp', true, command || rea.id, rea.enabled === false ? 'warn' : 'ok', note);
+    const note = pinned && pinned !== `${REA_PACKAGE.name}@${REA_PACKAGE.version}` ? 'other-version'
+      : !pinned ? 'custom-command' : runsBundled ? 'built-in' : undefined;
+    add('mcp', true, command || rea.id, 'ok', note);
   }
 
   add('browser', false, await findBrowser(deps));

@@ -1,5 +1,7 @@
 import type { Express, Response } from 'express';
+import { readAppConfig } from '../app-config.js';
 import { readMcpConfig } from '../mcp-config.js';
+import { reaForAgentsEnabled } from '../services/bundled-rea.js';
 import { classifyBrowserEvidenceError } from '../services/browser-evidence.js';
 import { citeReaEvidence } from '../services/rea-cite.js';
 import { compareReaFiles } from '../services/rea-compare.js';
@@ -39,7 +41,8 @@ export function registerReaEvidenceRoutes(app: Express, deps: RegisterBrowserEvi
     try {
       // The full configuration, because GHIDRA_INSTALL_DIR and JAVA_HOME may be set on the REA entry; the response carries
       // those two paths only, never another server's values.
-      const doctorDeps = deps.reaDoctor ?? defaultReaDoctorDeps(async () => (await readMcpConfig(deps.paths.RUNTIME_DATA_DIR)).servers);
+      const doctorDeps = deps.reaDoctor ?? defaultReaDoctorDeps(async () => (await readMcpConfig(deps.paths.RUNTIME_DATA_DIR)).servers,
+        async () => reaForAgentsEnabled((await readAppConfig(deps.paths.RUNTIME_DATA_DIR)).reaForAgents));
       res.set('Cache-Control', 'no-store').json(await runReaDoctor(doctorDeps));
     } catch (error) { fail(res, error); }
   });

@@ -11,23 +11,24 @@ const NEED_KEY = {
   java: 'reaDoctor.need.java', jadx: 'reaDoctor.need.jadx', apktool: 'reaDoctor.need.apktool', tshark: 'reaDoctor.need.tshark', adb: 'reaDoctor.need.adb',
 } as const satisfies Record<ReaDoctorCheckId, string>;
 const NOTE_KEY = {
-  'outside-range': 'reaDoctor.note.outsideRange', disabled: 'reaDoctor.note.disabled', 'other-version': 'reaDoctor.note.otherVersion', 'custom-command': 'reaDoctor.note.customCommand',
+  'outside-range': 'reaDoctor.note.outsideRange', 'other-version': 'reaDoctor.note.otherVersion', 'custom-command': 'reaDoctor.note.customCommand',
   'not-set': 'reaDoctor.note.notSet', 'empty-value': 'reaDoctor.note.emptyValue', 'not-absolute': 'reaDoctor.note.notAbsolute',
   'no-analyze-headless': 'reaDoctor.note.noAnalyzeHeadless', 'no-java': 'reaDoctor.note.noJava',
-  'not-installed': 'reaDoctor.note.notInstalled', 'not-needed': 'reaDoctor.note.notNeeded', 'runs-bundled': 'reaDoctor.note.runsBundled',
+  'not-installed': 'reaDoctor.note.notInstalled', 'not-needed': 'reaDoctor.note.notNeeded',
+  'built-in': 'reaDoctor.note.builtIn', 'agents-off': 'reaDoctor.note.agentsOff',
 } as const;
 const noteKey = (note: string | undefined) => (note && note in NOTE_KEY ? NOTE_KEY[note as keyof typeof NOTE_KEY] : null);
 const GLYPH: Readonly<Record<ReaDoctorCheck['status'], string>> = { ok: '✓', warn: '!', missing: '✕' };
 
 /**
- * Everything REA needs, checked in one place: the REA copy that ships with MonoField (or else Node.js and npx), the REA MCP server in these settings, and the browser and
- * engines some targets use. The daemon looks; this shows what it found, what each item is for, and adds REA to the MCP
- * list (saved with the section's own Save button) when it is missing.
+ * REA ships with MonoField. This panel has the one switch people need, "the AI uses REA in conversations" (on unless
+ * turned off; the app setting `reaForAgents`), and checks what REA needs on this machine: the built-in copy (or else
+ * Node.js and npx), the browser and the engines some targets use. A saved REA entry in the MCP list below only holds
+ * settings such as the Ghidra and Java folders.
  */
-export function ReaDoctorPanel({ mcpRow, onAddRea, refreshKey }: {
+export function ReaDoctorPanel({ mcpRow, refreshKey }: {
   /** The REA entry in the MCP list being edited: absent, added or changed but not saved yet, or saved. */
   mcpRow: 'none' | 'unsaved' | 'saved';
-  onAddRea?: () => void;
   /** Changes after a save, so the check reads the saved settings again. */
   refreshKey?: number | null;
 }) {
@@ -35,6 +36,15 @@ export function ReaDoctorPanel({ mcpRow, onAddRea, refreshKey }: {
   const [result, setResult] = useState<ReaDoctorResponse | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [forAgents, setForAgents] = useState<boolean | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    void fetch('/api/app-config').then(async (response) => {
+      if (!response.ok) return;
+      setForAgents(((await response.json()) as { config?: { reaForAgents?: unknown } }).config?.reaForAgents !== false);
+    }).catch(() => undefined);
+  }, []);
 
   const run = useCallback(async () => {
     setBusy(true); setError('');
@@ -46,6 +56,19 @@ export function ReaDoctorPanel({ mcpRow, onAddRea, refreshKey }: {
     setBusy(false);
   }, []);
   useEffect(() => { void run(); }, [run, refreshKey]);
+
+  async function toggle() {
+    if (forAgents === null) return;
+    const next = !forAgents;
+    setSaving(true); setError('');
+    try {
+      const response = await fetch('/api/app-config', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ reaForAgents: next }) });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      setForAgents(next);
+      void run();
+    } catch (reason) { setError(`${t('reaDoctor.agents.saveFailed')} ${reason instanceof Error ? reason.message : String(reason)}`); }
+    setSaving(false);
+  }
 
   const label = (id: ReaDoctorCheckId) => (id === 'bundled' ? t('reaDoctor.label.bundled') : id === 'node' ? `Node.js ${result?.package.node ?? ''}`.trim()
     : id === 'mcp' ? t('reaDoctor.label.mcp') : id === 'browser' ? t('reaDoctor.label.browser') : id === 'native' ? t('reaDoctor.label.native')
@@ -60,6 +83,17 @@ export function ReaDoctorPanel({ mcpRow, onAddRea, refreshKey }: {
       </div>
       <Button variant="ghost" onClick={() => void run()} disabled={busy} data-testid="rea-doctor-run">{busy ? t('common.loading') : t('reaDoctor.run')}</Button>
     </div>
+    <div className={styles.switchRow}>
+      <div>
+        <strong className={styles.switchTitle}>{t('reaDoctor.agents.title')}</strong>
+        <p className={styles.need}>{t('reaDoctor.agents.hint')}</p>
+      </div>
+      <button type="button" role="switch" aria-checked={forAgents === true} aria-label={t('reaDoctor.agents.title')}
+        className={styles.switch} data-on={forAgents === true} disabled={forAgents === null || saving} onClick={() => void toggle()} data-testid="rea-agents-switch">
+        <span className={styles.track} aria-hidden="true"><span className={styles.thumb} /></span>
+        <span>{forAgents === false ? t('reaDoctor.agents.off') : t('reaDoctor.agents.on')}</span>
+      </button>
+    </div>
     {error ? <p className={styles.alert} role="alert">{t('reaDoctor.failed')} {error}</p> : null}
     {checks.length ? <ul className={styles.list}>
       {checks.map((check) => <li key={check.id} className={styles.item} data-status={check.status} data-testid={`rea-doctor-${check.id}`}>
@@ -72,10 +106,7 @@ export function ReaDoctorPanel({ mcpRow, onAddRea, refreshKey }: {
           </div>
           <p className={styles.need}>{t(NEED_KEY[check.id])}</p>
           <code className={styles.found}>{check.found ?? t('reaDoctor.notFound')}</code>
-          {check.id === 'mcp' && check.status === 'missing' && onAddRea ? (mcpRow === 'none'
-            ? <Button variant="primary" onClick={onAddRea} data-testid="rea-doctor-add">{t('reaDoctor.addMcp')}</Button>
-            : <p className={styles.need} role="status">{t('reaDoctor.saveHint')}</p>) : null}
-          {check.id === 'mcp' && check.status !== 'missing' && mcpRow === 'unsaved' ? <p className={styles.need}>{t('reaDoctor.saveHint')}</p> : null}
+          {check.id === 'mcp' && mcpRow === 'unsaved' ? <p className={styles.need}>{t('reaDoctor.saveHint')}</p> : null}
         </div>
       </li>)}
     </ul> : null}

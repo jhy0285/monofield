@@ -16,7 +16,7 @@ import type {
 import type { McpServerConfig, McpTemplate } from '../mcp-config.js';
 
 const USAGE = `Usage:
-  monofield rea <status|configure|disable> [--json] [--daemon-url URL]
+  monofield rea <status|enable|disable> [--json] [--daemon-url URL]
   monofield rea configure   [--ghidra-dir <folder> | --clear-ghidra-dir] [--java-home <folder> | --clear-java-home]
   monofield rea doctor      [--json]
   monofield rea files       --project <id> [--json]
@@ -50,9 +50,10 @@ calls with IDs normalized, visible text unless --no-text), or two case-result fi
 "output"}]}) case by case, numbers equal within --tolerance. It exits with status 1 when anything differs, so an agent
 can loop until the remake matches. A pass means the recorded runs matched, not that the remake is equivalent.
 
-status, configure and disable manage the optional pinned REA MCP server for new
-supported local-agent conversations. They do not install Node.js, start REA, or
-test server availability.
+status, enable and disable read and switch "the AI uses REA in conversations" (Settings → MCP), on by default: the
+REA that ships with MonoField reaches every new conversation of Claude Code, Codex, OpenCode and ACP agents without a
+saved MCP entry. configure turns it on too and keeps the folders below in a saved REA entry. None of them starts REA or
+tests a conversation.
 
 --ghidra-dir and --java-home save the folders REA reads as GHIDRA_INSTALL_DIR and JAVA_HOME (the same two boxes as in
 Settings → MCP). They must be full paths: REA does not start with a relative one. --clear-ghidra-dir and --clear-java-home
@@ -79,7 +80,7 @@ interface Helpers {
 }
 
 const EVIDENCE_COMMANDS = ['files', 'show', 'cite', 'compare', 'evidence', 'cross-check', 'apply'];
-const MCP_COMMANDS = ['status', 'configure', 'disable'];
+const MCP_COMMANDS = ['status', 'enable', 'configure', 'disable'];
 
 /** `parseFlags` keeps the last value of a flag; these two may be given several times. */
 export function repeatedFlag(args: string[], name: string): string[] {
@@ -373,18 +374,34 @@ export async function runReaCli(args: string[], helpers: Helpers): Promise<void>
   });
   if (flags.help) { console.log(USAGE); return; }
   const folderEdits = reaFolderEdits(flags);
-  if (extra.length || !MCP_COMMANDS.includes(command)) throw new Error('Use monofield rea <status|configure|disable|doctor|files|show|cite|compare|evidence|cross-check|apply> --help.');
+  if (extra.length || !MCP_COMMANDS.includes(command)) throw new Error('Use monofield rea <status|enable|disable|configure|doctor|files|show|cite|compare|evidence|cross-check|apply> --help.');
   const base = (await helpers.baseUrl(flags)).replace(/\/$/, '');
+  // The switch lives in the app settings; absent means on.
+  const readSetting = async () => {
+    const response = await fetch(`${base}/api/app-config`);
+    if (!response.ok) throw new Error(`Could not read the settings (HTTP ${response.status}).`);
+    return ((await response.json()) as { config?: { reaForAgents?: unknown } }).config?.reaForAgents !== false;
+  };
+  const writeSetting = async (on: boolean) => {
+    const response = await fetch(`${base}/api/app-config`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ reaForAgents: on }) });
+    if (!response.ok) throw new Error(`Could not save the setting (HTTP ${response.status}).`);
+    if (((await response.json()) as { config?: { reaForAgents?: unknown } }).config?.reaForAgents !== on) throw new Error('The daemon did not keep the REA setting.');
+  };
   const endpoint = `${base}/api/mcp/servers`;
   const response = await fetch(endpoint);
   if (!response.ok) throw new Error(`Could not read MCP configuration (HTTP ${response.status}).`);
   const current = await response.json() as { servers: McpServerConfig[]; templates: McpTemplate[] };
   if (!Array.isArray(current.servers) || !Array.isArray(current.templates)) throw new Error('Invalid MCP configuration response.');
   let server = current.servers.find(entry => entry.id === 'rea');
-  if (command !== 'status') {
+  if (command === 'enable' || command === 'disable') {
+    if (folderEdits.length) throw new Error('--ghidra-dir and --java-home belong to "monofield rea configure".');
+    await writeSetting(command === 'enable');
+  } else if (command === 'configure') {
     if (server && server.templateId !== 'rea') throw new Error('A custom server already uses the rea ID. Manage it in Settings → MCP; it was not changed.');
-    if (command !== 'configure' && folderEdits.length) throw new Error('--ghidra-dir and --java-home belong to "monofield rea configure".');
-    if (command === 'configure' && !server) {
+    if (!server && folderEdits.length === 0) {
+      // Nothing to keep in an entry: turning the setting on is all "configure" means now.
+      await writeSetting(true);
+    } else if (!server) {
       const template = current.templates.find(entry => entry.id === 'rea');
       if (!template?.command || template.transport !== 'stdio' || !template.args) throw new Error('This daemon does not provide the REA template. Update MonoField first.');
       server = { id: 'rea', templateId: 'rea', label: template.label, transport: 'stdio', command: template.command, args: template.args, enabled: true };
@@ -392,7 +409,7 @@ export async function runReaCli(args: string[], helpers: Helpers): Promise<void>
     if (server) {
       const { env: previousEnv, ...rest } = server;
       const nextEnv = applyReaFolderEdits(previousEnv, folderEdits);
-      const changed: McpServerConfig = { ...rest, enabled: command === 'configure', ...(nextEnv ? { env: nextEnv } : {}) };
+      const changed: McpServerConfig = { ...rest, enabled: true, ...(nextEnv ? { env: nextEnv } : {}) };
       const servers = current.servers.some(entry => entry.id === 'rea')
         ? current.servers.map(entry => entry.id === 'rea' ? changed : entry)
         : [...current.servers, changed];
@@ -401,10 +418,13 @@ export async function runReaCli(args: string[], helpers: Helpers): Promise<void>
       const result = await saved.json() as { servers: McpServerConfig[] };
       server = result.servers?.find(entry => entry.id === 'rea');
       if (!server || server.enabled !== changed.enabled) throw new Error('The daemon did not retain the requested REA configuration.');
+      await writeSetting(true);
     }
   }
-  process.stdout.write(`${JSON.stringify({ configured: Boolean(server), enabled: server?.enabled ?? false, availability: 'not-probed',
+  const enabled = await readSetting();
+  process.stdout.write(`${JSON.stringify({ enabled, builtIn: true, configured: Boolean(server), availability: 'not-probed',
     ...(server ? { server: { id: server.id, templateId: server.templateId, transport: server.transport, command: server.command, args: server.args },
       folders: { GHIDRA_INSTALL_DIR: Boolean(server.env?.GHIDRA_INSTALL_DIR), JAVA_HOME: Boolean(server.env?.JAVA_HOME) } } : {}),
-    nextStep: 'Start a new supported local-agent conversation; use the legacy-system-handover skill. REA runtime and Laya model/server are installed separately.' }, null, 2)}\n`);
+    nextStep: enabled ? 'New conversations get REA. Use the legacy-system-handover skill; Laya model/server is installed separately.'
+      : 'REA is off for conversations. Turn it on with "monofield rea enable".' }, null, 2)}\n`);
 }

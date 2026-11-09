@@ -1641,13 +1641,19 @@ export interface Dict {
   'reaStudio.cases.title': string;
   'reaStudio.cases.hint': string;
   'reaDoctor.title': string;
+  'reaDoctor.agents.title': string;
+  'reaDoctor.agents.hint': string;
+  'reaDoctor.agents.on': string;
+  'reaDoctor.agents.off': string;
+  'reaDoctor.agents.saveFailed': string;
+  'reaDoctor.note.builtIn': string;
+  'reaDoctor.note.agentsOff': string;
   'reaDoctor.run': string;
   'reaDoctor.ready': string;
   'reaDoctor.notReady': string;
   'reaDoctor.required': string;
   'reaDoctor.optional': string;
   'reaDoctor.notFound': string;
-  'reaDoctor.addMcp': string;
   'reaDoctor.saveHint': string;
   'reaDoctor.scope': string;
   'reaDoctor.failed': string;
@@ -1666,7 +1672,6 @@ export interface Dict {
   'reaDoctor.need.tshark': string;
   'reaDoctor.need.adb': string;
   'reaDoctor.note.outsideRange': string;
-  'reaDoctor.note.disabled': string;
   'reaDoctor.note.otherVersion': string;
   'reaDoctor.note.customCommand': string;
   'reaDoctor.note.notSet': string;
@@ -1678,7 +1683,6 @@ export interface Dict {
   'reaDoctor.need.bundled': string;
   'reaDoctor.note.notInstalled': string;
   'reaDoctor.note.notNeeded': string;
-  'reaDoctor.note.runsBundled': string;
   'reaDoctor.launchTitle': string;
   'reaDoctor.launchCommand': string;
   'reaDoctor.launchArgs': string;

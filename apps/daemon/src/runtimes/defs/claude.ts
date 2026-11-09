@@ -50,6 +50,7 @@ export const claudeAgentDef = {
       // Fixes issue #430: --add-dir never detected because it wasn't in global help.
       '--include-partial-messages': 'partialMessages',
       '--add-dir': 'addDir',
+      '--mcp-config': 'mcpConfig',
     },
     // `claude` has no list-models subcommand. Prefer local mmd/MMS routes
     // when present so proxy-backed Claude-compatible models appear in the
@@ -115,6 +116,12 @@ export const claudeAgentDef = {
         args.push('--resume', runtimeContext.resumeSessionId);
       } else if (typeof runtimeContext.newSessionId === 'string' && runtimeContext.newSessionId) {
         args.push('--session-id', runtimeContext.newSessionId);
+      }
+      // Outside a MonoField-managed project no `.mcp.json` is written (it would overwrite the person's own), so the
+      // built-in REA comes as an extra MCP config on the command line; it adds to, never replaces, their servers.
+      const rea = runtimeContext.reaMcpServer;
+      if (rea && caps.mcpConfig !== false) {
+        args.push('--mcp-config', JSON.stringify({ mcpServers: { rea: { type: 'stdio', command: rea.command, args: rea.args, ...(Object.keys(rea.env).length ? { env: rea.env } : {}) } } }));
       }
       // MonoField runs Claude headless, so no approval prompt can reach the
       // user: the execution permission level picks between letting every tool

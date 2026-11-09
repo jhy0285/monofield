@@ -57,7 +57,7 @@ Entry template:
 
 ## Current state
 
-As of 2026-11-06.
+As of 2026-11-09.
 
 - Product: MonoField, a local Windows workbench that takes Codex or Claude Code
   CLI work to Korean SI deliverables (interface-spec XLSX, screen-spec PPTX,
@@ -128,6 +128,9 @@ As of 2026-11-06.
   compares the two as patterns; the differences go into the chat as a `<reference-flow-comparison>` block. Same routes
   (`/api/projects/:id/references*`) for `monofield refs list|add|note|remove|apply|record|compare`. Guide:
   `docs/reference-board.ko.md`.
+- Built-in REA (2026-11-09, branch only): MonoField ships `rea-agents` 6.7.0 and gives it to the AI in conversations by default
+  (`reaForAgents`, switch "대화에서 AI가 REA 쓰기" in Settings → MCP → REA 설치·연결 점검, `monofield rea enable|disable|status`).
+  Claude Code (`.mcp.json` or `--mcp-config`), Codex (`-c mcp_servers.rea.*`), OpenCode and ACP adapters receive it without setup.
 - REA browser evidence cross-check (2026-11-02, branch only): an REA `capture_browser_scenario` recording is compared with an
   interface spec from the editor ("브라우저 증거 대조 (REA)" panel, next to the judgment check) or `monofield rea
   evidence|cross-check|apply`, all through `/api/projects/:id/browser-evidence*`. Tests, CLI, panel, 19-locale keys
@@ -325,7 +328,12 @@ Reference board (see the 2026-11-06 and 2026-11-09 "reference board" Log entries
   `.gitignore` (`*`). Its files are hidden from the project's first-open file choice (`selectPrimaryProjectFile`) but still listed
   in Design Files.
 
-Built-in REA (see the 2026-11-06 "REA ships inside MonoField" entry):
+Built-in REA (see the 2026-11-06 "REA ships inside MonoField" and 2026-11-09 "REA built in" entries):
+
+- Codex receives REA through `-c` overrides on every run, but no Codex conversation has called an REA tool yet (no sign-in in the
+  test environment); check one real run, including Windows paths in the overrides.
+- `reaForAgents` defaults to on, so every supported conversation starts REA's MCP server (about 200 tools in the tool list). If a
+  model's context or start-up time suffers, consider limiting it to projects that use REA.
 
 - `pnpm-lock.yaml` changed (rea-agents and its dependency tree), so `nix/pnpm-deps.nix` needs its hash refreshed
   (`pnpm nix:update-hash`, then `nix flake check`). It was tried and failed: Nix could not download the flake input
@@ -520,6 +528,28 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-09 — REA built in: the AI uses it in conversations by default, Codex included (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** the user pointed out that REA runs inside MonoField, so "add an REA MCP server" is the wrong framing: present it as
+  "MonoField uses REA", turn it on by default ("켜짐으로 진행"), and connect Codex too; then release and refresh the site.
+- **Changed:** app config `reaForAgents` (absent = on; contracts `app-config.ts`, daemon `app-config.ts`). `bundled-rea.ts`
+  `reaForAgentsEnabled` and `withReaForAgents` (off → saved `rea` entries disabled; on → saved entry enabled, else the template added).
+  `server.ts` applies it to a conversation's MCP servers (not in sandbox runtime or host-owned fallback) and passes `reaMcpServer`
+  to `buildArgs` for Codex and for Claude Code outside managed projects. Codex (`defs/codex.ts`): `-c mcp_servers.rea.command/args/env.*`
+  as TOML strings (JSON-quoted, env names limited to bare keys), skipped on the tool-less recovery run. Claude (`defs/claude.ts`):
+  `--mcp-config <json>` when `--help` lists it. Setup check: MCP row ok without a saved entry (`built-in`), `agents-off` warning
+  when off. CLI `monofield rea status|enable|disable|configure` reads/writes `/api/app-config`; `configure` now only saves the entry
+  for Ghidra/Java folders. Web `ReaDoctorPanel`: the "add REA" button is replaced by a switch "대화에서 AI가 REA 쓰기";
+  `McpClientSection` lost `onAddRea`. i18n: 7 keys added, 3 removed, 3 reworded x 19. Docs: README, `docs/rea-laya-handover.md`,
+  `docs/rea-laya-practical-guide.md`, `skills/legacy-system-handover/SKILL.md`.
+- **Verified:** daemon (Node 24) `rea-agent-args` (new, 4), `bundled-rea`, `rea-route-cli`, `rea-cite-compare`, `rea-studio-cli`,
+  `app-config`, `references*`, `tests/runtimes`: 47 files, 746 pass, 2 skipped; web `ReaStudio.cite-compare`, `ReferenceBoard`,
+  `McpClientSection*` 26 pass; `pnpm guard`, `pnpm typecheck`, `pnpm i18n:check` pass, web typecheck clean. Codex 0.167.0 (scratch
+  install) accepts the built overrides: `codex mcp list` / `codex mcp get rea` show `rea` enabled. Claude Code 2.1.319 run with the
+  built `--mcp-config` in a scratch folder: init reports `rea` `connected` and 207 `mcp__rea__*` tools.
+- **Not run:** Codex actually calling an REA tool (no Codex sign-in here); a packaged build; Windows. Under the daemon tests on Node 22
+  the SQLite-backed files fail to load `better-sqlite3` (built for Node 24): run them on Node 24.
 
 ### 2026-11-09 — reference board: compare our screen with the reference's flow (`ccr-8432aecf-n9xdfd`)
 

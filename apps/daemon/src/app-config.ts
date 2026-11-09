@@ -175,6 +175,8 @@ export interface AppConfigPrefs {
   // Global execution permission level for Codex / Claude Code (and, on
   // Windows, whether MonoField starts elevated). Absent means `default`.
   executionPermissionLevel?: ExecutionPermissionLevel;
+  // Whether conversations get the built-in REA. Absent means on.
+  reaForAgents?: boolean;
 }
 
 // Cap on how many recent working directories we remember. Keeps the picker's
@@ -201,6 +203,7 @@ const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'recentLinkedDirs',
   'pet',
   'executionPermissionLevel',
+  'reaForAgents',
 ] as const);
 
 function configFile(dataDir: string): string {
@@ -789,6 +792,10 @@ function applyConfigValue(
     } else {
       delete target[key];
     }
+    return;
+  }
+  if (key === 'reaForAgents') {
+    if (typeof value === 'boolean') target[key] = value; else delete target[key];
     return;
   }
   if (key === 'executionPermissionLevel') {

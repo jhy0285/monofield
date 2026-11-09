@@ -101,6 +101,12 @@ export interface AppConfigPrefs {
    * `PUT /api/execution-permissions`.
    */
   executionPermissionLevel?: ExecutionPermissionLevel;
+  /**
+   * Whether conversations give the AI the REA that ships with MonoField (its tools reach Claude Code, Codex, OpenCode
+   * and ACP agents). Absent means on; `false` turns it off. A saved REA entry in the MCP list only adds settings such as
+   * the Ghidra and Java folders.
+   */
+  reaForAgents?: boolean;
 }
 
 export interface AppConfigResponse {

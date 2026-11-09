@@ -261,6 +261,15 @@ export const codexAgentDef = {
       if (codexShouldDisableExternalPlugins()) {
         args.push('--disable', 'plugins');
       }
+      // The built-in REA reaches Codex as config overrides (TOML values; JSON strings and arrays are valid TOML), so the
+      // person's own ~/.codex/config.toml is never written. Not on the tool-less recovery path below.
+      const rea = runtimeContext.reaMcpServer;
+      if (rea && runtimeContext.disableTools !== true) {
+        args.push('-c', `mcp_servers.rea.command=${JSON.stringify(rea.command)}`, '-c', `mcp_servers.rea.args=${JSON.stringify(rea.args)}`);
+        for (const [key, value] of Object.entries(rea.env)) {
+          if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) args.push('-c', `mcp_servers.rea.env.${key}=${JSON.stringify(value)}`);
+        }
+      }
       if (runtimeContext.disableTools === true) {
         // `text_artifact` recovery is a host-owned transport, not a second
         // filesystem attempt. Disable both Codex shell implementations so a

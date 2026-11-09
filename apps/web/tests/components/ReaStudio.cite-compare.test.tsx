@@ -35,11 +35,16 @@ const comparison: ReaComparison = {
   ],
 };
 
-function stub(routes: { probe?: Json; doctor?: ReaDoctorResponse; citeStatus?: number } = {}) {
+function stub(routes: { probe?: Json; doctor?: ReaDoctorResponse; citeStatus?: number; appConfig?: Json } = {}) {
   const posts: Array<{ url: string; body: Json }> = [];
+  let appConfig: Json = routes.appConfig ?? {};
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     const body = init?.body ? JSON.parse(String(init.body)) as Json : {};
-    if (init?.method === 'POST') posts.push({ url, body });
+    if (init?.method === 'POST' || init?.method === 'PUT') posts.push({ url, body });
+    if (url.endsWith('/api/app-config')) {
+      if (init?.method === 'PUT') appConfig = { ...appConfig, ...body };
+      return Response.json({ config: appConfig });
+    }
     if (url.endsWith('/rea-evidence/probe')) return Response.json(routes.probe ?? { evidence: true });
     if (url.endsWith('/rea-evidence/view')) return Response.json(body.file === 'evidence/remake.json' ? remake : original);
     if (url.endsWith('/rea-evidence/cite')) return routes.citeStatus ? Response.json({ error: { message: 'No step 9 in this capture.' } }, { status: routes.citeStatus }) : Response.json(citation);
@@ -158,10 +163,9 @@ describe('REA setup check panel', () => {
     ...over,
   });
 
-  it('lists required items first with what each is for, and adds REA to the MCP list when it is missing', async () => {
+  it('lists required items first with what each is for', async () => {
     stub({ doctor: doctor() });
-    const onAddRea = vi.fn();
-    render(<I18nProvider initial="ko"><ReaDoctorPanel mcpRow="none" onAddRea={onAddRea} /></I18nProvider>);
+    render(<I18nProvider initial="ko"><ReaDoctorPanel mcpRow="none" /></I18nProvider>);
     expect((await screen.findByRole('status')).textContent).toBe('준비 안 됨: 아래 필수 항목을 해결하세요.');
     const node = screen.getByTestId('rea-doctor-node');
     expect(node.getAttribute('data-status')).toBe('warn');
@@ -174,13 +178,35 @@ describe('REA setup check panel', () => {
     expect(ghidra.textContent).toContain('Ghidra');
     expect(ghidra.textContent).toContain('빈 값: 채우거나 지우기 전에는 REA가 시작되지 않음');
     expect(ghidra.textContent).toContain('Ghidra 폴더 칸을 채웁니다');
-    fireEvent.click(screen.getByTestId('rea-doctor-add'));
-    expect(onAddRea).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('rea-doctor-add')).toBeNull();
+  });
+
+  it('has REA on for conversations by default and turns it off and on through the app setting', async () => {
+    const posts = stub({ doctor: doctor() });
+    render(<I18nProvider initial="ko"><ReaDoctorPanel mcpRow="none" /></I18nProvider>);
+    const toggle = await screen.findByTestId('rea-agents-switch');
+    await waitFor(() => expect(toggle.getAttribute('aria-checked')).toBe('true'));
+    expect(toggle.textContent).toContain('켜짐');
+    expect(screen.getByText('대화에서 AI가 REA 쓰기')).toBeTruthy();
+    fireEvent.click(toggle);
+    await waitFor(() => expect(toggle.getAttribute('aria-checked')).toBe('false'));
+    expect(toggle.textContent).toContain('꺼짐');
+    expect(posts.find((post) => post.url.endsWith('/api/app-config'))?.body).toEqual({ reaForAgents: false });
+    fireEvent.click(toggle);
+    await waitFor(() => expect(toggle.getAttribute('aria-checked')).toBe('true'));
+  });
+
+  it('shows the switch off when the setting was turned off', async () => {
+    stub({ doctor: doctor(), appConfig: { reaForAgents: false } });
+    render(<I18nProvider initial="en"><ReaDoctorPanel mcpRow="none" /></I18nProvider>);
+    const toggle = await screen.findByTestId('rea-agents-switch');
+    await waitFor(() => expect(toggle.getAttribute('aria-checked')).toBe('false'));
+    expect(toggle.textContent).toContain('Off');
   });
 
   it('asks to save once REA is in the list but not saved, and reads ready from the daemon', async () => {
     stub({ doctor: doctor() });
-    const { unmount } = render(<I18nProvider initial="en"><ReaDoctorPanel mcpRow="unsaved" onAddRea={vi.fn()} /></I18nProvider>);
+    const { unmount } = render(<I18nProvider initial="en"><ReaDoctorPanel mcpRow="unsaved" /></I18nProvider>);
     await screen.findByTestId('rea-doctor-mcp');
     expect(screen.queryByTestId('rea-doctor-add')).toBeNull();
     expect(screen.getByTestId('rea-doctor-mcp').textContent).toContain('Save the MCP settings to apply it.');
@@ -195,7 +221,7 @@ describe('REA setup check panel', () => {
         { id: 'bundled', required: false, status: 'ok', found: 'rea-agents 6.7.0 · Node.js 24.14.0' },
         { id: 'node', required: false, status: 'missing', found: null, note: 'not-needed' },
         { id: 'npx', required: false, status: 'missing', found: null, note: 'not-needed' },
-        { id: 'mcp', required: true, status: 'ok', found: 'npx -y rea-agents@6.7.0 --mcp', note: 'runs-bundled' },
+        { id: 'mcp', required: true, status: 'ok', found: 'rea-agents 6.7.0', note: 'built-in' },
       ],
       bundled: { version: '6.7.0', command: 'C:\\MonoField\\MonoField.exe', args: ['C:\\MonoField\\resources\\app\\node_modules\\rea-agents\\scripts\\rea.mjs', '--mcp'], env: { ELECTRON_RUN_AS_NODE: '1' } } }) });
     render(<I18nProvider initial="ko"><ReaDoctorPanel mcpRow="saved" /></I18nProvider>);
@@ -203,7 +229,8 @@ describe('REA setup check panel', () => {
     expect(bundled.textContent).toContain('내장 REA');
     expect(bundled.textContent).toContain('rea-agents 6.7.0 · Node.js 24.14.0');
     expect(screen.getByTestId('rea-doctor-node').textContent).toContain('필요 없음: 내장 REA를 씀');
-    expect(screen.getByTestId('rea-doctor-mcp').textContent).toContain('내장 REA로 실행');
+    expect(screen.getByTestId('rea-doctor-mcp').textContent).toContain('내장 REA 연결됨');
+    expect(screen.getByTestId('rea-doctor-mcp').textContent).toContain('대화에서 AI 사용');
     const launch = screen.getByTestId('rea-doctor-launch');
     expect(launch.textContent).toContain('C:\\MonoField\\MonoField.exe');
     expect(launch.textContent).toContain('rea.mjs --mcp');
@@ -212,7 +239,7 @@ describe('REA setup check panel', () => {
 
   it('leaves out the launch details when MonoField has no usable copy', async () => {
     stub({ doctor: doctor() });
-    render(<I18nProvider initial="en"><ReaDoctorPanel mcpRow="none" onAddRea={vi.fn()} /></I18nProvider>);
+    render(<I18nProvider initial="en"><ReaDoctorPanel mcpRow="none" /></I18nProvider>);
     await screen.findByTestId('rea-doctor-mcp');
     expect(screen.queryByTestId('rea-doctor-launch')).toBeNull();
   });

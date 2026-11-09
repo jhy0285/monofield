@@ -14,39 +14,34 @@ MonoField `0.11.7-preview.2`에는 REA MCP 프리셋, `monofield rea` 설정 CLI
 
 ## REA 연결
 
-1. **Settings → MCP → Add MCP server**에서 **REA (Reverse Engineer Anything)**를 선택하고 저장·활성화합니다.
-2. 지원되는 로컬 CLI agent로 새 대화를 시작합니다. 기존 대화에 서버가 소급 연결된다고 가정하지 마세요.
+REA는 MonoField에 들어 있습니다(`rea-agents` 6.7.0). MonoField가 자기 런타임으로 실행하므로 Node.js 설치나 `npx` 다운로드가 필요 없습니다.
+
+1. 설정할 것이 없습니다. **설정 → MCP → REA 설치·연결 점검**의 **대화에서 AI가 REA 쓰기**가 기본으로 켜져 있습니다. 끄면 대화의 AI에게 REA 도구를 주지 않습니다.
+2. 지원되는 로컬 CLI agent로 새 대화를 시작합니다. 기존 대화에 소급 적용된다고 가정하지 마세요.
 3. `legacy-system-handover` 스킬을 선택하고 조사할 앱 경로·DB 스냅샷·실행 URL과 수행할 조작을 지정합니다. 스킬은 **Settings → Skills**에서도 확인할 수 있습니다.
 
-같은 설정은 실행 중인 MonoField daemon에 CLI로 적용할 수 있습니다.
+같은 설정은 CLI로도 바꿉니다(웹과 같은 `/api/app-config`를 씁니다).
 
 ```sh
-monofield rea configure --json
 monofield rea status --json
 monofield rea disable --json
+monofield rea enable --json
+monofield rea configure --ghidra-dir <folder> --java-home <folder> --json   # 실행 파일 분석용(선택)
 ```
 
-다른 daemon을 선택하려면 `--daemon-url URL`을 추가합니다. `status`는 설정 상태이며 실제 연결을 검증한 상태가 아닙니다(`availability: not-probed`). CLI는 다른 MCP 서버·자격증명을 보존하고, 사용자 지정 서버가 `rea` ID를 사용 중이면 덮어쓰지 않습니다. 웹과 CLI 모두 기존 `/api/mcp/servers`를 사용합니다.
+다른 daemon을 선택하려면 `--daemon-url URL`을 추가합니다. `status`는 설정 상태이며 실제 연결을 검증한 상태가 아닙니다(`availability: not-probed`). `configure`는 Ghidra·Java 폴더가 필요할 때만 씁니다. 이때만 `/api/mcp/servers`에 `rea` 항목이 저장되며, 다른 MCP 서버·자격증명은 보존하고 사용자 지정 서버가 `rea` ID를 쓰고 있으면 덮어쓰지 않습니다.
 
-프리셋 명령은 다음과 같습니다.
+전달 범위:
 
-```sh
-npx -y rea-agents@6.7.0 --mcp
-```
+- **Claude Code**: 관리 프로젝트에서는 `.mcp.json`, 가져온 폴더 프로젝트에서는 `--mcp-config` 인자로 받습니다.
+- **Codex CLI**: `-c mcp_servers.rea.*` 설정 덮어쓰기로 실행할 때마다 받습니다. 사용자 Codex 설정 파일은 바꾸지 않습니다.
+- **OpenCode**, 지원 ACP adapter: 기존 외부 MCP 전달 경로로 받습니다.
 
-REA 6.7.0은 Node `^22.19.0 || ^24.11.0 || >=26.0.0`을 요구합니다. 이 흐름의 SQLite 검사는 **Node 24.15 이상**을 사용하세요. Node와 npm을 PATH에서 실행할 수 있어야 합니다. 첫 `npx` 실행은 인터넷에서 패키지를 설치합니다. 브라우저 캡처에는 설치된 Chromium 계열 실행 파일이 필요합니다. 네이티브 바이너리 분석 엔진은 별도입니다.
+BYOK 채팅 모델만 선택한 경우 로컬 파일·브라우저·외부 MCP 실행 도구가 자동 제공되지 않습니다. 실제 도구가 광고되는 지원 로컬 CLI 경로를 사용하세요.
 
-사용자님의 [rea-yj](https://github.com/jhy0285/rea-yj) 소스 체크아웃을 직접 사용하려면 해당 저장소를 빌드하고 프리셋의 명령을 `node`, 인자를 `/absolute/path/to/rea-yj/scripts/rea.mjs`, `--mcp`로 바꿔 저장할 수 있습니다. 사용자 MCP 설정 이외의 전역 agent 설정은 자동 변경하지 않습니다.
+SQLite 검사는 Node 24.15 이상이 필요하며 내장 런타임이 이를 만족합니다. 브라우저 캡처에는 설치된 Chromium 계열 실행 파일이 필요합니다. 네이티브 바이너리 분석 엔진은 별도입니다. `monofield rea doctor --json`으로 확인하세요.
 
-BYOK 채팅 모델만 선택한 경우 로컬 파일·브라우저·외부 MCP 실행 도구가 자동 제공되지 않습니다. 실제 도구가 광고되는 지원 로컬 CLI 경로를 사용하세요. CLI adapter별 MCP 주입 범위는 같지 않습니다.
-
-현재 앱이 외부 MCP 설정을 전달하는 경로는 Claude Code, OpenCode 및 지원 ACP adapter입니다. **Codex CLI에는 이 설정이 자동 전달되지 않습니다.** Codex를 사용한다면 사용자 Codex 환경에서 아래 명령으로 등록하고 새 대화를 시작하세요. 앱의 MCP 설정 화면에서도 선택한 agent의 전달 지원 여부를 표시합니다.
-
-```sh
-codex mcp add rea -- npx -y rea-agents@6.7.0 --mcp
-```
-
-이 명령은 사용자 Codex 설정에 서버를 추가하므로 직접 선택해 실행합니다. MonoField는 이를 자동 실행하지 않습니다.
+사용자님의 [rea-yj](https://github.com/jhy0285/rea-yj) 소스 체크아웃을 직접 사용하려면 해당 저장소를 빌드하고 **Settings → MCP**에서 사용자 지정 서버로 명령 `node`, 인자 `/absolute/path/to/rea-yj/scripts/rea.mjs`, `--mcp`를 `rea` ID로 저장합니다. 사용자 MCP 설정 이외의 전역 agent 설정은 자동 변경하지 않습니다.
 
 ## 브라우저 기록과 명세서 대조
 

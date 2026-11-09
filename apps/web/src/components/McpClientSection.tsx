@@ -494,7 +494,6 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
       {reaTemplate ? (
         <ReaDoctorPanel
           mcpRow={reaRow ? (reaRow._isNew || dirty ? 'unsaved' : 'saved') : 'none'}
-          onAddRea={() => addFromTemplate(reaTemplate)}
           refreshKey={savedAt}
         />
       ) : null}

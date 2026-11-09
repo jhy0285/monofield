@@ -265,11 +265,17 @@ describe('the REA setup check', () => {
   it('is not ready when a required item is missing or out of range, and says why', async () => {
     const missing = await runReaDoctor(linuxDeps({ nodeVersion: async () => null, mcpServers: async () => [] }));
     expect(missing.ready).toBe(false);
-    expect(missing.checks.filter((check) => check.status === 'missing').map((check) => check.id)).toEqual(['bundled', 'node', 'npx', 'mcp', 'browser', 'ghidra', 'native', 'java', 'jadx', 'apktool', 'tshark', 'adb']);
+    // REA reaches conversations without a saved entry now, so the conversation link is never "missing"; without the
+    // bundled copy it runs through npx, which is what is missing here.
+    expect(missing.checks.filter((check) => check.status === 'missing').map((check) => check.id)).toEqual(['bundled', 'node', 'npx', 'browser', 'ghidra', 'native', 'java', 'jadx', 'apktool', 'tshark', 'adb']);
+    expect(missing.checks.find((check) => check.id === 'mcp')).toMatchObject({ status: 'ok', found: 'npx -y rea-agents@6.7.0 --mcp' });
     const old = await runReaDoctor(linuxDeps({ nodeVersion: async () => 'v20.18.0', mcpServers: async () => [{ id: 'rea', templateId: 'rea', enabled: false, command: 'npx', args: ['-y', 'rea-agents@6.4.0', '--mcp'] }] }, ['/usr/bin/npx']));
     expect(old.ready).toBe(false);
     expect(old.checks.find((check) => check.id === 'node')).toMatchObject({ status: 'warn', note: 'outside-range', found: 'v20.18.0' });
-    expect(old.checks.find((check) => check.id === 'mcp')).toMatchObject({ status: 'warn', note: 'disabled' });
+    // A saved entry is used whatever its own switch says; the setting decides. Another REA version is still named.
+    expect(old.checks.find((check) => check.id === 'mcp')).toMatchObject({ status: 'ok', note: 'other-version' });
+    const off = await runReaDoctor(linuxDeps({ mcpServers: async () => [], reaForAgents: async () => false }, ['/usr/bin/npx']));
+    expect(off.checks.find((check) => check.id === 'mcp')).toEqual({ id: 'mcp', required: false, found: null, status: 'warn', note: 'agents-off' });
   });
 
   it('finds Ghidra and Java the way REA does: GHIDRA_INSTALL_DIR and JAVA_HOME, the REA entry first, not PATH', async () => {
@@ -323,13 +329,13 @@ describe('the REA setup check', () => {
     expect(by.bundled).toEqual({ id: 'bundled', required: false, found: 'rea-agents 6.7.0 · Node.js 24.14.0', status: 'ok' });
     expect(by.node).toEqual({ id: 'node', required: false, found: null, status: 'missing', note: 'not-needed' });
     expect(by.npx).toMatchObject({ required: false, status: 'missing', note: 'not-needed' });
-    expect(by.mcp).toMatchObject({ status: 'ok', note: 'runs-bundled', found: 'npx -y rea-agents@6.7.0 --mcp' });
+    expect(by.mcp).toMatchObject({ status: 'ok', note: 'built-in', found: 'npx -y rea-agents@6.7.0 --mcp' });
     expect(result.bundled).toEqual({ version: '6.7.0', command: '/opt/MonoField/monofield', args: [runtime.entry, '--mcp'], env: { ELECTRON_RUN_AS_NODE: '1' } });
 
-    // Not added yet: the template saves the pinned entry, so the copy will be used and only the MCP entry is missing.
-    const notAdded = await runReaDoctor(linuxDeps({ nodeVersion: async () => null, mcpServers: async () => [], bundled: () => ({ available: true, runtime }) }));
-    expect(notAdded.ready).toBe(false);
-    expect(notAdded.checks.filter((check) => check.required && check.status !== 'ok').map((check) => check.id)).toEqual(['mcp']);
+    // Nothing saved: the built-in REA reaches conversations anyway, so REA is ready with no setup at all.
+    const nothingSaved = await runReaDoctor(linuxDeps({ nodeVersion: async () => null, mcpServers: async () => [], bundled: () => ({ available: true, runtime }) }));
+    expect(nothingSaved.ready).toBe(true);
+    expect(nothingSaved.checks.find((check) => check.id === 'mcp')).toEqual({ id: 'mcp', required: true, found: 'rea-agents 6.7.0', status: 'ok', note: 'built-in' });
   });
 
   it('says why the copy inside MonoField cannot be used, and falls back to Node.js and npx', async () => {

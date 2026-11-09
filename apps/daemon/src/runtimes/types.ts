@@ -83,6 +83,10 @@ export type RuntimeContext = {
   // sandbox mode and Claude Code to its permission mode; absent means
   // `default`, the behavior MonoField shipped with.
   executionPermissionLevel?: ExecutionPermissionLevel;
+  // The built-in REA (Settings → "the AI uses REA in conversations") for adapters whose MCP servers can only reach the
+  // CLI on its command line: Codex always, Claude Code when the project is a folder MonoField does not manage (no
+  // `.mcp.json` is written there). It carries no secrets; other servers never go on a command line.
+  reaMcpServer?: { command: string; args: string[]; env: Record<string, string> } | null;
 };
 
 // Marker on a RuntimeAgentDef declaring that the adapter's CLI maintains

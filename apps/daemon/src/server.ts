@@ -460,7 +460,7 @@ import {
   reconcileMediaTasksOnBoot,
   updateMediaTask,
 } from './media/tasks.js';
-import { locateBundledRea, withBundledRea } from './services/bundled-rea.js';
+import { locateBundledRea, reaForAgentsEnabled, withBundledRea, withReaForAgents } from './services/bundled-rea.js';
 import {
   MCP_TEMPLATES,
   buildAcpMcpServers,
@@ -6557,11 +6557,18 @@ export async function startServer({
     const runScopedMcpServers = Array.isArray(run?.toolBundle?.mcpServers)
       ? run.toolBundle.mcpServers
       : [];
+    // Settings → MCP → "the AI uses REA in conversations" (on unless turned off): the REA that ships with MonoField
+    // reaches the agent without a saved entry; a saved entry only adds its folders. Off leaves every REA entry out.
+    let reaForAgents = true;
+    try { reaForAgents = reaForAgentsEnabled((await readAppConfig(RUNTIME_DATA_DIR)).reaForAgents); } catch { reaForAgents = true; }
     const {
       enabledServers: selectedExternalMcp,
       persistedTokenServerIds,
     } = resolveExternalMcpServersForRun({
-      persistedServers: externalMcpConfig.servers,
+      // Only where saved servers are read at all (not in sandbox mode or the host-owned artifact fallback).
+      persistedServers: !SANDBOX_RUNTIME.enabled && !hostOwnedArtifactFallback
+        ? withReaForAgents(externalMcpConfig.servers, reaForAgents, MCP_TEMPLATES.find((template) => template.id === 'rea'))
+        : externalMcpConfig.servers,
       runScopedServers: runScopedMcpServers,
       sandboxMode: SANDBOX_RUNTIME.enabled,
     });
@@ -7437,6 +7444,14 @@ export async function startServer({
     // undefined fall through unchanged — the settings UI surfaces an
     // explicit "external MCP is not forwarded to <agent>" banner for them
     // so the previous silent-failure UX is gone.
+    // The built-in REA for CLIs that only take MCP servers on their command line: Codex (no config is forwarded to it)
+    // and Claude Code in a folder MonoField does not manage (no `.mcp.json` there). Only REA: it carries no secrets.
+    const reaEntry = enabledExternalMcp.find((server) => (server.id === 'rea' || server.templateId === 'rea')
+      && (server.transport ?? 'stdio') === 'stdio' && typeof server.command === 'string' && server.command.length > 0);
+    const reaForCommandLine = reaEntry && (def.id === 'codex'
+      || (def.externalMcpInjection === 'claude-mcp-json' && !isManagedProjectCwd(cwd, PROJECTS_DIR)))
+      ? { command: reaEntry.command!, args: reaEntry.args ?? [], env: reaEntry.env ?? {} }
+      : null;
     if (
       def.externalMcpInjection === 'claude-mcp-json' &&
       isManagedProjectCwd(cwd, PROJECTS_DIR)
@@ -7798,6 +7813,7 @@ export async function startServer({
             hostOwnedArtifactFallback || (cwd != null && projectBaseDir == null),
           disableTools: hostOwnedArtifactFallback,
           executionPermissionLevel,
+          reaMcpServer: reaForCommandLine,
         },
       );
     } catch (err) {
