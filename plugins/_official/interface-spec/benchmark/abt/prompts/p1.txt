@@ -1,0 +1,27 @@
+당신은 이 폴더 안의 Spring Boot 프로젝트 `abt-platform/`을 분석해 인터페이스 명세서를 JSON 파일로 작성한다.
+
+대상: 이 시스템이 외부 호출자(앱, 단말, 운수사, 운영 화면)에게 제공하는 REST API 전부.
+제외: 이 시스템이 다른 시스템을 호출하는 클라이언트 코드(Feign 등), 테스트 코드, 주석 처리된 코드.
+
+결과 파일: ./spec_v1.json (이 폴더 바로 아래). 형식은 아래 그대로.
+{
+  "endpoints": [
+    {
+      "method": "GET|POST|PUT|PATCH|DELETE",
+      "path": "호출자가 실제로 쓰는 전체 경로(클래스 경로+메서드 경로. 상수는 값으로 풀어서)",
+      "handler": "컨트롤러 메서드 이름",
+      "summary": "업무명(Javadoc에 있으면 그 문장, 없으면 빈 문자열)",
+      "auth": {"required": true, "detail": "근거(설정 파일 또는 애너테이션)"},
+      "request": [{"path": "필드 또는 파라미터 이름(중첩은 a.b, 배열 요소는 a[].b)", "in": "path|query|header|body", "type": "string|integer|number|boolean|array|object", "required": true, "maxLength": null}],
+      "response": [{"path": "필드 이름(중첩은 a.b, 배열 요소는 a[].b)", "type": "string|integer|number|boolean|array|object"}]
+    }
+  ]
+}
+
+규칙:
+- 요청: 경로 변수, 쿼리 파라미터(@ModelAttribute 조회 객체의 필드 포함), 코드가 읽는 요청 헤더, 본문 필드를 재귀적으로 펼친다. 부모 클래스에서 상속한 필드도 포함한다.
+- JSON으로 직렬화되는 이름(@JsonProperty 등) 기준으로 쓰고, @JsonIgnore 필드는 뺀다.
+- required: 경로 변수, 필수 헤더·파라미터, 검증 애너테이션(@NotNull/@NotBlank/@NotEmpty)이 있는 필드는 true. maxLength는 @Size(max) 값.
+- 응답: 반환하는 데이터 객체의 필드를 펼친다. 공통 래퍼(ApiResponse, PageResponse)의 포장 필드(code, message, traceId, page, size 등)는 쓰지 말고, data·content 안쪽 객체의 필드만 쓴다. 객체 대신 Map을 반환하면 코드에서 put하는 키를 쓴다.
+- auth.required: Spring Security 설정(Java 설정, 메서드 보안 애너테이션, XML 설정 모두)을 읽고 인증 필요 여부를 정한다. permitAll이면 false. 근거를 찾을 수 없을 때만 null.
+- 추측하지 말고 코드를 읽어 확인한다. 소스 코드는 수정하지 않는다. 모든 API를 빠짐없이 쓴다.

@@ -29,6 +29,8 @@ const allowedE2eScripts = new Set([
   "e2e/scripts/token-benchmark.ts",
   // Reproducible Spring interface-spec demo (docs/demo/spring-interface-spec-demo.md).
   "e2e/scripts/spring-spec-demo.ts",
+  // Compatibility comparison used by plugins/_official/interface-spec/benchmark/abt (scanner vs plain Claude Code).
+  "e2e/scripts/abt-compare.ts",
   // Renders the intro motion piece (apps/monofield-site/intro-src/scene.html) to the site and in-app videos.
   "e2e/scripts/render-intro-video.ts",
   "e2e/scripts/all-in-one.ts",

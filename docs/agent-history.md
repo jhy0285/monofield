@@ -529,6 +529,33 @@ Code health:
 
 ## Log
 
+### 2026-11-09 — MonoField scanner vs plain Claude Code on a large synthetic system (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** the user doubted MonoField has a visible strength next to Codex/Claude Code and asked for a rigorous comparison on a very
+  complex system (transit ABT fare/payment/settlement, bank next-generation style) instead of a toy example.
+- **Built:** `plugins/_official/interface-spec/benchmark/abt/` (Python generator from a domain model; scorer; runners; README) and
+  `e2e/scripts/abt-compare.ts`. The synthetic Spring Boot 3.3.5 platform (213 Java files, 8,119 lines, 68 APIs, 107 DTOs, mixed styles and traps,
+  XML/Java security) compiles with Maven for the baseline and the sprint commit; 29 sprint changes (18 API-contract, 4 outside the spec vocabulary,
+  7 that change no contract) give 159 truth entries computed from the model.
+- **Result:** `docs/testing/abt-scanner-vs-claude-code-2026-11-09.md`. Plain Claude Code (Sonnet, six runs: detailed and short prompts) matched or
+  beat the MonoField scanner on accuracy: first spec 100% on routes/fields/auth (short prompt: one run 95%), change detection 96-100% with 0 false
+  positives, all four out-of-vocabulary changes found; cost about $1.0-1.4 and 4-8 minutes per cycle. MonoField: 0.2 s, no model, identical output on
+  repeated scans, classification 100% on what it detects, but first-spec route accuracy 62%, request/response field recall 76%/69%, change
+  recall 53% (87% if routes are matched by handler), 0/4 out-of-vocabulary changes; file-level `docs impact` recall 97%, precision 59%.
+- **Scanner gaps found (verified in code):** no Java `record`, no constant or concatenated paths, no `@JsonProperty`/`@JsonIgnore`, header params and
+  `@RequestParam("name")` names, `Map` response keys, field max-size reduction and required header added are not detected as changes. Audit-like
+  fields (`create|update|modify|reg` anywhere in the name) are excluded on purpose (`rules/audit_fields.py`); inheritance and `@ModelAttribute`
+  query objects work. My first guess (inheritance) was wrong.
+- **Verified:** scanner output hash identical on three runs; kit rerun from the repository location reproduces the numbers; `pnpm guard`,
+  `pnpm typecheck`: see below. Two scorer bugs were found and fixed during the work (route normalisation; out-of-vocabulary changes and changes inside
+  a renamed endpoint counted as false positives) and the reported numbers are after those fixes.
+- **Not done / limits:** Excel/PPTX output quality and the review UI were not compared; one model (Sonnet), one sprint, generated code that is more
+  uniform than real SI code; the severity labels follow an OpenAPI-diff convention chosen by me. No scanner fix was made yet.
+- **Next agent:** the benchmark is the regression test for scanner fixes. Suggested order by impact: `record` DTOs (133 fields), constant paths (23
+  APIs), `@JsonProperty`/`@JsonIgnore`, header and named request params, `Map` keys, then narrowing the audit-field rule. Re-run `gen/build.py`,
+  `mf_arm.py`, `eval_all.py` after each fix; the generated repository is not committed. The earlier private feature guide could not be found, and
+  the guide rewrite (developer steps and a PM/team-lead reading guide) waits on the chosen positioning.
+
 ### 2026-11-09 — final user guide on GitHub and the site; the REA menu is called "외부 MCP" (`ccr-8432aecf-n9xdfd`)
 
 - **Request:** make the final, easy-to-use edition of "our guide" and put it on the branding site and GitHub.

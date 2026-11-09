@@ -1,0 +1,4 @@
+이 폴더의 Spring 프로젝트 `abt-platform/`의 REST API 명세서를 `spec_v1.json`으로 만들어 줘.
+각 API마다 method, path, handler(컨트롤러 메서드 이름), auth(required: true/false), request(요청 필드 목록), response(응답 필드 목록)을 넣어 줘.
+필드는 {"path": 이름, "type": "string|integer|number|boolean|array|object", "required": true/false} 형식이고 required는 요청 필드에만 쓰면 돼. 중첩 필드는 a.b 식으로 펼쳐 줘.
+전체 형식: {"endpoints":[{"method":"","path":"","handler":"","auth":{"required":true},"request":[],"response":[]}]}

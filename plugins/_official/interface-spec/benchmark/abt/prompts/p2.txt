@@ -1,0 +1,10 @@
+이전에 작성한 명세서 `spec_v1.json`이 이 폴더에 있다. 그 뒤 `abt-platform/`의 코드가 바뀌었다. git 기록으로 변경 내용을 확인할 수 있고, HEAD가 최신 코드다.
+
+1) `spec_v2.json` (이 폴더 바로 아래): 최신 코드(HEAD) 기준 명세서. spec_v1.json과 같은 형식이다. 코드가 바뀌지 않은 부분은 spec_v1.json의 내용을 그대로 둔다.
+2) `changes.json` (이 폴더 바로 아래): spec_v1.json과 spec_v2.json 사이에서 API 호출자에게 보이는 변경을 전부 적은 목록.
+   [{"route": "METHOD /전체/경로", "location": "request|response|endpoint", "field": "필드 경로 또는 null", "kind": "endpoint-added|endpoint-removed|field-added|field-removed|field-type-changed|field-required-changed|field-constraint-changed|auth-changed|other", "level": "breaking|warning|info", "reason": "한 줄 설명"}]
+   level 정의: breaking = 변경 전에 올바르게 동작하던 호출자가 실패할 수 있음(필수 요청 필드 추가, 응답 필드 제거, API 삭제·경로·메서드 변경, 인증 강화 등). warning = 호출자에 따라 깨질 수 있어 사람이 판단해야 함. info = 추가만 있어 안전함.
+   API 계약이 바뀌지 않는 변경(내부 로직, 리팩터링, 주석, 포맷, 외부 시스템 호출 코드, 어느 API에도 쓰이지 않는 내부 DTO)은 적지 않는다.
+   열거값 추가, 기본값 변경, 인증 권한 범위(scope) 변경처럼 필드 목록에 드러나지 않는 변경은 kind를 "other"로 하고 reason에 쓴다.
+   여러 API가 공유하는 객체(예: Money)가 바뀌면 영향받는 API마다 각각 적는다.
+소스 코드는 수정하지 않는다.
