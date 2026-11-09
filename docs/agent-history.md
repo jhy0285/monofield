@@ -529,6 +529,15 @@ Code health:
 
 ## Log
 
+### 2026-11-09 — document reviews in a stable order (`ccr-8432aecf-n9xdfd`)
+
+- **Found:** full CI run 42551206289 failed once in `tests/code-ontology-route.test.ts` ("joins real Java/Vue source…"): the two
+  document reviews came back swapped between two plans of the same project. The previous run (42550418481) passed with the same
+  code: `documentReviews` followed the order the spec files were read in.
+- **Changed:** `apps/daemon/src/services/ontology/change-graph.ts` `documentReviews` sorts by document file, then item ID.
+- **Verified:** new case in `apps/daemon/tests/ontology-plan.test.ts` fails without the sort and passes with it;
+  `ontology-plan` and `code-ontology-route` 13 pass; daemon typecheck and `pnpm guard` pass.
+
 ### 2026-11-09 — REA built in: the AI uses it in conversations by default, Codex included (`ccr-8432aecf-n9xdfd`)
 
 - **Request:** the user pointed out that REA runs inside MonoField, so "add an REA MCP server" is the wrong framing: present it as

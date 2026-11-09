@@ -183,5 +183,12 @@ export function documentReviews(
             : ("no-recorded-impact" as const),
         impactPath: chain.map((id) => nodes.get(id)?.label ?? id),
       };
-    });
+    })
+    // The graph lists documents in the order their files were read; reviews are listed by document, then item, so
+    // two plans of the same project compare equal.
+    .sort((a, b) => compareText(a.documentFile, b.documentFile) || compareText(a.itemId, b.itemId));
+}
+
+function compareText(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
 }

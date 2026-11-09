@@ -44,6 +44,15 @@ describe('code relationship and specification change planning', () => {
     expect(plan.obligations.some(item => item.checkId === 'frontend::node:test')).toBe(false);
     expect(plan.modelCalls).toBe(0);
   });
+  it('lists document reviews by document and item, whatever order the documents were read in', () => {
+    const reversed: DocumentGraphResponse = { ...docs, documents: [...docs.documents].reverse(), nodes: [...docs.nodes].reverse() };
+    const order = (graphDocs: DocumentGraphResponse) => {
+      const plan = buildChangePlan({ graph: mergeOntologyDocuments(ontology, graphDocs, [spec]), checks, source, receipt: null, changedFiles: ['backend/Service.java'] });
+      return documentReviews(plan, ontology).map((item) => `${item.documentFile}#${item.itemId}`);
+    };
+    expect(order(docs)).toEqual(['api.json#IF-1', 'screen.json#SC-1', 'screen.json#SC-2']);
+    expect(order(reversed)).toEqual(order(docs));
+  });
   it('does not pair duplicate or merely similar API routes', () => {
     const duplicate = { ...ontology, nodes: [...ontology.nodes, { ...ontology.nodes[0]!, id: 'duplicate' }] };
     const graph = mergeOntologyDocuments(duplicate, docs, [spec]);
