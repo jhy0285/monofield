@@ -529,6 +529,28 @@ Code health:
 
 ## Log
 
+### 2026-11-09 — final user guide on GitHub and the site; the REA menu is called "외부 MCP" (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** make the final, easy-to-use edition of "our guide" and put it on the branding site and GitHub.
+- **Found first:** the private HTML feature guide published on 2026-11-05 is not in the repository and is not in the artifact list any
+  more, so it could not be updated. The final guide was written from the repository's own guides and the app's Korean labels instead.
+  If the user wants that private page's screenshots in the public guide, they have to be taken again (not done).
+- **Found while checking labels:** the REA setup check lives under Settings → **외부 MCP** (en: External MCP), not "Settings → MCP"
+  as the preview.8 docs, release notes, README and two daemon messages said. Fixed in `README.md`, `docs/rea-laya-handover.md`,
+  `docs/rea-laya-practical-guide.md`, `docs/releases/0.11.7-preview.8.md`, `skills/legacy-system-handover/SKILL.md`,
+  `apps/daemon/src/services/rea-cli.ts` and `reference-flow.ts` (error text only). Code comments elsewhere still say "Settings → MCP".
+- **Changed:** `docs/user-guide.ko.md` (new): what-you-want-to-do → where-to-click table, Settings at a glance, reference board, built-in
+  REA, execution permissions, things to know, troubleshooting, CLI, next reads. `apps/monofield-site/guide.html` (new, `/guide`): the same
+  content with a bilingual page frame and a Korean body; `sitemap.xml`, the home page's guide section (primary button), both footers,
+  `styles.css` (one spacing rule). `docs/getting-started.ko.md` and `README.md` link the guide. Both outputs were generated from one
+  script kept outside the repository, so an edit has to be made in both files by hand.
+- **Verified:** `node --test tests/seo.test.ts tests/get-started.test.ts tests/guide.test.ts` in `apps/monofield-site` 21 pass (new
+  `guide.test.ts`: identity, no inline script, both languages on every translated element, real menu names, anchors, links from the home
+  page); `pnpm guard` 67, `pnpm i18n:check`, daemon typecheck pass; `rea-route-cli`, `references-route-cli`, `rea-cite-compare` 34 pass.
+  The page was viewed from a local static server at 1440 px (ko, en) and 390 px (ko): no page errors, no horizontal overflow.
+- **Not run:** a check of the live site after this push is recorded in the next entry if it was done; the guide's steps were not walked
+  through the real desktop app (the labels come from the locale files and the existing guides).
+
 ### 2026-11-09 — 0.11.7-preview.8 published from `main` (`ccr-8432aecf-n9xdfd`)
 
 - **Done:** after the account owner added a payment method, the billing lock lifted. Full CI on the branch head needed two

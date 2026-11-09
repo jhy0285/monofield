@@ -740,6 +740,7 @@ li.is-added + li.is-added .cover { animation-name: loop-type-2; }
 .gs-node-core span { color: var(--on-dark-muted); }
 .gs-node-optional { border-style: dashed; }
 .gs-list { display: grid; gap: 8px; margin: 16px 0 0; padding-left: 20px; color: var(--muted); line-height: 1.7; word-break: keep-all; }
+.gs-list + h3, .gs-list + .gs-pre { margin-top: 28px; }
 .gs-next { padding-bottom: 80px; }
 .gs-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
 @media (max-width: 800px) {

@@ -50,13 +50,13 @@ calls with IDs normalized, visible text unless --no-text), or two case-result fi
 "output"}]}) case by case, numbers equal within --tolerance. It exits with status 1 when anything differs, so an agent
 can loop until the remake matches. A pass means the recorded runs matched, not that the remake is equivalent.
 
-status, enable and disable read and switch "the AI uses REA in conversations" (Settings → MCP), on by default: the
+status, enable and disable read and switch "the AI uses REA in conversations" (Settings → External MCP), on by default: the
 REA that ships with MonoField reaches every new conversation of Claude Code, Codex, OpenCode and ACP agents without a
 saved MCP entry. configure turns it on too and keeps the folders below in a saved REA entry. None of them starts REA or
 tests a conversation.
 
 --ghidra-dir and --java-home save the folders REA reads as GHIDRA_INSTALL_DIR and JAVA_HOME (the same two boxes as in
-Settings → MCP). They must be full paths: REA does not start with a relative one. --clear-ghidra-dir and --clear-java-home
+Settings → External MCP). They must be full paths: REA does not start with a relative one. --clear-ghidra-dir and --clear-java-home
 remove a saved folder. The values are stored with the server's other environment and are not printed back.
 
 evidence lists the project's REA browser capture files (rea.browser-scenario-capture).
@@ -351,7 +351,7 @@ export function applyReaFolderEdits(env: Record<string, string> | undefined, edi
   return Object.keys(next).length ? next : undefined;
 }
 
-/** Configure the optional REA MCP server (Settings → MCP) and compare REA browser evidence with interface specifications. */
+/** Configure the optional REA MCP server (Settings → External MCP) and compare REA browser evidence with interface specifications. */
 export async function runReaCli(args: string[], helpers: Helpers): Promise<void> {
   const strings = new Set(['daemon-url', 'project', 'input', 'evidence', 'finding', 'out', 'note-lang', 'base-sha256', 'file', 'ghidra-dir', 'java-home']);
   const [command = 'status', ...extra] = helpers.positionalArgs(args, new Set([...strings, ...STRING_FLAGS]));
@@ -397,7 +397,7 @@ export async function runReaCli(args: string[], helpers: Helpers): Promise<void>
     if (folderEdits.length) throw new Error('--ghidra-dir and --java-home belong to "monofield rea configure".');
     await writeSetting(command === 'enable');
   } else if (command === 'configure') {
-    if (server && server.templateId !== 'rea') throw new Error('A custom server already uses the rea ID. Manage it in Settings → MCP; it was not changed.');
+    if (server && server.templateId !== 'rea') throw new Error('A custom server already uses the rea ID. Manage it in Settings → External MCP; it was not changed.');
     if (!server && folderEdits.length === 0) {
       // Nothing to keep in an entry: turning the setting on is all "configure" means now.
       await writeSetting(true);

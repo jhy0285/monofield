@@ -46,7 +46,7 @@
    `monofield rea doctor`)로 직접 등록합니다.
 
 4. 브라우저 캡처에는 설치된 Chrome/Edge 등 Chromium 계열 브라우저가 필요합니다.
-5. **한 화면에서 점검**: Settings → MCP(또는 Integrations → MCP) 맨 위의 **REA 설치·연결 점검**이
+5. **한 화면에서 점검**: 설정 → 외부 MCP 맨 위의 **REA 설치·연결 점검**이
    내장 REA(쓸 수 있으면 Node.js와 npx는 "필요 없음"으로 표시), Node.js 버전(rea-agents 6.7.0 패키지가 선언한
    `^22.19.0 || ^24.11.0 || >=26.0.0`), npx, MCP 등록(이상 내장본이 없을 때 필수)과
    Chromium 계열 브라우저, Ghidra, 다른 네이티브 엔진(Hopper·IDA), Java·JADX·Apktool·tshark·adb(선택)를 한 번에 보여 줍니다.

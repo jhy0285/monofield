@@ -16,7 +16,7 @@ MonoField `0.11.7-preview.2`에는 REA MCP 프리셋, `monofield rea` 설정 CLI
 
 REA는 MonoField에 들어 있습니다(`rea-agents` 6.7.0). MonoField가 자기 런타임으로 실행하므로 Node.js 설치나 `npx` 다운로드가 필요 없습니다.
 
-1. 설정할 것이 없습니다. **설정 → MCP → REA 설치·연결 점검**의 **대화에서 AI가 REA 쓰기**가 기본으로 켜져 있습니다. 끄면 대화의 AI에게 REA 도구를 주지 않습니다.
+1. 설정할 것이 없습니다. **설정 → 외부 MCP → REA 설치·연결 점검**의 **대화에서 AI가 REA 쓰기**가 기본으로 켜져 있습니다. 끄면 대화의 AI에게 REA 도구를 주지 않습니다.
 2. 지원되는 로컬 CLI agent로 새 대화를 시작합니다. 기존 대화에 소급 적용된다고 가정하지 마세요.
 3. `legacy-system-handover` 스킬을 선택하고 조사할 앱 경로·DB 스냅샷·실행 URL과 수행할 조작을 지정합니다. 스킬은 **Settings → Skills**에서도 확인할 수 있습니다.
 
@@ -41,7 +41,7 @@ BYOK 채팅 모델만 선택한 경우 로컬 파일·브라우저·외부 MCP �
 
 SQLite 검사는 Node 24.15 이상이 필요하며 내장 런타임이 이를 만족합니다. 브라우저 캡처에는 설치된 Chromium 계열 실행 파일이 필요합니다. 네이티브 바이너리 분석 엔진은 별도입니다. `monofield rea doctor --json`으로 확인하세요.
 
-사용자님의 [rea-yj](https://github.com/jhy0285/rea-yj) 소스 체크아웃을 직접 사용하려면 해당 저장소를 빌드하고 **Settings → MCP**에서 사용자 지정 서버로 명령 `node`, 인자 `/absolute/path/to/rea-yj/scripts/rea.mjs`, `--mcp`를 `rea` ID로 저장합니다. 사용자 MCP 설정 이외의 전역 agent 설정은 자동 변경하지 않습니다.
+사용자님의 [rea-yj](https://github.com/jhy0285/rea-yj) 소스 체크아웃을 직접 사용하려면 해당 저장소를 빌드하고 **설정 → 외부 MCP**에서 사용자 지정 서버로 명령 `node`, 인자 `/absolute/path/to/rea-yj/scripts/rea.mjs`, `--mcp`를 `rea` ID로 저장합니다. 사용자 MCP 설정 이외의 전역 agent 설정은 자동 변경하지 않습니다.
 
 ## 브라우저 기록과 명세서 대조
 

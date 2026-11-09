@@ -113,6 +113,10 @@ structured deliverable.
   and shows the affected paths. See [schema monitoring](docs/database-schema-watch.md).
   Native Codex development chat avoids app prompt overhead when no extra context is selected;
   document updates support small change proposals. See [token efficiency](docs/token-efficiency.md).
+- **Find what to click.** The [user guide (Korean, final edition)](docs/user-guide.ko.md)
+  maps what you want to do to the screen to use, with Settings at a glance, the reference
+  board, the built-in REA, execution permissions and fixes; it is also online at
+  [monofield.vercel.app/guide](https://monofield.vercel.app/guide).
 - **Guidance is built in.** First-run onboarding is followed by a seven-step
   development walkthrough or a four-step documents/design walkthrough. Both can
   be opened again from the product guide.
@@ -122,7 +126,7 @@ structured deliverable.
   [decision model guide](docs/jev-decisions.md).
 - **REA is built in.** MonoField ships REA (`rea-agents` 6.7.0) and lets the AI
   use it in conversations by default; Claude Code, Codex, OpenCode and supported
-  ACP adapters receive it without setup. Turn it off in Settings → MCP → REA setup
+  ACP adapters receive it without setup. Turn it off in Settings → External MCP → REA setup
   check or with `monofield rea disable --json`. Use the bundled
   `legacy-system-handover` skill to investigate a legacy application, preserve
   static, browser and SQLite Evidence, and export structured interface/screen

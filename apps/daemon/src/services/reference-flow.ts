@@ -47,7 +47,7 @@ export function defaultReferenceFlowDeps(): ReferenceFlowDeps {
     runRea: (scenario, signal) => new Promise((resolve, reject) => {
       const lookup = locateBundledRea();
       if (!lookup.available) {
-        reject(new ReferenceBoardError(`The REA copy that ships with MonoField cannot run here (${lookup.reason}). Check Settings → MCP → REA setup.`, 409, 'REFERENCE_FLOW_NO_REA'));
+        reject(new ReferenceBoardError(`The REA copy that ships with MonoField cannot run here (${lookup.reason}). Check Settings → External MCP → REA setup check.`, 409, 'REFERENCE_FLOW_NO_REA'));
         return;
       }
       const { runtime } = lookup;
