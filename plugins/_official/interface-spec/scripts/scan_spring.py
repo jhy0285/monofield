@@ -51,6 +51,7 @@ from tools.excel_generator.collector.dto_expander import (  # noqa: E402
     expand_type_to_spec_fields,
     parse_java_classes,
 )
+from tools.excel_generator.rules.audit_fields import set_include_audit_fields  # noqa: E402
 from tools.excel_generator.rules.naming import (  # noqa: E402
     koreanize_identifier,
     load_name_dict,
@@ -140,6 +141,8 @@ def field_to_json(field) -> dict:
         "note": field.note or "",
         "depth": int(field.depth or 0),
     }
+    if getattr(field, "max_size", ""):
+        out["maxSize"] = field.max_size
     if field.path:
         out["path"] = field.path
     if field.parent_path:
@@ -156,10 +159,13 @@ def main() -> int:
     ap.add_argument("--name-dict", default="", help="custom dictionary (.json/.csv), overrides bundled entries")
     ap.add_argument("--sample-context", default="", help="approved database-context JSON; never credentials")
     ap.add_argument("--codebase-name", default="")
+    ap.add_argument("--include-audit-fields", action="store_true",
+                    help="keep audit columns (createdAt, updatedAt, regDate, ...) that are left out by default")
     ap.add_argument("--language", default="java")
     ap.add_argument("--framework", default="spring-boot")
     args = ap.parse_args()
 
+    set_include_audit_fields(args.include_audit_fields)
     codebase = Path(args.codebase_path).resolve()
     if not codebase.exists():
         raise SystemExit(f"codebase path not found: {codebase}")

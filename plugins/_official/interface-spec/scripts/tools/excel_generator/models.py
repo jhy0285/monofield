@@ -17,6 +17,8 @@ class FieldSpec:
     path: str | None = None
     parent_path: str | None = None
     depth: int = 0
+    # `@Size(max = N)` / `@Length(max = N)`; lets the change analysis see a tighter limit as a breaking change.
+    max_size: str = ""
 
 
 @dataclass

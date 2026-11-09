@@ -12,7 +12,14 @@ from tools.excel_generator.rules.page_object import is_page_object_field
 FIELD_RE = re.compile(
     r"\b(?:private|protected|public)\s+([^;=]+?)\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:=\s*[^;]*)?;\s*$"
 )
-CLASS_RE = re.compile(r"\bclass\s+([A-Za-z_][A-Za-z0-9_]*)\b(?:\s+extends\s+([A-Za-z_][A-Za-z0-9_\.]*) )?")
+# A field with no access modifier (Lombok `@Value`, package-private DTOs); only read directly inside the class body.
+FIELD_NO_MODIFIER_RE = re.compile(
+    r"^((?:final\s+)?[A-Za-z_][A-Za-z0-9_.]*(?:<[^;=()]*>)?(?:\[\])*)\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:=\s*[^;]*)?;\s*$"
+)
+CLASS_RE = re.compile(
+    r"\bclass\s+([A-Za-z_][A-Za-z0-9_]*)\b(?:\s*<[^{]*?>)?(?:\s+extends\s+([A-Za-z_][A-Za-z0-9_\.]*)(?=[\s{<,]))?"
+)
+RECORD_RE = re.compile(r"\brecord\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:<[^()]*?>)?\s*\(")
 PACKAGE_RE = re.compile(r"^\s*package\s+([^;]+);", re.M)
 _HANGUL = re.compile(r"[가-힣]")
 
@@ -36,6 +43,14 @@ _LEAF_TYPES = {
 }
 
 
+_MODIFIER_WORDS = {"static", "final", "transient", "volatile"}
+_STATEMENT_WORDS = {"return", "throw", "package", "import", "new", "else", "case"}
+_JSON_IGNORE_RE = re.compile(r"^@(?:[\w.]*\.)?JsonIgnore(?:\s*\(\s*(?:value\s*=\s*)?true\s*\))?$")
+_JSON_PROPERTY_RE = re.compile(r'^@(?:[\w.]*\.)?JsonProperty\s*\(\s*(?:(?:value|name)\s*=\s*)?"([^"]*)"')
+_SIZE_RE = re.compile(r"^@(?:[\w.]*\.)?(?:Size|Length)\s*\((.*)\)\s*$")
+_SNAKE_NAMING_RE = re.compile(r"@(?:[\w.]*\.)?JsonNaming\s*\(\s*(?:[\w.]*\.)?(?:SnakeCaseStrategy|SNAKE_CASE)\b")
+
+
 @dataclass
 class JavaField:
     name: str
@@ -43,6 +58,128 @@ class JavaField:
     annotations: list[str]
     # Javadoc, block or line comment written for the field (first descriptive line).
     comment: str = ""
+    # Name on the wire: an explicit `@JsonProperty`, else the class's snake_case naming strategy, else the Java name.
+    json_name: str = ""
+
+    @property
+    def wire_name(self) -> str:
+        return self.json_name or self.name
+
+    @property
+    def json_ignored(self) -> bool:
+        return any(_JSON_IGNORE_RE.match(a.strip()) for a in self.annotations)
+
+    @property
+    def max_size(self) -> str:
+        for a in self.annotations:
+            m = _SIZE_RE.match(a.strip())
+            if m:
+                mx = re.search(r"\bmax\s*=\s*(\d+)", m.group(1))
+                if mx:
+                    return mx.group(1)
+        return ""
+
+
+def _explicit_json_name(annotations: list[str]) -> str:
+    for a in annotations:
+        m = _JSON_PROPERTY_RE.match(a.strip())
+        if m and m.group(1):
+            return m.group(1)
+    return ""
+
+
+def _snake_case(name: str) -> str:
+    return re.sub(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", "_", name).lower()
+
+
+def _wire_name(name: str, annotations: list[str], snake: bool) -> str:
+    return _explicit_json_name(annotations) or (_snake_case(name) if snake else "")
+
+
+def _strip_comments(text: str) -> str:
+    """Source without comments, keeping string literals and line breaks (so positions stay meaningful)."""
+    def repl(m: re.Match[str]) -> str:
+        if m.group(1) is not None:
+            return m.group(1)
+        return re.sub(r"[^\n]", " ", m.group(0))
+    return re.sub(r'("(?:\\.|[^"\\\n])*")|/\*.*?\*/|//[^\n]*', repl, text, flags=re.S)
+
+
+def _balanced(text: str, start: int, open_ch: str = "(", close_ch: str = ")") -> int:
+    """Index of the bracket that closes the one at `start`, or -1. String literals are skipped."""
+    depth = 0
+    i = start
+    while i < len(text):
+        ch = text[i]
+        if ch == '"':
+            i += 1
+            while i < len(text) and text[i] != '"':
+                i += 2 if text[i] == "\\" else 1
+        elif ch == open_ch:
+            depth += 1
+        elif ch == close_ch:
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return -1
+
+
+def _split_leading_annotations(line: str) -> tuple[list[str], str]:
+    """`@NotBlank @Size(max = 5) private String a;` -> (["@NotBlank", "@Size(max = 5)"], "private String a;")."""
+    out: list[str] = []
+    rest = line.strip()
+    while rest.startswith("@") and not rest.startswith("@interface"):
+        m = re.match(r"@[A-Za-z_][\w.]*", rest)
+        if not m:
+            break
+        end = m.end()
+        after = rest[end:]
+        if after.lstrip().startswith("("):
+            open_at = end + (len(after) - len(after.lstrip()))
+            close = _balanced(rest, open_at)
+            if close < 0:
+                return out, rest if not out else rest
+            end = close + 1
+        out.append(rest[:end].strip())
+        rest = rest[end:].lstrip()
+    return out, rest
+
+
+def _split_top_level(text: str) -> list[str]:
+    parts: list[str] = []
+    depth = 0
+    cur: list[str] = []
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if ch == '"':
+            j = i + 1
+            while j < len(text) and text[j] != '"':
+                j += 2 if text[j] == "\\" else 1
+            cur.append(text[i : j + 1])
+            i = j + 1
+            continue
+        if ch in "(<[{":
+            depth += 1
+        elif ch in ")>]}":
+            depth -= 1
+        if ch == "," and depth == 0:
+            parts.append("".join(cur))
+            cur = []
+        else:
+            cur.append(ch)
+        i += 1
+    tail = "".join(cur)
+    if tail.strip():
+        parts.append(tail)
+    return parts
+
+
+def _brace_delta(line: str) -> int:
+    no_strings = re.sub(r'"(?:\\.|[^"\\])*"', '""', line)
+    no_chars = re.sub(r"'(?:\\.|[^'\\])'", "''", no_strings)
+    return no_chars.count("{") - no_chars.count("}")
 
 
 def _comment_text(raw: str) -> str:
@@ -81,6 +218,7 @@ class JavaClass:
     package: str
     extends: str | None
     fields: list[JavaField] = field(default_factory=list)
+    snake_case: bool = False
 
 
 def _short_type(type_raw: str) -> str:
@@ -111,6 +249,93 @@ def _candidate_nested_classes(type_raw: str, classes: dict[str, JavaClass]) -> l
     return out
 
 
+def _parse_record(code: str, m: re.Match[str], path: Path, package: str) -> JavaClass:
+    """A Java record: every component is a field, written with its annotations (`@Size`, `@JsonProperty`, ...)."""
+    open_at = m.end() - 1
+    close = _balanced(code, open_at)
+    header = code[open_at + 1 : close] if close > open_at else ""
+    snake = bool(_SNAKE_NAMING_RE.search(code[max(0, m.start() - 400) : m.start()]))
+    fields: list[JavaField] = []
+    for part in _split_top_level(header):
+        anns, rest = _split_leading_annotations(part.strip())
+        rest = re.sub(r"\bfinal\s+", "", rest).strip()
+        tm = re.match(r"(.+?)\s+([A-Za-z_][A-Za-z0-9_]*)\s*$", rest, re.S)
+        if not tm:
+            continue
+        type_raw = re.sub(r"\s+", " ", tm.group(1)).strip()
+        fields.append(JavaField(name=tm.group(2), type_raw=type_raw, annotations=anns,
+                                json_name=_wire_name(tm.group(2), anns, snake)))
+    return JavaClass(name=m.group(1), path=path, package=package, extends=None, fields=fields, snake_case=snake)
+
+
+def _parse_class(text: str, cm: re.Match[str], path: Path, package: str) -> JavaClass:
+    cls_name = cm.group(1)
+    extends = cm.group(2).split(".")[-1] if cm.group(2) else None
+    anns: list[str] = []
+    fields: list[JavaField] = []
+    comment = ""
+    in_block = False
+    depth = 0
+    snake = False
+    declared = False
+    for line in text.splitlines():
+        s = line.strip()
+        if in_block or s.startswith("/*"):
+            if not comment:
+                comment = _comment_text(s)
+            in_block = "*/" not in s
+            continue
+        if not s:
+            continue
+        if s.startswith("//"):
+            comment = _comment_text(s) or comment
+            continue
+        trailing = re.search(r"//(.*)$", s)
+        s_no_comment = re.sub(r"//.*$", "", s).strip()
+        if not s_no_comment:
+            continue
+        line_anns, rest = _split_leading_annotations(s_no_comment)
+        if not declared and re.search(rf"\bclass\s+{re.escape(cls_name)}\b", rest or s_no_comment):
+            declared = True
+            snake = any(_SNAKE_NAMING_RE.search(a) for a in anns + line_anns)
+            anns = []
+            comment = ""
+            depth += _brace_delta(rest or s_no_comment)
+            continue
+        if line_anns and not rest:
+            anns.extend(line_anns)
+            depth += _brace_delta(s_no_comment)
+            continue
+        field_anns = anns + line_anns
+        body = rest or s_no_comment
+        fm = FIELD_RE.search(body)
+        if not fm and declared and depth == 1:
+            fm = FIELD_NO_MODIFIER_RE.match(body)
+        if fm:
+            type_raw = fm.group(1).strip()
+            name = fm.group(2)
+            words = type_raw.split()
+            skip = False
+            while words and words[0] in _MODIFIER_WORDS:
+                skip = skip or words[0] in ("static", "transient")
+                words.pop(0)
+            skip = skip or not words or words[0] in _STATEMENT_WORDS
+            if not skip:
+                type_raw = " ".join(words)
+                field_comment = trailing.group(1).strip() if trailing else comment
+                fields.append(JavaField(name=name, type_raw=type_raw, annotations=field_anns[:], comment=field_comment,
+                                        json_name=_wire_name(name, field_anns, snake)))
+            anns = []
+            comment = ""
+            depth += _brace_delta(body)
+            continue
+        if not s.startswith("@"):
+            anns = []
+            comment = ""
+        depth += _brace_delta(body)
+    return JavaClass(name=cls_name, path=path, package=package, extends=extends, fields=fields, snake_case=snake)
+
+
 def parse_java_classes(codebase_path: Path) -> dict[str, JavaClass]:
     java_root = codebase_path / "main/java"
     if not java_root.exists():
@@ -119,8 +344,10 @@ def parse_java_classes(codebase_path: Path) -> dict[str, JavaClass]:
     classes: dict[str, JavaClass] = {}
     for path in java_root.rglob("*.java"):
         text = path.read_text(encoding="utf-8", errors="ignore")
-        cm = CLASS_RE.search(text)
-        if not cm:
+        code = _strip_comments(text)
+        cm = CLASS_RE.search(code)
+        rm = RECORD_RE.search(code)
+        if not cm and not rm:
             continue
 
         pkg = ""
@@ -128,52 +355,11 @@ def parse_java_classes(codebase_path: Path) -> dict[str, JavaClass]:
         if pm:
             pkg = pm.group(1).strip()
 
-        cls_name = cm.group(1)
-        extends = cm.group(2).split(".")[-1] if cm.group(2) else None
-
-        anns: list[str] = []
-        fields: list[JavaField] = []
-        comment = ""
-        in_block = False
-        for line in text.splitlines():
-            s = line.strip()
-            if in_block or s.startswith("/*"):
-                if not comment:
-                    comment = _comment_text(s)
-                in_block = "*/" not in s
-                continue
-            if not s:
-                continue
-            if s.startswith("//"):
-                comment = _comment_text(s) or comment
-                continue
-            trailing = re.search(r"//(.*)$", s)
-            s_no_comment = re.sub(r"//.*$", "", s).strip()
-            if not s_no_comment:
-                continue
-            if s.startswith("@"):
-                anns.append(s)
-                continue
-            fm = FIELD_RE.search(s_no_comment)
-            if fm:
-                type_raw = fm.group(1).strip()
-                name = fm.group(2)
-                field_comment = trailing.group(1).strip() if trailing else comment
-                fields.append(JavaField(name=name, type_raw=type_raw, annotations=anns[:], comment=field_comment))
-                anns = []
-                comment = ""
-                continue
-            if not s.startswith("@"):
-                anns = []
-                comment = ""
-
-        classes[cls_name] = JavaClass(
-            name=cls_name,
-            path=path,
-            package=pkg,
-            extends=extends,
-            fields=fields,
-        )
+        if rm and (not cm or rm.start() < cm.start()):
+            parsed = _parse_record(code, rm, path, pkg)
+        else:
+            parsed = _parse_class(text, cm, path, pkg)
+        classes[parsed.name] = parsed
 
     return classes
 
@@ -232,7 +418,7 @@ def java_fields_to_spec_fields(
     conflicts: list[str] = []
 
     for f in fields:
-        if f.name in {"serialVersionUID"}:
+        if f.name in {"serialVersionUID"} or f.json_ignored:
             continue
         if is_audit_field(f.name):
             continue
@@ -255,14 +441,15 @@ def java_fields_to_spec_fields(
         out.append(
             FieldSpec(
                 section=section,
-                name_en=f.name,
+                name_en=f.wire_name,
                 name_ko=ko,
                 data_type=_short_type(f.type_raw),
                 required=required,
                 note="",
-                path=f.name,
+                path=f.wire_name,
                 parent_path=None,
                 depth=0,
+                max_size=f.max_size,
             )
         )
 
@@ -296,7 +483,7 @@ def expand_dto_to_spec_fields(
 
         fields = resolve_dto_fields(classes, cls_name)
         for f in fields:
-            if f.name in {"serialVersionUID"}:
+            if f.name in {"serialVersionUID"} or f.json_ignored:
                 continue
             if is_audit_field(f.name):
                 continue
@@ -304,7 +491,7 @@ def expand_dto_to_spec_fields(
                 # include only if explicit field exists in DTO; this function is called only on existing fields
                 pass
 
-            path = f.name if parent_path is None else f"{parent_path}.{f.name}"
+            path = f.wire_name if parent_path is None else f"{parent_path}.{f.wire_name}"
             if path in seen_paths:
                 continue
             seen_paths.add(path)
@@ -325,7 +512,7 @@ def expand_dto_to_spec_fields(
             out.append(
                 FieldSpec(
                     section=section,
-                    name_en=f.name,
+                    name_en=f.wire_name,
                     name_ko=ko,
                     data_type=_short_type(f.type_raw),
                     required=required,
@@ -333,6 +520,7 @@ def expand_dto_to_spec_fields(
                     path=path,
                     parent_path=parent_path,
                     depth=depth,
+                    max_size=f.max_size,
                 )
             )
 
