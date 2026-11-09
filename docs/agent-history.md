@@ -307,6 +307,14 @@ exercise is unchanged by it.
 
 Newest first within each group. Remove an item when it is done.
 
+Release 0.11.7-preview.8 (see the 2026-11-09 "preview.8 prepared" entry):
+
+- Blocked: GitHub Actions jobs are not started ("account is locked due to a billing issue"), so neither CI nor
+  `release-windows.yml` can run. The account owner has to resolve it in GitHub billing settings; then follow that entry's
+  "Next agent" steps. `main` and monofield.vercel.app still show preview.7.
+- `nix/pnpm-deps.nix` was not refreshed after the rea-agents lockfile change; the full CI run may fail "Validate Nix flake" and
+  produce the hash-only patch as a handoff artifact.
+
 Reference board (see the 2026-11-06 and 2026-11-09 "reference board" Log entries; steps 1 to 4 of the proposal are built):
 
 - The comparison with our screen is a pattern comparison (`compareReferenceFlows` in contracts): step outcome, page move, API
@@ -538,6 +546,24 @@ Code health:
 - **Changed:** `apps/daemon/src/services/ontology/change-graph.ts` `documentReviews` sorts by document file, then item ID.
 - **Verified:** new case in `apps/daemon/tests/ontology-plan.test.ts` fails without the sort and passes with it;
   `ontology-plan` and `code-ontology-route` 13 pass; daemon typecheck and `pnpm guard` pass.
+### 2026-11-09 — 0.11.7-preview.8 prepared; GitHub Actions refused to start (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** release the reference board and built-in REA work and refresh monofield.vercel.app.
+- **Done:** "chore(release): prepare 0.11.7-preview.8" bumped the five release packages and was pushed to the branch.
+  `gh workflow run ci.yml -f ci_mode=full` on it (run 42548533150) failed within seconds: every job's annotation says
+  "The job was not started because your account is locked due to a billing issue". Nothing ran; this is not a test failure.
+- **Prepared on the branch, not on `main`:** `docs/releases/0.11.7-preview.8.md` (no `Source:` line or Actions link yet);
+  README release line and install links, the site's preview card (new title, copy and feature list, REA built in in the
+  limits line), structured data, `get-started.html` (REA node and the `monofield rea status|enable|disable` row) and the site
+  README point at preview.8. Site tests (`node --test tests/seo.test.ts tests/get-started.test.ts`) 16 pass; the card was
+  viewed at 1440 px (ko, en) and 390 px (ko) from a local static server, no page errors, no horizontal overflow.
+- **Checked for the packaged app:** Electron 41.3.0 (the official Linux zip, checksum equal to the one in the electron
+  package) reports Node 24.15.0, in REA's range; `ELECTRON_RUN_AS_NODE=1 electron <rea.mjs> --mcp` answers `initialize`
+  (`rea` 6.7.0) and lists 207 tools. Windows itself not run.
+- **Next agent:** once the account owner clears the billing lock, rerun full CI on the release commit, push that commit (not
+  the branch head) to `main` as a fast-forward, dispatch `release-windows.yml` (ref = that commit, `release_channel=preview`,
+  `allow_unsigned=true`, `publish=true`), check the assets, then add the `Source:` line and the run link to the notes and push
+  the site commit to `main`. Do not push the site commit before the release exists: its links would 404.
 
 ### 2026-11-09 — REA built in: the AI uses it in conversations by default, Codex included (`ccr-8432aecf-n9xdfd`)
 
