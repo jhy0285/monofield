@@ -5372,6 +5372,7 @@ export async function startServer({
     projectFiles: projectFileDeps,
     schemaWatch,
     verification,
+    interfaceSpecScriptsDir: path.join(BUNDLED_PLUGINS_DIR, 'interface-spec', 'scripts'),
   });
   registerJudgmentRoutes(app, { db, http: httpDeps, paths: pathDeps, projectFiles: projectFileDeps });
   registerBrowserEvidenceRoutes(app, { db, http: httpDeps, paths: pathDeps, projectFiles: projectFileDeps });

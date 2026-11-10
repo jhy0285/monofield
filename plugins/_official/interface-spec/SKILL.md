@@ -571,6 +571,16 @@ alone does not identify uncommitted content, so record the inspected file hash
 as well. AI-updated fields remain `reviewStatus: "unreviewed"` until reviewed.
 Never turn inferred information into a browser or database observation.
 
+For a document the Spring scanner made, `monofield docs impact` re-scans the
+code at the recorded revision and now and lists only the interfaces whose
+caller-visible contract changed (`analysis: "rescan"`), the exact differences
+(`rescan.changes`), and routes the code has that the document lacks
+(`newRoutes`). Update exactly those. When it reports `analysis: "files"`, it
+matched changed files instead (reason in `analysisNote`), so inspect each
+flagged interface before editing it. The Spring scanner records `source.revision` itself when every
+Java and XML file it reads is committed; otherwise the comparison starts from
+the current `HEAD`, so analyze before committing the change.
+
 For a change-review request that explicitly names a proposal file, preserve the
 original, stable interface IDs, accepted human edits, and existing evidence.
 Inspect changed source files and their DTO dependencies. Prefer a small JSON

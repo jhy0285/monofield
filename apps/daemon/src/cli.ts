@@ -1021,7 +1021,12 @@ async function runDocs(args) {
     if (!response.ok) return structuredHttpFailure(response);
     const result = await response.json();
     if (flags.json) process.stdout.write(JSON.stringify(result, null, 2) + '\n');
-    else console.log(`${result.affected.length} affected interfaces; ${result.untrackedEndpointIndexes.length} without code references.\n\n${result.updatePrompt}`);
+    else {
+      const how = result.analysis === 'rescan' ? 're-scanned the code at the baseline and now'
+        : result.analysis === 'files' ? `matched changed files${result.analysisNote ? ` (${result.analysisNote})` : ''}` : 'matched changed files';
+      const added = result.newRoutes?.length ? `; ${result.newRoutes.length} interfaces in the code are not in the document` : '';
+      console.log(`${result.affected.length} affected interfaces (${how}); ${result.untrackedEndpointIndexes.length} without code references${added}.\n\n${result.updatePrompt}`);
+    }
     return;
   }
   const { exitCode } = await runDocsCli(args);

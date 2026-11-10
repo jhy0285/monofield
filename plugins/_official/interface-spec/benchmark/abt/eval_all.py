@@ -128,6 +128,23 @@ def mf_impact() -> dict:
             'changed_files': len(changed)}
 
 
+def mf_impact_rescan() -> dict:
+    """MonoField's re-scan impact (document-rescan.ts): the baseline document's endpoints that the scanner's own
+    before/after comparison reports a change for, plus routes the code has and the document does not. Route-based."""
+    v1_routes = {e['route'] for e in json.loads((HERE / 'out/mf/mf_v1.norm.json').read_text())['endpoints']}
+    changes = json.loads((HERE / 'out/mf/mf_changes.norm.json').read_text())
+    changed = {c['route'] for c in changes}
+    flagged = v1_routes & changed
+    new = {c['route'] for c in changes if c['kind'] == 'endpoint-added'} - v1_routes
+    truth = {score.nr(c['route']) for c in truth_changes if c['vocab'] and c['route'] != '*'}
+    truth_documented = truth & v1_routes
+    truth_new = {score.nr(x['route']) for x in truth_v2} & truth - v1_routes
+    return {'flagged': len(flagged), 'truth_documented_routes_with_in_vocab_change': len(truth_documented),
+            'flagged_and_truly_changed': len(flagged & truth), 'flagged_but_unchanged': sorted(flagged - truth),
+            'changed_but_not_flagged': sorted(truth_documented - flagged),
+            'new_routes': len(new), 'new_routes_true': len(new & truth_new), 'new_routes_missed': sorted(truth_new - new)}
+
+
 def main():
     report = {'experiment': stats}
     # ---- MonoField, deterministic scan + shipped classifier
@@ -139,7 +156,7 @@ def main():
         'timing': json.loads((HERE / 'out/mf/mf_timing.json').read_text()),
         'phase1_v1': score.score_spec(truth_v1, mf_v1), 'phase1_v2': score.score_spec(truth_v2, mf_v2),
         'changes_strict': score.score_changes(truth_changes, mf_ch), 'changes_lenient': score.score_changes(truth_changes, lenient),
-        'impact': mf_impact(),
+        'impact': mf_impact(), 'impact_rescan': mf_impact_rescan(),
         'out_of_vocab': {'B1_scope_blacklist': False, 'B2_enum_PARTIAL_REFUND': False, 'B3_enum_SYSTEM_ERROR': False, 'B4_default_size': False,
                          'note': 'enum values, defaults and OAuth scopes are not part of the interface-spec schema'},
     }

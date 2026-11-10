@@ -5,6 +5,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import type { DocumentImpactResponse, InterfaceSpecDocument } from '@open-design/contracts';
 import { parseGitNameStatus } from '../git-workspace.js';
+import { rescanBlocker, rescanCode, routeKey, routeKeyOf, touchesScannedSources, type RescanOptions } from './document-rescan.js';
 
 const executeFile = promisify(execFile);
 
@@ -72,6 +73,8 @@ export function matchDocumentImpact(
 
 export async function analyzeDocumentImpact(options: {
   projectRoot: string; projectId?: string; inputFile: string; content: Buffer; doc: InterfaceSpecDocument;
+  /** Re-read the code with the document's scanner at the baseline and now, and list only interfaces that changed. */
+  rescan?: RescanOptions;
 }): Promise<DocumentImpactResponse> {
   const projectRoot = await realpath(options.projectRoot);
   const selectedRoot = path.resolve(projectRoot, options.doc.source.codebasePath || '.');
@@ -95,7 +98,44 @@ export async function analyzeDocumentImpact(options: {
       ...untracked.split('\0').filter(Boolean),
     ])].sort();
   }
-  const impact = matchDocumentImpact(options.doc, changedFiles, codeRoot, projectRoot);
+  const fileImpact = matchDocumentImpact(options.doc, changedFiles, codeRoot, projectRoot);
+  let impact = fileImpact;
+  let analysis: 'rescan' | 'files' = 'files';
+  let analysisNote: string | undefined;
+  let rescan: DocumentImpactResponse['rescan'];
+  let newRoutes: string[] | undefined;
+  if (options.rescan) {
+    const blocker = rescanBlocker(options.doc, repository, baselineRevision);
+    if (blocker) {
+      analysisNote = blocker;
+    } else if (!touchesScannedSources(changedFiles)) {
+      // Nothing the scanner reads changed, so no interface can have changed.
+      analysis = 'rescan';
+      rescan = { level: 'none', counts: { breaking: 0, warning: 0, info: 0 }, changes: [] };
+      impact = { ...fileImpact, affected: [] };
+      newRoutes = [];
+    } else {
+      try {
+        const result = await rescanCode({ codeRoot, revision: baselineRevision!, doc: options.doc, rescan: options.rescan });
+        const changed = new Set(result.report.changes.map((change) => routeKeyOf(change.route)));
+        const documented = options.doc.endpoints.map((endpoint) => routeKey(endpoint.method, endpoint.path));
+        impact = {
+          ...fileImpact,
+          affected: options.doc.endpoints.flatMap((endpoint, endpointIndex) => changed.has(documented[endpointIndex]!) ? [{
+            endpointIndex, endpointId: endpoint.interfaceId || `${endpoint.method} ${endpoint.path}`,
+            title: endpoint.interfaceName || `${endpoint.method} ${endpoint.path}`,
+            changedFiles: fileImpact.affected.find((item) => item.endpointIndex === endpointIndex)?.changedFiles ?? [],
+          }] : []),
+        };
+        newRoutes = [...new Set(result.report.changes.filter((change) => change.code === 'endpoint-added').map((change) => change.route))]
+          .filter((route) => !documented.includes(routeKeyOf(route)));
+        rescan = result.report;
+        analysis = 'rescan';
+      } catch (error) {
+        analysisNote = `re-scan failed: ${error instanceof Error ? error.message : String(error)}`;
+      }
+    }
+  }
   const contentSha256 = createHash('sha256').update(options.content).digest('hex');
   const proposalFile = options.inputFile.replace(/\.json$/i, '') + '.proposed.json';
   const analyzedAt = new Date().toISOString();
@@ -113,6 +153,8 @@ export async function analyzeDocumentImpact(options: {
     `Inspect relevant endpoints and source metadata in ${JSON.stringify(options.inputFile)}. For large documents, extract the affected endpoint indexes locally instead of printing the whole JSON into model context. Baseline document SHA-256: ${contentSha256}.`,
     `Codebase directory: ${JSON.stringify(options.doc.source.codebasePath || '.')}. Git HEAD: ${headRevision ?? 'unavailable'}.`,
     `Directly affected interfaces: ${inlineList(impact.affected.map(({ endpointIndex, endpointId }) => ({ endpointIndex, endpointId })))}.`,
+    ...(rescan ? [`Exact caller-visible differences, found by re-scanning the code at ${baselineRevision} and now: ${inlineList(rescan.changes.map((change) =>
+      [change.route, change.location, change.field, change.code].filter(Boolean).join(' ')))}.${newRoutes?.length ? ` Interfaces in the code but not in the document: ${inlineList(newRoutes)}.` : ''} Update exactly these; do not rewrite other interfaces.`] : []),
     `Interfaces without code references (coverage unknown): ${inlineList(impact.untrackedEndpointIndexes)}.`,
     `Changed files: ${inlineList(changedFiles)}. Direct references only; inspect imported DTOs and dependencies before deciding impact.`,
     `Lists are bounded to avoid wasting input tokens. If abbreviated, retrieve the complete report with the runtime wrapper: docs impact${cliProject} --input ${JSON.stringify(options.inputFile)} --json. Inspect only relevant code; the original report is computed without a model call.`,
@@ -123,5 +165,7 @@ export async function analyzeDocumentImpact(options: {
     `Validate through the runtime wrapper: docs proposal${cliProject} --input ${JSON.stringify(options.inputFile)} --proposal ${JSON.stringify(proposalFile)} --expected-sha ${contentSha256} --json. This returns a small validation summary, not the complete document. Report failures and unresolved evidence; the user explicitly reviews and applies the proposal.`,
   ].join('\n\n');
   return { ok: true, inputFile: options.inputFile, contentSha256, repository, baselineRevision, headRevision,
-    changedFiles, ...impact, proposalFile, updatePrompt, analyzedAt };
+    changedFiles, ...impact, proposalFile, updatePrompt, analyzedAt,
+    ...(options.rescan ? { analysis } : {}), ...(analysisNote ? { analysisNote } : {}),
+    ...(rescan ? { rescan } : {}), ...(newRoutes ? { newRoutes } : {}) };
 }

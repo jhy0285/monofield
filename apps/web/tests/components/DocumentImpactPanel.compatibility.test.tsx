@@ -88,3 +88,41 @@ describe('DocumentImpactPanel caller compatibility', () => {
     await waitFor(() => expect(screen.queryByTestId('document-impact-compatibility')).toBeNull());
   });
 });
+
+describe('DocumentImpactPanel analysis method', () => {
+  async function renderImpact(extra: Partial<DocumentImpactResponse>) {
+    const sha = await documentContentHash(ORIGINAL_TEXT);
+    const impact: DocumentImpactResponse = {
+      ok: true, inputFile: 'orders.json', contentSha256: sha, repository: true, baselineRevision: 'a', headRevision: 'b',
+      changedFiles: ['OrderController.java'], affected: [{ endpointIndex: 0, endpointId: 'IF-ORD-001', title: '주문 등록', changedFiles: [] }],
+      untrackedEndpointIndexes: [], proposalFile: 'orders.proposed.json', updatePrompt: 'update', analyzedAt: '2026-11-10T00:00:00Z', ...extra,
+    };
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(impact), { status: 200, headers: { 'content-type': 'application/json' } })));
+    render(
+      <I18nProvider initial="en">
+        <DocumentImpactPanel projectId="p1" inputFile="orders.json" doc={original} dirty={false} onApplyProposal={() => undefined} />
+      </I18nProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze Git changes' }));
+    return screen.findByTestId('document-impact-analysis');
+  }
+
+  it('shows the exact differences and new routes found by re-scanning the code', async () => {
+    const analysis = await renderImpact({
+      analysis: 'rescan', newRoutes: ['POST /api/orders/{orderId}/cancel'],
+      rescan: compareInterfaceSpecDocuments(original, revised),
+    });
+    expect(analysis.getAttribute('data-analysis')).toBe('rescan');
+    expect(analysis.textContent).toContain('Only interfaces whose contract changed are listed');
+    expect(screen.getByTestId('document-impact-compatibility').textContent).toContain('2 breaking');
+    expect(screen.getByTestId('document-impact-new-routes').textContent).toContain('POST /api/orders/{orderId}/cancel');
+  });
+
+  it('says why the wider file match was used', async () => {
+    const analysis = await renderImpact({ analysis: 'files', analysisNote: 'Python 3 was not found' });
+    expect(analysis.getAttribute('data-analysis')).toBe('files');
+    expect(analysis.textContent).toContain('Some of them may not have changed');
+    expect(analysis.textContent).toContain('Python 3 was not found');
+    expect(screen.queryByTestId('document-impact-new-routes')).toBeNull();
+  });
+});

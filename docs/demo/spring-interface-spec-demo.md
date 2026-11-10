@@ -74,6 +74,15 @@ monofield docs proposal --project <project-id> \
 monofield docs export-openapi --project <project-id> --input docs/orders.interface-spec.json --json
 ```
 
+`docs impact`는 스캐너로 만든 명세서라면 기준 커밋의 코드와 지금 코드를 같은
+스캐너로 다시 읽어, 계약이 실제로 바뀐 API와 명세서에 아직 없는 새 API만
+표시합니다(`analysis: "rescan"`). 기준 코드는 임시 폴더에서 읽으므로 작업 폴더와
+Git 인덱스는 그대로입니다. Python 3이 없거나 직접 만든 명세서라면 바뀐 파일을
+근거로 쓴 API를 표시하고(`analysis: "files"`), 그 이유를 `analysisNote`에 적습니다.
+스캐너는 Java·XML 파일이 모두 커밋된 상태에서 읽었다면 그 커밋을
+`source.revision`에 남기므로, 변경을 커밋한 뒤에 분석해도 기준점이 유지됩니다.
+커밋하지 않은 코드를 읽어 만든 명세서는 지금의 `HEAD`를 기준으로 비교합니다.
+
 이미 팀이 관리하는 OpenAPI/Swagger JSON(springdoc `/v3/api-docs` 등)이 있으면
 `scan_openapi.py --spec <openapi.json>`으로 명세서를 바로 시작할 수 있습니다.
 

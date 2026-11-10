@@ -347,6 +347,10 @@ export interface Dict {
   "docs.evidence": string;
   "docs.impact.title": string;
   "docs.impact.scope": string;
+  "docs.impact.analysis.rescan": string;
+  "docs.impact.analysis.files": string;
+  "docs.impact.analysis.reason": string;
+  "docs.impact.newRoutes": string;
   "docs.impact.analyze": string;
   "docs.impact.failed": string;
   "docs.impact.conflict": string;

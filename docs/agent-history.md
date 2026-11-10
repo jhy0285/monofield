@@ -529,6 +529,34 @@ Code health:
 
 ## Log
 
+### 2026-11-10 — `docs impact` re-scans the code instead of matching files (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** "어 모두 진행", step 1 of 3: make the affected-API list precise (the ABT benchmark flagged 60 APIs, 26 of them unchanged).
+- **Changed:** new `apps/daemon/src/services/document-rescan.ts`: for a document whose `source.collector` is `static-spring`, the bundled
+  `scan_spring.py` reads the code at `source.revision` (exported to a temporary folder through a temporary `GIT_INDEX_FILE`, `read-tree`,
+  `checkout-index --prefix`; the user's index and working tree are untouched) and the current tree, and `compareInterfaceSpecDocuments` diffs the two.
+  `analyzeDocumentImpact` (`services/document-impact.ts`) then lists only documented endpoints with a change, plus `newRoutes`, `rescan` (the report)
+  and `analysis: 'rescan' | 'files'` with `analysisNote` when it falls back (no Git, no revision, another collector, no Python 3, scanner missing or
+  failing). Only `.java`/`.xml` changes trigger a scan. Contract fields in `packages/contracts/src/api/document-impact.ts`; route passes the bundled
+  scripts dir (`server.ts`); CLI `docs impact` prints the method and new-route count; `DocumentImpactPanel` shows the method, the compatibility
+  summary and new routes (4 keys in `types.ts` and 19 locales). `tools/pack` now leaves `benchmark/` folders out of packaged resources.
+  `scan_spring.py` records `source.revision` (HEAD) when every `.java`/`.xml` under the codebase is committed (`committed_revision`), so a
+  change that is committed before the analysis is still compared with the scanned commit (it used to compare HEAD with HEAD and find nothing).
+- **Tests:** `apps/daemon/tests/document-impact-rescan.test.ts` (5, skipped without `python3`), `scripts/tests/test_spring_source_revision.py`
+  (5, red first), 2 new cases in
+  `apps/web/tests/components/DocumentImpactPanel.compatibility.test.tsx`, a `benchmark` path in `tools/pack/tests/resources.test.ts`.
+- **Verified:** ABT benchmark (`eval_all.py` → `impact_rescan`): 34 flagged, 34 truly changed, 0 false, 0 missed, 4/4 new routes, 0.7 s through
+  `analyzeDocumentImpact` (file rule: 60 flagged, 26 false, 0.04 s). Through a real daemon (`tools-dev start daemon`, isolated `OD_DATA_DIR`,
+  `monofield project import-folder`, `monofield docs impact`): the Spring fixture scanned on a clean commit, the `spring-change` overlay committed
+  afterwards → `analysis: rescan`, 1 affected (주문 등록), `newRoutes` = the cancel route, changes `request-field-added-optional deliveryMemo` and
+  `endpoint-added`. `e2e/scripts/spring-spec-demo.ts --json` still passes. `pnpm guard`, `pnpm typecheck`, `pnpm i18n:check` pass; scanner suite 59 OK;
+  `@open-design/contracts` tests pass; web `DocumentImpactPanel.compatibility` 4/4; tools-pack `resources.test.ts` 11/11; daemon full suite
+  476 files pass, 2 fail (`mcp-spawn.test.ts` ".mcp.json removed when servers are cleared", `run-resume-on-failure.test.ts` "marks a resumable
+  failure"): both fail the same way on the base commit `ed2db34` with these changes stashed, so they are pre-existing in this environment.
+- **Not done:** only the Spring scanner can re-scan; other collectors keep the file rule. Not run on Windows (the Python launcher order there is
+  `python`, `py -3`, `python3`) or in the packaged app.
+- **Next agent:** steps 2 (guide and site rewrite with the strength wording) and 3 (release 0.11.7-preview.9) of the user's request remain.
+
 ### 2026-11-09 — Spring scanner reads XML security configuration (`ccr-8432aecf-n9xdfd`)
 
 - **Request:** after the scanner fixes, "XML 보안 설정부터 고쳐줘" (the 7 undecided auth rows of the ABT benchmark, eGovFrame `.do` URLs).

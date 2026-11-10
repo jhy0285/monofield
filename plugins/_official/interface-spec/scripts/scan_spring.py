@@ -33,6 +33,7 @@ import argparse
 import csv
 import json
 import re
+import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
@@ -150,6 +151,30 @@ def field_to_json(field) -> dict:
     return out
 
 
+_SCANNED_SOURCE = re.compile(r"\.(java|xml)$", re.IGNORECASE)
+
+
+def committed_revision(codebase: Path) -> str | None:
+    """The Git commit the scanned sources match, or None.
+
+    Recorded only when every Java and XML file under the codebase is committed, so that `monofield docs impact`
+    can compare the code with exactly what was read, even after later commits."""
+    def git(*args: str) -> str:
+        return subprocess.run(["git", "-C", str(codebase), *args], check=True, capture_output=True, text=True,
+                              timeout=30, encoding="utf-8", errors="replace").stdout
+    try:
+        if git("rev-parse", "--is-inside-work-tree").strip() != "true":
+            return None
+        head = git("rev-parse", "--verify", "HEAD").strip()
+        status = git("status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ".")
+    except (OSError, subprocess.SubprocessError):
+        return None
+    entries = [entry for entry in status.split("\0") if entry]
+    if any(_SCANNED_SOURCE.search(entry[3:] if len(entry) > 3 else entry) for entry in entries):
+        return None
+    return head if re.fullmatch(r"[0-9a-f]{40}", head) else None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--codebase-path", required=True)
@@ -265,6 +290,7 @@ def main() -> int:
             "language": args.language,
             "framework": args.framework,
             "collector": "static-spring",
+            **({"revision": revision} if (revision := committed_revision(codebase)) else {}),
         },
         **({"auth": auth} if auth else {}),
         "endpoints": [

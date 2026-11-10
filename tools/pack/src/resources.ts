@@ -87,6 +87,7 @@ const DEVELOPMENT_ONLY_RESOURCE_DIRECTORIES = new Set([
   "__snapshots__",
   "__tests__",
   "__pycache__",
+  "benchmark",
   "coverage",
   "docs",
   "fixtures",

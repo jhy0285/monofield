@@ -42,4 +42,16 @@ export interface DocumentImpactResponse {
   proposalFile: string;
   updatePrompt: string;
   analyzedAt: string;
+  /**
+   * How `affected` was found. `rescan`: the code at the baseline revision and the current code were both read with the
+   * document's scanner and compared, so only interfaces that really changed are listed. `files`: interfaces whose source
+   * references include a changed file (wider; also lists interfaces whose file changed elsewhere).
+   */
+  analysis?: 'rescan' | 'files';
+  /** Why the rescan was not used (no Python, a document not made by the scanner, the scanner failed, ...). */
+  analysisNote?: string;
+  /** Caller-visible differences between the baseline and the current code, from the rescan. */
+  rescan?: import('../docs/interface-spec-compatibility.js').InterfaceSpecCompatibilityReport;
+  /** `METHOD /path` routes found in the current code that the document does not list (rescan only). */
+  newRoutes?: string[];
 }

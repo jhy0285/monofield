@@ -17,7 +17,11 @@ import type { DatabaseSchemaWatchService } from '../services/database-schema-wat
 import { analyzeDocumentImpact } from '../services/document-impact.js';
 import type { RouteDeps } from '../server-context.js';
 
-export interface RegisterDocumentImpactRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'projectFiles' | 'verification'> { schemaWatch: DatabaseSchemaWatchService }
+export interface RegisterDocumentImpactRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'projectFiles' | 'verification'> {
+  schemaWatch: DatabaseSchemaWatchService;
+  /** The interface-spec plugin's `scripts` directory; lets impact analysis re-scan the code instead of matching files. */
+  interfaceSpecScriptsDir?: string;
+}
 
 export function registerDocumentImpactRoutes(app: Express, deps: RegisterDocumentImpactRoutesDeps): void {
   async function selected(id: string) {
@@ -88,6 +92,7 @@ export function registerDocumentImpactRoutes(app: Express, deps: RegisterDocumen
       res.json(await analyzeDocumentImpact({
         projectRoot: resolveProjectDir(deps.paths.PROJECTS_DIR, project.id, project.metadata),
         projectId: project.id, inputFile: file.name, content: file.buffer, doc: parsed.doc,
+        ...(deps.interfaceSpecScriptsDir ? { rescan: { scriptsDir: deps.interfaceSpecScriptsDir } } : {}),
       }));
     } catch (error) {
       res.status(400).json({ error: { code: 'DOCUMENT_IMPACT_FAILED', message: error instanceof Error ? error.message : String(error) } });

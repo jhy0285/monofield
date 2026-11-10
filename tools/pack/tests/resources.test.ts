@@ -67,6 +67,7 @@ describe("copyBundledResourceTrees", () => {
         join(workspaceRoot, "design-templates", "orbit-general", "docs", "preview.png"),
         join(workspaceRoot, "design-templates", "AGENTS.md"),
         join(workspaceRoot, "plugins", "_official", "sample", "fixtures", "input.json"),
+        join(workspaceRoot, "plugins", "_official", "sample", "benchmark", "score.py"),
         join(workspaceRoot, "plugins", "_official", "sample", "scripts", "tests", "plugin.test.ts"),
         join(workspaceRoot, "plugins", "_official", "sample", "scripts", "__pycache__", "plugin.cpython-314.pyc"),
         join(workspaceRoot, "plugins", "_official", "sample", "screenshots", "result.png"),

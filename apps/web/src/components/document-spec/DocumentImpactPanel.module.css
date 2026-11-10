@@ -27,3 +27,8 @@
 .compatList li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; min-width: 0; }
 .compatList code { font: 11px var(--font-mono); overflow-wrap: anywhere; color: var(--text-muted); }
 .compatValues { font: 11px var(--font-mono); }
+
+.analysis {
+  color: var(--text-muted);
+  font-size: 13px;
+}

@@ -104,6 +104,14 @@ export function DocumentImpactPanel({ projectId, inputFile, doc, loadedContentSh
     {error ? <p className={styles.error} role="alert">{error}</p> : null}
     {report ? <div>
       <p>{report.repository ? t('docs.impact.summary', { affected: report.affected.length, unknown: report.untrackedEndpointIndexes.length }) : t('docs.impact.noGit')}</p>
+      {report.analysis ? <p className={styles.analysis} data-testid="document-impact-analysis" data-analysis={report.analysis}>
+        {report.analysis === 'rescan' ? t('docs.impact.analysis.rescan') : t('docs.impact.analysis.files')}
+        {report.analysisNote ? ` ${t('docs.impact.analysis.reason', { reason: report.analysisNote })}` : ''}
+      </p> : null}
+      {report.rescan && report.rescan.changes.length ? <CompatibilitySummary report={report.rescan} /> : null}
+      {report.newRoutes?.length ? <p data-testid="document-impact-new-routes">{t('docs.impact.newRoutes', {
+        count: report.newRoutes.length, routes: report.newRoutes.slice(0, 5).join(', ') + (report.newRoutes.length > 5 ? ', …' : ''),
+      })}</p> : null}
       <ul>{report.affected.map((item) => <li key={item.endpointIndex}><strong>{item.endpointId} · {item.title}</strong><span>{item.changedFiles.join(', ')}</span></li>)}</ul>
       <div className={styles.actions}>
         <Button disabled={busy || dirty || !onRequestUpdate || !report.repository} onClick={() => onRequestUpdate?.(report.updatePrompt)}>{t('docs.impact.request')}</Button>
