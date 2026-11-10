@@ -1,6 +1,6 @@
 {
   "name": "@open-design/desktop",
-  "version": "0.11.7-preview.8",
+  "version": "0.11.7-preview.9",
   "private": true,
   "type": "module",
   "main": "./dist/main/index.js",

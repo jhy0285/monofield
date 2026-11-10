@@ -57,15 +57,16 @@ Entry template:
 
 ## Current state
 
-As of 2026-11-09.
+As of 2026-11-10.
 
 - Product: MonoField, a local Windows workbench that takes Codex or Claude Code
   CLI work to Korean SI deliverables (interface-spec XLSX, screen-spec PPTX,
   reviewed spec diffs). It is an independent fork of the Apache-2.0 Open Design
   project; see `docs/adr/0002-upstream-maintenance.md` (status: Proposed, only
   phase A done).
-- Version: `0.11.7-preview.8` (root `package.json`), published on 2026-11-09 as a GitHub prerelease (preview channel,
-  unsigned) from `d202b63` on `main`; stable `latest` is still `v0.11.6`. Workspace packages are
+- Version: `0.11.7-preview.9` (root `package.json`), prepared on 2026-11-10 to ship the re-scan change analysis, the Spring
+  scanner fixes and XML security reading, and the developer/PM guide; `0.11.7-preview.8` (2026-11-09, from `d202b63`) is the
+  previous published preview; stable `latest` is still `v0.11.6`. Workspace packages are
   still named `@open-design/*`; env vars still use the `OD_*` prefix.
 - Shape: pnpm monorepo. `apps/daemon` (Express + SQLite, `monofield` CLI) and
   `apps/web` (Next.js 16) hold most of the code (roughly 320k and 410k lines of
