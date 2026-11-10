@@ -64,9 +64,9 @@ As of 2026-11-10.
   reviewed spec diffs). It is an independent fork of the Apache-2.0 Open Design
   project; see `docs/adr/0002-upstream-maintenance.md` (status: Proposed, only
   phase A done).
-- Version: `0.11.7-preview.9` (root `package.json`), prepared on 2026-11-10 to ship the re-scan change analysis, the Spring
-  scanner fixes and XML security reading, and the developer/PM guide; `0.11.7-preview.8` (2026-11-09, from `d202b63`) is the
-  previous published preview; stable `latest` is still `v0.11.6`. Workspace packages are
+- Version: `0.11.7-preview.9` (root `package.json`), published on 2026-11-10 as a GitHub prerelease (preview channel,
+  unsigned) from `0454ba7` on `main`; it ships the re-scan change analysis, the Spring scanner fixes and XML security reading,
+  and the developer/PM guide. Stable `latest` is still `v0.11.6`. Workspace packages are
   still named `@open-design/*`; env vars still use the `OD_*` prefix.
 - Shape: pnpm monorepo. `apps/daemon` (Express + SQLite, `monofield` CLI) and
   `apps/web` (Next.js 16) hold most of the code (roughly 320k and 410k lines of
@@ -529,6 +529,15 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-10 — 0.11.7-preview.9 published from `main` (`ccr-8432aecf-n9xdfd`)
+
+- **Done:** full CI run 42769688968 passed on the branch head (the release commit `0454ba7` plus the docs-only pin commit); `main` was
+  fast-forwarded to `0454ba7`; `release-windows.yml` run 42770791486 (preview, unsigned, publish) built, installed, smoke-checked and published
+  `v0.11.7-preview.9` as a prerelease at `0454ba7` with the installer, portable ZIP, payload, `latest.yml` and `SHA256SUMS.txt`. The GitHub
+  `latest` release is still `v0.11.6`. This commit adds the run link to the notes; pushing it to `main` lets `sync_release_notes` replace the
+  release body and moves the site and READMEs to preview.9.
+- **Not checked:** installing the preview on a real Windows PC (only the workflow's smoke checks ran).
 
 ### 2026-11-10 — 0.11.7-preview.9 prepared (`ccr-8432aecf-n9xdfd`)
 
