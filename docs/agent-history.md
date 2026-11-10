@@ -530,6 +530,20 @@ Code health:
 
 ## Log
 
+### 2026-11-10 — 0.11.7-preview.9 prepared (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** "어 모두 진행", step 3 of 3: release the scanner fixes, the re-scan change analysis and the guide as preview.9.
+- **Changed:** the five release packages are at `0.11.7-preview.9` ("chore(release): prepare 0.11.7-preview.9"). Prepared ahead of publication in a
+  later commit: `docs/releases/0.11.7-preview.9.md`, the site's preview card ("바뀐 API만, 정확히."), structured data, `get-started.html`, the site
+  README and the root README pinned to preview.9.
+- **Verified:** site tests 23 pass after the pins. The first full CI (run 42768913648, on a release commit that was then replaced) failed only
+  `apps/web/tests/i18n/locales.test.ts`: the ja/zh-CN parity lock reads single-quoted keys and the four new `docs.impact` keys were double-quoted
+  there. Fixed in "fix(i18n): declare the change-analysis keys in ja and zh-CN explicitly" (`vitest run tests/i18n`: 33 pass) and the release
+  commit was rebuilt on top of it; its full CI result is recorded in the next entry.
+- **Lesson:** run `pnpm --filter @open-design/web exec vitest run tests/i18n` after adding locale keys; `pnpm i18n:check` does not check this.
+- **Next agent:** move `main` only to the release commit until the `v0.11.7-preview.9` release exists; the notes file on `main` makes
+  `sync_release_notes` require the tag. After publication add the run link to the notes and record the result here.
+
 ### 2026-11-10 — user guide for developers and PMs; measured strengths on the site (`ccr-8432aecf-n9xdfd`)
 
 - **Request:** "어 모두 진행", step 2 of 3: rewrite the guide so a developer can follow it and a PM or team lead can read the results, and state
