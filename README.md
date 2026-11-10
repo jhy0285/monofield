@@ -69,6 +69,15 @@ If you only write code and are comfortable in a terminal or IDE, Codex or Claude
 Code alone may be all you need. MonoField earns its place when the job also ends
 in structured deliverables that must stay in sync with the code.
 
+**Measured strength.** The interface-spec scanner and the change analysis call no
+AI model: the code stays on your PC, a 68-API Spring system is scanned in 0.3 s,
+and the same code always gives the same result. On that synthetic transit-payment
+system the spec, the 152 changed items and their compatibility levels matched a
+general Claude Code run, and the change analysis flagged exactly the 34 changed
+APIs. New enum values, changed defaults and OAuth scopes are not found yet, and
+Kotlin is not read. Method and data:
+[docs/testing/abt-scanner-vs-claude-code-2026-11-09.md](docs/testing/abt-scanner-vs-claude-code-2026-11-09.md).
+
 The three-minute walkthrough of the full loop is in
 [docs/demo/spring-interface-spec-demo.md](docs/demo/spring-interface-spec-demo.md).
 
@@ -113,9 +122,10 @@ structured deliverable.
   and shows the affected paths. See [schema monitoring](docs/database-schema-watch.md).
   Native Codex development chat avoids app prompt overhead when no extra context is selected;
   document updates support small change proposals. See [token efficiency](docs/token-efficiency.md).
-- **Find what to click.** The [user guide (Korean, final edition)](docs/user-guide.ko.md)
-  maps what you want to do to the screen to use, with Settings at a glance, the reference
-  board, the built-in REA, execution permissions and fixes; it is also online at
+- **A guide for developers and PMs.** The [user guide (Korean)](docs/user-guide.ko.md)
+  walks a developer from the sample project to an updated spec step by step, shows PMs and
+  team leads how to read the Excel and the change analysis, and says which steps send code
+  to an AI provider; it is also online at
   [monofield.vercel.app/guide](https://monofield.vercel.app/guide).
 - **Guidance is built in.** First-run onboarding is followed by a seven-step
   development walkthrough or a four-step documents/design walkthrough. Both can

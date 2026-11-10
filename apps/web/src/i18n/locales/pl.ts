@@ -673,7 +673,7 @@ export const pl: Dict = {
   'guide.startProject': "Zacznij projekt",
   'guide.replayTour': "Powtórz wycieczkę po interfejsie",
   'guide.startGuide': "Przewodnik na start (15 min, po koreańsku)",
-  'guide.userGuide': "Przewodnik z ilustracjami (PDF, koreański)",
+  'guide.userGuide': "Przewodnik dla programistów i PM-ów (koreański)",
   'judgments.title': "Sprawdzenie modelem oceny (JEV · Laya)",
   'judgments.intro': "Model oceny sprawdza każdą koreańską etykietę pola i nazwę biznesową wpisaną przez AI. Reguły najpierw sprawdzają to, co może rozstrzygnąć kod, np. puste wartości.",
   'judgments.backend': "Model oceny: {backend} · {model}",

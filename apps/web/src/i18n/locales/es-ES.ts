@@ -673,7 +673,7 @@ export const esES: Dict = {
   'guide.startProject': "Empezar un proyecto",
   'guide.replayTour': "Repetir el recorrido",
   'guide.startGuide': "Guía de inicio (15 min, en coreano)",
-  'guide.userGuide': "Guía ilustrada (PDF, coreano)",
+  'guide.userGuide': "Guía de uso para desarrolladores y PM (coreano)",
   'judgments.title': "Revisión con modelo de juicio (JEV · Laya)",
   'judgments.intro': "Un modelo de juicio revisa cada etiqueta coreana de campo y cada nombre de negocio que rellenó la IA. Las reglas revisan primero lo que el código puede decidir, como valores vacíos.",
   'judgments.backend': "Modelo de juicio: {backend} · {model}",

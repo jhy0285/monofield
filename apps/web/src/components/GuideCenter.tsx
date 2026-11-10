@@ -15,7 +15,7 @@ import type { Dict } from '../i18n/types';
 import { modalContent, modalOverlay } from '../motion';
 import styles from './GuideCenter.module.css';
 
-const USER_GUIDE_URL = 'https://monofield.vercel.app/downloads/monofield-user-guide-ko.pdf';
+const USER_GUIDE_URL = 'https://monofield.vercel.app/guide';
 // The step-by-step first run (sample project, first spec, first change review).
 // One Markdown source in the repository, so it stays current with each release.
 const START_GUIDE_URL = 'https://github.com/jhy0285/monofield/blob/main/docs/getting-started.ko.md';

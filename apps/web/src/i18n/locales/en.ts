@@ -652,7 +652,7 @@ export const en: Dict = {
   'guide.startProject': "Start a project",
   'guide.replayTour': "Replay the screen tour",
   'guide.startGuide': "Getting started guide (15 min, Korean)",
-  'guide.userGuide': "Illustrated guide (Korean PDF)",
+  'guide.userGuide': "User guide for developers and PMs (Korean)",
   'judgments.title': "Judgment check (JEV · Laya)",
   'judgments.intro': "A judgment model checks each Korean field label and business name the AI filled in. Rules look first at what code can decide, such as empty values.",
   'judgments.backend': "Judgment model: {backend} · {model}",

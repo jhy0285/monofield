@@ -589,7 +589,7 @@ export const ja: Dict = {
   'guide.startProject': "プロジェクトを始める",
   'guide.replayTour': "画面ツアーをもう一度見る",
   'guide.startGuide': "はじめてガイド(15分・韓国語)",
-  'guide.userGuide': "図解ガイド(韓国語PDF)",
+  'guide.userGuide': "利用ガイド(開発者・PM向け、韓国語)",
   'judgments.title': "判断モデルによる検査 (JEV・Laya)",
   'judgments.intro': "AIが入力した韓国語の項目名と業務名を、判断モデルが1件ずつ確認します。空欄のようにコードで決められるものは先にルールで確認します。",
   'judgments.backend': "判断モデル: {backend} · {model}",

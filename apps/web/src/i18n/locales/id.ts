@@ -673,7 +673,7 @@ export const id: Dict = {
   'guide.startProject': "Mulai proyek",
   'guide.replayTour': "Ulangi tur layar",
   'guide.startGuide': "Panduan memulai (15 menit, bahasa Korea)",
-  'guide.userGuide': "Panduan bergambar (PDF, Korea)",
+  'guide.userGuide': "Panduan pengguna untuk developer dan PM (Korea)",
   'judgments.title': "Pemeriksaan dengan model penilai (JEV · Laya)",
   'judgments.intro': "Model penilai memeriksa setiap label kolom berbahasa Korea dan nama bisnis yang diisi AI. Aturan lebih dulu memeriksa hal yang bisa diputuskan kode, seperti nilai kosong.",
   'judgments.backend': "Model penilai: {backend} · {model}",

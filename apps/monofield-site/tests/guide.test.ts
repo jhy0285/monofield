@@ -43,7 +43,9 @@ test('every translated element carries both languages', () => {
 });
 
 test('guide names the real menus, the current release and links only to existing places', () => {
-  assert.match(page, /0\.11\.7-preview\.8/);
+  assert.match(page, /0\.11\.7-preview\.9/);
+  // the download button follows the site's download section, so it never names an unpublished release
+  assert.doesNotMatch(page, /releases\/download\//);
   assert.match(page, /외부 MCP/);
   assert.match(page, /대화에서 AI가 REA 쓰기/);
   assert.match(page, /레퍼런스로 담기/);
@@ -54,6 +56,24 @@ test('guide names the real menus, the current release and links only to existing
   }
   assert.ok((page.match(/href="#[a-z-]+"/g) ?? []).length >= 9, 'table of contents');
   for (const [, id] of page.matchAll(/href="#([a-z-]+)"/g)) assert.match(page, new RegExp(`id="${id}"`), `anchor target ${id}`);
+});
+
+test('guide serves both readers and says what leaves the PC', () => {
+  for (const id of ['overview', 'developer', 'reader', 'security']) assert.match(page, new RegExp(`<section id="${id}"`));
+  assert.match(page, /Git 변경 분석/);
+  assert.match(page, /호환성 깨짐/);
+  assert.match(page, /외부 AI 없이 쓰기/);
+  // the honest limits stay next to the strength claim
+  assert.match(page, /열거값 추가, 기본값 변경, 권한 범위/);
+  assert.match(page, /Kotlin/);
+});
+
+test('the home page states the measured strengths and their limits', () => {
+  const proof = home.match(/<section class="proof-section[\s\S]*?<\/section>/)?.[0] ?? '';
+  assert.match(proof, /코드를 PC 밖으로 보내지 않고/);
+  assert.match(proof, /152\/152/);
+  assert.match(proof, /열거값 추가/);
+  assert.match(proof, /href="https:\/\/github\.com\/jhy0285\/monofield\/blob\/main\/docs\/testing\//);
 });
 
 test('the home page and the page footers lead to the guide', () => {

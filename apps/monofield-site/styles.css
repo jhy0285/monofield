@@ -688,7 +688,7 @@ li.is-added + li.is-added .cover { animation-name: loop-type-2; }
 .gs-split { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 22px; margin: 22px 0; }
 .gs-split > *, .gs-cards > *, .gs-arch > * { min-width: 0; }
 .gs-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
-.gs-table { width: 100%; min-width: 480px; border-collapse: collapse; font-size: 13.5px; }
+.gs-table { width: 100%; min-width: 480px; border-collapse: collapse; font-size: 13.5px; word-break: keep-all; }
 .gs-table td:first-child code { white-space: nowrap; }
 .gs-table th, .gs-table td { padding: 9px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); }
 .gs-table th { background: var(--paper-2); font-size: 12px; letter-spacing: 0.04em; color: var(--forest); white-space: nowrap; }
@@ -741,6 +741,8 @@ li.is-added + li.is-added .cover { animation-name: loop-type-2; }
 .gs-node-optional { border-style: dashed; }
 .gs-list { display: grid; gap: 8px; margin: 16px 0 0; padding-left: 20px; color: var(--muted); line-height: 1.7; word-break: keep-all; }
 .gs-list + h3, .gs-list + .gs-pre { margin-top: 28px; }
+.gs-list > li { min-width: 0; overflow-wrap: break-word; }
+.gs-section > :not(:first-child) + h3 { margin-top: 30px; }
 .gs-next { padding-bottom: 80px; }
 .gs-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
 @media (max-width: 800px) {
@@ -755,3 +757,16 @@ li.is-added + li.is-added .cover { animation-name: loop-type-2; }
   .gs-table { min-width: 420px; }
   .gs-table td:first-child code { white-space: normal; }
 }
+
+/* Proof: the measured strengths, right after the intro video. */
+.proof-section { padding: 120px 0 0; }
+.proof-copy { max-width: 720px; margin-inline: auto; word-break: keep-all; }
+.proof-stats { list-style: none; margin: 48px 0 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.proof-stat { display: flex; flex-direction: column; gap: 8px; padding: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 18px; }
+.proof-stat strong { font-size: clamp(30px, 3.2vw, 44px); line-height: 1.05; letter-spacing: -0.04em; color: var(--forest); }
+.proof-stat > span { font-size: 14px; color: var(--muted); word-break: keep-all; }
+.proof-note { max-width: 860px; margin: 28px auto 0; font-size: 13.5px; color: var(--muted); text-align: center; word-break: keep-all; }
+.proof-link { margin-top: 18px; text-align: center; }
+@media (max-width: 1100px) { .proof-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 800px) { .proof-section { padding-top: 84px; } }
+@media (max-width: 520px) { .proof-stats { grid-template-columns: 1fr; } .proof-stat { padding: 20px; } }

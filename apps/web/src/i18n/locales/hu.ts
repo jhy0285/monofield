@@ -673,7 +673,7 @@ export const hu: Dict = {
   'guide.startProject': "Projekt indítása",
   'guide.replayTour': "Felületbemutató újra",
   'guide.startGuide': "Kezdő útmutató (15 perc, koreaiul)",
-  'guide.userGuide': "Képes útmutató (PDF, koreai)",
+  'guide.userGuide': "Felhasználói útmutató fejlesztőknek és PM-eknek (koreai)",
   'judgments.title': "Ellenőrzés döntési modellel (JEV · Laya)",
   'judgments.intro': "Egy döntési modell egyenként ellenőrzi az MI által kitöltött koreai mezőcímkéket és üzleti neveket. Először szabályok nézik meg, amit kód is el tud dönteni, például az üres értékeket.",
   'judgments.backend': "Döntési modell: {backend} · {model}",

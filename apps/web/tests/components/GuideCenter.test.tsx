@@ -98,10 +98,10 @@ describe('GuideCenter', () => {
     expect(onClose).toHaveBeenCalledTimes(2);
   });
 
-  it('links the illustrated user guide safely', () => {
+  it('links the user guide for developers and PMs safely', () => {
     renderGuide('en');
-    const link = screen.getByRole('link', { name: /Illustrated guide/ });
-    expect(link.getAttribute('href')).toMatch(/^https:\/\/monofield\.vercel\.app\/downloads\//);
+    const link = screen.getByRole('link', { name: /User guide for developers and PMs/ });
+    expect(link.getAttribute('href')).toBe('https://monofield.vercel.app/guide');
     expect(link.getAttribute('rel')).toContain('noopener');
   });
 

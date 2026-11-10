@@ -652,7 +652,7 @@ export const ko: Dict = {
   'guide.startProject': "프로젝트 시작",
   'guide.replayTour': "화면 투어 다시 보기",
   'guide.startGuide': "처음 시작 가이드 (15분)",
-  'guide.userGuide': "그림 가이드 (PDF)",
+  'guide.userGuide': "사용 가이드 (개발자·PM용)",
   'judgments.title': "판단 검토 (JEV·Laya)",
   'judgments.intro': "AI가 채운 한글 필드명과 업무명을 판단 모델이 한 항목씩 확인합니다. 빈 값처럼 코드로 정할 수 있는 것은 규칙이 먼저 봅니다.",
   'judgments.backend': "판단 모델: {backend} · {model}",

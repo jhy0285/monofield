@@ -673,7 +673,7 @@ export const ptBR: Dict = {
   'guide.startProject': "Iniciar um projeto",
   'guide.replayTour': "Rever o tour da tela",
   'guide.startGuide': "Guia de primeiros passos (15 min, em coreano)",
-  'guide.userGuide': "Guia ilustrado (PDF, coreano)",
+  'guide.userGuide': "Guia de uso para desenvolvedores e PMs (coreano)",
   'judgments.title': "Verificação com modelo de julgamento (JEV · Laya)",
   'judgments.intro': "Um modelo de julgamento confere cada rótulo coreano de campo e cada nome de negócio preenchido pela IA. Regras conferem primeiro o que o código pode decidir, como valores vazios.",
   'judgments.backend': "Modelo de julgamento: {backend} · {model}",

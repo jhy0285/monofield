@@ -673,7 +673,7 @@ export const de: Dict = {
   'guide.startProject': "Projekt starten",
   'guide.replayTour': "Bildschirmtour wiederholen",
   'guide.startGuide': "Einstiegsanleitung (15 Min., Koreanisch)",
-  'guide.userGuide': "Bebilderte Anleitung (PDF, Koreanisch)",
+  'guide.userGuide': "Benutzerhandbuch für Entwickler und PMs (Koreanisch)",
   'judgments.title': "Prüfung durch Urteilsmodell (JEV · Laya)",
   'judgments.intro': "Ein Urteilsmodell prüft jede koreanische Feldbezeichnung und jeden Geschäftsnamen, den die KI eingetragen hat. Regeln prüfen zuerst, was Code entscheiden kann, etwa leere Werte.",
   'judgments.backend': "Urteilsmodell: {backend} · {model}",

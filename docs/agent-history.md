@@ -529,6 +529,26 @@ Code health:
 
 ## Log
 
+### 2026-11-10 — user guide for developers and PMs; measured strengths on the site (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** "어 모두 진행", step 2 of 3: rewrite the guide so a developer can follow it and a PM or team lead can read the results, and state
+  the strength ("코드를 PC 밖으로 보내지 않고, 0.3초에, 매번 같은 결과로, 일반 AI와 비슷한 정확도의 명세서와 변경 분류") with its limits.
+- **Changed:** `docs/user-guide.ko.md` and `apps/monofield-site/guide.html` rewritten from one builder (kept outside the repository): at a glance
+  with the benchmark numbers and limits, a developer walk-through (steps 1–7, "외부 AI 없이 쓰기" with `scan_spring.py`), how PMs read the Excel and
+  the change analysis (order, the three compatibility levels with the exact codes per level, questions to ask), what leaves the PC per step,
+  settings, reference board and REA, fixes, CLI. Site home: a `#proof` section after the intro video (4 measured numbers, the limits, a link
+  to the results document) and a FAQ item on what leaves the PC; `styles.css` `.proof-*`. `docs/getting-started.ko.md` (cost note, step 4 now
+  shows the re-scan result), `README.md` (measured-strength paragraph, guide bullet). The app's
+  Guide Center link `guide.userGuide` now opens `monofield.vercel.app/guide` (label "사용 가이드 (개발자·PM용)" in 19 locales) instead of the
+  August PDF; the tour's PDF download is unchanged.
+- **Tests:** `apps/monofield-site/tests/guide.test.ts`: version preview.9, both readers' sections, the limits next to the claim, the home
+  `#proof` section. `node --test tests/guide.test.ts tests/seo.test.ts tests/get-started.test.ts`: 23 pass. `apps/web/tests/components/
+  GuideCenter.test.tsx` (link test red first, 9 pass). Playwright at 1366 and 390 px: no horizontal overflow on the home page or the guide
+  after breaking the long scanner list and `keep-all` in guide tables.
+- **Not done:** no screenshots in the guide; the claim "코드를 PC 밖으로 보내지 않고" holds for the scanner, editor, export and the change
+  analysis only, and the guide says that the chat steps send code to the AI provider. The guide names preview.9 as text only; its download
+  button goes to the site's `#download` section, so it never points at an unpublished release.
+
 ### 2026-11-10 — `docs impact` re-scans the code instead of matching files (`ccr-8432aecf-n9xdfd`)
 
 - **Request:** "어 모두 진행", step 1 of 3: make the affected-API list precise (the ABT benchmark flagged 60 APIs, 26 of them unchanged).

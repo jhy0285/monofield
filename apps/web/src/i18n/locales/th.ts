@@ -673,7 +673,7 @@ export const th: Dict = {
   'guide.startProject': "เริ่มโปรเจกต์",
   'guide.replayTour': "ดูทัวร์หน้าจออีกครั้ง",
   'guide.startGuide': "คู่มือเริ่มต้น (15 นาที ภาษาเกาหลี)",
-  'guide.userGuide': "คู่มือภาพประกอบ (PDF ภาษาเกาหลี)",
+  'guide.userGuide': "คู่มือการใช้งานสำหรับนักพัฒนาและ PM (ภาษาเกาหลี)",
   'judgments.title': "ตรวจด้วยโมเดลตัดสิน (JEV · Laya)",
   'judgments.intro': "โมเดลตัดสินจะตรวจชื่อฟิลด์ภาษาเกาหลีและชื่องานที่ AI กรอกทีละรายการ สิ่งที่โค้ดตัดสินได้ เช่น ค่าว่าง จะถูกตรวจด้วยกฎก่อน",
   'judgments.backend': "โมเดลตัดสิน: {backend} · {model}",

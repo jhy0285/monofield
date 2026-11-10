@@ -673,7 +673,7 @@ export const zhTW: Dict = {
   'guide.startProject': "開始專案",
   'guide.replayTour': "重新觀看介面導覽",
   'guide.startGuide': "入門指南(15 分鐘，韓文)",
-  'guide.userGuide': "圖文指南(韓文 PDF)",
+  'guide.userGuide': "使用指南(開發者與 PM 適用,韓文)",
   'judgments.title': "判斷模型檢查 (JEV · Laya)",
   'judgments.intro': "判斷模型逐項檢查 AI 填寫的韓文欄位名稱與業務名稱。空值這類程式能判定的情況會先由規則檢查。",
   'judgments.backend': "判斷模型：{backend} · {model}",

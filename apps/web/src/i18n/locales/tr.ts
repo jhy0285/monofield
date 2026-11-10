@@ -673,7 +673,7 @@ export const tr: Dict = {
   'guide.startProject': "Proje başlat",
   'guide.replayTour': "Ekran turunu yeniden izle",
   'guide.startGuide': "Başlangıç rehberi (15 dk, Korece)",
-  'guide.userGuide': "Resimli rehber (PDF, Korece)",
+  'guide.userGuide': "Geliştiriciler ve PM'ler için kullanım kılavuzu (Korece)",
   'judgments.title': "Karar modeliyle denetim (JEV · Laya)",
   'judgments.intro': "Bir karar modeli, yapay zekânın doldurduğu her Korece alan etiketini ve iş adını tek tek denetler. Boş değerler gibi kodun karar verebileceği şeylere önce kurallar bakar.",
   'judgments.backend': "Karar modeli: {backend} · {model}",

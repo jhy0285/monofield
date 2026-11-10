@@ -673,7 +673,7 @@ export const ar: Dict = {
   'guide.startProject': "ابدأ مشروعًا",
   'guide.replayTour': "أعد جولة الواجهة",
   'guide.startGuide': "دليل البدء (15 دقيقة، بالكورية)",
-  'guide.userGuide': "دليل مصوّر (PDF بالكورية)",
+  'guide.userGuide': "دليل الاستخدام للمطورين ومديري المشاريع (بالكورية)",
   'judgments.title': "فحص بنموذج الحكم (JEV · Laya)",
   'judgments.intro': "يفحص نموذج الحكم كل تسمية حقل كورية واسم عمل ملأه الذكاء الاصطناعي، واحدًا تلو الآخر. تفحص القواعد أولًا ما يمكن للشيفرة أن تحسمه، مثل القيم الفارغة.",
   'judgments.backend': "نموذج الحكم: {backend} · {model}",

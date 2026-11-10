@@ -589,7 +589,7 @@ export const zhCN: Dict = {
   'guide.startProject': "开始项目",
   'guide.replayTour': "重新观看界面导览",
   'guide.startGuide': "入门指南(15 分钟，韩文)",
-  'guide.userGuide': "图文指南(韩文 PDF)",
+  'guide.userGuide': "使用指南(面向开发者和 PM,韩文)",
   'judgments.title': "判断模型检查 (JEV · Laya)",
   'judgments.intro': "判断模型逐项检查 AI 填写的韩文字段名和业务名称。空值这类代码能判定的情况先由规则检查。",
   'judgments.backend': "判断模型：{backend} · {model}",

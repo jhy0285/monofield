@@ -450,6 +450,16 @@
           </div>
         </div>
       </section>
+      <section class="proof-section container" id="proof" aria-labelledby="proof-title">
+        <div class="section-heading">
+          <p class="eyebrow"><span data-ko="검증한 숫자 · 가상 교통 결제 시스템 API 68개" data-en="MEASURED ON A 68-API SYNTHETIC TRANSIT PAYMENT SYSTEM">검증한 숫자 · 가상 교통 결제 시스템 API 68개</span></p>
+          <h2 id="proof-title"><span data-ko="코드를 PC 밖으로 보내지 않고," data-en="Your code stays on your PC.">코드를 PC 밖으로 보내지 않고,</span><span data-ko="0.3초에, 매번 같은 결과로." data-en="0.3 seconds. The same result every time.">0.3초에, 매번 같은 결과로.</span></h2>
+          <p class="section-copy proof-copy" data-ko="명세서 스캐너와 변경 분석은 AI 모델을 부르지 않습니다. 같은 코드로 일반 Claude Code와 비교했을 때 명세서와 변경 분류의 정확도는 비슷했고, 바뀐 API만 정확히 짚었습니다." data-en="The spec scanner and the change analysis call no AI model. On the same code, spec and change-classification accuracy matched a general Claude Code run, and only the APIs that really changed were flagged.">명세서 스캐너와 변경 분석은 AI 모델을 부르지 않습니다. 같은 코드로 일반 Claude Code와 비교했을 때 명세서와 변경 분류의 정확도는 비슷했고, 바뀐 API만 정확히 짚었습니다.</p>
+        </div>
+        <ul class="proof-stats"><li class="proof-stat"><strong><span data-ko="0.3초" data-en="0.3 s">0.3초</span></strong><span data-ko="명세서 한 번 만들기 (API 68개). 일반 AI는 4~8분" data-en="One spec for 68 APIs. A general AI agent took 4–8 min">명세서 한 번 만들기 (API 68개). 일반 AI는 4~8분</span></li><li class="proof-stat"><strong><span data-ko="152/152" data-en="152/152">152/152</span></strong><span data-ko="코드 변경으로 바뀐 항목을 모두 찾음, 잘못 찾은 것 0" data-en="Every changed item found, none invented">코드 변경으로 바뀐 항목을 모두 찾음, 잘못 찾은 것 0</span></li><li class="proof-stat"><strong><span data-ko="34/34" data-en="34/34">34/34</span></strong><span data-ko="영향받은 API만 표시, 불필요한 표시 0" data-en="Only the affected APIs flagged, no false alarms">영향받은 API만 표시, 불필요한 표시 0</span></li><li class="proof-stat"><strong><span data-ko="0원" data-en="$0">0원</span></strong><span data-ko="스캐너와 변경 분석의 모델 비용" data-en="Model cost of the scanner and the change analysis">스캐너와 변경 분석의 모델 비용</span></li></ul>
+        <p class="proof-note" data-ko="아직 못 하는 것: 열거값 추가, 기본값 변경, 권한 범위(scope) 변경은 명세서 칸에 없어 찾지 못합니다(일반 AI는 4건 모두 찾았습니다). Spring(Java) 코드 기준이며 Kotlin은 읽지 않습니다. 채팅으로 AI에게 시키는 일은 그 AI 회사로 코드 일부가 전송됩니다." data-en="Not yet: new enum values, changed defaults and changed OAuth scopes have no column in the spec, so they are not found (the general AI found all four). Spring (Java) only; Kotlin is not read. Work you hand to an AI in the chat sends part of the code to that AI provider.">아직 못 하는 것: 열거값 추가, 기본값 변경, 권한 범위(scope) 변경은 명세서 칸에 없어 찾지 못합니다(일반 AI는 4건 모두 찾았습니다). Spring(Java) 코드 기준이며 Kotlin은 읽지 않습니다. 채팅으로 AI에게 시키는 일은 그 AI 회사로 코드 일부가 전송됩니다.</p>
+        <p class="proof-link"><a class="text-link" href="https://github.com/jhy0285/monofield/blob/main/docs/testing/abt-scanner-vs-claude-code-2026-11-09.md"><span data-ko="실험 방법과 전체 결과 보기" data-en="Read the method and full results">실험 방법과 전체 결과 보기</span></a></p>
+      </section>
       <section
         class="product-section container"
         id="product"
@@ -1309,6 +1319,28 @@
               직접 설정한 API 엔드포인트를 사용할 수 있습니다. 로컬 에이전트는
               설치와 로그인이 필요하고, API 연결은 키·모델·엔드포인트 설정이
               필요합니다.
+            </p>
+          </details>
+          <details>
+            <summary>
+              <span data-ko="코드가 외부 AI로 나가나요?" data-en="Does my code leave my PC?">코드가 외부 AI로 나가나요?</span><svg
+                class="icon faq-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </summary>
+            <p
+              data-ko="명세서 스캐너, 명세서 편집과 Excel·OpenAPI 내보내기, Git 변경 분석은 PC 안에서만 돌고 AI 모델을 부르지 않습니다. 채팅으로 Codex·Claude Code에게 시키는 일(명세서 만들기 요청, AI 갱신 요청)은 그 AI가 코드를 읽으므로 코드 일부가 해당 회사로 전송됩니다. 외부 AI가 금지된 현장은 사용 가이드의 “외부 AI 없이 쓰기”를 보세요."
+              data-en="The spec scanner, spec editing, Excel and OpenAPI export and the Git change analysis run on your PC only and call no AI model. Work you hand to Codex or Claude Code in the chat (asking for a spec, asking for an update) lets that AI read the code, so part of it goes to that provider. If outside AI is not allowed, see “Without outside AI” in the user guide."
+            >
+              명세서 스캐너, 명세서 편집과 Excel·OpenAPI 내보내기, Git 변경 분석은 PC 안에서만 돌고 AI 모델을 부르지 않습니다. 채팅으로 Codex·Claude Code에게 시키는 일(명세서 만들기 요청, AI 갱신 요청)은 그 AI가 코드를 읽으므로 코드 일부가 해당 회사로 전송됩니다. 외부 AI가 금지된 현장은 사용 가이드의 “외부 AI 없이 쓰기”를 보세요.
             </p>
           </details>
           <details>

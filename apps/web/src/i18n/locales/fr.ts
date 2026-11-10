@@ -673,7 +673,7 @@ export const fr: Dict = {
   'guide.startProject': "Démarrer un projet",
   'guide.replayTour': "Revoir la visite guidée",
   'guide.startGuide': "Guide de démarrage (15 min, en coréen)",
-  'guide.userGuide': "Guide illustré (PDF, coréen)",
+  'guide.userGuide': "Guide d’utilisation pour développeurs et PM (coréen)",
   'judgments.title': "Vérification par modèle de jugement (JEV · Laya)",
   'judgments.intro': "Un modèle de jugement vérifie chaque libellé coréen de champ et chaque nom métier rempli par l’IA. Des règles vérifient d’abord ce que le code peut trancher, comme les valeurs vides.",
   'judgments.backend': "Modèle de jugement : {backend} · {model}",
