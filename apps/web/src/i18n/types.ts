@@ -351,6 +351,13 @@ export interface Dict {
   "docs.impact.analysis.files": string;
   "docs.impact.analysis.reason": string;
   "docs.impact.newRoutes": string;
+  "docs.auth.undecided": string;
+  "docs.auth.none": string;
+  "docs.auth.bearer": string;
+  "docs.auth.api-key": string;
+  "docs.auth.session-cookie": string;
+  "docs.auth.custom": string;
+  "docs.auth.inherited": string;
   "docs.impact.analyze": string;
   "docs.impact.failed": string;
   "docs.impact.conflict": string;

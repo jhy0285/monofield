@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
+  InterfaceAuthType,
   InterfaceEndpoint,
   InterfaceFieldSpec,
   InterfaceSpecDocument,
@@ -29,6 +30,15 @@ type Props = {
   onOpenFile?: (name: string) => void;
   onRequestDocumentUpdate?: (prompt: string) => void;
 };
+
+/**
+ * The scheme an endpoint uses: its own `auth`, else the document-level `auth` it inherits (the Spring scanner writes the
+ * scheme once for the document), else undecided. An endpoint that needs no login is `none`.
+ */
+function endpointAuthType(endpoint: InterfaceEndpoint, documentAuthType: InterfaceAuthType | undefined): InterfaceAuthType {
+  if (!endpoint.authRequired) return 'none';
+  return endpoint.auth?.type ?? documentAuthType ?? 'undecided';
+}
 
 function emptyField(): InterfaceFieldSpec {
   return { nameEn: '', nameKo: '', dataType: 'String', required: 'TBD', minSize: '', maxSize: '', note: '', depth: 0 };
@@ -177,6 +187,7 @@ export function InterfaceSpecEditor({ projectId, file, onFileSaved, onOpenFile, 
   );
 
   const endpoint = doc.endpoints[endpointIndex];
+  const documentAuthType = doc.auth?.type !== 'none' ? doc.auth?.type : undefined;
   return (
     <div className={`viewer ${styles.root}`}>
       <div className="viewer-toolbar">
@@ -239,10 +250,13 @@ export function InterfaceSpecEditor({ projectId, file, onFileSaved, onOpenFile, 
               <Field label={copy.businessPurpose}><input value={endpoint.businessPurpose ?? ''} onChange={(event) => patchEndpoint({ businessPurpose: event.target.value })} /></Field>
               <Field label={copy.method}><select value={endpoint.method} onChange={(event) => patchEndpoint({ method: event.target.value })}>{METHODS.map((method) => <option value={method} key={method}>{method}</option>)}</select></Field>
               <Field label={copy.path}><input value={endpoint.path} onChange={(event) => patchEndpoint({ path: event.target.value })} /></Field>
-              <Field label={copy.auth}><select value={endpoint.authRequired ? endpoint.auth?.type ?? 'undecided' : 'none'} onChange={(event) => {
+              <Field label={copy.auth}><select value={endpointAuthType(endpoint, documentAuthType)} onChange={(event) => {
                 const type = event.target.value as (typeof AUTH_TYPES)[number];
-                patchEndpoint({ authRequired: type !== 'none', auth: type === 'none' ? undefined : { type } });
-              }}>{AUTH_TYPES.map((type) => <option value={type} key={type}>{type}</option>)}</select></Field>
+                // Choosing the document's scheme inherits it again instead of copying it onto the endpoint.
+                patchEndpoint({ authRequired: type !== 'none', auth: type === 'none' || type === documentAuthType ? undefined : { type } });
+              }}>{AUTH_TYPES.map((type) => <option value={type} key={type}>
+                {type === documentAuthType ? t('docs.auth.inherited', { label: t(`docs.auth.${type}`) }) : t(`docs.auth.${type}`)}
+              </option>)}</select></Field>
               <Field label={copy.owner}><input value={endpoint.owner} onChange={(event) => patchEndpoint({ owner: event.target.value })} /></Field>
               <Field label={copy.businessCode}><input value={endpoint.businessCode} onChange={(event) => patchEndpoint({ businessCode: event.target.value })} /></Field>
               <Field label={copy.note}><input value={endpoint.note} onChange={(event) => patchEndpoint({ note: event.target.value })} /></Field>

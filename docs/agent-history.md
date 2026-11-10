@@ -307,12 +307,6 @@ exercise is unchanged by it.
 
 Newest first within each group. Remove an item when it is done.
 
-Interface-spec editor:
-
-- The 인증 select falls back to `undecided` when an endpoint has `authRequired: true` and no endpoint-level `auth`, even if the document has a
-  document-level `auth` (the Spring scanner writes it that way). Show the document's auth type instead and translate the option labels; the raw
-  English values (`undecided`, `bearer`) are shown to Korean users today.
-
 Reference board (see the 2026-11-06 and 2026-11-09 "reference board" Log entries; steps 1 to 4 of the proposal are built):
 
 - The comparison with our screen is a pattern comparison (`compareReferenceFlows` in contracts): step outcome, page move, API
@@ -535,6 +529,19 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-10 — spec editor shows the inherited auth scheme in the reader's language (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** "어 수정해": fix the 인증 field that showed the raw value `undecided` for endpoints that require login (found while capturing the guide).
+- **Changed:** `apps/web/src/components/interface-spec/InterfaceSpecEditor.tsx`: `endpointAuthType` follows the contract (`auth` on the endpoint,
+  else the document-level `auth`, else `undecided`; no login is `none`); the inherited choice reads "Bearer 토큰 (문서 공통)"; picking the document's
+  scheme again drops the endpoint override instead of copying it. Option labels come from 7 new `docs.auth.*` keys in `types.ts` and all 19 locales
+  (ja/zh-CN with single-quoted keys). Display and editing only; the stored JSON format is unchanged.
+- **Tests:** `apps/web/tests/components/InterfaceSpecEditor.auth.test.tsx` (5, red first). `pnpm --filter @open-design/web typecheck` clean;
+  `vitest run tests/i18n` plus the editor, impact-panel and Guide Center tests: 10 files, 51 pass; `pnpm i18n:check` and `pnpm guard` pass.
+- **Verified in the app:** `tools-dev start web` with the sample project: 주문 등록 shows "Bearer 토큰 (문서 공통)", 회원 가입 shows "인증 없음", options
+  확인 필요 / 인증 없음 / Bearer 토큰 (문서 공통) / API 키 / 세션 쿠키 / 기타.
+- **Not done:** not released; it ships with the next preview. The guide screenshots never showed this field, so they are unchanged.
 
 ### 2026-11-10 — user guide rewritten around real screens and plain Korean (`ccr-8432aecf-n9xdfd`)
 
