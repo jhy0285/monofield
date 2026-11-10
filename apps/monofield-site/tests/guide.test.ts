@@ -33,7 +33,8 @@ test('guide page runs no inline script and loads only the shared script', () => 
 
 test('every translated element carries both languages', () => {
   const tags = [...page.matchAll(/<[a-z0-9]+\b[^>]*\bdata-(?:ko|en)=[^>]*>/gi)].map((match) => match[0]);
-  assert.ok(tags.length > 20);
+  // the guide body is Korean only; the shared header, footer and buttons switch language
+  assert.ok(tags.length >= 10);
   for (const tag of tags) {
     const ko = tag.match(/\sdata-ko="([^"]*)"/)?.[1];
     const en = tag.match(/\sdata-en="([^"]*)"/)?.[1];
@@ -42,30 +43,45 @@ test('every translated element carries both languages', () => {
   }
 });
 
-test('guide names the real menus, the current release and links only to existing places', () => {
+test('guide names the real menus and the current release, and links only to existing places', () => {
   assert.match(page, /0\.11\.7-preview\.9/);
-  // the download button follows the site's download section, so it never names an unpublished release
-  assert.doesNotMatch(page, /releases\/download\//);
   assert.match(page, /외부 MCP/);
   assert.match(page, /대화에서 AI가 REA 쓰기/);
   assert.match(page, /레퍼런스로 담기/);
+  assert.match(page, /Git 변경 분석/);
   assert.doesNotMatch(page, /설정 → MCP/);
   assert.doesNotMatch(page, /monifiled/i);
+  // the download button follows the site's download section, so it never names an unpublished release
+  assert.doesNotMatch(page, /releases\/download\//);
   for (const [, href] of page.matchAll(/href="([^"]+)"/g)) {
     assert.ok(/^(https:\/\/|\/|#)/.test(href!), `absolute or in-page link: ${href}`);
   }
-  assert.ok((page.match(/href="#[a-z-]+"/g) ?? []).length >= 9, 'table of contents');
   for (const [, id] of page.matchAll(/href="#([a-z-]+)"/g)) assert.match(page, new RegExp(`id="${id}"`), `anchor target ${id}`);
 });
 
-test('guide serves both readers and says what leaves the PC', () => {
-  for (const id of ['overview', 'developer', 'reader', 'security']) assert.match(page, new RegExp(`<section id="${id}"`));
-  assert.match(page, /Git 변경 분석/);
-  assert.match(page, /호환성 깨짐/);
-  assert.match(page, /외부 AI 없이 쓰기/);
-  // the honest limits stay next to the strength claim
-  assert.match(page, /열거값 추가, 기본값 변경, 권한 범위/);
+test('guide is written for two readers and shows the real screens', async () => {
+  for (const id of ['developer', 'reader', 'notes', 'trouble']) assert.match(page, new RegExp(`<section id="${id}"`));
+  // the two doors at the top lead to each reader's part
+  assert.match(page, /<a class="ug-door" href="#developer">/);
+  assert.match(page, /<a class="ug-door" href="#reader">/);
+  const images = [...page.matchAll(/<img src="\/guide-img\/([^"]+)" alt="([^"]+)" width="(\d+)" height="(\d+)"/g)];
+  assert.deepEqual(images.map((match) => match[1]), ['home.webp', 'preview.webp', 'impact.webp', 'impact-breaking.webp']);
+  for (const [, file] of images) {
+    const bytes = await readFile(new URL(`../guide-img/${file}`, import.meta.url));
+    assert.equal(bytes.subarray(8, 12).toString('ascii'), 'WEBP', `${file} is a WebP image`);
+    assert.ok(bytes.length < 200_000, `${file} stays small`);
+  }
+  // no wall of tables: one table for the compatibility levels
+  assert.equal((page.match(/<table>/g) ?? []).length, 1);
+});
+
+test('guide says what leaves the PC and keeps the limits next to the claims', () => {
+  assert.match(page, /AI를 쓰지 않고 PC 안에서만/);
+  assert.match(page, /코드 일부가 그 회사로 넘어가요/);
+  assert.match(page, /외부 AI를 쓸 수 없는 현장이라면/);
+  assert.match(page, /열거값이 늘거나 기본값이 바뀌거나 권한 범위/);
   assert.match(page, /Kotlin/);
+  assert.match(page, /가상 시스템에서 한 번 잰 숫자예요/);
 });
 
 test('the home page states the measured strengths and their limits', () => {

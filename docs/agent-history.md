@@ -307,6 +307,12 @@ exercise is unchanged by it.
 
 Newest first within each group. Remove an item when it is done.
 
+Interface-spec editor:
+
+- The 인증 select falls back to `undecided` when an endpoint has `authRequired: true` and no endpoint-level `auth`, even if the document has a
+  document-level `auth` (the Spring scanner writes it that way). Show the document's auth type instead and translate the option labels; the raw
+  English values (`undecided`, `bearer`) are shown to Korean users today.
+
 Reference board (see the 2026-11-06 and 2026-11-09 "reference board" Log entries; steps 1 to 4 of the proposal are built):
 
 - The comparison with our screen is a pattern comparison (`compareReferenceFlows` in contracts): step outcome, page move, API
@@ -529,6 +535,27 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-10 — user guide rewritten around real screens and plain Korean (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** the user found the previous guide unreadable ("존나 못 썼고 보기 싫다") and asked for a rewrite that does not read like AI, applying
+  `epoko77-ai/im-not-ai` (Korean AI-tell taxonomy and `metrics_v2.py`) and `DaleSeo/korean-skills` (humanizer patterns, style guide).
+- **Changed:** `docs/user-guide.ko.md` and `apps/monofield-site/guide.html` rewritten (about half the length): two doors at the top (개발자 / PM·팀장),
+  sections 개발자가 할 일 (steps 1–5 with the sample), PM·팀장이 볼 것, 알아 둘 것, 막혔을 때, 더 보기; one table instead of thirteen; consistent
+  해요체. Four real screens in `apps/monofield-site/guide-img/` (WebP): home with the folder and result-format markers, the spec preview, Git change
+  analysis after the sample change, and the same analysis after renaming `OrderResponse.totalAmount` (호환성 깨짐 ×3). They were captured from
+  `tools-dev start web` with an isolated `OD_DATA_DIR`, the site's sample zip, `scan_spring.py` and the `spring-change` overlay; markers are injected
+  outlines. New `.ug-*` styles (760px column, figures widen to 1040px on wide screens, tap to open full size). The home FAQ and
+  `docs/getting-started.ko.md` point at the renamed "외부 AI를 쓸 수 없는 현장이라면" part. The builder script stays outside the repository (a Python
+  file would not fit the TypeScript-first rule); the Markdown and HTML must be edited together.
+- **Measured:** the guide prose scored with im-not-ai `metrics_v2.py --genre blog` before and after: connective-ending comma rate 0.225 → 0,
+  `-다` ending streak 8 → 0 (z 12.8 → -0.5), risk score 3 → 2; no colon headings, cleft sentences or "~에 대해/통해" left. Ending diversity stays low
+  (z -3.75) because 해요체 ends in "-요"; mixing registers was not done (style-guide consistency).
+- **Tests:** `apps/monofield-site/tests/guide.test.ts` rewritten for the new page (two readers, the four WebP screens under 200 KB, one table, the
+  limits next to the claims, no pinned download URL); `node --test tests/guide.test.ts tests/seo.test.ts tests/get-started.test.ts`: 24 pass.
+  Playwright at 1280 and 390 px: no horizontal overflow, all four images load.
+- **Found, not fixed:** the interface-spec editor's 인증 select shows the raw value `undecided` for an endpoint that requires login when the
+  document declares its auth only at the document level (`InterfaceSpecEditor.tsx`, `endpoint.auth?.type ?? 'undecided'` ignores `doc.auth`).
 
 ### 2026-11-10 — 0.11.7-preview.9 published from `main` (`ccr-8432aecf-n9xdfd`)
 
