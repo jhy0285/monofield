@@ -260,7 +260,10 @@ def _extract_mapping_paths(anno: str, consts: dict[str, str]) -> tuple[str | Non
         return _split_top_level(rest)[0]
 
     if anno.startswith("@RequestMapping"):
-        methods = re.findall(r"RequestMethod\.([A-Z]+)", inside)
+        # `method = RequestMethod.POST`, a statically imported `method = POST`, or a list of either.
+        method_attr = re.search(r"\bmethod\s*=\s*(\{[^}]*\}|[\w.]+)", inside)
+        methods = re.findall(r"(?:\bRequestMethod\.|\b)(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b",
+                             method_attr.group(1)) if method_attr else []
         method = "/".join(dict.fromkeys(methods)) if methods else ANY_METHOD
     expr = named_path(inside)
     if expr is None and inside and "=" not in first_argument(inside).split('"')[0]:
@@ -818,6 +821,161 @@ def _map_response_fields(method_body: str) -> list[FieldSpec]:
     return out
 
 
+_UNKNOWN_BODY_TYPES = {None, "", "?", "Object", "ResponseEntity", "ResponseEntity<?>", "void", "Void"}
+_TYPED_FIELD_RE = re.compile(r"\b(?:private|protected)\s+(?:final\s+)?([A-Za-z_][\w<>,.\s\[\]?]*?)\s+([A-Za-z_]\w*)\s*;")
+_METHOD_DECL_RE = re.compile(
+    r"(?:private|protected|public)\s+(?:static\s+)?(?:final\s+)?(?:<[^>]+>\s+)?([\w.]+(?:\s*<[^{};]*?>)?(?:\[\])?)\s+(\w+)\s*\(")
+_LOCAL_DECL_RE = re.compile(r"(?:^|[;{(\s])(?:final\s+)?([A-Z][\w.]*(?:\s*<[^;=(){}]*?>)?(?:\[\])?)\s+([a-z_]\w*)\s*=")
+_PUT_RE = re.compile(r'\bput\(\s*"([^"]+)"\s*,\s*')
+
+
+def _balanced_parens(text: str, open_at: int) -> int:
+    """Index of the parenthesis closing the one at `open_at`, skipping string literals; -1 if unbalanced."""
+    depth = 0
+    i = open_at
+    while i < len(text):
+        ch = text[i]
+        if ch == '"':
+            i += 1
+            while i < len(text) and text[i] != '"':
+                i += 2 if text[i] == "\\" else 1
+        elif ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return -1
+
+
+def _param_types(params_text: str) -> dict[str, str]:
+    """`@PathVariable("slug") String slug, final User user` -> {slug: String, user: User}."""
+    out: dict[str, str] = {}
+    for part in _split_params(params_text):
+        clean = re.sub(r"@[\w.]+(?:\s*\([^)]*\))?", " ", part).replace("final ", " ").strip()
+        m = re.match(r"(.+?)\s+([A-Za-z_]\w*)$", clean)
+        if m:
+            out[m.group(2)] = _short_type(m.group(1))
+    return out
+
+
+def _class_methods(text: str) -> dict[str, tuple[str, dict[str, str], str]]:
+    """Methods declared in a class: name -> (return type, parameter types, body). Overloads keep the first."""
+    out: dict[str, tuple[str, dict[str, str], str]] = {}
+    for m in _METHOD_DECL_RE.finditer(text):
+        open_at = m.end() - 1
+        close = _balanced_parens(text, open_at)
+        if close < 0:
+            continue
+        brace = re.match(r"\s*(?:throws\s+[\w.,\s]+)?\{", text[close + 1:])
+        if not brace:
+            continue
+        start = close + 1 + brace.end() - 1
+        depth, i = 0, start
+        while i < len(text):
+            if text[i] == "{":
+                depth += 1
+            elif text[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+        out.setdefault(m.group(2), (_short_type(m.group(1)), _param_types(text[open_at + 1:close]), text[start:i + 1]))
+    return out
+
+
+def _body_expressions(body: str) -> list[str]:
+    """What a handler sends: the arguments of `ResponseEntity.ok(...)` / `.body(...)`, else the returned expression."""
+    out: list[str] = []
+    for m in re.finditer(r"\bResponseEntity\s*\.\s*ok\s*\(|\.\s*body\s*\(", body):
+        close = _balanced_parens(body, m.end() - 1)
+        if close > m.end() - 1:
+            out.append(body[m.end():close].strip())
+    if not out:
+        out += [e.strip() for e in re.findall(r"\breturn\s+([^;]+);", body) if not e.strip().startswith("ResponseEntity")]
+    return [e for e in out if e]
+
+
+def _value_type(expr: str, scope: dict[str, str], services: dict[str, str],
+                service_returns: dict[tuple[str, str, int], str]) -> str:
+    e = expr.strip()
+    if re.fullmatch(r"[A-Za-z_]\w*", e) and e in scope:
+        return scope[e]
+    m = re.match(r"new\s+([\w.]+(?:\s*<[^(]*>)?)\s*\(", e)
+    if m:
+        return _short_type(m.group(1))
+    m = re.match(r"([A-Za-z_]\w*)\s*\.\s*([A-Za-z_]\w*)\s*\(", e)
+    if m and m.group(1) in services:
+        close = _balanced_parens(e, m.end() - 1)
+        args = e[m.end():close] if close > 0 else ""
+        argc = len(_split_params(args)) if args.strip() else 0
+        found = service_returns.get((services[m.group(1)], m.group(2), argc))
+        if found is None:
+            candidates = {ret for (cls, name, _), ret in service_returns.items() if cls == services[m.group(1)] and name == m.group(2)}
+            found = candidates.pop() if len(candidates) == 1 else None
+        if found:
+            return _short_type(re.sub(r"^Optional<(.+)>$", r"\1", found))
+    return _guess_value_type(e)
+
+
+def _keyed_puts(text: str, scope: dict[str, str], services: dict[str, str],
+                service_returns: dict[tuple[str, str, int], str]) -> list[FieldSpec]:
+    out: list[FieldSpec] = []
+    seen: set[str] = set()
+    for m in _PUT_RE.finditer(text):
+        close = _balanced_parens(text, m.start() + len("put"))
+        value = text[m.end():close] if close > m.end() else ""
+        key = m.group(1)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(FieldSpec(section="RESPONSE", name_en=key, name_ko=koreanize_identifier(key),
+                             data_type=_value_type(value, scope, services, service_returns),
+                             required="Y", note="", path=key, depth=0))
+    return out
+
+
+def _scope_of(params: dict[str, str], body: str) -> dict[str, str]:
+    scope = dict(params)
+    for m in _LOCAL_DECL_RE.finditer(body):
+        scope.setdefault(m.group(2), _short_type(m.group(1)))
+    return scope
+
+
+def _wire_body(body: str, params: dict[str, str], methods: dict[str, tuple[str, dict[str, str], str]],
+               services: dict[str, str], service_returns: dict[tuple[str, str, int], str],
+               depth: int = 0) -> tuple[str | None, list[FieldSpec]]:
+    """The response a handler builds when its signature does not say (`ResponseEntity<?>`): keys put into a Map built
+    inline (`new HashMap<>() {{ put("comments", comments); }}`) or in a helper of the same class (also reached through
+    `this::helper`), with each value's type from parameters, locals, `new X(...)` or the service's return type; or the
+    type of a service result passed straight to `ok(...)`."""
+    if depth > 3:
+        return None, []
+    scope = _scope_of(params, body)
+    # `service.find(x).map(this::helper)`: the referenced helper builds the body, so it comes before the chain's value.
+    candidates = [f"{name}()" for name in re.findall(r"\bthis::(\w+)", body)] + _body_expressions(body)
+    for expr in candidates:
+        if _PUT_RE.search(expr):
+            fields = _keyed_puts(expr, scope, services, service_returns)
+            if fields:
+                return None, fields
+        call = re.match(r"(?:this\s*\.\s*)?([A-Za-z_]\w*)\s*\(", expr)
+        if call and call.group(1) in methods:
+            ret, helper_params, helper_body = methods[call.group(1)]
+            if not _is_map_type(ret) or not _PUT_RE.search(helper_body):
+                found = _wire_body(helper_body, helper_params, methods, services, service_returns, depth + 1)
+                if found[0] or found[1]:
+                    return found
+            fields = _keyed_puts(helper_body, _scope_of(helper_params, helper_body), services, service_returns)
+            if fields:
+                return None, fields
+        typed = _value_type(expr, scope, services, service_returns)
+        if typed not in {"Object", "String", "Integer", "Long", "Boolean", "Double"} and not _is_map_type(typed):
+            return typed, []
+    return None, []
+
+
 _EXTENDS_RE = re.compile(r"\bclass\s+[A-Za-z_][A-Za-z0-9_]*(?:\s*<[^{]*?>)?\s+extends\s+([A-Za-z_][A-Za-z0-9_.]*)")
 
 
@@ -882,6 +1040,27 @@ def _map_fields_from_service(method_body: str, service_map_keys: dict[tuple[str,
                       note=f.note, path=f.path, depth=f.depth) for f in service_map_keys.get((name, argc), [])]
 
 
+_CONTROLLER_ANNOTATION_RE = re.compile(r"^\s*@(?:[\w.]+\.)?(?:Rest)?Controller\b", re.MULTILINE)
+_MAPPING_ANNOTATION_RE = re.compile(r"@(?:[\w.]+\.)?(?:Request|Get|Post|Put|Patch|Delete)Mapping\b")
+
+
+def _controller_sources(java_root: Path) -> dict[Path, str]:
+    """Production classes Spring routes requests to, with their source.
+
+    A class is a controller because it is annotated `@Controller` or `@RestController`, not because of its file name:
+    real projects call them `ArticleApi`, `TagsResource` and so on. `@ControllerAdvice` is not a controller. Abstract
+    classes with mapping annotations are kept too, because their handlers are served under each subclass's mapping."""
+    sources: dict[Path, str] = {}
+    for path in sorted(java_root.rglob("*.java")):
+        if _is_test_source(path):
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        if _CONTROLLER_ANNOTATION_RE.search(text) or (
+                re.search(r"\babstract\s+class\b", text) and _MAPPING_ANNOTATION_RE.search(text)):
+            sources[path] = text
+    return sources
+
+
 def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
     java_root = codebase_path / "main/java"
     if not java_root.exists():
@@ -896,8 +1075,8 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
     )
     out: list[ApiSeed] = []
 
-    controller_files = [p for p in sorted(java_root.rglob("*Controller.java")) if not _is_test_source(p)]
-    texts = {p: p.read_text(encoding="utf-8", errors="ignore") for p in controller_files}
+    texts = _controller_sources(java_root)
+    controller_files = list(texts)
     abstract_paths: dict[str, Path] = {}
     for p, t in texts.items():
         if re.search(r"\babstract\s+class\b", t):
@@ -923,6 +1102,8 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
         class_name = class_match.group(1) if class_match else path.stem
         local_consts = _class_constants(text, consts, class_name)
         service_fields = _service_fields_from_controller(text)
+        typed_fields = {m.group(2): _short_type(m.group(1)) for m in _TYPED_FIELD_RE.finditer(text)}
+        class_methods = _class_methods(text)
         package_name = _extract_package_name(text)
         class_base, class_security = _class_level(lines, path, class_name, local_consts)
         if inherited_base:
@@ -1078,6 +1259,13 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
                 map_fields = _map_response_fields(method_body) if _is_map_type(response_type) else []
                 if _is_map_type(response_type) and not map_fields:
                     map_fields = _map_fields_from_service(method_body, service_map_keys)
+                if response_type in _UNKNOWN_BODY_TYPES and not map_fields:
+                    p_start, p_end = sig.find("("), sig.rfind(")")
+                    handler_params = _param_types(sig[p_start + 1:p_end]) if 0 <= p_start < p_end else {}
+                    body_type, map_fields = _wire_body(method_body, handler_params, class_methods, typed_fields,
+                                                       service_method_returns)
+                    if body_type:
+                        response_type = body_type
                 service_name = _infer_service_name_from_method_body(method_body, service_fields)
 
                 for full_path in full_paths:

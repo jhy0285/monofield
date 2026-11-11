@@ -48,6 +48,7 @@ _STATEMENT_WORDS = {"return", "throw", "package", "import", "new", "else", "case
 _JSON_IGNORE_RE = re.compile(r"^@(?:[\w.]*\.)?JsonIgnore(?:\s*\(\s*(?:value\s*=\s*)?true\s*\))?$")
 _JSON_PROPERTY_RE = re.compile(r'^@(?:[\w.]*\.)?JsonProperty\s*\(\s*(?:(?:value|name)\s*=\s*)?"([^"]*)"')
 _SIZE_RE = re.compile(r"^@(?:[\w.]*\.)?(?:Size|Length)\s*\((.*)\)\s*$")
+_JSON_ROOT_RE = re.compile(r'@(?:[\w.]*\.)?JsonRootName\s*\(\s*(?:value\s*=\s*)?"([^"]+)"')
 _SNAKE_NAMING_RE = re.compile(r"@(?:[\w.]*\.)?JsonNaming\s*\(\s*(?:[\w.]*\.)?(?:SnakeCaseStrategy|SNAKE_CASE)\b")
 
 
@@ -219,6 +220,8 @@ class JavaClass:
     extends: str | None
     fields: list[JavaField] = field(default_factory=list)
     snake_case: bool = False
+    # `@JsonRootName("user")`: the wire object is wrapped as {"user": {...}} when Jackson's (UN)WRAP_ROOT_VALUE is on.
+    json_root: str = ""
 
 
 def _short_type(type_raw: str) -> str:
@@ -255,6 +258,7 @@ def _parse_record(code: str, m: re.Match[str], path: Path, package: str) -> Java
     close = _balanced(code, open_at)
     header = code[open_at + 1 : close] if close > open_at else ""
     snake = bool(_SNAKE_NAMING_RE.search(code[max(0, m.start() - 400) : m.start()]))
+    root_match = _JSON_ROOT_RE.search(code[max(0, m.start() - 400) : m.start()])
     fields: list[JavaField] = []
     for part in _split_top_level(header):
         anns, rest = _split_leading_annotations(part.strip())
@@ -265,7 +269,8 @@ def _parse_record(code: str, m: re.Match[str], path: Path, package: str) -> Java
         type_raw = re.sub(r"\s+", " ", tm.group(1)).strip()
         fields.append(JavaField(name=tm.group(2), type_raw=type_raw, annotations=anns,
                                 json_name=_wire_name(tm.group(2), anns, snake)))
-    return JavaClass(name=m.group(1), path=path, package=package, extends=None, fields=fields, snake_case=snake)
+    return JavaClass(name=m.group(1), path=path, package=package, extends=None, fields=fields, snake_case=snake,
+                     json_root=root_match.group(1) if root_match else "")
 
 
 def _parse_class(text: str, cm: re.Match[str], path: Path, package: str) -> JavaClass:
@@ -277,8 +282,17 @@ def _parse_class(text: str, cm: re.Match[str], path: Path, package: str) -> Java
     in_block = False
     depth = 0
     snake = False
+    json_root = ""
     declared = False
+    opened = False
     for line in text.splitlines():
+        # Only this class's own body is read: a file can hold several top-level classes (a controller and its
+        # package-private request class), and the fields of one must not land in another.
+        if declared:
+            if depth > 0:
+                opened = True
+            elif opened:
+                break
         s = line.strip()
         if in_block or s.startswith("/*"):
             if not comment:
@@ -298,9 +312,15 @@ def _parse_class(text: str, cm: re.Match[str], path: Path, package: str) -> Java
         if not declared and re.search(rf"\bclass\s+{re.escape(cls_name)}\b", rest or s_no_comment):
             declared = True
             snake = any(_SNAKE_NAMING_RE.search(a) for a in anns + line_anns)
+            json_root = next((m.group(1) for a in anns + line_anns if (m := _JSON_ROOT_RE.search(a))), "")
             anns = []
             comment = ""
             depth += _brace_delta(rest or s_no_comment)
+            continue
+        if not declared:
+            # Before the declaration only annotations matter: they belong to the class when it follows.
+            anns = anns + line_anns if line_anns and not rest else []
+            comment = ""
             continue
         if line_anns and not rest:
             anns.extend(line_anns)
@@ -333,7 +353,8 @@ def _parse_class(text: str, cm: re.Match[str], path: Path, package: str) -> Java
             anns = []
             comment = ""
         depth += _brace_delta(body)
-    return JavaClass(name=cls_name, path=path, package=package, extends=extends, fields=fields, snake_case=snake)
+    return JavaClass(name=cls_name, path=path, package=package, extends=extends, fields=fields, snake_case=snake,
+                     json_root=json_root)
 
 
 def parse_java_classes(codebase_path: Path) -> dict[str, JavaClass]:
@@ -357,9 +378,18 @@ def parse_java_classes(codebase_path: Path) -> dict[str, JavaClass]:
 
         if rm and (not cm or rm.start() < cm.start()):
             parsed = _parse_record(code, rm, path, pkg)
-        else:
-            parsed = _parse_class(text, cm, path, pkg)
-        classes[parsed.name] = parsed
+            classes[parsed.name] = parsed
+            continue
+        # Every top-level class of the file (brace depth 0), not only the first one.
+        for decl in CLASS_RE.finditer(code):
+            before = code[:decl.start()]
+            if before.count("{") - before.count("}") != 0:
+                continue
+            parsed = _parse_class(text, decl, path, pkg)
+            if decl is cm:
+                classes[parsed.name] = parsed  # the file's main class replaces a same-named one, as before
+            else:
+                classes.setdefault(parsed.name, parsed)
 
     return classes
 
@@ -462,7 +492,11 @@ def expand_dto_to_spec_fields(
     section: str,
     name_dict: dict[str, str],
     template_name_reuse: dict[str, str] | None = None,
+    wrap_root: bool = False,
+    under: str | None = None,
 ) -> tuple[list[FieldSpec], list[str]]:
+    """Fields of a DTO as they appear on the wire; with `under`, nested below that already listed field. With `wrap_root` (Jackson's UNWRAP_ROOT_VALUE for requests or
+    WRAP_ROOT_VALUE for responses), a class annotated `@JsonRootName("user")` is nested under a `user` object."""
     out: list[FieldSpec] = []
     conflicts: list[str] = []
     seen_paths: set[str] = set()
@@ -530,6 +564,16 @@ def expand_dto_to_spec_fields(
                     continue
                 add_class_fields(nested, path, depth + 1, next_ancestry)
 
+    if under:
+        add_class_fields(root_cls_name, under, under.count(".") + 1, set())
+        return out, conflicts
+    root = classes.get(root_cls_name)
+    if wrap_root and root is not None and root.json_root:
+        out.append(FieldSpec(section=section, name_en=root.json_root, name_ko=name_dict.get(root.json_root, root.json_root),
+                             data_type=root_cls_name, required="Y", note="", path=root.json_root, parent_path=None, depth=0))
+        seen_paths.add(root.json_root)
+        add_class_fields(root_cls_name, root.json_root, 1, set())
+        return out, conflicts
     add_class_fields(root_cls_name, None, 0, set())
     return out, conflicts
 
@@ -540,13 +584,14 @@ def expand_type_to_spec_fields(
     section: str,
     name_dict: dict[str, str],
     template_name_reuse: dict[str, str] | None = None,
+    wrap_root: bool = False,
 ) -> tuple[list[FieldSpec], list[str]]:
     if not root_type:
         return ([], [])
 
     short = _short_type(root_type)
     if short in classes:
-        return expand_dto_to_spec_fields(classes, short, section, name_dict, template_name_reuse)
+        return expand_dto_to_spec_fields(classes, short, section, name_dict, template_name_reuse, wrap_root)
 
     candidates = _candidate_nested_classes(short, classes)
     out: list[FieldSpec] = []

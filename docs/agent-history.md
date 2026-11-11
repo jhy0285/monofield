@@ -530,6 +530,29 @@ Code health:
 
 ## Log
 
+### 2026-11-11 — Spring scanner measured on two real projects; six real-code gaps fixed (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** after the user set "AI 없이" aside as the selling point: 1) validate on a real project, 2) enum/default/scope changes,
+  3) preview.10, Kotlin, code signing. This entry is step 1; 2 and 3 wait for the plan the user is shown next.
+- **Measured:** `docs/testing/real-projects-2026-11-11.md`. RealWorld (`gothinkster/spring-boot-realworld-example-app` `ee17e31`) against the
+  official OpenAPI document (`gothinkster/realworld` `2558884`): preview.9 found 0/19 routes; now routes 19/19, auth 19/19, request leaf fields
+  37/38 with no extras, response 122/140 (140/140 with `--include-audit-fields`); every remaining difference is the implementation differing
+  from the spec (checked in the code). eGovFrame common components (`e5c1347b`): 1,206 APIs vs 1,218 mappings counted independently, 3 s, auth
+  all undecided (profile- and DB-dependent, correct); 20 real commits replayed: 35 reported changes all match the diffs (one `int`→`Integer`
+  false alarm before the fix), 0 false alarms on 8 non-API commits, 1 default-value change missed.
+- **Changed:** `controller_scanner.py`: controllers found by `@Controller`/`@RestController` (`_controller_sources`) instead of the
+  `*Controller.java` name; `method = POST` read when statically imported; `ResponseEntity<?>` bodies followed through `ok(...)`/`body(...)`,
+  private helpers, inline `new HashMap<>() {{ put(...) }}`, `this::helper` and service results (`_wire_body`). `dto_expander.py`: every top-level
+  class of a file is parsed, each only within its own body; `@JsonRootName` recorded; `under=` expands a DTO below a listed key. `scan_spring.py`:
+  `jackson_root_wrapping` reads `UNWRAP_ROOT_VALUE`/`WRAP_ROOT_VALUE` from `application*.properties|yml`; Map keys typed as project DTOs are
+  expanded. `packages/contracts/src/docs/interface-spec-compatibility.ts`: Java primitives equal their boxed types. New kit
+  `plugins/_official/interface-spec/benchmark/real/` (`compare_openapi.py`, `replay_commits.sh`, README).
+- **Tests:** `scripts/tests/test_spring_real_world_shapes.py` (8, each red first) — scanner suite 66 OK; contracts test (red first) — contracts
+  326 pass; daemon `document-impact-rescan` + `document-impact` 12 pass; `e2e/scripts/spring-spec-demo.ts --json` passes; ABT benchmark rerun
+  unchanged (routes 68/68, request 315/315, response 98%, auth 68/68, impact 34/34); `pnpm guard`, `pnpm typecheck` pass.
+- **Next agent:** `replay_commits.sh` and `e2e/scripts/abt-compare.ts` load `@open-design/contracts` from `dist/`; rebuild it after changing the
+  comparison or the replay shows the old rules. Not released yet (goes into preview.10).
+
 ### 2026-11-10 — spec editor shows the inherited auth scheme in the reader's language (`ccr-8432aecf-n9xdfd`)
 
 - **Request:** "어 수정해": fix the 인증 field that showed the raw value `undecided` for endpoints that require login (found while capturing the guide).

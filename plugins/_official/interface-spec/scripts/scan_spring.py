@@ -48,6 +48,7 @@ from tools.excel_generator.collector.controller_scanner import (  # noqa: E402
 from tools.excel_generator.collector.spring_security import production_java_files  # noqa: E402
 from tools.excel_generator.collector.dto_expander import (  # noqa: E402
     referenced_classes,
+    _candidate_nested_classes as candidate_nested_classes,
     expand_dto_to_spec_fields,
     expand_type_to_spec_fields,
     parse_java_classes,
@@ -154,6 +155,24 @@ def field_to_json(field) -> dict:
 _SCANNED_SOURCE = re.compile(r"\.(java|xml)$", re.IGNORECASE)
 
 
+_UNWRAP_ROOT_RE = re.compile(r"\bunwrap[-_]root[-_]value\s*[:=]\s*true\b", re.IGNORECASE)
+_WRAP_ROOT_RE = re.compile(r"(?<![a-z_-])wrap[-_]root[-_]value\s*[:=]\s*true\b", re.IGNORECASE)
+
+
+def jackson_root_wrapping(codebase: Path) -> tuple[bool, bool]:
+    """Whether the project turns on Jackson's root wrapping: (UNWRAP_ROOT_VALUE for request bodies, WRAP_ROOT_VALUE for
+    responses), read from `application*.properties` and `application*.yml` outside test and build folders."""
+    unwrap = wrap = False
+    for path in list(codebase.rglob("application*.properties")) + list(codebase.rglob("application*.y*ml")):
+        parts = set(path.parts)
+        if parts & {"test", "target", "build", "node_modules", ".git"}:
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        unwrap = unwrap or bool(_UNWRAP_ROOT_RE.search(text))
+        wrap = wrap or bool(_WRAP_ROOT_RE.search(text))
+    return unwrap, wrap
+
+
 def committed_revision(codebase: Path) -> str | None:
     """The Git commit the scanned sources match, or None.
 
@@ -228,9 +247,11 @@ def main() -> int:
         name_dict = {**name_dict, **custom}  # custom wins
 
     classes = parse_java_classes(codebase)
+    unwrap_requests, wrap_responses = jackson_root_wrapping(codebase)
     for ep in endpoints:
         if ep.request_body_type:
-            fields, _conflicts = expand_dto_to_spec_fields(classes, ep.request_body_type, "REQUEST", name_dict)
+            fields, _conflicts = expand_dto_to_spec_fields(classes, ep.request_body_type, "REQUEST", name_dict,
+                                                           wrap_root=unwrap_requests)
             ep.request_fields.extend(fields)
         if ep.query_dto_type:
             # A handler can bind several form objects (e.g. eGov `searchVO` plus the
@@ -244,8 +265,19 @@ def main() -> int:
                         seen.add(key)
                         ep.request_fields.append(f)
         if ep.response_type:
-            fields, _conflicts = expand_type_to_spec_fields(classes, ep.response_type, "RESPONSE", name_dict)
+            fields, _conflicts = expand_type_to_spec_fields(classes, ep.response_type, "RESPONSE", name_dict,
+                                                            wrap_root=wrap_responses)
             ep.response_fields.extend(fields)
+        # Keys put into a returned Map carry the value's type (`put("user", userWithToken)`); list that DTO under its key.
+        if any(f.depth == 0 and candidate_nested_classes(f.data_type, classes) for f in ep.response_fields):
+            nested: list = []
+            for f in ep.response_fields:
+                nested.append(f)
+                if f.depth == 0:
+                    for cls_name in candidate_nested_classes(f.data_type, classes):
+                        sub, _conflicts = expand_dto_to_spec_fields(classes, cls_name, "RESPONSE", name_dict, under=f.path)
+                        nested.extend(sub)
+            ep.response_fields = nested
 
     def dto_evidence(ep) -> list[dict]:
         """Code references to the DTO files the endpoint's fields were read from.

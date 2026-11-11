@@ -62,8 +62,13 @@ function fieldKey(field: InterfaceFieldSpec): string {
   return (field.path ?? field.nameEn).trim();
 }
 
+/** Java primitives and their boxed types carry the same value on the wire (`int` and `Integer` are one number). */
+const BOXED_TYPES: Record<string, string> = {
+  int: 'integer', long: 'long', short: 'short', byte: 'byte', double: 'double', float: 'float', boolean: 'boolean', char: 'character',
+};
+
 function normalizedType(type: string): string {
-  return type.replace(/\s+/g, '').toLowerCase();
+  return type.replace(/\s+/g, '').toLowerCase().replace(/\b(int|long|short|byte|double|float|boolean|char)\b/g, (name) => BOXED_TYPES[name] ?? name);
 }
 
 function numericSize(value: string): number | null {

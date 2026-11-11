@@ -105,4 +105,17 @@ describe('interface spec compatibility', () => {
     const report = compareInterfaceSpecDocuments(spec([open]), spec([createOrder]));
     expect(report.changes).toEqual([expect.objectContaining({ code: 'auth-required-added', level: 'breaking' })]);
   });
+
+  // Found on a real eGovFrame commit: `int length` became `Integer length`; the wire value is the same number.
+  it('treats a Java primitive and its boxed type as the same type', () => {
+    const boxed = revise((endpoint) => {
+      endpoint.requestFields[0]!.dataType = 'long';
+    });
+    expect(compareInterfaceSpecDocuments(spec([createOrder]), boxed).level).toBe('none');
+    const counts = spec([{ ...createOrder, requestFields: [{ nameEn: 'count', dataType: 'int', required: 'N' }] }]);
+    const boxedCounts = spec([{ ...createOrder, requestFields: [{ nameEn: 'count', dataType: 'Integer', required: 'N' }] }]);
+    expect(compareInterfaceSpecDocuments(counts, boxedCounts).level).toBe('none');
+    const text = spec([{ ...createOrder, requestFields: [{ nameEn: 'count', dataType: 'String', required: 'N' }] }]);
+    expect(compareInterfaceSpecDocuments(counts, text).changes).toEqual([expect.objectContaining({ code: 'field-type-changed' })]);
+  });
 });
