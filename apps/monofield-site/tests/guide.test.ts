@@ -44,7 +44,7 @@ test('every translated element carries both languages', () => {
 });
 
 test('guide names the real menus and the current release, and links only to existing places', () => {
-  assert.match(page, /0\.11\.7-preview\.9/);
+  assert.match(page, /0\.11\.7-preview\.10/);
   assert.match(page, /외부 MCP/);
   assert.match(page, /대화에서 AI가 REA 쓰기/);
   assert.match(page, /레퍼런스로 담기/);
@@ -79,16 +79,19 @@ test('guide says what leaves the PC and keeps the limits next to the claims', ()
   assert.match(page, /AI를 쓰지 않고 PC 안에서만/);
   assert.match(page, /코드 일부가 그 회사로 넘어가요/);
   assert.match(page, /외부 AI를 쓸 수 없는 현장이라면/);
-  assert.match(page, /열거값이 늘거나 기본값이 바뀌거나 권한 범위/);
+  assert.match(page, /메서드 안에서 정하는 코드/);
   assert.match(page, /Kotlin/);
-  assert.match(page, /가상 시스템에서 한 번 잰 숫자예요/);
+  assert.match(page, /공개된 실제 Spring 프로젝트 두 곳에서도 다시 쟀어요/);
+  assert.match(page, /36건 중 35건/);
 });
 
 test('the home page states the measured strengths and their limits', () => {
   const proof = home.match(/<section class="proof-section[\s\S]*?<\/section>/)?.[0] ?? '';
-  assert.match(proof, /코드를 PC 밖으로 보내지 않고/);
-  assert.match(proof, /152\/152/);
-  assert.match(proof, /열거값 추가/);
+  assert.match(proof, /바뀐 항목은 빠짐없이/);
+  assert.match(proof, /156\/156/);
+  assert.match(proof, /19\/19/);
+  assert.match(proof, /메서드 안에서 정하는 기본값은 읽지 못해/);
+  assert.match(proof, /real-projects-2026-11-11\.md/);
   assert.match(proof, /href="https:\/\/github\.com\/jhy0285\/monofield\/blob\/main\/docs\/testing\//);
 });
 

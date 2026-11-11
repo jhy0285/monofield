@@ -547,6 +547,17 @@ Code health:
 
 ## Log
 
+### 2026-11-11 — site, READMEs, guide and notes pointed at 0.11.7-preview.10 (`ccr-8432aecf-n9xdfd`)
+
+- **Changed:** preview download links and version labels in `README.md`, `apps/monofield-site/{index,get-started,guide}.html`,
+  `apps/monofield-site/README.md`, `docs/user-guide.ko.md`; `docs/releases/0.11.7-preview.10.md`. The guide's compatibility table lists the
+  enum, default and authority changes, and its "ask separately" note now covers only defaults set inside a method. The home page's measured
+  section leads with results instead of "code stays on your PC" (the user said running without AI is not the selling point): 156/156 changes,
+  38/38 affected APIs, 19/19 RealWorld routes, plus a link to the real-project report; the preview card describes this release.
+- **Tests:** `apps/monofield-site` `npm test` 27 pass (guide and home assertions updated to the new text). Proof and preview sections viewed
+  at 1280 and 390 px, no horizontal overflow.
+- **Next agent:** push this commit to `main` only after the `v0.11.7-preview.10` release exists; `sync_release_notes` needs the tag.
+
 ### 2026-11-11 — 0.11.7-preview.10 prepared (`ccr-8432aecf-n9xdfd`)
 
 - **Request:** item 3 of the user's list, "편집기 인증 칸 수정을 담은 preview.10 릴리즈".
