@@ -114,7 +114,11 @@ before certification.
 - Store identity exactly matches Partner Center.
 - Version is higher than the last submitted Store package.
 - AppX carries the MonoField M tile assets.
-- Store build contains no direct updater URL.
+- Store build contains no direct updater URL. A Store install also skips the
+  GitHub "new version" notice: the daemon reports `distribution: "store"`
+  (`/api/version`, `monofield version --json`) when it runs from
+  `WindowsApps`, and Settings → "latest version" opens the Store's
+  Downloads and updates page instead of GitHub Releases.
 - App starts, opens a working folder, and launches its local sidecars.
 - Privacy policy (`https://monofield.vercel.app/privacy`) and open-source
   notices are reachable from the listing.

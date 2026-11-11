@@ -15,6 +15,7 @@ export interface AppVersionInfo {
   packaged: boolean;
   platform: string;
   arch: string;
+  distribution: 'direct' | 'store';
 }
 
 interface PackageMetadata {
@@ -104,6 +105,19 @@ export function isPackagedRuntime({
   }
 }
 
+/**
+ * A Microsoft Store (MSIX) install runs from `WindowsApps`, where Windows keeps packaged apps; the Store then owns its
+ * updates. Read from where the runtime lives, so no build flag can disagree with how the copy was actually installed.
+ */
+export function isStoreInstall({
+  resourcesPath = processWithResources.resourcesPath,
+  execPath = process.execPath,
+  platform = process.platform,
+}: Pick<ResolveAppVersionInfoOptions, 'resourcesPath' | 'execPath' | 'platform'> = {}): boolean {
+  if (platform !== 'win32') return false;
+  return [resourcesPath, execPath].some((path) => cleanString(path)?.replace(/\\/g, '/').toLowerCase().includes('/windowsapps/'));
+}
+
 export function resolveAppVersionInfo({
   env = process.env,
   packageMetadata,
@@ -122,7 +136,8 @@ export function resolveAppVersionInfo({
     ?? inferredChannel
     ?? (packaged ? 'stable' : 'development');
 
-  return { version, channel, packaged, platform, arch };
+  const distribution = isStoreInstall({ resourcesPath, execPath, platform }) ? 'store' : 'direct';
+  return { version, channel, packaged, platform, arch, distribution };
 }
 
 async function readPackageMetadata(packageJsonUrl: URL): Promise<PackageMetadata | null> {

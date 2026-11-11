@@ -1471,6 +1471,11 @@ export function SettingsDialog({
 
   const handleInstallLatest = useCallback(async () => {
     if (versionChecking || !appVersionInfo) return;
+    if (appVersionInfo.distribution === 'store') {
+      // The Store owns updates for a Store install: open its Downloads and updates page instead of GitHub.
+      window.open('ms-windows-store://downloadsandupdates', '_blank', 'noopener,noreferrer');
+      return;
+    }
     setVersionChecking(true);
     try {
       const release = await fetchLatestGithubReleaseInfo();

@@ -173,6 +173,8 @@ export function UpdaterPopup({
 
   useEffect(() => {
     if (!appVersionInfo?.packaged || manualRelease != null) return;
+    // A Microsoft Store install is updated by the Store; pointing at a GitHub installer would break Store policy.
+    if (appVersionInfo.distribution === 'store') return;
     // A provisioned Desktop updater owns the normal check/download flow. The
     // public GitHub lookup below is only a safety net for packaged builds whose
     // host updater is unavailable or explicitly disabled.

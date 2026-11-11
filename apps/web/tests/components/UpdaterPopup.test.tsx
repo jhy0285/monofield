@@ -159,6 +159,29 @@ describe('UpdaterPopup', () => {
     }
   });
 
+  // Microsoft Store policy: a Store app is updated by the Store, so it never points users at a GitHub installer.
+  it('does not contact GitHub from a Microsoft Store install', async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetchLatestGithubReleaseInfo).mockResolvedValue({
+      tagName: 'v9.9.9',
+      htmlUrl: 'https://github.com/jhy0285/monofield/releases/tag/v9.9.9',
+      stale: false,
+    });
+
+    try {
+      render(<UpdaterPopup appVersionInfo={{ ...PACKAGED_APP_VERSION, distribution: 'store' }} />);
+      await act(async () => {
+        vi.advanceTimersByTime(1_500);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(fetchLatestGithubReleaseInfo).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('does not contact GitHub when the packaged native updater is provisioned', async () => {
     vi.useFakeTimers();
     restoreHost = installMockOpenDesignHost({

@@ -323,8 +323,6 @@ Microsoft Store (see the 2026-11-11 "Microsoft Store preparation" Log entry):
   `MONOFIELD_WINDOWS_STORE_IDENTITY_NAME`, `MONOFIELD_WINDOWS_STORE_PUBLISHER`, `MONOFIELD_WINDOWS_STORE_PUBLISHER_DISPLAY_NAME`, then the
   Store ID for `monofield-store-product-id` in `apps/monofield-site/index.html` once the listing is public.
 - Not done: Store listing copy and screenshots, age rating questionnaire, Windows App Certification Kit run on the AppX.
-- The Store edition still shows the in-app "new version" notice that links to GitHub Releases; consider hiding it when the app runs as
-  an AppX package, since the Store installs updates.
 
 Reference board (see the 2026-11-06 and 2026-11-09 "reference board" Log entries; steps 1 to 4 of the proposal are built):
 
@@ -548,6 +546,18 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-11 — a Microsoft Store install leaves updates to the Store (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** part of the Store preparation the user approved; Store policy requires Store apps to update through the Store.
+- **Changed:** `apps/daemon/src/app-version.ts` `isStoreInstall` (Windows and the runtime under `WindowsApps`) sets `distribution:
+  'store' | 'direct'` on the version info (`/api/version`, `monofield version --json`); `packages/contracts/src/api/version.ts` has it as an
+  optional field. `UpdaterPopup.tsx` skips the GitHub release lookup for a Store install; Settings → latest version opens
+  `ms-windows-store://downloadsandupdates` instead of GitHub Releases. `docs/windows-store-release.md` updated.
+- **Tests:** daemon `tests/app-version.test.ts` (new case red first, two exact-object cases gained `distribution: 'direct'`), 8 pass; web
+  `tests/components/UpdaterPopup.test.tsx` new case red first, 22 pass with `SettingsDialog.test.ts`; daemon and web typecheck clean;
+  `telemetry-message-finalization`, `langfuse-trace`, `diagnostics-export` tests pass.
+- **Not run:** a real Store install (needs the Partner Center identity); the `WindowsApps` path rule is the documented MSIX install location.
 
 ### 2026-11-11 — enum values, request defaults and required authorities in the spec and the change analysis (`ccr-8432aecf-n9xdfd`)
 

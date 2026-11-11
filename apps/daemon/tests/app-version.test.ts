@@ -20,6 +20,7 @@ describe('app version helpers', () => {
       packaged: false,
       platform: 'linux',
       arch: 'x64',
+      distribution: 'direct',
     });
   });
 
@@ -41,7 +42,32 @@ describe('app version helpers', () => {
       packaged: true,
       platform: 'darwin',
       arch: 'arm64',
+      distribution: 'direct',
     });
+  });
+
+  // A Microsoft Store (MSIX) install runs from WindowsApps; the app then leaves updates to the Store.
+  it('tells a Microsoft Store install from a directly installed one', () => {
+    const store = resolveAppVersionInfo({
+      packageMetadata: { version: '0.11.7' },
+      env: {},
+      resourcesPath: 'C:\\Program Files\\WindowsApps\\12345Pub.MonoField_0.11.7.0_x64__abcd\\app\\resources',
+      execPath: 'C:\\Program Files\\WindowsApps\\12345Pub.MonoField_0.11.7.0_x64__abcd\\app\\MonoField.exe',
+      platform: 'win32',
+      arch: 'x64',
+    });
+    expect(store).toMatchObject({ packaged: true, distribution: 'store' });
+    expect(resolveAppVersionInfo({
+      packageMetadata: { version: '0.11.7' },
+      env: {},
+      resourcesPath: 'C:\\Users\\Ada\\AppData\\Local\\Programs\\MonoField\\resources',
+      platform: 'win32',
+      arch: 'x64',
+    }).distribution).toBe('direct');
+    // Only Windows has WindowsApps; a folder of that name elsewhere means nothing.
+    expect(resolveAppVersionInfo({
+      packageMetadata: { version: '0.11.7' }, env: {}, execPath: '/home/ada/WindowsApps/node', platform: 'linux', arch: 'x64',
+    }).distribution).toBe('direct');
   });
 
   it('detects packaged runtimes without sidecar protocol knowledge', () => {
