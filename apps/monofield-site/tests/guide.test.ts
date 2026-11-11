@@ -44,7 +44,7 @@ test('every translated element carries both languages', () => {
 });
 
 test('guide names the real menus and the current release, and links only to existing places', () => {
-  assert.match(page, /0\.11\.7-preview\.10/);
+  assert.match(page, /0\.11\.7-preview\.11/);
   assert.match(page, /외부 MCP/);
   assert.match(page, /대화에서 AI가 REA 쓰기/);
   assert.match(page, /레퍼런스로 담기/);

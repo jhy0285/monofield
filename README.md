@@ -13,8 +13,8 @@
 
 <p align="center">
   <a href="https://monofield.vercel.app">Website</a> ·
-  <a href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.10/MonoField-release-preview-win-setup.exe">Windows preview · SI workbench</a> ·
-  <a href="https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.10">0.11.7-preview.10 release</a> ·
+  <a href="https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.11/MonoField-release-preview-win-setup.exe">Windows preview · SI workbench</a> ·
+  <a href="https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.11">0.11.7-preview.11 release</a> ·
   <a href="docs/open-source-compliance.md">Open-source notices</a>
 </p>
 
@@ -69,19 +69,20 @@ If you only write code and are comfortable in a terminal or IDE, Codex or Claude
 Code alone may be all you need. MonoField earns its place when the job also ends
 in structured deliverables that must stay in sync with the code.
 
-**Measured strength.** The interface-spec scanner and the change analysis call no
-AI model: the code stays on your PC, a 68-API Spring system is scanned in 0.3 s,
-and the same code always gives the same result. On that synthetic transit-payment
-system the spec, the 152 changed items and their compatibility levels matched a
-general Claude Code run, and the change analysis flagged exactly the 34 changed
-APIs. New enum values, changed defaults and OAuth scopes are not found yet, and
-Kotlin is not read. Method and data:
-[docs/testing/abt-scanner-vs-claude-code-2026-11-09.md](docs/testing/abt-scanner-vs-claude-code-2026-11-09.md).
+**Measured strength.** On a 68-API synthetic transit-payment system the
+scanner found all 156 changed items of one sprint, enum values, defaults and
+permission scopes included, with none invented, and the change analysis flagged
+exactly the 38 APIs that changed. On public Spring projects every route and login
+rule of RealWorld matched its official API document, and the Kotlin version of the
+getting-started sample gives the same spec as the Java one. A 68-API scan takes
+0.3 s and the same code always gives the same result. Method and data:
+[synthetic system](docs/testing/abt-scanner-vs-claude-code-2026-11-09.md),
+[real projects](docs/testing/real-projects-2026-11-11.md).
 
 The three-minute walkthrough of the full loop is in
 [docs/demo/spring-interface-spec-demo.md](docs/demo/spring-interface-spec-demo.md).
 
-**Current development release: [0.11.7-preview.10](https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.10)** — the interface spec now records **enum values, request defaults and required authorities**, so the change analysis classifies a new response value, a changed default or a narrowed permission by its effect on callers (also in the Excel notes and the OpenAPI export); the **Spring scanner was measured on two public projects** ([results](docs/testing/real-projects-2026-11-11.md)): 19/19 routes and login rules against the RealWorld API spec, 1,206 eGovFrame APIs in 3 seconds, and fixes for controllers not named `*Controller`, statically imported methods, `@JsonRootName`, `ResponseEntity<?>` bodies and several classes in one file; the spec editor names auth choices in plain words — on top of change analysis that shows only the APIs whose contract changed (`monofield docs impact`), the [user guide for developers and PMs](docs/user-guide.ko.md), the reference board, REA built in, Settings → Execution permissions, the [15-minute getting started guide](docs/getting-started.ko.md) and the SI-deliverables workbench: Spring / eGovFrame / OpenAPI interface-spec scanners, compatibility classification of spec changes, OpenAPI 3.1 export, an in-app Guide Center, the Java/ontology workspace, the legacy-system handover skill and **Laya local typed-decision integration**. [Download the Windows preview](https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.10/MonoField-release-preview-win-setup.exe). It installs alongside stable and is unsigned (verify `SHA256SUMS.txt`). The precise change analysis needs Python 3. Kotlin controllers are not read yet. Oracle/Tibero live connections are not supported yet. Browser recording needs an installed Chrome, Edge or Chromium; Laya model weights and its server are separate prerequisites.
+**Current development release: [0.11.7-preview.11](https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.11)** — the Spring scanner now reads **Kotlin** controllers, data classes, enum classes and the Kotlin security DSL (the Kotlin version of the sample gives the Java spec), a method list change such as `@RequestMapping` → `@PostMapping` is reported as one change on the documented API, and duplicate rows in some responses are gone — on top of preview.10's enum value, request default and required authority detection, real-project scanner fixes, change analysis that shows only the APIs whose contract changed (`monofield docs impact`), the [user guide for developers and PMs](docs/user-guide.ko.md), the reference board, REA built in, Settings → Execution permissions, the [15-minute getting started guide](docs/getting-started.ko.md) and the SI-deliverables workbench: Spring / eGovFrame / OpenAPI interface-spec scanners, OpenAPI 3.1 export, an in-app Guide Center, the Java/ontology workspace, the legacy-system handover skill and **Laya local typed-decision integration**. [Download the Windows preview](https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.11/MonoField-release-preview-win-setup.exe). It installs alongside stable and is unsigned (verify `SHA256SUMS.txt`). The precise change analysis needs Python 3. WebFlux functional routers and Ktor are not read. Oracle/Tibero live connections are not supported yet. Browser recording needs an installed Chrome, Edge or Chromium; Laya model weights and its server are separate prerequisites.
 
 **한국어** — REA로 기존 시스템의 화면·API·SQLite 근거를 조사하고 MonoField의 인터페이스 Excel·화면명세 PPTX로 정리할 수 있습니다. Laya는 선택적으로 근거 검토와 검증 후보 선택을 보조합니다. [설정·SI 인수인계 흐름](docs/rea-laya-handover.md) · [실제 합성 샘플 실행 결과](docs/testing/rea-handover-2026-10-22.md).
 
@@ -175,16 +176,16 @@ tooling boundary.
 
 ## Install
 
-- [Windows REA/Laya preview installer](https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.10/MonoField-release-preview-win-setup.exe)
-- [Preview portable package](https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.10/MonoField-release-preview-win-portable.zip)
-- [Preview release notes and checksums](https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.10)
+- [Windows REA/Laya preview installer](https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.11/MonoField-release-preview-win-setup.exe)
+- [Preview portable package](https://github.com/jhy0285/monofield/releases/download/v0.11.7-preview.11/MonoField-release-preview-win-portable.zip)
+- [Preview release notes and checksums](https://github.com/jhy0285/monofield/releases/tag/v0.11.7-preview.11)
 - [Stable Windows installer](https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-setup.exe)
 - [Stable portable package](https://github.com/jhy0285/monofield/releases/latest/download/MonoField-default-portable.zip)
 - [Stable release notes and checksums](https://github.com/jhy0285/monofield/releases/latest)
 - Microsoft Store — shown on the [MonoField website](https://monofield.vercel.app)
   after the public listing is certified
 
-Preview downloads are pinned to the REA/Laya `0.11.7-preview.10` release;
+Preview downloads are pinned to the REA/Laya `0.11.7-preview.11` release;
 stable links follow the latest stable GitHub Release.
 The current public Desktop build targets Windows 10/11. Direct-download builds
 are unsigned, so Windows can show an unrecognized-publisher warning; verify the

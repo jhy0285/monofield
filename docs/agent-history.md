@@ -316,7 +316,6 @@ Interface-spec scanner and change analysis (see the 2026-11-11 Log entries):
 - Kotlin (2026-11-11, branch only, not released): WebFlux `coRouter` and Ktor are not read; mappings that only exist in code generated at
   build time (OpenAPI Generator `kotlin-spring` interfaces) are invisible to the scanner; Kotlin `const val` constants are resolved only within
   the controller file; a service call's type is found through the receiver's declared type or a unique function name, not full inference.
-  User guide and site still say Kotlin is not read (true for preview.10); change them with the next release.
 
 Microsoft Store (see the 2026-11-11 "Microsoft Store preparation" Log entry):
 
@@ -549,6 +548,14 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-11 — site, READMEs, guide and notes pointed at 0.11.7-preview.11 (`ccr-8432aecf-n9xdfd`)
+
+- **Changed:** preview pins and labels to preview.11; the guide and home page now say Kotlin is read (WebFlux functional routers and Ktor
+  are not); the guide's compatibility table lists HTTP method narrowing and widening; README's "Measured strength" leads with results
+  (156/156, 38/38, RealWorld, Kotlin parity) instead of "no AI model"; `docs/releases/0.11.7-preview.11.md`.
+- **Tests:** `apps/monofield-site` `npm test` 27 pass.
+- **Next agent:** push to `main` only after `v0.11.7-preview.11` exists.
 
 ### 2026-11-11 — 0.11.7-preview.11 prepared (`ccr-8432aecf-n9xdfd`)
 
