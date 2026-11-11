@@ -64,9 +64,9 @@ As of 2026-11-11.
   reviewed spec diffs). It is an independent fork of the Apache-2.0 Open Design
   project; see `docs/adr/0002-upstream-maintenance.md` (status: Proposed, only
   phase A done).
-- Version: `0.11.7-preview.10` (root `package.json`), prepared on 2026-11-11 and not yet published: it adds the editor auth
-  field fix, the real-project scanner fixes, enum/default/authority change detection and the Store-install update rule.
-  The last published preview is `0.11.7-preview.9` (2026-11-10, from `0454ba7`). Stable `latest` is still `v0.11.6`. Workspace packages are
+- Version: `0.11.7-preview.10` (root `package.json`), published on 2026-11-11 as a GitHub prerelease (preview channel,
+  unsigned) from `42680ad` on `main`; it adds the editor auth field fix, the real-project scanner fixes, enum/default/authority
+  change detection and the Store-install update rule. Stable `latest` is still `v0.11.6`. Workspace packages are
   still named `@open-design/*`; env vars still use the `OD_*` prefix.
 - Shape: pnpm monorepo. `apps/daemon` (Express + SQLite, `monofield` CLI) and
   `apps/web` (Next.js 16) hold most of the code (roughly 320k and 410k lines of
@@ -309,9 +309,6 @@ Newest first within each group. Remove an item when it is done.
 
 Interface-spec scanner and change analysis (see the 2026-11-11 Log entries):
 
-- Release preview.10 with the editor auth fix, the real-project scanner fixes and the enum/default/authority work; in the same commit change
-  `docs/user-guide.ko.md` (line about "못 잡는 변경"), `apps/monofield-site/guide.html` and the `proof-note` in `apps/monofield-site/index.html`,
-  which still say enum, default and scope changes are not found.
 - A default applied in the method body (`if (x == null) x = 5`) is not read, so moving an annotation default into code reads as a removed
   default (eGovFrame `e4823589`). A URL rule and a method annotation that both name authorities are ANDed by Spring, but only the annotation's are
   listed. Enum values are compared only when both revisions recorded them, so the first rescan after upgrading reports no enum changes.
@@ -548,6 +545,14 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-11 — 0.11.7-preview.10 published from `main` (`ccr-8432aecf-n9xdfd`)
+
+- **Done:** full CI run 42962497056 passed on `42680ad`; `main` fast-forwarded to it; `release-windows` run 42963537313 (preview,
+  `allow_unsigned`, `publish`, no Store package) passed build, packaged smoke and publish. `v0.11.7-preview.10` is a prerelease on `42680ad`
+  with setup.exe (259,428,867 bytes), payload.7z, portable.zip, `latest.yml` and `SHA256SUMS.txt` (checked over the REST API).
+- **Then:** the site/README/guide pins, the Store listing doc and these notes (Source and build link added) were pushed to `main`.
+- **Next agent:** `gh release view` fails in this environment (GraphQL is blocked); use `gh api repos/jhy0285/monofield/releases/tags/<tag>`.
 
 ### 2026-11-11 — site, READMEs, guide and notes pointed at 0.11.7-preview.10 (`ccr-8432aecf-n9xdfd`)
 
