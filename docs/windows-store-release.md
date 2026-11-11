@@ -84,7 +84,9 @@ installer update feed so Store updates remain authoritative.
 ## 3. Validate and submit
 
 Run the Windows App Certification Kit locally when available, then upload the
-AppX in Partner Center. Complete the age rating, privacy, support, screenshots,
+AppX in Partner Center. The listing text, age-rating answers, the `runFullTrust`
+justification and the certification notes are in
+[windows-store-listing.md](windows-store-listing.md). Complete the age rating, privacy, support, screenshots,
 and listing copy before submission. Certification timing is controlled by
 Microsoft and commonly takes several business days; rejected submissions need
 another review cycle.

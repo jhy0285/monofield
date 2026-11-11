@@ -322,7 +322,9 @@ Microsoft Store (see the 2026-11-11 "Microsoft Store preparation" Log entry):
 - Waiting on the user: a Partner Center account and the three identity values, saved as repository variables
   `MONOFIELD_WINDOWS_STORE_IDENTITY_NAME`, `MONOFIELD_WINDOWS_STORE_PUBLISHER`, `MONOFIELD_WINDOWS_STORE_PUBLISHER_DISPLAY_NAME`, then the
   Store ID for `monofield-store-product-id` in `apps/monofield-site/index.html` once the listing is public.
-- Not done: Store listing copy and screenshots, age rating questionnaire, Windows App Certification Kit run on the AppX.
+- Listing text (ko/en), age-rating answers, `runFullTrust` justification and certification notes are drafted in
+  `docs/windows-store-listing.md`. Not done: Store screenshots (1366x768 or larger), the WACK run on the AppX. The sample zip has no
+  generated spec, so a certification tester without Codex or Claude Code cannot see a specification.
 
 Reference board (see the 2026-11-06 and 2026-11-09 "reference board" Log entries; steps 1 to 4 of the proposal are built):
 
