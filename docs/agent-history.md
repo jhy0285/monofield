@@ -312,7 +312,11 @@ Interface-spec scanner and change analysis (see the 2026-11-11 Log entries):
 - A default applied in the method body (`if (x == null) x = 5`) is not read, so moving an annotation default into code reads as a removed
   default (eGovFrame `e4823589`). A URL rule and a method annotation that both name authorities are ANDed by Spring, but only the annotation's are
   listed. Enum values are compared only when both revisions recorded them, so the first rescan after upgrading reports no enum changes.
-- Method narrowing (GET/POST → POST) still shows as removed + added; JSP model attributes are not response fields; Kotlin is not read.
+- Method narrowing (GET/POST → POST) still shows as removed + added; JSP model attributes are not response fields.
+- Kotlin (2026-11-11, branch only, not released): WebFlux `coRouter` and Ktor are not read; mappings that only exist in code generated at
+  build time (OpenAPI Generator `kotlin-spring` interfaces) are invisible to the scanner; Kotlin `const val` constants are resolved only within
+  the controller file; a service call's type is found through the receiver's declared type or a unique function name, not full inference.
+  User guide and site still say Kotlin is not read (true for preview.10); change them with the next release.
 
 Microsoft Store (see the 2026-11-11 "Microsoft Store preparation" Log entry):
 
@@ -545,6 +549,27 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-11 — Spring scanner reads Kotlin controllers, DTOs and security configuration (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** item 3 "Kotlin 지원"; the user approved the plan ("어진행").
+- **Changed:** new `plugins/_official/interface-spec/scripts/tools/excel_generator/collector/kotlin_source.py` (listed in `open-design.json`):
+  Kotlin data classes, classes and `enum class` become `JavaClass` entries (non-null without default is required; defaults, `@field:`/`@get:`
+  annotations, `@JsonValue` constructor property, KDoc labels), and `@RestController`/`@Controller` classes become `ApiSeed`s (mapping
+  annotations with `[...]`, `name: Type` parameters, `?`/default = optional, `@ModelAttribute` and un-annotated DTO form objects, return
+  types through `ResponseEntity`, expression bodies, `mapOf("k" to v)` keys typed from service return types by receiver). `scan_spring.py`
+  merges them (a Java class of the same name wins), sets `source.language` to `kotlin` or `java, kotlin`, and counts `.kt` in
+  `committed_revision`. `spring_security.py` reads `.kt` files, Kotlin `fun ...(http: HttpSecurity): SecurityFilterChain`, the DSL
+  `authorize(...)`/`securityMatcher(...)`. `apps/daemon/src/services/document-rescan.ts` re-scans on `.kt` changes. Fixed on the way: the
+  Map-key expansion re-expanded DTO fields that were already expanded (26 duplicate rows on RealWorld Java). New fixture
+  `fixtures/spring-kotlin` (the getting-started sample in Kotlin).
+- **Tests (red first):** `scripts/tests/test_spring_kotlin.py` 9 (controllers, nullability, data class body, responses, mixed Java+Kotlin, DSL and
+  method security, Java-style chain in Kotlin, parity with the Java sample, KDoc labels); `test_spring_real_world_shapes.py` duplicate-row case;
+  daemon `document-impact-rescan.test.ts` Kotlin end-to-end re-scan and `.kt` trigger (7 pass). Scanner suite 81 pass.
+- **Measured:** Kotlin RealWorld (maxsplawski `f279289`): 0 → 8/8 routes, 20/20 request fields, 32/32 response fields against its own code;
+  Java/Kotlin sample parity exact. Unchanged: ABT (68/68, 315/315, 98%, auth 68/68, 152/152, B 4/4, impact 38), RealWorld Java (19/19, 37/38,
+  122/140), eGovFrame 20-commit replay (36 reports, identical per commit). Report: `docs/testing/real-projects-2026-11-11.md`.
+- **Not done:** not released; the guide and site still say Kotlin is not read.
 
 ### 2026-11-11 — 0.11.7-preview.10 published from `main` (`ccr-8432aecf-n9xdfd`)
 

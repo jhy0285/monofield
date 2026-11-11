@@ -329,6 +329,23 @@ class RealWorldShapesTest(unittest.TestCase):
         # a service result passed straight to ok() is expanded like a declared return type
         self.assertEqual(response["GET /tags"], ["tags", "tagsCount"])
 
+    def test_a_dto_field_typed_as_another_dto_is_listed_once(self) -> None:
+        # Found when the Kotlin reader reused the Map-key expansion: a returned DTO's own DTO field was expanded twice.
+        doc = scan({**self.RESPONSES, f"{BASE}/CommentsApi.java": """
+            package io.example.api;
+
+            @RestController
+            public class CommentsApi {
+              @GetMapping("/comments/{id}")
+              public CommentData one(@PathVariable("id") String id) {
+                return null;
+              }
+            }
+        """})
+        paths = [f["path"] for f in doc["endpoints"][0]["responseFields"]] if doc["endpoints"][0]["path"] == "/comments/{id}" else \
+            [f["path"] for e in doc["endpoints"] if e["path"] == "/comments/{id}" for f in e["responseFields"]]
+        self.assertEqual(paths, ["id", "body", "author", "author.username", "author.following"])
+
     def test_a_request_class_declared_in_the_controller_file_is_read_on_its_own(self) -> None:
         doc = scan({f"{BASE}/UsersApi.java": """
             package io.example.api;

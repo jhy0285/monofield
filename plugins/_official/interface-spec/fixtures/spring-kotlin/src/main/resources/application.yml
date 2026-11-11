@@ -1,0 +1,11 @@
+server:
+  port: 8080
+spring:
+  application:
+    name: legacy-order
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # The token issuer's public keys. Nothing is fetched until a token arrives, so the sample starts without it.
+          jwk-set-uri: http://localhost:9999/.well-known/jwks.json

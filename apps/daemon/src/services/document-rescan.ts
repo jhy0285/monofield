@@ -15,7 +15,7 @@ const run = promisify(execFile);
 /** Collectors whose output can be regenerated from code with the bundled scanner, and the script that does it. */
 const RESCAN_SCANNERS: Record<string, string> = { 'static-spring': 'scan_spring.py' };
 /** Files those scanners read; other changed files cannot change their output. */
-const SCANNED_SOURCES = /\.(java|xml)$/i;
+const SCANNED_SOURCES = /\.(java|kt|xml)$/i;
 
 export interface RescanOptions {
   /** The interface-spec plugin's `scripts` directory. */

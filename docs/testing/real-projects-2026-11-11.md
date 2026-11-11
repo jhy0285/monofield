@@ -79,8 +79,21 @@ API를 바꾼 커밋 12개에서 보고된 변경 35건이 모두 실제 diff와
 - 기본값·열거값·권한 범위는 2026-11-11부터 읽습니다. 다만 메서드 본문에서 정하는 기본값(`if (x == null) x = 5`)은 읽지 못합니다.
 - JSP에 넘기는 모델 값은 응답 필드로 세지 않습니다.
 - 여러 클래스에 걸쳐 조립하는 응답, 람다를 여러 겹 거치는 응답은 따라가지 못합니다.
-- Kotlin 컨트롤러는 읽지 않습니다.
+- Kotlin은 Spring MVC 컨트롤러만 읽습니다. WebFlux 함수형 라우터(`coRouter`)와 Ktor는 읽지 않습니다.
 - 두 프로젝트 모두 각자의 한 시점에서 잰 결과입니다.
+
+## Kotlin (같은 날 추가)
+
+Kotlin 컨트롤러를 읽기 전에는 공개된 Kotlin Spring 프로젝트 두 곳에서 API를 하나도 찾지 못했습니다(`.kt` 파일을 읽지 않음). 그중 [realworld-kotlin-springboot (BaekChan1024)](https://github.com/BaekChan1024/realworld-kotlin-springboot)는 지금도 0개입니다. 매핑이 빌드할 때 OpenAPI Generator가 만드는 인터페이스에 있고 저장소에는 없기 때문입니다. 이런 프로젝트는 원본 OpenAPI 문서를 OpenAPI 수집기로 읽어야 합니다. 다른 한 곳과 예제의 Kotlin판으로 잰 결과입니다.
+
+| 대상 | 정답을 어떻게 정했나 | 결과 |
+| --- | --- | --- |
+| [realworld-kotlin-springboot](https://github.com/maxsplawski/realworld-kotlin-springboot) `f279289` | 이 앱의 코드를 직접 읽어 정함. 공식 RealWorld 문서와는 앱 자체가 많이 달라서(작성자·즐겨찾기 필드 없음, 요청을 `article`로 감싸지 않음) 정답으로 쓰지 않음 | 경로 8/8, 요청 필드 20/20(필수 여부 포함), 응답 필드 32/32(감사 필드 포함 옵션) |
+| 예제 `legacy-order`를 Kotlin으로 옮긴 판(`plugins/_official/interface-spec/fixtures/spring-kotlin`) | Java판 스캔 결과 | 경로·필드·필수 여부·타입·인증·예시까지 Java판과 같음. 용어 사전 없이도 KDoc 주석에서 같은 한글 필드명 |
+
+이 앱의 댓글 API 3개는 `@RestController("/api/articles")`로 선언되어 있습니다. 이 값은 경로가 아니라 빈 이름이라 Spring은 `/{slug}/comments`로 서비스하고, 스캐너도 그렇게 적습니다. 보안 설정이 없어 로그인 여부는 모두 미정이 맞습니다.
+
+Kotlin을 넣은 뒤 다시 잰 Java 결과(가상 시스템, RealWorld Java, 전자정부 커밋 20개)는 그대로입니다. 이 과정에서 Java 쪽 결함 하나를 찾아 고쳤습니다. 실제 프로젝트 검증 때 넣은 "Map 키를 DTO로 펼치기"가 이미 펼친 DTO 필드를 한 번 더 펼쳐 RealWorld Java 명세에 같은 행이 26개 중복됐습니다(채점은 집합으로 해서 숫자에는 드러나지 않음). 지금은 0개입니다.
 
 ## 재현
 

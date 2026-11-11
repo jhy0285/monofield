@@ -89,6 +89,12 @@ _MATCHER_FACTORIES = {
     "matcher": "ant", "RegexRequestMatcher": "regex", "regexMatcher": "regex",
 }
 
+# A Kotlin function: `fun filterChain(http: HttpSecurity): SecurityFilterChain {`.
+_KOTLIN_FUN_RE = re.compile(r"\bfun\s+([A-Za-z_]\w*)\s*\(([^()]*)\)\s*(?::\s*([\w.<>?]+))?\s*\{")
+# The Kotlin security DSL inside `http { ... }`: `authorize("/x", permitAll)`, `securityMatcher("/api/**")`.
+_DSL_AUTHORIZE_RE = re.compile(r"(?<![\w.])authorize\s*\(")
+_DSL_SCOPE_RE = re.compile(r"(?<![\w.])securityMatcher\s*\(")
+
 _SECURITY_ANNOTATION_RE = re.compile(
     r"@(?:[\w.]+\.)?(PreAuthorize|Secured|RolesAllowed|PermitAll|DenyAll)\b\s*(?:\((.*)\))?", re.S
 )
@@ -104,14 +110,14 @@ _PATH_VARIABLE = "\x00"  # stands in for a `{var}` segment of an endpoint path
 
 
 def production_java_files(root: Path) -> list[Path]:
-    """Java sources outside test and build-output directories, in a stable order.
+    """Java and Kotlin sources outside test and build-output directories, in a stable order.
 
     Shared by the endpoint auth analysis and `detect_spring_auth`, so a
     test-only security configuration never decides how production endpoints
     authenticate.
     """
     return sorted(
-        path for path in root.rglob("*.java")
+        path for pattern in ("*.java", "*.kt") for path in root.rglob(pattern)
         if not NON_PRODUCTION_DIRS.intersection(path.relative_to(root).parts[:-1])
     )
 
@@ -747,8 +753,9 @@ class SpringSecurityModel:
 
     @staticmethod
     def _methods(text: str, class_order: int) -> Iterable[_Method]:
-        for found in _METHOD_RE.finditer(text):
-            return_type, name, params = found.groups()
+        kotlin = ((m.group(3) or "", m.group(1), m.group(2), m) for m in _KOTLIN_FUN_RE.finditer(text))
+        java = ((*m.groups(), m) for m in _METHOD_RE.finditer(text))
+        for return_type, name, params, found in (*java, *kotlin):
             if return_type in _NOT_TYPES or name in _NOT_METHODS:
                 continue
             body_start = found.end() - 1
@@ -807,6 +814,25 @@ class SpringSecurityModel:
             rules.append((key + (found.start(),), _Rule(patterns, verdict, snippet, source, _line(text, found.start()), symbol,
                                                         authorities, access_rule)))
             pos = access_close + 1
+        for found in _DSL_SCOPE_RE.finditer(text, start, end):
+            close = _close_paren(text, found.end() - 1)
+            if 0 < close < end:
+                scopes.append(self._matcher_call(text[found.end():close], "ant", source, nested_lambdas=False))
+        for found in _DSL_AUTHORIZE_RE.finditer(text, start, end):
+            close = _close_paren(text, found.end() - 1)
+            if close == -1 or close >= end:
+                continue
+            args = _split_top(text[found.end():close])
+            if len(args) < 2:
+                continue
+            target, access = ", ".join(args[:-1]), args[-1].strip()
+            patterns = [_Pattern("any")] if target.strip() == "anyRequest" else self._matcher_call(target, "ant", source, nested_lambdas=False)
+            call = re.match(r"([A-Za-z_]\w*)\s*(?:\((.*)\))?$", access, re.S)
+            name, inner = (call.group(1), call.group(2) or "") if call else ("", "")
+            verdict = self._access_verdict(name, inner, source) if name else _UNKNOWN
+            authorities, access_rule = self._access_authorities(name, inner, source) if name else (None, "")
+            rules.append((key + (found.start(),), _Rule(patterns, verdict, _snippet(text[found.start():close + 1]), source,
+                                                        _line(text, found.start()), symbol, authorities, access_rule)))
         for helper in methods:
             if helper.name in visited or start <= helper.body_start < end:
                 continue

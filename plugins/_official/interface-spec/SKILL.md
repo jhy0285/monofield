@@ -497,6 +497,16 @@ scheme as `x-auth-undecided: true` with no `security` (never `security: []`,
 which means public); `scan_openapi.py` reads it back as `authRequired: true`
 with `auth: {"type": "undecided"}`.
 
+The Spring scanner reads Kotlin sources (`*.kt`) as well as Java: controllers
+with `name: Type` parameters (a `?` type or a default makes the value
+optional), `[...]` array literals in mapping annotations, data classes whose
+constructor properties are the fields (non-null without a default is required,
+as jackson-module-kotlin requires it), `enum class`, KDoc comments as Korean
+labels, `mapOf("key" to value)` responses, and the Kotlin security DSL
+(`http { authorizeHttpRequests { authorize("/x", permitAll) } }`). It records
+`source.language` as `kotlin` or `java, kotlin`. WebFlux functional routers
+(`coRouter`) and Ktor are not read.
+
 The Spring scanner also covers eGovFrame-style Spring MVC: `.do` mappings,
 method-level `@RequestMapping` without `method` (recorded as `GET/POST` with a
 note, because Spring accepts every method), `@ModelAttribute` and un-annotated

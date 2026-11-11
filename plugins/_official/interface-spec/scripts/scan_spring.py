@@ -54,6 +54,10 @@ from tools.excel_generator.collector.dto_expander import (  # noqa: E402
     expand_type_to_spec_fields,
     parse_java_classes,
 )
+from tools.excel_generator.collector.kotlin_source import (  # noqa: E402
+    parse_kotlin_classes,
+    scan_kotlin_controllers,
+)
 from tools.excel_generator.rules.audit_fields import set_include_audit_fields  # noqa: E402
 from tools.excel_generator.rules.naming import (  # noqa: E402
     koreanize_identifier,
@@ -157,7 +161,7 @@ def field_to_json(field) -> dict:
     return out
 
 
-_SCANNED_SOURCE = re.compile(r"\.(java|xml)$", re.IGNORECASE)
+_SCANNED_SOURCE = re.compile(r"\.(java|kt|xml)$", re.IGNORECASE)
 
 
 _UNWRAP_ROOT_RE = re.compile(r"\bunwrap[-_]root[-_]value\s*[:=]\s*true\b", re.IGNORECASE)
@@ -181,7 +185,7 @@ def jackson_root_wrapping(codebase: Path) -> tuple[bool, bool]:
 def committed_revision(codebase: Path) -> str | None:
     """The Git commit the scanned sources match, or None.
 
-    Recorded only when every Java and XML file under the codebase is committed, so that `monofield docs impact`
+    Recorded only when every Java, Kotlin and XML file under the codebase is committed, so that `monofield docs impact`
     can compare the code with exactly what was read, even after later commits."""
     def git(*args: str) -> str:
         return subprocess.run(["git", "-C", str(codebase), *args], check=True, capture_output=True, text=True,
@@ -220,7 +224,14 @@ def main() -> int:
         raise SystemExit(f"codebase path not found: {codebase}")
 
     seeds = scan_controllers(codebase, codebase)
-    endpoints = to_api_endpoints(seeds)
+    # Kotlin DTOs join the Java ones (a Java class of the same name wins), then Kotlin controllers are read with them.
+    classes = parse_java_classes(codebase)
+    for name, cls in parse_kotlin_classes(codebase).items():
+        classes.setdefault(name, cls)
+    kotlin_seeds = scan_kotlin_controllers(codebase, codebase, classes)
+    if args.language == "java" and kotlin_seeds:
+        args.language = "java, kotlin" if seeds else "kotlin"
+    endpoints = to_api_endpoints(seeds + kotlin_seeds)
 
     wanted = {m.strip() for m in args.modules.split(",") if m.strip()}
     if wanted:
@@ -251,7 +262,6 @@ def main() -> int:
         custom = load_custom_dict(Path(args.name_dict))
         name_dict = {**name_dict, **custom}  # custom wins
 
-    classes = parse_java_classes(codebase)
     unwrap_requests, wrap_responses = jackson_root_wrapping(codebase)
     for ep in endpoints:
         # Path variables, query parameters and headers are bound by enum constant name.
@@ -278,11 +288,13 @@ def main() -> int:
                                                             wrap_root=wrap_responses)
             ep.response_fields.extend(fields)
         # Keys put into a returned Map carry the value's type (`put("user", userWithToken)`); list that DTO under its key.
-        if any(f.depth == 0 and candidate_nested_classes(f.data_type, classes) for f in ep.response_fields):
+        # Only a key whose rows are not listed yet: a DTO's own DTO-typed field already carries its children.
+        expanded = {f.parent_path for f in ep.response_fields if f.parent_path}
+        if any(f.depth == 0 and f.path not in expanded and candidate_nested_classes(f.data_type, classes) for f in ep.response_fields):
             nested: list = []
             for f in ep.response_fields:
                 nested.append(f)
-                if f.depth == 0:
+                if f.depth == 0 and f.path not in expanded:
                     for cls_name in candidate_nested_classes(f.data_type, classes):
                         sub, _conflicts = expand_dto_to_spec_fields(classes, cls_name, "RESPONSE", name_dict, under=f.path)
                         nested.extend(sub)
