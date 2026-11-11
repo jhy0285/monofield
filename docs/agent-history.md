@@ -64,9 +64,9 @@ As of 2026-11-11.
   reviewed spec diffs). It is an independent fork of the Apache-2.0 Open Design
   project; see `docs/adr/0002-upstream-maintenance.md` (status: Proposed, only
   phase A done).
-- Version: `0.11.7-preview.9` (root `package.json`), published on 2026-11-10 as a GitHub prerelease (preview channel,
-  unsigned) from `0454ba7` on `main`; it ships the re-scan change analysis, the Spring scanner fixes and XML security reading,
-  and the developer/PM guide. Stable `latest` is still `v0.11.6`. Workspace packages are
+- Version: `0.11.7-preview.10` (root `package.json`), prepared on 2026-11-11 and not yet published: it adds the editor auth
+  field fix, the real-project scanner fixes, enum/default/authority change detection and the Store-install update rule.
+  The last published preview is `0.11.7-preview.9` (2026-11-10, from `0454ba7`). Stable `latest` is still `v0.11.6`. Workspace packages are
   still named `@open-design/*`; env vars still use the `OD_*` prefix.
 - Shape: pnpm monorepo. `apps/daemon` (Express + SQLite, `monofield` CLI) and
   `apps/web` (Next.js 16) hold most of the code (roughly 320k and 410k lines of
@@ -546,6 +546,14 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-11 — 0.11.7-preview.10 prepared (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** item 3 of the user's list, "편집기 인증 칸 수정을 담은 preview.10 릴리즈".
+- **Changed:** the five release package versions (`package.json`, `apps/desktop`, `apps/packaged`, `tools/pack`, `tools/release`).
+- **Next agent:** full CI on this commit, fast-forward `main`, dispatch `release-windows` (preview, `allow_unsigned`, `publish`), then
+  pin the site, READMEs and `docs/releases/0.11.7-preview.10.md`, and change the guide/site lines that say enum, default and scope
+  changes are missed.
 
 ### 2026-11-11 — a Microsoft Store install leaves updates to the Store (`ccr-8432aecf-n9xdfd`)
 
