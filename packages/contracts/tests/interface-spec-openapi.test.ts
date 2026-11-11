@@ -147,4 +147,34 @@ describe('interface spec → OpenAPI 3.1', () => {
     expect(ops['/api/products/{productId}/stock']!.get['x-auth-undecided']).toBe(true);
     expect(exported).not.toHaveProperty('security');
   });
+
+  it('states enum values, request defaults and required authorities', () => {
+    const guarded = InterfaceSpecDocumentSchema.parse({
+      schemaVersion: 1, kind: 'interface-spec', source: { codebaseName: 'payments' }, auth: { type: 'bearer' },
+      endpoints: [{
+        method: 'GET', path: '/payments', handlerName: 'list', authRequired: true,
+        authorities: ['ROLE_ADMIN', 'SCOPE_payments.read'],
+        requestFields: [
+          { nameEn: 'status', dataType: 'PaymentStatus', required: 'N', note: 'request param', enumValues: ['PAID', 'REFUNDED'] },
+          { nameEn: 'size', dataType: 'int', required: 'N', note: 'request param', defaultValue: '20' },
+          { nameEn: 'closed', dataType: 'boolean', required: 'N', note: 'request param', defaultValue: 'false' },
+          { nameEn: 'sort', dataType: 'String', required: 'N', note: 'request param', defaultValue: 'createdAt,desc' },
+        ],
+        responseFields: [{ nameEn: 'statuses', dataType: 'List<PaymentStatus>', required: 'Y', enumValues: ['PAID', 'REFUNDED'] }],
+      }, {
+        method: 'DELETE', path: '/payments/{id}', handlerName: 'remove', authRequired: true, accessRule: "hasRole('ADMIN') and #id > 0",
+      }],
+    });
+    const exported = interfaceSpecToOpenApi(guarded).document.paths as Record<string, Record<string, any>>;
+    const list = exported['/payments']!.get;
+    const param = (name: string) => list.parameters.find((candidate: any) => candidate.name === name).schema;
+    expect(param('status')).toEqual({ type: 'string', enum: ['PAID', 'REFUNDED'] });
+    expect(param('size')).toMatchObject({ type: 'integer', default: 20 });
+    expect(param('closed')).toMatchObject({ type: 'boolean', default: false });
+    expect(param('sort')).toMatchObject({ type: 'string', default: 'createdAt,desc' });
+    expect(list.responses['200'].content['application/json'].schema.properties.statuses)
+      .toEqual({ type: 'array', items: { type: 'string', enum: ['PAID', 'REFUNDED'] } });
+    expect(list['x-required-authorities']).toEqual(['ROLE_ADMIN', 'SCOPE_payments.read']);
+    expect(exported['/payments/{id}']!.delete['x-access-rule']).toBe("hasRole('ADMIN') and #id > 0");
+  });
 });

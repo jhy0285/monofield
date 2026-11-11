@@ -50,6 +50,7 @@ from tools.excel_generator.collector.dto_expander import (  # noqa: E402
     referenced_classes,
     _candidate_nested_classes as candidate_nested_classes,
     expand_dto_to_spec_fields,
+    enum_values_for,
     expand_type_to_spec_fields,
     parse_java_classes,
 )
@@ -145,6 +146,10 @@ def field_to_json(field) -> dict:
     }
     if getattr(field, "max_size", ""):
         out["maxSize"] = field.max_size
+    if getattr(field, "enum_values", None):
+        out["enumValues"] = list(field.enum_values)
+    if getattr(field, "default_value", None) is not None:
+        out["defaultValue"] = field.default_value
     if field.path:
         out["path"] = field.path
     if field.parent_path:
@@ -249,6 +254,10 @@ def main() -> int:
     classes = parse_java_classes(codebase)
     unwrap_requests, wrap_responses = jackson_root_wrapping(codebase)
     for ep in endpoints:
+        # Path variables, query parameters and headers are bound by enum constant name.
+        for f in ep.request_fields:
+            if f.enum_values is None and f.note in ("request param", "path variable", "request header"):
+                f.enum_values = enum_values_for(f.data_type, classes, json_body=False)
         if ep.request_body_type:
             fields, _conflicts = expand_dto_to_spec_fields(classes, ep.request_body_type, "REQUEST", name_dict,
                                                            wrap_root=unwrap_requests)
@@ -258,7 +267,7 @@ def main() -> int:
             # entity VO); expand each and keep the first occurrence of a field path.
             seen = {f.path or f.name_en for f in ep.request_fields}
             for form_type in (part.strip() for part in ep.query_dto_type.split(",")):
-                fields, _conflicts = expand_dto_to_spec_fields(classes, form_type, "REQUEST", name_dict)
+                fields, _conflicts = expand_dto_to_spec_fields(classes, form_type, "REQUEST", name_dict, json_body=False)
                 for f in fields:
                     key = f.path or f.name_en
                     if key not in seen:
@@ -343,6 +352,8 @@ def main() -> int:
                 # Undecided stays visible as a TBD auth row instead of a guessed one.
                 "authRequired": ep.auth_required is not False,
                 **({"auth": {"type": "undecided"}} if ep.auth_required is None else {}),
+                **({"authorities": list(ep.authorities)} if ep.authorities else {}),
+                **({"accessRule": ep.access_rule} if ep.access_rule else {}),
                 **({"evidenceRefs": refs} if (refs := [*(ep.auth_evidence or []), *dto_evidence(ep)]) else {}),
                 "requestBodyType": ep.request_body_type or "",
                 "queryDtoType": ep.query_dto_type or "",

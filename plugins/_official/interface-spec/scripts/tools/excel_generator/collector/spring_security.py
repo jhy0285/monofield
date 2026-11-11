@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import re
 import xml.parsers.expat as expat
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable, Iterable
 
@@ -425,6 +425,56 @@ def _spel_verdict(expression: str) -> str:
     return REQUIRED if words and words <= _SPEL_REQUIRED else _UNKNOWN
 
 
+_HAS_CALL_RE = re.compile(r"^(hasRole|hasAnyRole|hasAuthority|hasAnyAuthority)\s*\((.*)\)$", re.S)
+_AUTHENTICATED_RE = re.compile(r"^(?:isAuthenticated|isFullyAuthenticated|authenticated|fullyAuthenticated)(?:\(\s*\))?$")
+_QUOTED_RE = re.compile(r"'((?:[^'\\]|\\.)*)'|\"((?:[^\"\\]|\\.)*)\"")
+_AUTHORITY_CALLS = {"hasRole", "hasAnyRole", "hasAuthority", "hasAnyAuthority"}
+
+
+def _role(name: str) -> str:
+    """`hasRole('ADMIN')`, `@RolesAllowed("ADMIN")` and `.hasRole("ADMIN")` check the authority `ROLE_ADMIN`."""
+    return name if name.startswith("ROLE_") else f"ROLE_{name}"
+
+
+def _unwrap(term: str) -> str:
+    term = term.strip()
+    while term.startswith("(") and _close_paren(term, 0) == len(term) - 1:
+        term = term[1:-1].strip()
+    return term
+
+
+def spel_access(expression: str) -> tuple[list[str] | None, str]:
+    """Who passes a SpEL access rule, as `(authorities, rule)`.
+
+    An `or` of `hasRole`/`hasAnyRole`/`hasAuthority`/`hasAnyAuthority` calls gives the authorities of which any one is
+    enough; `isAuthenticated()` gives an empty list (any signed-in caller). Anything else (`and`, `#param`, `@bean`,
+    other functions) is kept as written, because reducing it to a list would misstate who may call.
+    """
+    expr = re.sub(r"\s+", " ", (expression or "").strip())
+    if not expr:
+        return None, ""
+    if _AUTHENTICATED_RE.match(expr):
+        return [], ""
+    out: list[str] = []
+    for term in re.split(r"\s+(?:or|OR)\s+|\s*\|\|\s*", expr):
+        call = _HAS_CALL_RE.match(_unwrap(term))
+        parts = _split_top(call.group(2)) if call else []
+        values = [m for part in parts if (m := _QUOTED_RE.fullmatch(part.strip()))]
+        if not call or not parts or len(values) != len(parts):
+            return None, expr
+        names = [m.group(1) if m.group(1) is not None else m.group(2) for m in values]
+        out.extend(_role(name) if "Role" in call.group(1) else name for name in names)
+    return list(dict.fromkeys(out)), ""
+
+
+def _config_attribute_access(access: str) -> tuple[list[str] | None, str]:
+    """`access="ROLE_A,ROLE_B"` (any one of them) or a SpEL expression, in an XML `<intercept-url>`."""
+    tokens = [token for token in re.split(r"[\s,]+", (access or "").strip()) if token]
+    if tokens and all(_XML_CONFIG_ATTRIBUTES.fullmatch(token) for token in tokens):
+        return [t for t in tokens if t.startswith("ROLE_") and t not in _ANONYMOUS_ROLES], ""
+    return spel_access(access)
+
+
 class _Constants:
     """`static final String` and `String[]` constants, loaded lazily across the project."""
 
@@ -522,6 +572,9 @@ class AuthDecision:
     status: str  # REQUIRED, PUBLIC, or UNDECIDED
     reason: str = ""  # why an undecided endpoint could not be decided
     evidence: list[dict] = field(default_factory=list)  # interface-spec `evidenceRefs`
+    # Authorities of which any one grants access (None: any signed-in caller, or unknown), or the rule as written.
+    authorities: list[str] | None = None
+    access_rule: str = ""
 
     @property
     def auth_required(self) -> bool | None:
@@ -541,6 +594,8 @@ class _Rule:
     source: Path
     line: int
     symbol: str
+    authorities: list[str] | None = None
+    access_rule: str = ""
 
 
 @dataclass
@@ -679,13 +734,15 @@ class SpringSecurityModel:
                     continue
                 method = a.get("method")
                 patterns = [_Pattern(kind, rule_pattern, method.upper() if method else None)]
+                authorities, access_rule = None, ""
                 if a.get("filters") == "none":
                     verdict = PUBLIC
                 else:
                     verdict = _xml_access_verdict(a.get("access", ""))
+                    authorities, access_rule = _config_attribute_access(a.get("access", ""))
                 snippet = f'intercept-url pattern="{rule_pattern}"' + (f' access="{a["access"]}"' if a.get("access") else "") \
                     + (f' method="{method}"' if method else "")
-                rules.append(_Rule(patterns, verdict, snippet, source, item["line"], symbol))
+                rules.append(_Rule(patterns, verdict, snippet, source, item["line"], symbol, authorities, access_rule))
             self.chains.append(_Chain(_LOWEST, len(self.chains), symbol, scopes, rules))
 
     @staticmethod
@@ -745,8 +802,10 @@ class SpringSecurityModel:
                 break
             patterns = [_Pattern("any")] if name == "anyRequest" else self._matcher_call(args, kind, source, nested_lambdas=False)
             verdict = self._access_verdict(follow_name, text[access_open + 1 : access_close], source)
+            authorities, access_rule = self._access_authorities(follow_name, text[access_open + 1 : access_close], source)
             snippet = _snippet(text[found.start() + 1 : access_close + 1])
-            rules.append((key + (found.start(),), _Rule(patterns, verdict, snippet, source, _line(text, found.start()), symbol)))
+            rules.append((key + (found.start(),), _Rule(patterns, verdict, snippet, source, _line(text, found.start()), symbol,
+                                                        authorities, access_rule)))
             pos = access_close + 1
         for helper in methods:
             if helper.name in visited or start <= helper.body_start < end:
@@ -842,6 +901,39 @@ class SpringSecurityModel:
             return REQUIRED
         return _UNKNOWN
 
+    def _access_authorities(self, name: str, args: str, source: Path) -> tuple[list[str] | None, str]:
+        """Authorities named by a URL rule's access call (`.hasAnyRole("A", "B")`, `.access("hasRole('A')")`)."""
+        if name in _AUTHORITY_CALLS:
+            values: list[str] = []
+            for part in _split_top(args):  # varargs: `.hasAnyRole("A", ROLE_B)`
+                resolved = self.constants.values(part, source)
+                if resolved is None:
+                    return None, ""
+                values.extend(resolved)
+            return (list(dict.fromkeys(_role(v) if "Role" in name else v for v in values)), "") if values else (None, "")
+        if name == "access":
+            values = self.constants.values(args, source)
+            if values is None:
+                wrapped = _outer_call(args.strip())
+                if wrapped and wrapped[0] == "WebExpressionAuthorizationManager":
+                    values = self.constants.values(wrapped[1], source)
+            if values and len(values) == 1:
+                return spel_access(values[0])
+        return None, ""
+
+    def _annotation_access(self, annotation: SecurityAnnotation) -> tuple[list[str] | None, str]:
+        if annotation.name in ("PermitAll", "DenyAll") or not annotation.args:
+            return None, ""
+        values = self.constants.values(annotation.args, annotation.source)
+        if not values:
+            return None, ""
+        if annotation.name == "PreAuthorize":
+            return spel_access(values[0]) if len(values) == 1 else (None, "")
+        names = [v for v in values if not v.startswith("IS_AUTHENTICATED_") and v not in _ANONYMOUS_ROLES]
+        if annotation.name == "RolesAllowed":
+            names = [_role(v) for v in names]
+        return list(dict.fromkeys(names)), ""
+
     # deciding
 
     def _evidence(self, source: Path, line: int, symbol: str, verdict: str, snippet: str) -> dict:
@@ -879,7 +971,8 @@ class SpringSecurityModel:
                 if rule.verdict == _UNKNOWN:
                     return AuthDecision(UNDECIDED, f"해석할 수 없는 인가 규칙 {rule.snippet} {where}",
                                         [self._rule_evidence(rule, _UNKNOWN)])
-                return AuthDecision(rule.verdict, "", [self._rule_evidence(rule, rule.verdict)])
+                return AuthDecision(rule.verdict, "", [self._rule_evidence(rule, rule.verdict)],
+                                    rule.authorities or None, rule.access_rule)
             return AuthDecision(UNDECIDED, f"{chain.symbol}에 이 경로와 일치하는 인가 규칙 없음")
         return AuthDecision(UNDECIDED, "이 경로를 처리하는 SecurityFilterChain 없음")
 
@@ -914,11 +1007,35 @@ class SpringSecurityModel:
             if chosen:
                 evidence = [self._evidence(a.source, a.line, a.symbol, verdict, a.text) for a, _ in chosen]
                 reason = "; ".join(reason for _, reason in chosen if reason)
-                return AuthDecision(UNDECIDED if verdict == _UNKNOWN else verdict, reason, evidence)
+                authorities, access_rule = None, ""
+                if verdict in (REQUIRED, _UNKNOWN):
+                    accesses = [self._annotation_access(a) for a, _ in chosen]
+                    named = [acc for acc in accesses if acc[0] or acc[1]]
+                    if len(named) == 1:
+                        authorities, access_rule = named[0][0] or None, named[0][1]
+                    elif named:
+                        # Several annotation families each restrict the caller; all of them must pass.
+                        authorities, access_rule = None, " and ".join(a.text for a, _ in chosen)
+                return AuthDecision(UNDECIDED if verdict == _UNKNOWN else verdict, reason, evidence, authorities, access_rule)
         return None
 
+    @classmethod
+    def _combine(cls, url: AuthDecision, annotations: AuthDecision | None) -> AuthDecision:
+        decision = cls._combine_status(url, annotations)
+        if decision.status == PUBLIC:
+            return replace(decision, authorities=None, access_rule="")
+        # The handler's own annotation is the most specific statement of who may call; a URL rule names them otherwise.
+        # (When both name authorities, both must pass; only the annotation's are listed.) A rule kept as text stays
+        # visible even when it leaves the endpoint undecided (`hasRole('A') and #id == principal.id`).
+        if annotations is not None and annotations.status != PUBLIC and (annotations.authorities or annotations.access_rule):
+            return replace(decision, authorities=annotations.authorities if decision.status == REQUIRED else None,
+                           access_rule=annotations.access_rule)
+        if url.status == REQUIRED and decision.status == REQUIRED:
+            return replace(decision, authorities=url.authorities, access_rule=url.access_rule)
+        return replace(decision, authorities=None, access_rule="")
+
     @staticmethod
-    def _combine(url: AuthDecision, annotations: AuthDecision | None) -> AuthDecision:
+    def _combine_status(url: AuthDecision, annotations: AuthDecision | None) -> AuthDecision:
         """Anonymous access needs both the URL rule and the annotations to allow it."""
         if annotations is None or url.status == REQUIRED:
             return url
@@ -941,6 +1058,9 @@ class SpringSecurityModel:
         statuses = {decision.status for _, decision in per_method}
         if len(statuses) == 1:
             reasons = dict.fromkeys(decision.reason for _, decision in per_method if decision.reason)
-            return AuthDecision(statuses.pop(), "; ".join(reasons), evidence)
+            accesses = {(tuple(d.authorities) if d.authorities else None, d.access_rule) for _, d in per_method}
+            authorities, access_rule = accesses.pop() if len(accesses) == 1 else (None, "")
+            return AuthDecision(statuses.pop(), "; ".join(reasons), evidence,
+                                list(authorities) if authorities else None, access_rule)
         detail = ", ".join(f"{method} {STATUS_LABELS[decision.status]}" for method, decision in per_method)
         return AuthDecision(UNDECIDED, f"HTTP 메서드별 판정이 다름({detail})", evidence)

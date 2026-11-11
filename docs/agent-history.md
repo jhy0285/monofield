@@ -57,7 +57,7 @@ Entry template:
 
 ## Current state
 
-As of 2026-11-10.
+As of 2026-11-11.
 
 - Product: MonoField, a local Windows workbench that takes Codex or Claude Code
   CLI work to Korean SI deliverables (interface-spec XLSX, screen-spec PPTX,
@@ -307,6 +307,16 @@ exercise is unchanged by it.
 
 Newest first within each group. Remove an item when it is done.
 
+Interface-spec scanner and change analysis (see the 2026-11-11 Log entries):
+
+- Release preview.10 with the editor auth fix, the real-project scanner fixes and the enum/default/authority work; in the same commit change
+  `docs/user-guide.ko.md` (line about "못 잡는 변경"), `apps/monofield-site/guide.html` and the `proof-note` in `apps/monofield-site/index.html`,
+  which still say enum, default and scope changes are not found.
+- A default applied in the method body (`if (x == null) x = 5`) is not read, so moving an annotation default into code reads as a removed
+  default (eGovFrame `e4823589`). A URL rule and a method annotation that both name authorities are ANDed by Spring, but only the annotation's are
+  listed. Enum values are compared only when both revisions recorded them, so the first rescan after upgrading reports no enum changes.
+- Method narrowing (GET/POST → POST) still shows as removed + added; JSP model attributes are not response fields; Kotlin is not read.
+
 Microsoft Store (see the 2026-11-11 "Microsoft Store preparation" Log entry):
 
 - Waiting on the user: a Partner Center account and the three identity values, saved as repository variables
@@ -539,6 +549,36 @@ Code health:
 
 ## Log
 
+### 2026-11-11 — enum values, request defaults and required authorities in the spec and the change analysis (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** item 2 of the user's list: catch enum, default and permission-scope changes (ABT B1-B4, 0/4 before).
+- **Changed:** `packages/contracts/src/docs/interface-spec.ts`: field `enumValues`, `defaultValue`; endpoint `authorities` (any one grants
+  access) and `accessRule` (a rule kept as written). `interface-spec-compatibility.ts`: codes `request-enum-value-added` (info),
+  `request-enum-value-removed` (breaking), `response-enum-value-added` (warning), `response-enum-value-removed` (info),
+  `request-default-changed` (warning, info when a default is only added), `auth-authorities-narrowed` (breaking), `-widened` (info),
+  `auth-rule-changed` (warning); enum values compared only when both sides recorded them, authorities only when `authRequired` did not change.
+  `interface-spec-openapi.ts`: `enum`, typed `default`, `x-required-authorities`, `x-access-rule`. Spring scanner: enums parsed
+  (`@JsonProperty` constants, `@JsonValue` getter or field mapped through the constructor), JSON values in bodies and constant names in query or
+  form binding; `@RequestParam(defaultValue)` and literal field initializers (request side only); `spring_security.py` `spel_access` reduces an
+  `or` of `hasRole`/`hasAnyRole`/`hasAuthority`/`hasAnyAuthority` to a list, keeps anything else as `accessRule`; `@Secured`, `@RolesAllowed`
+  (`ROLE_` prefix), Java `.hasAnyRole(...)`/`.access(...)` and XML `access=` read; enum files now count as DTO evidence. `scan_openapi.py`
+  writes `enumValues`/`defaultValue` instead of putting enum values in `note`, and reads the two extensions back. XLSX/HTML 비고:
+  `허용값: …`, `기본값: …`, auth row `필요 권한: A 또는 B` / `접근 규칙: …`; samples use the first enum value. Editor shows the three
+  facts read-only (hint outside the `<label>`). 12 keys in `types.ts` and 19 locales. ABT harness: `mf_arm.py` passes before/after,
+  `eval_all.py` judges MonoField's B1-B4 with the same keywords as the plain runs, `score.py` does not penalise either arm for such reports.
+  `benchmark/real/replay_commits.sh` resolves its paths itself.
+- **Tests (red first unless noted):** contracts 3 compatibility + 1 OpenAPI (330 pass); scanner `test_spring_enum_default_authority.py` 5 (4 red,
+  1 guard) and `test_scan_openapi.py` 1 new + 2 updated (71 + 6 pass); daemon renderer 2 (23 pass); web `InterfaceSpecEditor.facts.test.tsx` 4
+  (display tests red without the editor change; preservation and label tests are guards). `vitest run tests/i18n`, `pnpm i18n:check`, `pnpm guard`,
+  `pnpm typecheck`, `e2e/scripts/spring-spec-demo.ts --json` pass.
+- **Measured:** ABT B1-B4 4/4 with the answer key's levels (B1 1 API breaking, B2 3 APIs warning, B3 1 info, B4 8 APIs warning); 152/152 in-vocab
+  changes, 0 false; first-spec scores unchanged; re-scan impact flags 38 = 34 + 4 APIs whose only change is B1 or B4. eGovFrame 20 commits:
+  unchanged except `e4823589`, now one more warning (`lenght` default 5 removed); the new code applies the same 5 inside the method, so callers
+  see no change (a warning to dismiss). RealWorld unchanged (19/19, 37/38, 122/140); `limit` default 20 matches the official document.
+  Docs: `docs/testing/abt-scanner-vs-claude-code-2026-11-09.md`, `docs/testing/real-projects-2026-11-11.md`.
+- **Not done:** plain Claude Code arm not rerun. User guide and site still say these changes are missed (true for preview.9); change them
+  with preview.10. Not released.
+
 ### 2026-11-11 — Microsoft Store preparation: privacy policy page and an optional Store AppX job (`ccr-8432aecf-n9xdfd`)
 
 - **Request:** "마이크로소프트 스토어 배포 … 진행" (item 3, code signing through the Store instead of a certificate).
@@ -554,7 +594,11 @@ Code health:
 - **Tests:** `apps/monofield-site` `npm test` 27 pass (new `tests/privacy.test.ts`; `guide.test.ts` was not in the test script and now is);
   `tools-pack` `tests/release-workflows.test.ts` 5 pass (new Store case, red before the job existed); `e2e`
   `tests/packaged-smoke-workflow.test.ts` 11 pass. Privacy page viewed at 1280 and 375 px, no horizontal overflow.
-- **Not run:** the `store_package` job on a Windows runner (no `pwsh` here); see the next entry or Open items.
+- **Verified on Windows:** `release-windows` run 42957791159 on this branch (`publish=false`, `store_package=true`, no repository variables):
+  the `store_package` job passed and uploaded `monofield-windows-store-0.11.7-preview.9-42957791159-placeholder-identity` (AppX 320,577,062
+  bytes). Downloaded and checked here: SHA-256 matches `SHA256SUMS.txt`, `AppxManifest.xml` identity `MonoField.Placeholder`, version
+  `0.11.7.0`, `app/resources/open-design-config.json` has `appVersion` `0.11.7-preview.9` and `updateMetadataUrl: null`.
+  The regular `build` job (full packaged smoke) passed in the same run; publish was skipped as requested.
 - **Next agent:** every `x.y.z-preview.N` packages as Store version `x.y.z.0`; Partner Center accepts each version once and only upward, so one
   Store submission per `x.y.z`.
 

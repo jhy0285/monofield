@@ -58,12 +58,13 @@ class OpenApiCollectorTest(unittest.TestCase):
         # allOf merges the audit base with the order schema and its required list.
         self.assertEqual(list(response), ["createdAt", "orderId", "status", "totalAmount"])
         self.assertEqual((response["orderId"]["required"], response["createdAt"]["required"]), ("Y", "N"))
-        self.assertEqual(response["status"]["note"], "PAID, PENDING, CANCELLED")
+        # Enum values are their own column now, so the change analysis can compare them.
+        self.assertEqual((response["status"]["note"], response["status"]["enumValues"]), ("", ["PAID", "PENDING", "CANCELLED"]))
 
     def test_parameters_security_and_deprecation(self) -> None:
         routes = _by_route(_scan("--spec", str(FIXTURES_DIR / "openapi" / "openapi.json")))
         search = _fields(routes[("GET", "/api/v1/orders")], "requestFields")
-        self.assertEqual(search["status"]["note"], "request param; PAID, PENDING, CANCELLED")
+        self.assertEqual((search["status"]["note"], search["status"]["enumValues"]), ("request param", ["PAID", "PENDING", "CANCELLED"]))
         self.assertEqual(search["status"]["nameKo"], "주문 상태")
         self.assertEqual(search["X-Trace-Id"]["note"], "request header")
         detail = _fields(routes[("GET", "/api/v1/orders/{orderId}")], "requestFields")
@@ -125,6 +126,33 @@ class OpenApiCollectorTest(unittest.TestCase):
         self.assertFalse(routes[("GET", "/health")]["authRequired"])
         self.assertNotIn("auth", routes[("GET", "/health")])
         self.assertTrue(routes[("GET", "/docs")]["authRequired"])  # global security still applies
+
+    def test_defaults_and_required_authorities_read_back_from_a_monofield_export(self) -> None:
+        contract = {
+            "openapi": "3.1.0",
+            "info": {"title": "결제 API", "version": "1.0"},
+            "paths": {"/payments": {"get": {
+                "operationId": "list",
+                "x-required-authorities": ["ROLE_ADMIN", "SCOPE_payments.read"],
+                "x-access-rule": "hasRole('ADMIN') and #id > 0",
+                "parameters": [
+                    {"name": "size", "in": "query", "schema": {"type": "integer", "default": 20}},
+                    {"name": "closed", "in": "query", "schema": {"type": "boolean", "default": False}},
+                    {"name": "status", "in": "query", "schema": {"type": "string", "enum": ["PAID", 2]}},
+                ],
+                "responses": {"200": {"description": "ok", "content": {"application/json": {"schema": {
+                    "type": "object", "properties": {"size": {"type": "integer", "default": 20}}}}}}},
+            }}},
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            spec = Path(temp_dir) / "openapi.json"
+            spec.write_text(json.dumps(contract), encoding="utf-8")
+            endpoint = _scan("--spec", str(spec))["endpoints"][0]
+        request = _fields(endpoint, "requestFields")
+        self.assertEqual((request["size"]["defaultValue"], request["closed"]["defaultValue"]), ("20", "false"))
+        self.assertEqual(request["status"]["enumValues"], ["PAID", "2"])
+        self.assertNotIn("defaultValue", _fields(endpoint, "responseFields")["size"])
+        self.assertEqual((endpoint["authorities"], endpoint["accessRule"]), (["ROLE_ADMIN", "SCOPE_payments.read"], "hasRole('ADMIN') and #id > 0"))
 
     def test_dictionary_overrides_descriptions_and_inventory_lists_modules(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

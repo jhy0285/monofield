@@ -69,6 +69,8 @@ class ApiSeed:
     auth_evidence: list[dict] = field(default_factory=list)
     # Response fields read from the handler itself (the keys put into a returned Map).
     response_fields: list[FieldSpec] = field(default_factory=list)
+    authorities: list[str] | None = None
+    access_rule: str = ""
 
 
 def _controller_display_path(path: Path, repo_root: Path, codebase_path: Path) -> str:
@@ -768,10 +770,13 @@ def _annotation_args(param: str, name: str) -> dict | None:
                 break
     named = re.search(r'\b(?:value|name)\s*=\s*"([^"]*)"', args) or re.match(r'\s*"([^"]*)"', args)
     required = re.search(r"\brequired\s*=\s*(true|false)\b", args)
+    default = re.search(r'\bdefaultValue\s*=\s*"((?:\\.|[^"\\])*)"', args)
     return {
         "name": named.group(1) if named else None,
         "required": None if not required else required.group(1) == "true",
         "default": "defaultValue" in args,
+        # The literal default; a constant reference is left unstated.
+        "default_value": default.group(1) if default else None,
     }
 
 
@@ -1210,6 +1215,7 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
                                 data_type=_short_type(p_type),
                                 required="N" if info.get("required") is False or info.get("default") else "Y",
                                 note="request header",
+                                default_value=info.get("default_value"),
                             )
                         )
                     elif "@RequestParam" in p_clean and not _is_map_type(p_type):
@@ -1223,6 +1229,7 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
                                 data_type=_short_type(p_type),
                                 required="N" if info.get("required") is False or info.get("default") else "Y",
                                 note="request param",
+                                default_value=info.get("default_value"),
                             )
                         )
                     elif _form_object_type(p_clean, p_type, project_classes):
@@ -1289,6 +1296,8 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
                             note=note,
                             auth_evidence=auth.evidence,
                             response_fields=list(map_fields),
+                            authorities=auth.authorities,
+                            access_rule=auth.access_rule,
                         )
                     )
                 continue
@@ -1322,6 +1331,8 @@ def to_api_endpoints(seeds: list[ApiSeed]) -> list[ApiEndpoint]:
                 response_type=s.response_type,
                 auth_required=s.auth_required,
                 auth_evidence=list(s.auth_evidence),
+                authorities=list(s.authorities) if s.authorities else None,
+                access_rule=s.access_rule,
                 interface_name=s.summary or None,
                 note=s.note,
                 request_fields=list(s.request_fields),

@@ -118,4 +118,77 @@ describe('interface spec compatibility', () => {
     const text = spec([{ ...createOrder, requestFields: [{ nameEn: 'count', dataType: 'String', required: 'N' }] }]);
     expect(compareInterfaceSpecDocuments(counts, text).changes).toEqual([expect.objectContaining({ code: 'field-type-changed' })]);
   });
+
+  // ABT scenarios B2/B3: a value added to an enum a response returns can break a client that switches over every value;
+  // the same addition on a request only widens what callers may send.
+  it('classifies enum value changes by which side of the call sees them', () => {
+    const withEnums = (status: string[], reason: string[]) => spec([{
+      ...createOrder,
+      requestFields: [{ nameEn: 'reason', dataType: 'RefundReason', required: 'Y', enumValues: reason }],
+      responseFields: [{ nameEn: 'status', dataType: 'PaymentStatus', required: 'Y', enumValues: status }],
+    }]);
+    const before = withEnums(['PAID', 'REFUNDED'], ['CUSTOMER', 'DUPLICATE']);
+
+    const added = compareInterfaceSpecDocuments(before, withEnums(['PAID', 'REFUNDED', 'PARTIAL_REFUND'], ['CUSTOMER', 'DUPLICATE', 'SYSTEM_ERROR']));
+    expect(added.changes).toEqual([
+      expect.objectContaining({ code: 'response-enum-value-added', level: 'warning', location: 'response', field: 'status', after: 'PARTIAL_REFUND' }),
+      expect.objectContaining({ code: 'request-enum-value-added', level: 'info', location: 'request', field: 'reason', after: 'SYSTEM_ERROR' }),
+    ]);
+
+    const removed = compareInterfaceSpecDocuments(before, withEnums(['PAID'], ['CUSTOMER']));
+    expect(removed.changes).toEqual([
+      expect.objectContaining({ code: 'request-enum-value-removed', level: 'breaking', field: 'reason', before: 'DUPLICATE' }),
+      expect.objectContaining({ code: 'response-enum-value-removed', level: 'info', field: 'status', before: 'REFUNDED' }),
+    ]);
+
+    // Order is not a change, and a side without recorded values is not compared (an older scan recorded none).
+    expect(compareInterfaceSpecDocuments(before, withEnums(['REFUNDED', 'PAID'], ['DUPLICATE', 'CUSTOMER'])).level).toBe('none');
+    const unrecorded = spec([{ ...createOrder, requestFields: [{ nameEn: 'reason', dataType: 'RefundReason', required: 'Y' }],
+      responseFields: [{ nameEn: 'status', dataType: 'PaymentStatus', required: 'Y' }] }]);
+    expect(compareInterfaceSpecDocuments(unrecorded, before).level).toBe('none');
+  });
+
+  // ABT scenario B4 (`size = 20` → `50`) and eGovFrame e4823589 (`defaultValue = "5"` removed).
+  it('reports a changed or removed request default as a warning and a new default as info', () => {
+    const page = (size?: string) => spec([{ ...createOrder, method: 'GET', path: '/api/orders',
+      requestFields: [{ nameEn: 'size', dataType: 'Integer', required: 'N', ...(size === undefined ? {} : { defaultValue: size }) }] }]);
+    expect(compareInterfaceSpecDocuments(page('20'), page('50')).changes).toEqual([
+      expect.objectContaining({ code: 'request-default-changed', level: 'warning', field: 'size', before: '20', after: '50' }),
+    ]);
+    expect(compareInterfaceSpecDocuments(page('5'), page()).changes).toEqual([
+      expect.objectContaining({ code: 'request-default-changed', level: 'warning', before: '5', after: undefined }),
+    ]);
+    expect(compareInterfaceSpecDocuments(page(), page('20')).changes).toEqual([
+      expect.objectContaining({ code: 'request-default-changed', level: 'info', after: '20' }),
+    ]);
+    expect(compareInterfaceSpecDocuments(page('20'), page('20')).level).toBe('none');
+  });
+
+  // ABT scenario B1: `hasAuthority('SCOPE_blacklist.read')` → `hasAuthority('SCOPE_blacklist.admin')`.
+  it('treats losing an authority that used to grant access as breaking and widening as info', () => {
+    const guarded = (authorities?: string[], accessRule?: string) => spec([{ ...createOrder,
+      ...(authorities ? { authorities } : {}), ...(accessRule ? { accessRule } : {}) }]);
+
+    expect(compareInterfaceSpecDocuments(guarded(['SCOPE_blacklist.read']), guarded(['SCOPE_blacklist.admin'])).changes).toEqual([
+      expect.objectContaining({ code: 'auth-authorities-narrowed', level: 'breaking', before: 'SCOPE_blacklist.read', after: 'SCOPE_blacklist.admin' }),
+    ]);
+    // Any authenticated caller before, only some after.
+    expect(compareInterfaceSpecDocuments(guarded(), guarded(['ROLE_ADMIN'])).changes).toEqual([
+      expect.objectContaining({ code: 'auth-authorities-narrowed', level: 'breaking', after: 'ROLE_ADMIN' }),
+    ]);
+    expect(compareInterfaceSpecDocuments(guarded(['ROLE_ADMIN']), guarded(['ROLE_ADMIN', 'ROLE_MANAGER'])).changes).toEqual([
+      expect.objectContaining({ code: 'auth-authorities-widened', level: 'info', after: 'ROLE_ADMIN, ROLE_MANAGER' }),
+    ]);
+    expect(compareInterfaceSpecDocuments(guarded(['ROLE_ADMIN']), guarded()).changes).toEqual([
+      expect.objectContaining({ code: 'auth-authorities-widened', level: 'info', before: 'ROLE_ADMIN' }),
+    ]);
+    expect(compareInterfaceSpecDocuments(guarded(['ROLE_A', 'ROLE_B']), guarded(['ROLE_B', 'ROLE_A'])).level).toBe('none');
+    // A rule the scanner could not reduce to a list of authorities is compared as text and needs a decision.
+    expect(compareInterfaceSpecDocuments(
+      guarded(undefined, "hasRole('ADMIN') and #id == principal.id"),
+      guarded(undefined, "hasRole('ADMIN')"),
+    ).changes).toEqual([
+      expect.objectContaining({ code: 'auth-rule-changed', level: 'warning', before: "hasRole('ADMIN') and #id == principal.id", after: "hasRole('ADMIN')" }),
+    ]);
+  });
 });

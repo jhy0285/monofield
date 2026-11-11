@@ -86,7 +86,24 @@ function describe(field: InterfaceFieldSpec, schema: JsonSchema): JsonSchema {
     if (max !== null) schema.maxLength = max;
   }
   if (field.required === 'TBD') schema['x-required'] = 'TBD';
+  if (field.enumValues?.length) {
+    // An enum travels as one of its string values, whatever its Java type name looked like.
+    if (schema.type === 'array') schema.items = { type: 'string', enum: [...field.enumValues] };
+    else {
+      for (const key of Object.keys(schema)) if (key !== 'title' && key !== 'description' && key !== 'x-required') delete schema[key];
+      schema.type = 'string';
+      schema.enum = [...field.enumValues];
+    }
+  }
+  if (field.defaultValue !== undefined) schema.default = typedDefault(field.defaultValue, schema.type);
   return schema;
+}
+
+/** A default as the JSON value of its schema type: `20` for an integer, `false` for a boolean, text otherwise. */
+function typedDefault(value: string, type: unknown): unknown {
+  if ((type === 'integer' || type === 'number') && /^-?\d+(?:\.\d+)?$/.test(value.trim())) return Number(value);
+  if (type === 'boolean' && (value === 'true' || value === 'false')) return value === 'true';
+  return value;
 }
 
 /** Builds an object schema from flat dot-path field rows. */
@@ -215,6 +232,9 @@ export function interfaceSpecToOpenApi(doc: InterfaceSpecDocument): InterfaceSpe
       operationIds.add(operationId);
       operation.operationId = operationId;
       if (endpoint.interfaceId) operation['x-interface-id'] = endpoint.interfaceId;
+      // Who may call: authorities of which any one is enough, or the rule as written in code.
+      if (endpoint.authorities?.length) operation['x-required-authorities'] = [...endpoint.authorities];
+      if (endpoint.accessRule) operation['x-access-rule'] = endpoint.accessRule;
 
       const operationParams = [...params];
       const formAsQuery = BODYLESS_METHODS.has(method) || (!endpoint.requestBodyType && !!endpoint.queryDtoType);

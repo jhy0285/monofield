@@ -19,6 +19,10 @@ class FieldSpec:
     depth: int = 0
     # `@Size(max = N)` / `@Length(max = N)`; lets the change analysis see a tighter limit as a breaking change.
     max_size: str = ""
+    # Values of an enum-typed field as they travel (JSON values in a body, constant names in a query or form).
+    enum_values: list[str] | None = None
+    # Request value used when the caller omits the field (`@RequestParam(defaultValue)`, a literal field initializer).
+    default_value: str | None = None
 
 
 @dataclass
@@ -38,6 +42,9 @@ class ApiEndpoint:
     auth_required: Optional[bool] = False
     # interface-spec `evidenceRefs` behind the auth decision.
     auth_evidence: list[dict] = field(default_factory=list)
+    # Authorities of which any one grants access, or the rule as written when it is not such a list.
+    authorities: Optional[list[str]] = None
+    access_rule: str = ""
     interface_id: Optional[str] = None
     interface_name: Optional[str] = None
     note: str = ""

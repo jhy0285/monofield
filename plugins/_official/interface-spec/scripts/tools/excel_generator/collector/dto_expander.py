@@ -20,6 +20,7 @@ CLASS_RE = re.compile(
     r"\bclass\s+([A-Za-z_][A-Za-z0-9_]*)\b(?:\s*<[^{]*?>)?(?:\s+extends\s+([A-Za-z_][A-Za-z0-9_\.]*)(?=[\s{<,]))?"
 )
 RECORD_RE = re.compile(r"\brecord\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:<[^()]*?>)?\s*\(")
+ENUM_RE = re.compile(r"\benum\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:implements\s+[^{]+)?\{")
 PACKAGE_RE = re.compile(r"^\s*package\s+([^;]+);", re.M)
 _HANGUL = re.compile(r"[가-힣]")
 
@@ -61,6 +62,8 @@ class JavaField:
     comment: str = ""
     # Name on the wire: an explicit `@JsonProperty`, else the class's snake_case naming strategy, else the Java name.
     json_name: str = ""
+    # The expression after `=` in the declaration, when it fits on the declaring line.
+    initializer: str = ""
 
     @property
     def wire_name(self) -> str:
@@ -222,6 +225,9 @@ class JavaClass:
     snake_case: bool = False
     # `@JsonRootName("user")`: the wire object is wrapped as {"user": {...}} when Jackson's (UN)WRAP_ROOT_VALUE is on.
     json_root: str = ""
+    # For an enum: constant name -> JSON value (`@JsonProperty` on the constant, the `@JsonValue` code, else the name).
+    # None for classes and records.
+    enum_constants: dict[str, str] | None = None
 
 
 def _short_type(type_raw: str) -> str:
@@ -238,18 +244,121 @@ def _short_type(type_raw: str) -> str:
     return "".join(out).strip()
 
 
-def _candidate_nested_classes(type_raw: str, classes: dict[str, JavaClass]) -> list[str]:
-    # Find project class names referenced in the field type, including generic arguments.
+def _candidate_nested_classes(type_raw: str, classes: dict[str, JavaClass], include_enums: bool = False) -> list[str]:
+    # Find project class names referenced in the field type, including generic arguments. Enums are values, not
+    # objects to expand, so they are left out unless asked for (a changed enum file still changes the API).
     tokens = re.findall(r"[A-Za-z_][A-Za-z0-9_]*", type_raw or "")
     out: list[str] = []
     seen: set[str] = set()
     for tok in tokens:
         if tok in _CONTAINER_TYPES or tok in _LEAF_TYPES:
             continue
+        if tok in classes and not include_enums and classes[tok].enum_constants is not None:
+            continue
         if tok in classes and tok not in seen:
             out.append(tok)
             seen.add(tok)
     return out
+
+
+_JSON_VALUE_GETTER_RE = re.compile(
+    r"@(?:[\w.]*\.)?JsonValue\s+(?:public\s+)?(?:final\s+)?[\w<>\[\]]+\s+\w+\s*\(\s*\)\s*\{\s*return\s+(?:this\.)?(\w+)\s*;"
+)
+_JSON_VALUE_FIELD_RE = re.compile(r"@(?:[\w.]*\.)?JsonValue\s+(?:(?:private|protected|public|final)\s+)*[\w<>\[\]]+\s+(\w+)\s*[;=]")
+_STRING_LITERAL_RE = re.compile(r'^"((?:\\.|[^"\\])*)"$')
+
+
+def _enum_json_values(name: str, body: str, constants: list[tuple[str, list[str], list[str]]]) -> dict[str, str]:
+    """Constant name -> JSON value. `@JsonProperty("x")` on a constant wins; a `@JsonValue` getter or field that
+    returns a constructor-assigned field maps each constant to the string literal it passes there; otherwise Jackson
+    writes the constant name."""
+    field_name = ""
+    if (m := _JSON_VALUE_GETTER_RE.search(body)) or (m := _JSON_VALUE_FIELD_RE.search(body)):
+        field_name = m.group(1)
+    index = -1
+    if field_name:
+        ctor = re.search(rf"\b{re.escape(name)}\s*\(([^)]*)\)\s*\{{(.*?)\}}", body, re.S)
+        if ctor:
+            params = [re.sub(r".*\s", "", p.strip()) for p in ctor.group(1).split(",") if p.strip()]
+            assigned = re.search(rf"(?:this\.)?{re.escape(field_name)}\s*=\s*(\w+)\s*;", ctor.group(2))
+            if assigned and assigned.group(1) in params:
+                index = params.index(assigned.group(1))
+    out: dict[str, str] = {}
+    for const, anns, args in constants:
+        explicit = _explicit_json_name(anns)
+        literal = _STRING_LITERAL_RE.match(args[index].strip()) if 0 <= index < len(args) else None
+        if explicit:
+            out[const] = explicit
+        elif field_name and literal:
+            out[const] = literal.group(1)
+        else:
+            out[const] = const
+    return out
+
+
+def _parse_enum(code: str, m: re.Match[str], path: Path, package: str) -> JavaClass:
+    """An enum's constants, in declaration order, with the value each one has on the wire."""
+    open_at = m.end() - 1
+    close = _balanced(code, open_at, "{", "}")
+    body = code[open_at + 1 : close] if close > open_at else code[open_at + 1 :]
+    # The constant list ends at the first `;` outside brackets, or at the end of the body.
+    depth = 0
+    end = len(body)
+    i = 0
+    while i < len(body):
+        ch = body[i]
+        if ch == '"':
+            i += 1
+            while i < len(body) and body[i] != '"':
+                i += 2 if body[i] == "\\" else 1
+        elif ch in "({[":
+            depth += 1
+        elif ch in ")}]":
+            depth -= 1
+        elif ch == ";" and depth == 0:
+            end = i
+            break
+        i += 1
+    constants: list[tuple[str, list[str], list[str]]] = []
+    for part in _split_top_level(body[:end]):
+        anns, rest = _split_leading_annotations(part.strip())
+        cm = re.match(r"([A-Za-z_][A-Za-z0-9_]*)\s*(\(.*?\))?\s*(?:\{.*\})?\s*$", rest, re.S)
+        if not cm:
+            continue
+        args = _split_top_level(cm.group(2)[1:-1]) if cm.group(2) else []
+        constants.append((cm.group(1), anns, args))
+    return JavaClass(name=m.group(1), path=path, package=package, extends=None,
+                     enum_constants=_enum_json_values(m.group(1), body, constants))
+
+
+def enum_values_for(type_raw: str, classes: dict[str, JavaClass], json_body: bool = True) -> list[str] | None:
+    """Values an enum-typed field (or a collection of one) takes. A JSON body carries the JSON values; a query
+    parameter or form field is bound by constant name, whatever `@JsonValue` says."""
+    for tok in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", type_raw or ""):
+        cls = classes.get(tok)
+        if cls is not None and cls.enum_constants is not None:
+            return list(cls.enum_constants.values()) if json_body else list(cls.enum_constants)
+    return None
+
+
+def default_literal(expr: str, type_raw: str, classes: dict[str, JavaClass], json_body: bool = True) -> str | None:
+    """A field initializer written as a request default when it is a literal: a string, number or boolean, or a
+    constant of the field's enum. Anything computed (`new ArrayList<>()`, a method call) is not a default we can state."""
+    e = (expr or "").strip()
+    if not e or e == "null":
+        return None
+    if m := _STRING_LITERAL_RE.match(e):
+        return re.sub(r"\\(.)", r"\1", m.group(1))
+    if re.fullmatch(r"[-+]?\d+(?:\.\d+)?[lLfFdD]?", e):
+        return e.rstrip("lLfFdD") if not re.fullmatch(r"[-+]?\d+", e) else e
+    if e in ("true", "false"):
+        return e
+    if m := re.fullmatch(r"(?:([A-Za-z_]\w*)\.)?([A-Za-z_]\w*)", e):
+        for tok in ([m.group(1)] if m.group(1) else []) + re.findall(r"[A-Za-z_]\w*", type_raw or ""):
+            cls = classes.get(tok)
+            if cls is not None and cls.enum_constants is not None and m.group(2) in cls.enum_constants:
+                return cls.enum_constants[m.group(2)] if json_body else m.group(2)
+    return None
 
 
 def _parse_record(code: str, m: re.Match[str], path: Path, package: str) -> JavaClass:
@@ -343,8 +452,10 @@ def _parse_class(text: str, cm: re.Match[str], path: Path, package: str) -> Java
             if not skip:
                 type_raw = " ".join(words)
                 field_comment = trailing.group(1).strip() if trailing else comment
+                init = re.search(r"=\s*(.+?)\s*;\s*$", body)
                 fields.append(JavaField(name=name, type_raw=type_raw, annotations=field_anns[:], comment=field_comment,
-                                        json_name=_wire_name(name, field_anns, snake)))
+                                        json_name=_wire_name(name, field_anns, snake),
+                                        initializer=init.group(1) if init else ""))
             anns = []
             comment = ""
             depth += _brace_delta(body)
@@ -368,13 +479,21 @@ def parse_java_classes(codebase_path: Path) -> dict[str, JavaClass]:
         code = _strip_comments(text)
         cm = CLASS_RE.search(code)
         rm = RECORD_RE.search(code)
-        if not cm and not rm:
+        em = ENUM_RE.search(code)
+        if not cm and not rm and not em:
             continue
 
         pkg = ""
         pm = PACKAGE_RE.search(text)
         if pm:
             pkg = pm.group(1).strip()
+
+        # Enums anywhere in the file, top-level ones first so a nested enum never shadows one of the same name.
+        for decl in sorted(ENUM_RE.finditer(code), key=lambda d: code[:d.start()].count("{") - code[:d.start()].count("}")):
+            parsed = _parse_enum(code, decl, path, pkg)
+            classes.setdefault(parsed.name, parsed)
+        if not cm and not rm:
+            continue
 
         if rm and (not cm or rm.start() < cm.start()):
             parsed = _parse_record(code, rm, path, pkg)
@@ -412,10 +531,10 @@ def referenced_classes(classes: dict[str, JavaClass], type_raw: str) -> list[Jav
         if cls.extends:
             visit(cls.extends)
         for f in cls.fields:
-            for nested in _candidate_nested_classes(f.type_raw, classes):
+            for nested in _candidate_nested_classes(f.type_raw, classes, include_enums=True):
                 visit(nested)
 
-    for name in _candidate_nested_classes(type_raw, classes):
+    for name in _candidate_nested_classes(type_raw, classes, include_enums=True):
         visit(name)
     return found
 
@@ -480,6 +599,8 @@ def java_fields_to_spec_fields(
                 parent_path=None,
                 depth=0,
                 max_size=f.max_size,
+                enum_values=None,
+                default_value=None,
             )
         )
 
@@ -494,9 +615,11 @@ def expand_dto_to_spec_fields(
     template_name_reuse: dict[str, str] | None = None,
     wrap_root: bool = False,
     under: str | None = None,
+    json_body: bool = True,
 ) -> tuple[list[FieldSpec], list[str]]:
     """Fields of a DTO as they appear on the wire; with `under`, nested below that already listed field. With `wrap_root` (Jackson's UNWRAP_ROOT_VALUE for requests or
-    WRAP_ROOT_VALUE for responses), a class annotated `@JsonRootName("user")` is nested under a `user` object."""
+    WRAP_ROOT_VALUE for responses), a class annotated `@JsonRootName("user")` is nested under a `user` object.
+    `json_body` is False for a query or form object, which Spring binds by constant name rather than Jackson's value."""
     out: list[FieldSpec] = []
     conflicts: list[str] = []
     seen_paths: set[str] = set()
@@ -555,6 +678,8 @@ def expand_dto_to_spec_fields(
                     parent_path=parent_path,
                     depth=depth,
                     max_size=f.max_size,
+                    enum_values=enum_values_for(f.type_raw, classes, json_body),
+                    default_value=default_literal(f.initializer, f.type_raw, classes, json_body) if section == "REQUEST" else None,
                 )
             )
 

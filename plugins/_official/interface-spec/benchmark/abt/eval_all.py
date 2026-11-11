@@ -157,8 +157,9 @@ def main():
         'phase1_v1': score.score_spec(truth_v1, mf_v1), 'phase1_v2': score.score_spec(truth_v2, mf_v2),
         'changes_strict': score.score_changes(truth_changes, mf_ch), 'changes_lenient': score.score_changes(truth_changes, lenient),
         'impact': mf_impact(), 'impact_rescan': mf_impact_rescan(),
-        'out_of_vocab': {'B1_scope_blacklist': False, 'B2_enum_PARTIAL_REFUND': False, 'B3_enum_SYSTEM_ERROR': False, 'B4_default_size': False,
-                         'note': 'enum values, defaults and OAuth scopes are not part of the interface-spec schema'},
+        # Same keyword adjudication as the plain runs. Before 2026-11-11 the interface-spec schema had no enum values,
+        # defaults or authorities, so these were all False by construction.
+        'out_of_vocab': other_changes_found(mf_ch),
     }
     # ---- plain Claude Code runs
     runs = []

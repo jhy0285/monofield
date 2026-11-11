@@ -250,7 +250,9 @@ export function InterfaceSpecEditor({ projectId, file, onFileSaved, onOpenFile, 
               <Field label={copy.businessPurpose}><input value={endpoint.businessPurpose ?? ''} onChange={(event) => patchEndpoint({ businessPurpose: event.target.value })} /></Field>
               <Field label={copy.method}><select value={endpoint.method} onChange={(event) => patchEndpoint({ method: event.target.value })}>{METHODS.map((method) => <option value={method} key={method}>{method}</option>)}</select></Field>
               <Field label={copy.path}><input value={endpoint.path} onChange={(event) => patchEndpoint({ path: event.target.value })} /></Field>
-              <Field label={copy.auth}><select value={endpointAuthType(endpoint, documentAuthType)} onChange={(event) => {
+              <Field label={copy.auth} hint={endpoint.authorities?.length
+                ? <small className={styles.hint} data-testid="endpoint-authorities">{t('docs.endpoint.authorities', { authorities: endpoint.authorities.join(', ') })}</small>
+                : endpoint.accessRule ? <small className={styles.hint} data-testid="endpoint-access-rule">{t('docs.endpoint.accessRule', { rule: endpoint.accessRule })}</small> : null}><select value={endpointAuthType(endpoint, documentAuthType)} onChange={(event) => {
                 const type = event.target.value as (typeof AUTH_TYPES)[number];
                 // Choosing the document's scheme inherits it again instead of copying it onto the endpoint.
                 patchEndpoint({ authRequired: type !== 'none', auth: type === 'none' || type === documentAuthType ? undefined : { type } });
@@ -270,8 +272,10 @@ export function InterfaceSpecEditor({ projectId, file, onFileSaved, onOpenFile, 
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label className={styles.field}><span>{label}</span>{children}</label>;
+function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: React.ReactNode }) {
+  const field = <label className={styles.field}><span>{label}</span>{children}</label>;
+  // A hint sits beside the label, not in it, so it never becomes part of the control's accessible name.
+  return hint ? <div>{field}{hint}</div> : field;
 }
 
 function IssueList({ title, tone, issues }: { title: string; tone: 'fatal' | 'warning'; issues: string[] }) {
@@ -294,7 +298,9 @@ function FieldTable({ title, fields, onAdd, onDelete, onPatch, copy }: { title: 
       <td><input value={field.minSize} onChange={(event) => onPatch(index, { minSize: event.target.value })} /></td>
       <td><input value={field.maxSize} onChange={(event) => onPatch(index, { maxSize: event.target.value })} /></td>
       <td><select value={field.required} onChange={(event) => onPatch(index, { required: event.target.value as InterfaceFieldSpec['required'] })}><option value="TBD">TBD</option><option value="Y">Y</option><option value="N">N</option></select></td>
-      <td><input value={field.note} onChange={(event) => onPatch(index, { note: event.target.value })} /></td>
+      <td><input value={field.note} onChange={(event) => onPatch(index, { note: event.target.value })} />
+        {field.enumValues?.length ? <small className={styles.hint}>{t('docs.field.enumValues', { values: field.enumValues.join(', ') })}</small> : null}
+        {field.defaultValue !== undefined ? <small className={styles.hint}>{t('docs.field.defaultValue', { value: field.defaultValue === '' ? '""' : field.defaultValue })}</small> : null}</td>
       <td><small>{field.reviewStatus ?? 'unreviewed'}</small><div>{field.evidence}</div>{field.evidenceRefs?.map((ref, evidenceIndex) => <div key={evidenceIndex}><code>{ref.ref}{ref.line ? `:${ref.line}` : ''}</code><small>{ref.summary}</small></div>)}</td>
       <td><button aria-label={`${title} ${index + 1} ${copy.delete}`} type="button" onClick={() => onDelete(index)}>×</button></td>
     </tr>)}</tbody></table></div>}

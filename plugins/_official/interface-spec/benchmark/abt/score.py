@@ -204,9 +204,11 @@ def score_changes(truth_changes: list[dict], reported: list[dict], strict_route_
         family_total += 1
         if FAMILY.get(r.get('kind'), r.get('kind')) == FAMILY.get(t['kind'], t['kind']):
             family_ok += 1
-    OOV = re.compile(r'default|enum|scope|기본값|열거|범위|권한', re.I)
+    OOV = re.compile(r'default|enum|scope|authorit|access-rule|기본값|열거|범위|권한', re.I)
     def oov(c):
-        return c.get('kind') == 'other' or bool(OOV.search(c.get('reason', '') or ''))
+        # A report about an enum value, a default or an authority answers an out-of-vocabulary truth item (B1-B4),
+        # judged separately; neither arm is penalised for it, whether it says so in its kind or its reason.
+        return c.get('kind') == 'other' or bool(OOV.search(f"{c.get('kind') or ''} {c.get('reason') or ''}"))
     ignored = {k for k, cs in r_keys.items() if k in secondary or all(oov(c) for c in cs)}
     fp_keys = r_keys.keys() - t_keys.keys() - ignored
     out = {

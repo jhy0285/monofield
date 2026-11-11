@@ -534,6 +534,24 @@ one, and the rule's file and line are cited. Servlet filters,
 `securedObjectService`) are not read, so endpoints protected only by those stay
 undecided.
 
+Three more facts let the change analysis see what a caller must send, gets when
+it sends nothing, and must hold:
+
+- `enumValues` on a field: the values of an enum-typed field (or a collection
+  of one), as they travel. A JSON body uses Jackson's value (`@JsonProperty` on
+  a constant, or the `@JsonValue` code); a query parameter or form field uses
+  the constant name. Omit it when the type is not an enum.
+- `defaultValue` on a request field: `@RequestParam(defaultValue = "...")` or a
+  literal field initializer (`private Integer size = 20;`). Do not invent one
+  from a default applied inside the method body; the scanner does not read those.
+- `authorities` on an endpoint: authorities of which any one grants access, as
+  the server checks them (`hasRole('ADMIN')` is `ROLE_ADMIN`). Keep a rule that
+  is not an `or` of role or authority checks in `accessRule` as written.
+
+An agent collector fills these the same way. The comparison treats a removed
+request enum value and a narrowed authority list as breaking, an added response
+enum value and a changed or removed request default as warnings.
+
 Each scanner emits `requestExample` and `responseExample` with
 `exampleSource: "static-analysis"`. These examples combine traced request and
 response DTO fields with matching values from the approved redacted table

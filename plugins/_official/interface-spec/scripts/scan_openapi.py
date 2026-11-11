@@ -142,7 +142,8 @@ class Converter:
             return first, rest
         return koreanize_identifier(name), text
 
-    def field(self, name: str, schema: Any, required: str, path: str, parent: str | None, depth: int) -> dict[str, Any]:
+    def field(self, name: str, schema: Any, required: str, path: str, parent: str | None, depth: int,
+              response: bool = False) -> dict[str, Any]:
         resolved, _ = self.resolve(schema)
         name_ko, note = self.label(name, resolved.get("description", "") if isinstance(resolved, dict) else "")
         out: dict[str, Any] = {
@@ -159,9 +160,14 @@ class Converter:
         if parent:
             out["parentPath"] = parent
         enum = resolved.get("enum")
+        if not (isinstance(enum, list) and enum) and isinstance(resolved.get("items"), dict):
+            items, _ = self.resolve(resolved["items"])
+            enum = items.get("enum") if isinstance(items, dict) else None
         if isinstance(enum, list) and enum:
-            values = ", ".join(str(v) for v in enum[:12])
-            out["note"] = f"{out['note']} ({values})".strip() if out["note"] else values
+            out["enumValues"] = [_scalar_text(v) for v in enum if v is not None]
+        # A request default is what the server uses when the caller omits the field; a response has none.
+        if not response and "default" in resolved and isinstance(resolved["default"], (str, int, float, bool)):
+            out["defaultValue"] = _scalar_text(resolved["default"])
         return out
 
     def expand(self, schema: Any, parent: str | None = None, depth: int = 0,
@@ -186,7 +192,7 @@ class Converter:
         for name, prop in props.items():
             path = name if parent is None else f"{parent}.{name}"
             flag = "Y" if name in required else ("TBD" if response and not declared else "N")
-            out.append(self.field(name, prop, flag, path, parent, depth))
+            out.append(self.field(name, prop, flag, path, parent, depth, response))
             child, child_seen = self.merged(prop, seen)
             target = child.get("items", child) if child.get("type") == "array" else child
             target_schema, _ = self.merged(target, child_seen)
@@ -316,6 +322,10 @@ class Converter:
                     "sourceFile": "",
                     "authRequired": auth_required,
                     **({"auth": {"type": "undecided"}} if auth_undecided else {}),
+                    # Written by the MonoField export: who may call the operation.
+                    **({"authorities": [str(a) for a in op["x-required-authorities"]]}
+                       if isinstance(op.get("x-required-authorities"), list) and op["x-required-authorities"] else {}),
+                    **({"accessRule": op["x-access-rule"]} if isinstance(op.get("x-access-rule"), str) and op["x-access-rule"] else {}),
                     "requestBodyType": body_type,
                     "queryDtoType": "",
                     "responseType": response_type,
@@ -323,6 +333,13 @@ class Converter:
                     "responseFields": response_fields,
                 })
         return out
+
+
+def _scalar_text(value: Any) -> str:
+    """A JSON scalar as the interface spec writes it: `true`/`false` for booleans, `20` for 20."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
 
 
 def module_of(endpoint: dict[str, Any]) -> str:

@@ -7,7 +7,7 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 monofield="$(cd "$here/../../../../.." && pwd)"
 scan="$monofield/plugins/_official/interface-spec/scripts/scan_spring.py"
-repo="$1"; out="$2"; shift 2
+repo="$(cd "$1" && pwd)"; mkdir -p "$2"; out="$(cd "$2" && pwd)"; shift 2  # absolute: the comparison runs from the checkout
 for commit in "$@"; do
   for side in before after; do
     rev="$commit"; [ "$side" = before ] && rev="$commit^"

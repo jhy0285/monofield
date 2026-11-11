@@ -14,6 +14,9 @@ export type InterfaceSpecChangeCode =
   | 'endpoint-added'
   | 'auth-required-added'
   | 'auth-required-removed'
+  | 'auth-authorities-narrowed'
+  | 'auth-authorities-widened'
+  | 'auth-rule-changed'
   | 'request-field-added-required'
   | 'request-field-added-unresolved'
   | 'request-field-added-optional'
@@ -24,6 +27,11 @@ export type InterfaceSpecChangeCode =
   | 'response-field-removed'
   | 'response-field-added'
   | 'response-field-became-optional'
+  | 'request-enum-value-added'
+  | 'request-enum-value-removed'
+  | 'response-enum-value-added'
+  | 'response-enum-value-removed'
+  | 'request-default-changed'
   | 'field-type-changed';
 
 export interface InterfaceSpecCompatibilityChange {
@@ -35,8 +43,9 @@ export interface InterfaceSpecCompatibilityChange {
   location?: 'request' | 'response';
   /** Field dot path (`path`, falling back to `nameEn`). */
   field?: string;
-  before?: string;
-  after?: string;
+  /** Value before and after the change; `undefined` when the field, default or rule did not exist on that side. */
+  before?: string | undefined;
+  after?: string | undefined;
 }
 
 export interface InterfaceSpecCompatibilityReport {
@@ -69,6 +78,68 @@ const BOXED_TYPES: Record<string, string> = {
 
 function normalizedType(type: string): string {
   return type.replace(/\s+/g, '').toLowerCase().replace(/\b(int|long|short|byte|double|float|boolean|char)\b/g, (name) => BOXED_TYPES[name] ?? name);
+}
+
+function joined(values: Iterable<string>): string | undefined {
+  const list = [...values];
+  return list.length ? list.join(', ') : undefined;
+}
+
+/**
+ * Enum values are compared only when both revisions recorded them: an older scan that recorded none is not a change.
+ * A caller sends request values and reads response values, so the same edit weighs differently on each side:
+ * a removed request value is rejected from then on (breaking), an added response value can reach a client that
+ * handles every known value (warning), and the other two only widen or narrow what the caller may meet (info).
+ */
+function compareEnumValues(
+  location: 'request' | 'response',
+  key: string,
+  before: InterfaceFieldSpec,
+  after: InterfaceFieldSpec,
+  base: Pick<InterfaceSpecCompatibilityChange, 'route' | 'interfaceId'>,
+  push: (change: InterfaceSpecCompatibilityChange) => void,
+): void {
+  if (!before.enumValues || !after.enumValues) return;
+  const previous = new Set(before.enumValues);
+  const next = new Set(after.enumValues);
+  const added = joined(after.enumValues.filter((value) => !previous.has(value)));
+  const removed = joined(before.enumValues.filter((value) => !next.has(value)));
+  if (added) {
+    push({ ...base, location, field: key, level: location === 'response' ? 'warning' : 'info',
+      code: location === 'response' ? 'response-enum-value-added' : 'request-enum-value-added', after: added });
+  }
+  if (removed) {
+    push({ ...base, location, field: key, level: location === 'request' ? 'breaking' : 'info',
+      code: location === 'request' ? 'request-enum-value-removed' : 'response-enum-value-removed', before: removed });
+  }
+}
+
+/**
+ * Who may call an endpoint, from a caller's side. `authorities` lists alternatives (any one grants access), so the
+ * change narrows access when a caller holding a previously sufficient authority, or any authenticated caller when
+ * none was listed, is now refused; it widens access otherwise. Compared only when `authRequired` did not change,
+ * because that change is already reported. A rule kept as text is compared as text and needs a decision.
+ */
+function compareAccess(
+  before: InterfaceEndpoint,
+  after: InterfaceEndpoint,
+  base: Pick<InterfaceSpecCompatibilityChange, 'route' | 'interfaceId'>,
+  push: (change: InterfaceSpecCompatibilityChange) => void,
+): void {
+  if (before.authRequired !== after.authRequired) return;
+  const previous = new Set(before.authorities ?? []);
+  const next = new Set(after.authorities ?? []);
+  const changed = previous.size !== next.size || [...previous].some((authority) => !next.has(authority));
+  if (changed) {
+    const lost = [...previous].some((authority) => !next.has(authority));
+    const narrowed = next.size > 0 && (previous.size === 0 || lost);
+    push({ ...base, level: narrowed ? 'breaking' : 'info', code: narrowed ? 'auth-authorities-narrowed' : 'auth-authorities-widened',
+      before: joined(previous), after: joined(next) });
+  }
+  const rule = (value?: string) => value?.replace(/\s+/g, ' ').trim() || undefined;
+  if (rule(before.accessRule) !== rule(after.accessRule)) {
+    push({ ...base, level: 'warning', code: 'auth-rule-changed', before: rule(before.accessRule), after: rule(after.accessRule) });
+  }
 }
 
 function numericSize(value: string): number | null {
@@ -116,6 +187,12 @@ function compareFields(
         push({ ...base, location, field: key, level: 'warning', code: 'response-field-became-optional', before: old.required, after: field.required });
       }
     }
+    compareEnumValues(location, key, old, field, base, push);
+    if (location === 'request' && (old.defaultValue ?? undefined) !== (field.defaultValue ?? undefined)) {
+      // A caller that omits the field gets a different value (or none) from now on; a new default only fills a gap.
+      push({ ...base, location, field: key, level: old.defaultValue === undefined ? 'info' : 'warning',
+        code: 'request-default-changed', before: old.defaultValue, after: field.defaultValue });
+    }
     if (location === 'request') {
       const oldMax = numericSize(old.maxSize);
       const newMax = numericSize(field.maxSize);
@@ -148,6 +225,7 @@ export function compareInterfaceSpecDocuments(
     }
     if (!old.authRequired && endpoint.authRequired) push({ ...base, level: 'breaking', code: 'auth-required-added' });
     if (old.authRequired && !endpoint.authRequired) push({ ...base, level: 'warning', code: 'auth-required-removed' });
+    compareAccess(old, endpoint, base, push);
     compareFields('request', old.requestFields, endpoint.requestFields, base, push);
     compareFields('response', old.responseFields, endpoint.responseFields, base, push);
   }

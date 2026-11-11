@@ -247,7 +247,12 @@ function buildNestedSamplePayload(fields: InterfaceFieldSpec[]): Record<string, 
 
   const buildNodeValue = (node: FieldNode): unknown => {
     const kids = children.get(node.uniquePath) ?? [];
-    if (kids.length === 0) return sampleValue(node.field.dataType);
+    if (kids.length === 0) {
+      // An enum field shows one of its real values instead of a placeholder.
+      const value = node.field.enumValues?.[0];
+      if (value === undefined) return sampleValue(node.field.dataType);
+      return isCollectionType(node.field.dataType) ? [value] : value;
+    }
 
     const nested: Record<string, unknown> = {};
     const dupIdx = new Map<string, number>();
@@ -297,6 +302,34 @@ export interface ResolvedAuthRow {
  * endpoint with no scheme anywhere yields an honest "방식 미지정" row instead.
  */
 export function resolveAuthRow(
+  ep: InterfaceEndpoint,
+  docAuth: InterfaceAuthScheme | undefined,
+): ResolvedAuthRow | null {
+  const row = resolveAuthScheme(ep, docAuth);
+  const access = accessNote(ep);
+  return row && access ? { ...row, note: joinNotes(row.note, access) } : row;
+}
+
+function joinNotes(...parts: Array<string | undefined>): string {
+  return parts.map((part) => part?.trim()).filter(Boolean).join('; ');
+}
+
+/** Who may call, for the 비고 column of the auth row: `필요 권한: ROLE_A 또는 ROLE_B`, or the rule as written. */
+export function accessNote(ep: Pick<InterfaceEndpoint, 'authorities' | 'accessRule'>): string {
+  if (ep.authorities?.length) return `필요 권한: ${ep.authorities.join(' 또는 ')}`;
+  return ep.accessRule ? `접근 규칙: ${ep.accessRule}` : '';
+}
+
+/** 비고 column of a field row: its note, then the values it takes and the default a request gets without it. */
+export function fieldNote(field: Pick<InterfaceFieldSpec, 'note' | 'enumValues' | 'defaultValue'>): string {
+  return joinNotes(
+    field.note,
+    field.enumValues?.length ? `허용값: ${field.enumValues.join(', ')}` : undefined,
+    field.defaultValue !== undefined ? `기본값: ${field.defaultValue === '' ? '(빈 문자열)' : field.defaultValue}` : undefined,
+  );
+}
+
+function resolveAuthScheme(
   ep: InterfaceEndpoint,
   docAuth: InterfaceAuthScheme | undefined,
 ): ResolvedAuthRow | null {
@@ -597,7 +630,7 @@ function writeFieldRow(
   cells.getCell(5).value = field.minSize;
   cells.getCell(6).value = field.maxSize;
   cells.getCell(7).value = field.required;
-  cells.getCell(8).value = field.note;
+  cells.getCell(8).value = fieldNote(field);
 }
 
 function writeDetailSheet(

@@ -388,6 +388,18 @@ export interface Dict {
   'docs.impact.compat.response-field-added': string;
   'docs.impact.compat.response-field-became-optional': string;
   'docs.impact.compat.field-type-changed': string;
+  'docs.impact.compat.auth-authorities-narrowed': string;
+  'docs.impact.compat.auth-authorities-widened': string;
+  'docs.impact.compat.auth-rule-changed': string;
+  'docs.impact.compat.request-enum-value-added': string;
+  'docs.impact.compat.request-enum-value-removed': string;
+  'docs.impact.compat.response-enum-value-added': string;
+  'docs.impact.compat.response-enum-value-removed': string;
+  'docs.impact.compat.request-default-changed': string;
+  'docs.field.enumValues': string;
+  'docs.field.defaultValue': string;
+  'docs.endpoint.authorities': string;
+  'docs.endpoint.accessRule': string;
   "docs.impact.reviewHint": string;
   "docs.impact.before": string;
   "docs.impact.after": string;

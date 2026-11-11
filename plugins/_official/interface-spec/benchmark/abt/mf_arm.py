@@ -51,7 +51,7 @@ def normalise_changes(report: dict, v1: dict, v2: dict) -> list[dict]:
         nr = score.norm_route(method, path)
         handler = (h1 if c['code'] == 'endpoint-removed' else h2).get(nr) or h1.get(nr) or h2.get(nr)
         out.append({'route': nr, 'handler': handler, 'location': c.get('location') or 'endpoint', 'field': c.get('field'),
-                    'kind': c['code'], 'level': c['level']})
+                    'kind': c['code'], 'level': c['level'], 'before': c.get('before'), 'after': c.get('after')})
     return out
 
 

@@ -400,6 +400,37 @@ describe('renderInterfaceSpecXlsx auth scheme (no more hardcoded Bearer)', () =>
     expect(String(row.note)).not.toContain('Bearer');
   });
 
+  it('names who may call in the auth row and keeps a rule it could not reduce as written', async () => {
+    const guarded = docWithAuth({ type: 'bearer' });
+    guarded.endpoints[0]!.authorities = ['ROLE_ADMIN', 'ROLE_MANAGER'];
+    expect(String((await authRowOf(guarded)).note)).toBe('Bearer {accessToken}; 필요 권한: ROLE_ADMIN 또는 ROLE_MANAGER');
+    const ruled = docWithAuth({ type: 'bearer' });
+    ruled.endpoints[0]!.accessRule = "hasRole('ADMIN') and #id == principal.id";
+    expect(String((await authRowOf(ruled)).note)).toBe("Bearer {accessToken}; 접근 규칙: hasRole('ADMIN') and #id == principal.id");
+  });
+
+  it('writes enum values and the request default into 비고 and uses an enum value in the sample', async () => {
+    const parsed = parseInterfaceSpecDocument({
+      schemaVersion: 1, kind: 'interface-spec', source: { codebaseName: 'svc' },
+      endpoints: [{
+        method: 'POST', path: '/api/v1/refunds', interfaceName: '환불 요청',
+        requestFields: [
+          { nameEn: 'reason', nameKo: '사유', dataType: 'RefundReason', required: 'Y', enumValues: ['customer', 'duplicate'] },
+          { nameEn: 'size', nameKo: '건수', dataType: 'Integer', required: 'N', note: '최대 100', defaultValue: '20' },
+        ],
+      }],
+    });
+    if (!parsed.ok) throw new Error(parsed.error);
+    const result = await renderInterfaceSpecXlsx(parsed.doc);
+    const detail = (await readBack(result.buffer)).getWorksheet('환불 요청')!;
+    expect(detail.getCell('H12').value).toBe('허용값: customer, duplicate');
+    expect(detail.getCell('H13').value).toBe('최대 100; 기본값: 20');
+    const html = renderInterfaceSpecHtml(parsed.doc);
+    expect(html).toContain('허용값: customer, duplicate');
+    expect(html).toContain('최대 100; 기본값: 20');
+    expect(html).toContain('&quot;reason&quot;: &quot;customer&quot;');
+  });
+
   it('renders a bearer row only when the scheme says bearer', async () => {
     const row = await authRowOf(docWithAuth({ type: 'bearer' }));
     expect(row.nameEn).toBe('Authorization');

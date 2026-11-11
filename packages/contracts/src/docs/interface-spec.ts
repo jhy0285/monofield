@@ -42,6 +42,13 @@ export const InterfaceFieldSpecSchema = z.object({
   minSize: z.string().default(''),
   maxSize: z.string().default(''),
   note: z.string().default(''),
+  /**
+   * Values the field accepts or returns, as they travel on the wire (an enum's JSON values, not its Java constant
+   * names when they differ). Omit when the field is not restricted or the values are unknown.
+   */
+  enumValues: z.array(z.string()).optional(),
+  /** Value the server uses when a request omits the field. Omit when there is none or it is unknown. */
+  defaultValue: z.string().optional(),
   /** Dot path for nested DTO expansion. Omit for flat fields. */
   path: z.string().optional(),
   parentPath: z.string().optional(),
@@ -121,6 +128,13 @@ export const InterfaceEndpointSchema = z.object({
   authRequired: z.boolean().default(false),
   /** Per-endpoint auth override. Falls back to the document-level `auth` scheme. */
   auth: InterfaceAuthSchemeSchema.optional(),
+  /**
+   * Authorities (roles, scopes) of which any one grants access, spelled as the server checks them
+   * (`ROLE_ADMIN`, `SCOPE_orders.read`). Omit when any authenticated caller may call the endpoint or it is unknown.
+   */
+  authorities: z.array(z.string()).optional(),
+  /** The access rule as written in code when it cannot be reduced to `authorities` (e.g. a SpEL expression with `and`). */
+  accessRule: z.string().optional(),
   /** Original type names from code, for reference and re-collection. */
   requestBodyType: z.string().optional(),
   queryDtoType: z.string().optional(),

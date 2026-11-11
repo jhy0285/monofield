@@ -12,6 +12,7 @@ import {
   buildResponseExample,
   deriveDomain,
   endpointApiKey,
+  fieldNote,
   hierarchicalNumbers,
   resolveAuthRow,
   resolveInterfaceName,
@@ -74,7 +75,7 @@ function computeModel(doc: InterfaceSpecDocument): DetailModel[] {
     }
     const reqNos = hierarchicalNumbers(ep.requestFields, { startRootNo: authRow ? 2 : 1 });
     ep.requestFields.forEach((f, i) => {
-      requestRows.push({ no: reqNos[i]!, nameEn: f.nameEn, nameKo: f.nameKo, dataType: f.dataType, minSize: f.minSize, maxSize: f.maxSize, required: f.required, note: f.note });
+      requestRows.push({ no: reqNos[i]!, nameEn: f.nameEn, nameKo: f.nameKo, dataType: f.dataType, minSize: f.minSize, maxSize: f.maxSize, required: f.required, note: fieldNote(f) });
     });
 
     const responseRows: DetailModel['responseRows'] = [];
@@ -83,7 +84,7 @@ function computeModel(doc: InterfaceSpecDocument): DetailModel[] {
     });
     const respNos = hierarchicalNumbers(ep.responseFields, { topLevelParentNo: DETAIL_SHEET_LAYOUT.responseSection.topLevelParentNo });
     ep.responseFields.forEach((f, i) => {
-      responseRows.push({ no: respNos[i]!, nameEn: f.nameEn, nameKo: f.nameKo, dataType: f.dataType, minSize: f.minSize, maxSize: f.maxSize, required: f.required, note: f.note });
+      responseRows.push({ no: respNos[i]!, nameEn: f.nameEn, nameKo: f.nameKo, dataType: f.dataType, minSize: f.minSize, maxSize: f.maxSize, required: f.required, note: fieldNote(f) });
     });
 
     return {
