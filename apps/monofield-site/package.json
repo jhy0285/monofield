@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/seo.test.ts tests/get-started.test.ts",
-    "typecheck": "node --check script.js && node --check motion.js && node --check get-started.js && node --check tests/seo.test.ts && node --check tests/get-started.test.ts"
+    "test": "node --test tests/seo.test.ts tests/get-started.test.ts tests/guide.test.ts tests/privacy.test.ts",
+    "typecheck": "node --check script.js && node --check motion.js && node --check get-started.js && node --check tests/seo.test.ts && node --check tests/get-started.test.ts && node --check tests/guide.test.ts && node --check tests/privacy.test.ts"
   },
   "engines": {
     "node": "~24"

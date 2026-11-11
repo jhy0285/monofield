@@ -307,6 +307,15 @@ exercise is unchanged by it.
 
 Newest first within each group. Remove an item when it is done.
 
+Microsoft Store (see the 2026-11-11 "Microsoft Store preparation" Log entry):
+
+- Waiting on the user: a Partner Center account and the three identity values, saved as repository variables
+  `MONOFIELD_WINDOWS_STORE_IDENTITY_NAME`, `MONOFIELD_WINDOWS_STORE_PUBLISHER`, `MONOFIELD_WINDOWS_STORE_PUBLISHER_DISPLAY_NAME`, then the
+  Store ID for `monofield-store-product-id` in `apps/monofield-site/index.html` once the listing is public.
+- Not done: Store listing copy and screenshots, age rating questionnaire, Windows App Certification Kit run on the AppX.
+- The Store edition still shows the in-app "new version" notice that links to GitHub Releases; consider hiding it when the app runs as
+  an AppX package, since the Store installs updates.
+
 Reference board (see the 2026-11-06 and 2026-11-09 "reference board" Log entries; steps 1 to 4 of the proposal are built):
 
 - The comparison with our screen is a pattern comparison (`compareReferenceFlows` in contracts): step outcome, page move, API
@@ -529,6 +538,25 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-11 — Microsoft Store preparation: privacy policy page and an optional Store AppX job (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** "마이크로소프트 스토어 배포 … 진행" (item 3, code signing through the Store instead of a certificate).
+- **Changed:** `apps/monofield-site/privacy.html` (Korean and English, effective 2026-11-11), linked from every footer and `open-source.html`,
+  added to `sitemap.xml`. Its claims were checked against the code: no account, telemetry off (`apps/daemon/src/analytics.ts` no-op,
+  AMR mirroring no-op in `apps/web/src/analytics/amr-attribution.ts`); the app reads GitHub Releases for the new-version notice
+  (`/api/github/monofield/releases/latest`); AI CLIs, the built-in browser, plugin downloads and brand logo lookup (DuckDuckGo icons) go
+  online only when the user uses them. `.github/workflows/release-windows.yml`: input `store_package` and job `store_package` (Windows,
+  read-only token, no secrets) build `tools-pack win build --to store` with the identity from repository variables
+  `MONOFIELD_WINDOWS_STORE_*` (all three or none; none builds under a placeholder identity and the artifact says so), check the AppX
+  manifest identity, version `x.y.z.0` and the absence of the updater feed, and upload a workflow artifact. Publishing does not wait for it.
+  `docs/windows-store-release.md` documents the variables and the version rule.
+- **Tests:** `apps/monofield-site` `npm test` 27 pass (new `tests/privacy.test.ts`; `guide.test.ts` was not in the test script and now is);
+  `tools-pack` `tests/release-workflows.test.ts` 5 pass (new Store case, red before the job existed); `e2e`
+  `tests/packaged-smoke-workflow.test.ts` 11 pass. Privacy page viewed at 1280 and 375 px, no horizontal overflow.
+- **Not run:** the `store_package` job on a Windows runner (no `pwsh` here); see the next entry or Open items.
+- **Next agent:** every `x.y.z-preview.N` packages as Store version `x.y.z.0`; Partner Center accepts each version once and only upward, so one
+  Store submission per `x.y.z`.
 
 ### 2026-11-11 — Spring scanner measured on two real projects; six real-code gaps fixed (`ccr-8432aecf-n9xdfd`)
 

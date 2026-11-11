@@ -156,6 +156,41 @@ describe("Windows release workflow", () => {
     expect(readme).toContain("/releases/latest/download/MonoField-default-portable.zip");
   });
 
+  it("builds the Microsoft Store AppX only on request, beside and never inside the GitHub Release", async () => {
+    const workflow = (await readFile(new URL("../../../.github/workflows/release-windows.yml", import.meta.url), "utf8"))
+      .replaceAll("\r\n", "\n");
+    const store = sectionBetween(workflow, "\n  store_package:\n    name:", "\n  publish:\n    name:");
+    const publish = sectionBetween(workflow, "\n  publish:\n    name:", "\n  verify_public_update:\n    name:");
+
+    expect(workflow).toMatch(/      store_package:\n        description: [^\n]+\n        required: true\n        default: false\n        type: boolean\n/);
+    expect(store).toContain("if: ${{ github.event_name == 'workflow_dispatch' && inputs.store_package && !inputs.verify_public_update }}");
+    expect(store).toContain("runs-on: windows-2025");
+    expect(store).not.toContain("contents: write");
+    expect(store).not.toMatch(/gh release|secrets\./);
+    // Partner Center identity comes from repository variables; all three or none (placeholder, named as such).
+    for (const name of [
+      "MONOFIELD_WINDOWS_STORE_IDENTITY_NAME",
+      "MONOFIELD_WINDOWS_STORE_PUBLISHER",
+      "MONOFIELD_WINDOWS_STORE_PUBLISHER_DISPLAY_NAME",
+    ]) {
+      expect(store).toContain(`vars.${name}`);
+      expect(store).toContain(`"${name}=$`);
+    }
+    expect(store).toContain("set all three repository variables");
+    expect(store).toContain("'-placeholder-identity'");
+    expect(store).toContain('$appxVersion = "$($Matches[1]).$($Matches[2]).$($Matches[3]).0"');
+    expect(store).toContain("--namespace default");
+    expect(store).toContain("--to store");
+    // The uploaded package is checked, not trusted.
+    expect(store).toContain('$zip.GetEntry("AppxManifest.xml")');
+    expect(store).toContain('$identity.GetAttribute("Publisher")');
+    expect(store).toContain("Store package must not carry the direct installer update feed");
+    expect(store).toContain("name: monofield-windows-store-${{ steps.store.outputs.release_version }}-${{ github.run_id }}${{ steps.store.outputs.artifact_suffix }}");
+    // A Store problem never blocks or changes the direct-download release.
+    expect(publish).toContain("needs: build\n");
+    expect(publish).not.toContain("store");
+  });
+
   it("keeps release-history cleanup constrained to named direct children", async () => {
     const releaseCleanup = await readFile(
       new URL("../../release/scripts/cleanup-monofield-release-history.ps1", import.meta.url),

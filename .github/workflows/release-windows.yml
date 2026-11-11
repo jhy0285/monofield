@@ -38,6 +38,11 @@ on:
         required: true
         default: false
         type: boolean
+      store_package:
+        description: Also build the unsigned Microsoft Store AppX for Partner Center upload
+        required: true
+        default: false
+        type: boolean
       verify_public_update:
         description: Verify an existing Windows release against the actual public feed without publishing
         required: true
@@ -314,6 +319,178 @@ jobs:
             ${{ runner.temp }}\monofield-release-work\build-outputs.json
           if-no-files-found: ignore
           retention-days: 7
+
+  # The Store AppX is a Partner Center upload, not a GitHub Release asset: Microsoft signs and delivers it. It runs
+  # beside the direct-download build so a Store problem never blocks or alters the published EXE release.
+  store_package:
+    name: Build Microsoft Store package
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.store_package && !inputs.verify_public_update }}
+    runs-on: windows-2025
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout requested release source
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+
+      - name: Resolve Store version and package identity
+        id: store
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          STORE_IDENTITY_NAME: ${{ vars.MONOFIELD_WINDOWS_STORE_IDENTITY_NAME }}
+          STORE_PUBLISHER: ${{ vars.MONOFIELD_WINDOWS_STORE_PUBLISHER }}
+          STORE_PUBLISHER_DISPLAY_NAME: ${{ vars.MONOFIELD_WINDOWS_STORE_PUBLISHER_DISPLAY_NAME }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = $env:RELEASE_VERSION.Trim()
+          if ($version -notmatch '^(\d+)\.(\d+)\.(\d+)(-preview\.[1-9]\d*)?$') {
+            throw "release_version must be x.y.z or x.y.z-preview.N; got '$version'"
+          }
+          # The Store reserves the fourth version part, so every preview of x.y.z packages as x.y.z.0.
+          $appxVersion = "$($Matches[1]).$($Matches[2]).$($Matches[3]).0"
+          $packageVersion = [string]((Get-Content -LiteralPath package.json -Raw -Encoding utf8 | ConvertFrom-Json).version)
+          if ($packageVersion -ne $version) {
+            throw "package.json version '$packageVersion' does not match release_version '$version'"
+          }
+
+          $configured = @($env:STORE_IDENTITY_NAME, $env:STORE_PUBLISHER, $env:STORE_PUBLISHER_DISPLAY_NAME) |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+          if (@($configured).Count -eq 3) {
+            $placeholder = $false
+            $identityName = $env:STORE_IDENTITY_NAME.Trim()
+            $publisher = $env:STORE_PUBLISHER.Trim()
+            $publisherDisplayName = $env:STORE_PUBLISHER_DISPLAY_NAME.Trim()
+          } elseif (@($configured).Count -eq 0) {
+            # Without Partner Center values the build still proves the Store package works, but Partner Center
+            # rejects the placeholder identity, and the artifact name says so.
+            $placeholder = $true
+            $identityName = "MonoField.Placeholder"
+            $publisher = "CN=00000000-0000-0000-0000-000000000000"
+            $publisherDisplayName = "MonoField placeholder"
+          } else {
+            throw "set all three repository variables MONOFIELD_WINDOWS_STORE_IDENTITY_NAME, MONOFIELD_WINDOWS_STORE_PUBLISHER and MONOFIELD_WINDOWS_STORE_PUBLISHER_DISPLAY_NAME, or none of them"
+          }
+          "MONOFIELD_WINDOWS_STORE_IDENTITY_NAME=$identityName" >> $env:GITHUB_ENV
+          "MONOFIELD_WINDOWS_STORE_PUBLISHER=$publisher" >> $env:GITHUB_ENV
+          "MONOFIELD_WINDOWS_STORE_PUBLISHER_DISPLAY_NAME=$publisherDisplayName" >> $env:GITHUB_ENV
+          "release_version=$version" >> $env:GITHUB_OUTPUT
+          "appx_version=$appxVersion" >> $env:GITHUB_OUTPUT
+          "placeholder=$($placeholder.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          "artifact_suffix=$(if ($placeholder) { '-placeholder-identity' } else { '' })" >> $env:GITHUB_OUTPUT
+
+      - name: Build Store package
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ steps.store.outputs.release_version }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $storeRoot = Join-Path $env:RUNNER_TEMP "monofield-store-work"
+          New-Item -ItemType Directory -Force -Path $storeRoot | Out-Null
+          $buildOutput = & pnpm.cmd exec tools-pack win build `
+            --dir (Join-Path $storeRoot "tools-pack") `
+            --cache-dir (Join-Path $env:RUNNER_TEMP "monofield-store-cache") `
+            --namespace default `
+            --portable `
+            --app-version $env:RELEASE_VERSION `
+            --to store `
+            --json
+          if ($LASTEXITCODE -ne 0) { throw "tools-pack Store build failed with exit code $LASTEXITCODE" }
+          $buildOutput | Set-Content -LiteralPath (Join-Path $storeRoot "store-build.json") -Encoding utf8
+
+      - name: Verify and stage Store package
+        shell: pwsh
+        env:
+          APPX_VERSION: ${{ steps.store.outputs.appx_version }}
+          PLACEHOLDER_IDENTITY: ${{ steps.store.outputs.placeholder }}
+          RELEASE_VERSION: ${{ steps.store.outputs.release_version }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $storeRoot = Join-Path $env:RUNNER_TEMP "monofield-store-work"
+          $build = Get-Content -LiteralPath (Join-Path $storeRoot "store-build.json") -Raw -Encoding utf8 | ConvertFrom-Json
+          $appx = [string]$build.storePackagePath
+          if ([string]::IsNullOrWhiteSpace($appx) -or -not (Test-Path -LiteralPath $appx -PathType Leaf)) {
+            throw "Store build did not produce an AppX at '$appx'"
+          }
+
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [IO.Compression.ZipFile]::OpenRead($appx)
+          try {
+            function Read-Entry($entry) {
+              $reader = [IO.StreamReader]::new($entry.Open())
+              try { return $reader.ReadToEnd() } finally { $reader.Dispose() }
+            }
+            $manifestEntry = $zip.GetEntry("AppxManifest.xml")
+            if ($null -eq $manifestEntry) { throw "AppxManifest.xml is missing from the Store package" }
+            [xml]$manifest = Read-Entry $manifestEntry
+            $identity = $manifest.Package.Identity
+            $identityName = $identity.GetAttribute("Name")
+            $identityPublisher = $identity.GetAttribute("Publisher")
+            $identityVersion = $identity.GetAttribute("Version")
+            if ($identityName -cne $env:MONOFIELD_WINDOWS_STORE_IDENTITY_NAME) { throw "AppX identity name is '$identityName'" }
+            if ($identityPublisher -cne $env:MONOFIELD_WINDOWS_STORE_PUBLISHER) { throw "AppX publisher is '$identityPublisher'" }
+            if ($identityVersion -ne $env:APPX_VERSION) { throw "AppX version is '$identityVersion', expected '$env:APPX_VERSION'" }
+            if ($manifest.Package.Properties.PublisherDisplayName -cne $env:MONOFIELD_WINDOWS_STORE_PUBLISHER_DISPLAY_NAME) {
+              throw "AppX publisher display name is '$($manifest.Package.Properties.PublisherDisplayName)'"
+            }
+
+            $configEntry = $zip.Entries | Where-Object { $_.FullName -match '(^|/)resources/open-design-config\.json$' } | Select-Object -First 1
+            if ($null -eq $configEntry) { throw "Store package is missing resources/open-design-config.json" }
+            $packagedConfig = Read-Entry $configEntry | ConvertFrom-Json
+            if ([string]$packagedConfig.appVersion -ne $env:RELEASE_VERSION) {
+              throw "packaged appVersion is '$($packagedConfig.appVersion)', expected '$env:RELEASE_VERSION'"
+            }
+            # Store updates come from the Store; the direct installer feed must not be baked in.
+            if (-not [string]::IsNullOrWhiteSpace([string]$packagedConfig.updateMetadataUrl)) {
+              throw "Store package must not carry the direct installer update feed"
+            }
+          } finally {
+            $zip.Dispose()
+          }
+
+          $outRoot = Join-Path $env:RUNNER_TEMP "monofield-store-package"
+          Remove-Item -LiteralPath $outRoot -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $outRoot | Out-Null
+          $name = "MonoField-$env:RELEASE_VERSION-store.appx"
+          $destination = Join-Path $outRoot $name
+          Copy-Item -LiteralPath $appx -Destination $destination
+          $hash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash.ToUpperInvariant()
+          [IO.File]::WriteAllText((Join-Path $outRoot "SHA256SUMS.txt"), "$hash  $name`n", [Text.UTF8Encoding]::new($false))
+          [ordered]@{
+            appxVersion = $env:APPX_VERSION
+            bytes = (Get-Item -LiteralPath $destination).Length
+            identityName = $env:MONOFIELD_WINDOWS_STORE_IDENTITY_NAME
+            name = $name
+            placeholderIdentity = $env:PLACEHOLDER_IDENTITY -eq "true"
+            publisher = $env:MONOFIELD_WINDOWS_STORE_PUBLISHER
+            releaseCommit = (git rev-parse HEAD).Trim()
+            releaseVersion = $env:RELEASE_VERSION
+            schemaVersion = 1
+            sha256 = $hash
+          } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $outRoot "store-manifest.json") -Encoding utf8
+
+          "## Microsoft Store package" >> $env:GITHUB_STEP_SUMMARY
+          "" >> $env:GITHUB_STEP_SUMMARY
+          "| AppX | Version | SHA-256 |" >> $env:GITHUB_STEP_SUMMARY
+          "| --- | --- | --- |" >> $env:GITHUB_STEP_SUMMARY
+          "| ``$name`` | $env:APPX_VERSION | ``$hash`` |" >> $env:GITHUB_STEP_SUMMARY
+          if ($env:PLACEHOLDER_IDENTITY -eq "true") {
+            "" >> $env:GITHUB_STEP_SUMMARY
+            "Built with a placeholder identity because the Store repository variables are not set. Partner Center will reject this package." >> $env:GITHUB_STEP_SUMMARY
+          }
+
+      - name: Upload Store package
+        uses: actions/upload-artifact@v7
+        with:
+          name: monofield-windows-store-${{ steps.store.outputs.release_version }}-${{ github.run_id }}${{ steps.store.outputs.artifact_suffix }}
+          path: ${{ runner.temp }}\monofield-store-package
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
 
   publish:
     name: Publish GitHub Release

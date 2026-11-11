@@ -24,6 +24,38 @@ values belong in the AppX manifest; the 12-character Store ID builds the public
 
 ## 2. Build the Store package
 
+### On GitHub Actions (recommended)
+
+Save the three identity values as repository **variables** (not secrets; they
+are printed in the package manifest anyway) under Settings → Secrets and
+variables → Actions → Variables:
+
+- `MONOFIELD_WINDOWS_STORE_IDENTITY_NAME` = Package/Identity/Name
+- `MONOFIELD_WINDOWS_STORE_PUBLISHER` = Package/Identity/Publisher (`CN=...`)
+- `MONOFIELD_WINDOWS_STORE_PUBLISHER_DISPLAY_NAME` = Publisher display name
+
+Then run the `release-windows` workflow with `store_package` turned on. The
+`store_package` job runs beside the GitHub Release build, checks the AppX
+manifest identity and version, confirms the direct updater feed is absent, and
+uploads `monofield-windows-store-<version>-<run>` as a workflow artifact with
+the AppX, `SHA256SUMS.txt`, and `store-manifest.json`. It never adds the AppX to
+the GitHub Release, and a Store failure does not block publishing the EXE.
+
+Set all three variables or none. With none, the job still builds and checks a
+package under a placeholder identity and names the artifact
+`...-placeholder-identity`; Partner Center rejects that package, so it only
+proves the build works before the account exists.
+
+### Store version numbers
+
+The Store reserves the fourth version part, so the package version is always
+`x.y.z.0`. Every `x.y.z-preview.N` build of the same `x.y.z` therefore becomes
+the same Store version, and Partner Center accepts each Store version only once
+and only when it is higher than the last one. Submit at most one package per
+`x.y.z`, and move to a new `x.y.z` before the next Store submission.
+
+### On a Windows PC
+
 Use Node.js 24 and set the identity values only in the current release shell:
 
 ```powershell
@@ -84,5 +116,6 @@ before certification.
 - AppX carries the MonoField M tile assets.
 - Store build contains no direct updater URL.
 - App starts, opens a working folder, and launches its local sidecars.
-- Privacy policy and open-source notices are reachable from the listing.
+- Privacy policy (`https://monofield.vercel.app/privacy`) and open-source
+  notices are reachable from the listing.
 - Website Store link is enabled only after the listing is public.

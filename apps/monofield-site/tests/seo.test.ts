@@ -137,8 +137,9 @@ test('robots and sitemap advertise only absolute canonical URLs', () => {
   assert.match(sitemap, new RegExp(`<loc>${siteUrl.replaceAll('.', '\\.')}\/open-source<\/loc>`));
   assert.match(sitemap, new RegExp(`<loc>${siteUrl.replaceAll('.', '\\.')}\/get-started<\/loc>`));
   assert.match(sitemap, new RegExp(`<loc>${siteUrl.replaceAll('.', '\\.')}\/guide<\/loc>`));
+  assert.match(sitemap, new RegExp(`<loc>${siteUrl.replaceAll('.', '\\.')}\/privacy<\/loc>`));
   assert.doesNotMatch(sitemap, /\.html<\/loc>/);
-  assert.equal((sitemap.match(/<url>/g) ?? []).length, 4);
+  assert.equal((sitemap.match(/<url>/g) ?? []).length, 5);
 });
 
 test('static hosting serves crawl files with explicit content types and bounded caching', () => {
