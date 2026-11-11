@@ -12,6 +12,8 @@ export type InterfaceSpecChangeLevel = 'breaking' | 'warning' | 'info';
 export type InterfaceSpecChangeCode =
   | 'endpoint-removed'
   | 'endpoint-added'
+  | 'endpoint-methods-narrowed'
+  | 'endpoint-methods-widened'
   | 'auth-required-added'
   | 'auth-required-removed'
   | 'auth-authorities-narrowed'
@@ -203,6 +205,34 @@ function compareFields(
   }
 }
 
+function methodsOf(endpoint: Pick<InterfaceEndpoint, 'method'>): Set<string> {
+  return new Set(endpoint.method.split(/[\s/,|]+/).map((method) => method.trim().toUpperCase()).filter(Boolean));
+}
+
+function pathOfKey(key: string): string {
+  return key.slice(key.indexOf(' ') + 1);
+}
+
+/**
+ * Removed and added endpoints that are the same API with a different method list (`GET/POST` -> `POST` when an
+ * eGovFrame `@RequestMapping` becomes `@PostMapping`): exactly one of each on the same path, sharing a method.
+ * Anything else (a split, a join, unrelated methods) stays a removal plus an addition rather than a guess.
+ */
+function methodChangePairs(previous: Map<string, InterfaceEndpoint>, next: Map<string, InterfaceEndpoint>): Map<string, string> {
+  const removed = [...previous.keys()].filter((key) => !next.has(key));
+  const added = [...next.keys()].filter((key) => !previous.has(key));
+  const pairs = new Map<string, string>();
+  for (const oldKey of removed) {
+    const path = pathOfKey(oldKey);
+    const sameRemoved = removed.filter((key) => pathOfKey(key) === path);
+    const sameAdded = added.filter((key) => pathOfKey(key) === path);
+    if (sameRemoved.length !== 1 || sameAdded.length !== 1) continue;
+    const before = methodsOf(previous.get(oldKey)!);
+    if ([...methodsOf(next.get(sameAdded[0]!)!)].some((method) => before.has(method))) pairs.set(oldKey, sameAdded[0]!);
+  }
+  return pairs;
+}
+
 /** Compares two revisions of the same interface spec from a caller's point of view. */
 export function compareInterfaceSpecDocuments(
   before: InterfaceSpecDocument,
@@ -213,15 +243,24 @@ export function compareInterfaceSpecDocuments(
   const previous = new Map(before.endpoints.map((endpoint) => [routeKey(endpoint), endpoint]));
   const next = new Map(after.endpoints.map((endpoint) => [routeKey(endpoint), endpoint]));
 
+  const pairs = methodChangePairs(previous, next);
+  const pairedFrom = new Map([...pairs].map(([oldKey, newKey]) => [newKey, oldKey]));
   for (const [key, endpoint] of previous) {
-    if (!next.has(key)) push({ level: 'breaking', code: 'endpoint-removed', route: route(endpoint), interfaceId: endpoint.interfaceId });
+    if (!next.has(key) && !pairs.has(key)) push({ level: 'breaking', code: 'endpoint-removed', route: route(endpoint), interfaceId: endpoint.interfaceId });
   }
   for (const [key, endpoint] of next) {
-    const old = previous.get(key);
-    const base = { route: route(endpoint), interfaceId: endpoint.interfaceId || old?.interfaceId || '' };
+    const oldKey = pairedFrom.get(key);
+    const old = previous.get(oldKey ?? key);
+    // A re-methoded API keeps the documented route, so every change lands on the endpoint the reader knows.
+    const base = { route: route(old && oldKey ? old : endpoint), interfaceId: endpoint.interfaceId || old?.interfaceId || '' };
     if (!old) {
       push({ ...base, level: 'info', code: 'endpoint-added' });
       continue;
+    }
+    if (oldKey) {
+      const lost = [...methodsOf(old)].some((method) => !methodsOf(endpoint).has(method));
+      push({ ...base, level: lost ? 'breaking' : 'info', code: lost ? 'endpoint-methods-narrowed' : 'endpoint-methods-widened',
+        before: old.method.trim().toUpperCase(), after: endpoint.method.trim().toUpperCase() });
     }
     if (!old.authRequired && endpoint.authRequired) push({ ...base, level: 'breaking', code: 'auth-required-added' });
     if (old.authRequired && !endpoint.authRequired) push({ ...base, level: 'warning', code: 'auth-required-removed' });

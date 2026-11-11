@@ -96,6 +96,8 @@ export const ko: Dict = {
   'docs.impact.compat.counts': "호환성 깨짐 {breaking} · 확인 필요 {warning} · 추가 {info}",
   'docs.impact.compat.endpoint-removed': "인터페이스 삭제",
   'docs.impact.compat.endpoint-added': "인터페이스 추가",
+  'docs.impact.compat.endpoint-methods-narrowed': "허용 HTTP 메서드 축소",
+  'docs.impact.compat.endpoint-methods-widened': "허용 HTTP 메서드 확대",
   'docs.impact.compat.auth-required-added': "인증 필요로 변경",
   'docs.impact.compat.auth-required-removed': "인증 불필요로 변경",
   'docs.impact.compat.request-field-added-required': "필수 요청 필드 추가",

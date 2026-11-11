@@ -96,6 +96,8 @@ export const pl: Dict = {
   'docs.impact.compat.counts': "Niezgodne: {breaking} · do sprawdzenia: {warning} · dodane: {info}",
   'docs.impact.compat.endpoint-removed': "Usunięto interfejs",
   'docs.impact.compat.endpoint-added': "Dodano interfejs",
+  'docs.impact.compat.endpoint-methods-narrowed': "Mniej akceptowanych metod HTTP",
+  'docs.impact.compat.endpoint-methods-widened': "Więcej akceptowanych metod HTTP",
   'docs.impact.compat.auth-required-added': "Teraz wymaga uwierzytelnienia",
   'docs.impact.compat.auth-required-removed': "Nie wymaga już uwierzytelnienia",
   'docs.impact.compat.request-field-added-required': "Dodano wymagane pole żądania",

@@ -96,6 +96,8 @@ export const ru: Dict = {
   'docs.impact.compat.counts': "Несовместимо: {breaking} · проверить: {warning} · добавлено: {info}",
   'docs.impact.compat.endpoint-removed': "Интерфейс удалён",
   'docs.impact.compat.endpoint-added': "Интерфейс добавлен",
+  'docs.impact.compat.endpoint-methods-narrowed': "Меньше допустимых методов HTTP",
+  'docs.impact.compat.endpoint-methods-widened': "Больше допустимых методов HTTP",
   'docs.impact.compat.auth-required-added': "Теперь требуется аутентификация",
   'docs.impact.compat.auth-required-removed': "Аутентификация больше не требуется",
   'docs.impact.compat.request-field-added-required': "Добавлено обязательное поле запроса",

@@ -96,6 +96,8 @@ export const it: Dict = {
   'docs.impact.compat.counts': "{breaking} incompatibili · {warning} da verificare · {info} aggiunte",
   'docs.impact.compat.endpoint-removed': "Interfaccia rimossa",
   'docs.impact.compat.endpoint-added': "Interfaccia aggiunta",
+  'docs.impact.compat.endpoint-methods-narrowed': "Meno metodi HTTP accettati",
+  'docs.impact.compat.endpoint-methods-widened': "Più metodi HTTP accettati",
   'docs.impact.compat.auth-required-added': "Ora richiede autenticazione",
   'docs.impact.compat.auth-required-removed': "Non richiede più autenticazione",
   'docs.impact.compat.request-field-added-required': "Campo obbligatorio di richiesta aggiunto",

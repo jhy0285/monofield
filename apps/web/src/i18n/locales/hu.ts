@@ -96,6 +96,8 @@ export const hu: Dict = {
   'docs.impact.compat.counts': "Nem kompatibilis: {breaking} · ellenőrizendő: {warning} · bővítés: {info}",
   'docs.impact.compat.endpoint-removed': "Interfész törölve",
   'docs.impact.compat.endpoint-added': "Interfész hozzáadva",
+  'docs.impact.compat.endpoint-methods-narrowed': "Kevesebb elfogadott HTTP-metódus",
+  'docs.impact.compat.endpoint-methods-widened': "Több elfogadott HTTP-metódus",
   'docs.impact.compat.auth-required-added': "Mostantól hitelesítést igényel",
   'docs.impact.compat.auth-required-removed': "Már nem igényel hitelesítést",
   'docs.impact.compat.request-field-added-required': "Kötelező kérésmező hozzáadva",

@@ -191,4 +191,32 @@ describe('interface spec compatibility', () => {
       expect.objectContaining({ code: 'auth-rule-changed', level: 'warning', before: "hasRole('ADMIN') and #id == principal.id", after: "hasRole('ADMIN')" }),
     ]);
   });
+
+  // eGovFrame commits 93a3efd4 and 983f2a70: `@RequestMapping` (any method, recorded GET/POST) became `@PostMapping`.
+  it('reports a narrowed or widened method list as one change on the documented route', () => {
+    const list = (method: string, extra: unknown[] = []) => spec([{ method, path: '/board/list.do', interfaceId: 'IF-BRD-001',
+      requestFields: [{ nameEn: 'pageIndex', dataType: 'int', required: 'N' }, ...extra] }]);
+
+    const narrowed = compareInterfaceSpecDocuments(list('GET/POST'), list('POST'));
+    expect(narrowed.changes).toEqual([
+      expect.objectContaining({ code: 'endpoint-methods-narrowed', level: 'breaking', route: 'GET/POST /board/list.do', interfaceId: 'IF-BRD-001',
+        before: 'GET/POST', after: 'POST' }),
+    ]);
+    // field changes of the same API are reported on the documented route too, not as a new API
+    const withField = compareInterfaceSpecDocuments(list('GET/POST'), list('POST', [{ nameEn: 'searchWrd', dataType: 'String', required: 'N' }]));
+    expect(withField.changes.map((change) => `${change.code} ${change.route}`)).toEqual([
+      'endpoint-methods-narrowed GET/POST /board/list.do', 'request-field-added-optional GET/POST /board/list.do',
+    ]);
+
+    expect(compareInterfaceSpecDocuments(list('POST'), list('GET/POST')).changes).toEqual([
+      expect.objectContaining({ code: 'endpoint-methods-widened', level: 'info', before: 'POST', after: 'GET/POST' }),
+    ]);
+    // a different method on the same path with nothing in common is another API
+    expect(compareInterfaceSpecDocuments(list('PUT'), list('PATCH')).changes.map((change) => change.code).sort())
+      .toEqual(['endpoint-added', 'endpoint-removed']);
+    // one API split into two (or two joined into one) is not guessed at
+    const split = spec([{ method: 'GET', path: '/board/list.do' }, { method: 'POST', path: '/board/list.do' }]);
+    expect(compareInterfaceSpecDocuments(list('GET/POST'), split).changes.map((change) => change.code).sort())
+      .toEqual(['endpoint-added', 'endpoint-added', 'endpoint-removed']);
+  });
 });

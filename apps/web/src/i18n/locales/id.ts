@@ -96,6 +96,8 @@ export const id: Dict = {
   'docs.impact.compat.counts': "Tidak kompatibel {breaking} · perlu ditinjau {warning} · penambahan {info}",
   'docs.impact.compat.endpoint-removed': "Antarmuka dihapus",
   'docs.impact.compat.endpoint-added': "Antarmuka ditambahkan",
+  'docs.impact.compat.endpoint-methods-narrowed': "Lebih sedikit metode HTTP yang diterima",
+  'docs.impact.compat.endpoint-methods-widened': "Lebih banyak metode HTTP yang diterima",
   'docs.impact.compat.auth-required-added': "Sekarang memerlukan autentikasi",
   'docs.impact.compat.auth-required-removed': "Tidak lagi memerlukan autentikasi",
   'docs.impact.compat.request-field-added-required': "Bidang permintaan wajib ditambahkan",

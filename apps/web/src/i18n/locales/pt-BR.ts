@@ -96,6 +96,8 @@ export const ptBR: Dict = {
   'docs.impact.compat.counts': "{breaking} incompatíveis · {warning} a revisar · {info} adições",
   'docs.impact.compat.endpoint-removed': "Interface removida",
   'docs.impact.compat.endpoint-added': "Interface adicionada",
+  'docs.impact.compat.endpoint-methods-narrowed': "Menos métodos HTTP aceitos",
+  'docs.impact.compat.endpoint-methods-widened': "Mais métodos HTTP aceitos",
   'docs.impact.compat.auth-required-added': "Agora exige autenticação",
   'docs.impact.compat.auth-required-removed': "Não exige mais autenticação",
   'docs.impact.compat.request-field-added-required': "Campo obrigatório de requisição adicionado",

@@ -86,6 +86,21 @@ describe.skipIf(!hasPython())('document impact by re-scanning the code', () => {
     expect(report.newRoutes).toEqual(['POST /api/v1/orders/{orderId}/cancel']);
   });
 
+  // eGovFrame-style: a method-less `@RequestMapping` (GET/POST) in place of `@GetMapping` is the same API, not a new one.
+  it('reports a changed method list on the documented API instead of a removal plus a new API', async () => {
+    const doc = await scannedDocument();
+    const controller = path.join(root, 'src/main/java/kr/example/legacy/member/MemberController.java');
+    await writeFile(controller, (await readFile(controller, 'utf8')).replace('@GetMapping("/{memberId}")', '@RequestMapping("/{memberId}")'));
+    const report = await analyze(doc, { scriptsDir });
+    expect(report.analysis).toBe('rescan');
+    expect(report.affected.map((item) => `${doc.endpoints[item.endpointIndex]!.method} ${doc.endpoints[item.endpointIndex]!.path}`))
+      .toEqual(['GET /api/v1/members/{memberId}']);
+    expect(report.newRoutes).toEqual([]);
+    expect(report.rescan?.changes).toEqual([expect.objectContaining({
+      code: 'endpoint-methods-widened', level: 'info', route: 'GET /api/v1/members/{memberId}', before: 'GET', after: 'GET/POST',
+    })]);
+  });
+
   it('sees nothing to re-scan when only files the scanner does not read changed', async () => {
     const doc = await scannedDocument();
     execFileSync('bash', ['-c', 'echo "# notes" >> README.md'], { cwd: root });

@@ -9,6 +9,8 @@ export const zhCN: Dict = {
   'docs.impact.compat.counts': "破坏性 {breaking} · 需确认 {warning} · 新增 {info}",
   'docs.impact.compat.endpoint-removed': "接口已删除",
   'docs.impact.compat.endpoint-added': "新增接口",
+  'docs.impact.compat.endpoint-methods-narrowed': "允许的 HTTP 方法减少",
+  'docs.impact.compat.endpoint-methods-widened': "允许的 HTTP 方法增加",
   'docs.impact.compat.auth-required-added': "改为需要认证",
   'docs.impact.compat.auth-required-removed': "改为无需认证",
   'docs.impact.compat.request-field-added-required': "新增必填请求字段",

@@ -96,6 +96,8 @@ export const th: Dict = {
   'docs.impact.compat.counts': "ไม่เข้ากัน {breaking} · ต้องตรวจสอบ {warning} · เพิ่ม {info}",
   'docs.impact.compat.endpoint-removed': "ลบอินเทอร์เฟซ",
   'docs.impact.compat.endpoint-added': "เพิ่มอินเทอร์เฟซ",
+  'docs.impact.compat.endpoint-methods-narrowed': "รับเมธอด HTTP น้อยลง",
+  'docs.impact.compat.endpoint-methods-widened': "รับเมธอด HTTP มากขึ้น",
   'docs.impact.compat.auth-required-added': "ต้องยืนยันตัวตนแล้ว",
   'docs.impact.compat.auth-required-removed': "ไม่ต้องยืนยันตัวตนแล้ว",
   'docs.impact.compat.request-field-added-required': "เพิ่มฟิลด์คำขอที่จำเป็น",

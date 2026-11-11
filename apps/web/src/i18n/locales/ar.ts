@@ -96,6 +96,8 @@ export const ar: Dict = {
   'docs.impact.compat.counts': "غير متوافق {breaking} · للمراجعة {warning} · إضافات {info}",
   'docs.impact.compat.endpoint-removed': "تمت إزالة الواجهة",
   'docs.impact.compat.endpoint-added': "تمت إضافة واجهة",
+  'docs.impact.compat.endpoint-methods-narrowed': "طرق HTTP مقبولة أقل",
+  'docs.impact.compat.endpoint-methods-widened': "طرق HTTP مقبولة أكثر",
   'docs.impact.compat.auth-required-added': "تتطلب الآن مصادقة",
   'docs.impact.compat.auth-required-removed': "لم تعد تتطلب مصادقة",
   'docs.impact.compat.request-field-added-required': "أضيف حقل طلب إلزامي",

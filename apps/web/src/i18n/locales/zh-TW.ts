@@ -96,6 +96,8 @@ export const zhTW: Dict = {
   'docs.impact.compat.counts': "破壞性 {breaking} · 需確認 {warning} · 新增 {info}",
   'docs.impact.compat.endpoint-removed': "介面已刪除",
   'docs.impact.compat.endpoint-added': "新增介面",
+  'docs.impact.compat.endpoint-methods-narrowed': "允許的 HTTP 方法減少",
+  'docs.impact.compat.endpoint-methods-widened': "允許的 HTTP 方法增加",
   'docs.impact.compat.auth-required-added': "改為需要驗證",
   'docs.impact.compat.auth-required-removed': "改為不需驗證",
   'docs.impact.compat.request-field-added-required': "新增必填請求欄位",

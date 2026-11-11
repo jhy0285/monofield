@@ -312,7 +312,7 @@ Interface-spec scanner and change analysis (see the 2026-11-11 Log entries):
 - A default applied in the method body (`if (x == null) x = 5`) is not read, so moving an annotation default into code reads as a removed
   default (eGovFrame `e4823589`). A URL rule and a method annotation that both name authorities are ANDed by Spring, but only the annotation's are
   listed. Enum values are compared only when both revisions recorded them, so the first rescan after upgrading reports no enum changes.
-- Method narrowing (GET/POST → POST) still shows as removed + added; JSP model attributes are not response fields.
+- JSP model attributes are not response fields.
 - Kotlin (2026-11-11, branch only, not released): WebFlux `coRouter` and Ktor are not read; mappings that only exist in code generated at
   build time (OpenAPI Generator `kotlin-spring` interfaces) are invisible to the scanner; Kotlin `const val` constants are resolved only within
   the controller file; a service call's type is found through the receiver's declared type or a unique function name, not full inference.
@@ -549,6 +549,20 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-11 — a changed method list is one change on the documented API; the eGovFrame mapping gap explained (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** "일단 스토어 빼고 마저진행": the remaining open items, then a release.
+- **Changed:** `packages/contracts/src/docs/interface-spec-compatibility.ts` pairs a removed and an added endpoint on the same path when they
+  are the only ones there and share a method, and reports `endpoint-methods-narrowed` (breaking, a method was lost) or
+  `endpoint-methods-widened` (info) on the documented route, with the paired API's field changes on that route too. Two labels in
+  `types.ts` and 19 locales. `docs/testing/real-projects-2026-11-11.md` updated.
+- **Found:** the "12 eGovFrame mappings not investigated" were a counting artifact: per file, 1,206 method-level mapping annotations and
+  1,206 APIs (the 1,218 included class-level annotations and test sources). eGovFrame scan time 3.9-4.1 s now vs 3.7 s on the preview.10
+  scanner, same machine (the extra is the Kotlin file search).
+- **Tests (red first):** contracts compatibility case (11 pass); daemon `document-impact-rescan.test.ts` method-change case (8 pass); web
+  `InterfaceSpecEditor.facts.test.tsx` label coverage. eGovFrame 20-commit replay: 36 → 27 reports (the 9 narrowed APIs one row each,
+  breaking); ABT unchanged (152/152, levels 100%).
 
 ### 2026-11-11 — Spring scanner reads Kotlin controllers, DTOs and security configuration (`ccr-8432aecf-n9xdfd`)
 

@@ -96,6 +96,8 @@ export const fa: Dict = {
   'docs.impact.compat.counts': "ناسازگار {breaking} · برای بررسی {warning} · افزودنی {info}",
   'docs.impact.compat.endpoint-removed': "رابط حذف شد",
   'docs.impact.compat.endpoint-added': "رابط اضافه شد",
+  'docs.impact.compat.endpoint-methods-narrowed': "روش‌های HTTP پذیرفته‌شده کمتر",
+  'docs.impact.compat.endpoint-methods-widened': "روش‌های HTTP پذیرفته‌شده بیشتر",
   'docs.impact.compat.auth-required-added': "اکنون احراز هویت لازم است",
   'docs.impact.compat.auth-required-removed': "دیگر احراز هویت لازم نیست",
   'docs.impact.compat.request-field-added-required': "فیلد الزامی درخواست اضافه شد",

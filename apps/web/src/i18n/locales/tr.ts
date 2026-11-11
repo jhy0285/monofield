@@ -96,6 +96,8 @@ export const tr: Dict = {
   'docs.impact.compat.counts': "Uyumsuz {breaking} · incelenecek {warning} · eklenen {info}",
   'docs.impact.compat.endpoint-removed': "Arayüz kaldırıldı",
   'docs.impact.compat.endpoint-added': "Arayüz eklendi",
+  'docs.impact.compat.endpoint-methods-narrowed': "Daha az HTTP yöntemi kabul ediliyor",
+  'docs.impact.compat.endpoint-methods-widened': "Daha fazla HTTP yöntemi kabul ediliyor",
   'docs.impact.compat.auth-required-added': "Artık kimlik doğrulama gerekiyor",
   'docs.impact.compat.auth-required-removed': "Artık kimlik doğrulama gerekmiyor",
   'docs.impact.compat.request-field-added-required': "Zorunlu istek alanı eklendi",

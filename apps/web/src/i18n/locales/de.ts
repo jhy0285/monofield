@@ -96,6 +96,8 @@ export const de: Dict = {
   'docs.impact.compat.counts': "{breaking} inkompatibel · {warning} prüfen · {info} ergänzt",
   'docs.impact.compat.endpoint-removed': "Schnittstelle entfernt",
   'docs.impact.compat.endpoint-added': "Schnittstelle hinzugefügt",
+  'docs.impact.compat.endpoint-methods-narrowed': "Weniger HTTP-Methoden erlaubt",
+  'docs.impact.compat.endpoint-methods-widened': "Mehr HTTP-Methoden erlaubt",
   'docs.impact.compat.auth-required-added': "Erfordert jetzt Authentifizierung",
   'docs.impact.compat.auth-required-removed': "Keine Authentifizierung mehr erforderlich",
   'docs.impact.compat.request-field-added-required': "Pflichtfeld in Anfrage hinzugefügt",

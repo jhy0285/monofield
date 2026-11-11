@@ -96,6 +96,8 @@ export const uk: Dict = {
   'docs.impact.compat.counts': "Несумісно: {breaking} · перевірити: {warning} · додано: {info}",
   'docs.impact.compat.endpoint-removed': "Інтерфейс видалено",
   'docs.impact.compat.endpoint-added': "Інтерфейс додано",
+  'docs.impact.compat.endpoint-methods-narrowed': "Менше дозволених методів HTTP",
+  'docs.impact.compat.endpoint-methods-widened': "Більше дозволених методів HTTP",
   'docs.impact.compat.auth-required-added': "Тепер потрібна автентифікація",
   'docs.impact.compat.auth-required-removed': "Автентифікація більше не потрібна",
   'docs.impact.compat.request-field-added-required': "Додано обов'язкове поле запиту",

@@ -89,7 +89,7 @@ describe('InterfaceSpecEditor scanner facts', () => {
 // Every change the comparison can report has a label in the impact panel (a new code without one shows its raw key).
 describe('change labels', () => {
   const codes: Record<InterfaceSpecChangeCode, true> = {
-    'endpoint-removed': true, 'endpoint-added': true, 'auth-required-added': true, 'auth-required-removed': true,
+    'endpoint-removed': true, 'endpoint-added': true, 'endpoint-methods-narrowed': true, 'endpoint-methods-widened': true, 'auth-required-added': true, 'auth-required-removed': true,
     'auth-authorities-narrowed': true, 'auth-authorities-widened': true, 'auth-rule-changed': true,
     'request-field-added-required': true, 'request-field-added-unresolved': true, 'request-field-added-optional': true,
     'request-field-removed': true, 'request-field-became-required': true, 'request-field-became-optional': true,

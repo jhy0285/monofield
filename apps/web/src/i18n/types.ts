@@ -375,6 +375,8 @@ export interface Dict {
   'docs.impact.compat.counts': string;
   'docs.impact.compat.endpoint-removed': string;
   'docs.impact.compat.endpoint-added': string;
+  'docs.impact.compat.endpoint-methods-narrowed': string;
+  'docs.impact.compat.endpoint-methods-widened': string;
   'docs.impact.compat.auth-required-added': string;
   'docs.impact.compat.auth-required-removed': string;
   'docs.impact.compat.request-field-added-required': string;

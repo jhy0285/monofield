@@ -9,6 +9,8 @@ export const ja: Dict = {
   'docs.impact.compat.counts': "互換性なし {breaking} · 要確認 {warning} · 追加 {info}",
   'docs.impact.compat.endpoint-removed': "インターフェース削除",
   'docs.impact.compat.endpoint-added': "インターフェース追加",
+  'docs.impact.compat.endpoint-methods-narrowed': "受け付けるHTTPメソッドを縮小",
+  'docs.impact.compat.endpoint-methods-widened': "受け付けるHTTPメソッドを拡大",
   'docs.impact.compat.auth-required-added': "認証が必須に変更",
   'docs.impact.compat.auth-required-removed': "認証が不要に変更",
   'docs.impact.compat.request-field-added-required': "必須リクエスト項目を追加",
