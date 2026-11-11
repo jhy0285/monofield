@@ -570,7 +570,9 @@ Code health:
 - **Tests (red first unless noted):** contracts 3 compatibility + 1 OpenAPI (330 pass); scanner `test_spring_enum_default_authority.py` 5 (4 red,
   1 guard) and `test_scan_openapi.py` 1 new + 2 updated (71 + 6 pass); daemon renderer 2 (23 pass); web `InterfaceSpecEditor.facts.test.tsx` 4
   (display tests red without the editor change; preservation and label tests are guards). `vitest run tests/i18n`, `pnpm i18n:check`, `pnpm guard`,
-  `pnpm typecheck`, `e2e/scripts/spring-spec-demo.ts --json` pass.
+  `pnpm typecheck`, `e2e/scripts/spring-spec-demo.ts --json` pass. Full suites after the change: web 418 files / 4023 tests pass;
+  daemon 476 files pass, 2 fail (`tests/mcp-spawn.test.ts`, `tests/run-resume-on-failure.test.ts`), the same two that fail in this
+  environment on the base commit and pass in CI (see Known baseline failures).
 - **Measured:** ABT B1-B4 4/4 with the answer key's levels (B1 1 API breaking, B2 3 APIs warning, B3 1 info, B4 8 APIs warning); 152/152 in-vocab
   changes, 0 false; first-spec scores unchanged; re-scan impact flags 38 = 34 + 4 APIs whose only change is B1 or B4. eGovFrame 20 commits:
   unchanged except `e4823589`, now one more warning (`lenght` default 5 removed); the new code applies the same 5 inside the method, so callers
