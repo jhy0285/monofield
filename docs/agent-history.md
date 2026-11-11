@@ -64,8 +64,8 @@ As of 2026-11-11.
   reviewed spec diffs). It is an independent fork of the Apache-2.0 Open Design
   project; see `docs/adr/0002-upstream-maintenance.md` (status: Proposed, only
   phase A done).
-- Version: `0.11.7-preview.11` (root `package.json`), prepared on 2026-11-11 and not yet published: Kotlin reading, the duplicate-row
-  fix and method-list changes as one change. The last published preview is `0.11.7-preview.10` (2026-11-11, from `42680ad`).
+- Version: `0.11.7-preview.11` (root `package.json`), published on 2026-11-11 as a GitHub prerelease (preview channel, unsigned)
+  from `b403fac` on `main`: Kotlin reading, the duplicate-row fix and method-list changes as one change, on top of preview.10.
   Stable `latest` is still `v0.11.6`. Workspace packages are
   still named `@open-design/*`; env vars still use the `OD_*` prefix.
 - Shape: pnpm monorepo. `apps/daemon` (Express + SQLite, `monofield` CLI) and
@@ -548,6 +548,12 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-11 — 0.11.7-preview.11 published from `main` (`ccr-8432aecf-n9xdfd`)
+
+- **Done:** full CI run 42998682346 passed on `b403fac`; `main` fast-forwarded to it; `release-windows` run 42999784905 passed build,
+  packaged smoke and publish. `v0.11.7-preview.11` is a prerelease on `b403fac` with setup.exe (259,474,789 bytes), payload.7z,
+  portable.zip, `latest.yml` and `SHA256SUMS.txt` (checked over the REST API). Then the preview.11 pins and these notes went to `main`.
 
 ### 2026-11-11 — site, READMEs, guide and notes pointed at 0.11.7-preview.11 (`ccr-8432aecf-n9xdfd`)
 
