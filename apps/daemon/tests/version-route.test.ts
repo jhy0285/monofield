@@ -29,6 +29,8 @@ describe('/api/version', () => {
         packaged: expect.any(Boolean),
         platform: expect.any(String),
         arch: expect.any(String),
+        // 'store' only inside a Microsoft Store install, where the Store owns updates
+        distribution: expect.stringMatching(/^(direct|store)$/),
       },
     });
   });

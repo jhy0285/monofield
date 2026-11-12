@@ -595,7 +595,10 @@ Code health:
   Hidden files and folders are now never copied (red test first). `out/` was wrongly in the ignored folders (red tests caught it).
 - Verified:
   - `apps/daemon`: `tests/run-outputs.test.ts` 8, `tests/run-work-log.test.ts` 3, `tests/run-outputs-route-cli.test.ts` 2 (a
-    stand-in `codex` binary through `startServer`, `POST /api/runs`, HTTP and the built CLI). Full suite: not finished when this entry was written (the first attempt was stopped by a 10-minute limit; see the next entry for the result).
+    stand-in `codex` binary through `startServer`, `POST /api/runs`, HTTP and the built CLI). Full suite (865 s): 479 files / 5726 tests passed, 3 files failed with one test each. Two are the
+    recorded baseline failures of this environment (`tests/mcp-spawn.test.ts`, `tests/run-resume-on-failure.test.ts`). The third,
+    `tests/version-route.test.ts`, was stale since `b9a803b` (2026-11-11) added `distribution` to `/api/version` and compared the
+    whole object; the test now expects the field (fixed in the commit after this one, 2 tests pass).
   - `apps/web`: `tests/components/ResultsView.test.tsx` 5; full suite 419 files / 4029 tests passed (13 skipped).
   - `pnpm guard`, `pnpm typecheck`, `pnpm i18n:check` pass.
   - Live app (`pnpm tools-dev run web --namespace board`, isolated `OD_DATA_DIR`): five runs through stand-in `codex` and `claude`
