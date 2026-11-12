@@ -116,8 +116,9 @@ async function exportRevision(codeRoot: string, revision: string, scratch: strin
   return path.join(tree, prefix);
 }
 
-async function scan(python: { command: string; args: string[] }, script: string, codebase: string, out: string, timeout: number): Promise<InterfaceSpecDocument> {
-  await run(python.command, [...python.args, script, '--codebase-path', codebase, '--codebase-name', 'rescan', '--out', out], {
+async function scan(python: { command: string; args: string[] }, script: string, codebase: string, out: string, timeout: number,
+  extra: string[] = ['--codebase-name', 'rescan']): Promise<InterfaceSpecDocument> {
+  await run(python.command, [...python.args, script, '--codebase-path', codebase, ...extra, '--out', out], {
     timeout, windowsHide: true, maxBuffer: 16 * 1024 * 1024,
   });
   const parsed = parseInterfaceSpecDocument(JSON.parse(await readFile(out, 'utf8')));
@@ -147,6 +148,72 @@ export async function rescanCode(options: {
     return {
       report: compareInterfaceSpecDocuments(before, after),
       currentRoutes: after.endpoints.map((endpoint) => routeKey(endpoint.method, endpoint.path)),
+    };
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
+}
+
+async function scannerFor(scriptsDir: string, pythons?: RescanOptions['pythons']) {
+  const script = path.join(scriptsDir, RESCAN_SCANNERS['static-spring']!);
+  await access(script).catch(() => { throw new Error(`the scanner is not installed (${script})`); });
+  const python = await findPython(pythons);
+  if (!python) throw new Error('Python 3 was not found; install Python 3 and make `python` or `python3` available');
+  return { script, python };
+}
+
+export interface ScanCodebaseOptions extends RescanOptions {
+  /** The folder to read (a Spring project or one of its modules). */
+  codebasePath: string;
+  /** Where the interface-spec JSON is written. */
+  out: string;
+  codebaseName?: string;
+  /** A term dictionary (`english,한글` CSV) for Korean field names. */
+  nameDict?: string;
+  includeAuditFields?: boolean;
+}
+
+/**
+ * Makes an interface spec from code with the bundled scanner: no AI tool, no running daemon. The same scanner the
+ * change analysis re-runs, so a spec made here can be compared with later code exactly.
+ */
+export async function scanCodebase(options: ScanCodebaseOptions): Promise<InterfaceSpecDocument> {
+  const { script, python } = await scannerFor(options.scriptsDir, options.pythons);
+  await mkdir(path.dirname(options.out), { recursive: true });
+  return scan(python, script, options.codebasePath, options.out, options.timeoutMs ?? 300_000, [
+    ...(options.codebaseName ? ['--codebase-name', options.codebaseName] : []),
+    ...(options.nameDict ? ['--name-dict', options.nameDict] : []),
+    ...(options.includeAuditFields ? ['--include-audit-fields'] : []),
+  ]);
+}
+
+export interface CodeComparison {
+  /** The commit the working tree was compared with. */
+  baseRevision: string;
+  report: InterfaceSpecCompatibilityReport;
+  endpoints: { before: number; after: number };
+}
+
+/**
+ * What a caller of the API would notice between the code at `base` and the working tree: both are read with the
+ * scanner and compared. The baseline is checked out into a temporary folder; the user's checkout is not touched.
+ */
+export async function compareCodeWithRevision(options: RescanOptions & { codeRoot: string; base: string }): Promise<CodeComparison> {
+  const inside = await git(options.codeRoot, ['rev-parse', '--is-inside-work-tree']).catch(() => '');
+  if (inside.trim() !== 'true') throw new Error(`not a Git repository: ${options.codeRoot}`);
+  const baseRevision = (await git(options.codeRoot, ['rev-parse', '--verify', '--quiet', `${options.base}^{commit}`])
+    .catch(() => { throw new Error(`unknown Git revision: ${options.base}`); })).trim();
+  const { script, python } = await scannerFor(options.scriptsDir, options.pythons);
+  const timeout = options.timeoutMs ?? 300_000;
+  const scratch = await mkdtemp(path.join(os.tmpdir(), 'monofield-check-'));
+  try {
+    const baselineCode = await exportRevision(options.codeRoot, baseRevision, scratch);
+    const before = await scan(python, script, baselineCode, path.join(scratch, 'before.json'), timeout);
+    const after = await scan(python, script, options.codeRoot, path.join(scratch, 'after.json'), timeout);
+    return {
+      baseRevision,
+      report: compareInterfaceSpecDocuments(before, after),
+      endpoints: { before: before.endpoints.length, after: after.endpoints.length },
     };
   } finally {
     await rm(scratch, { recursive: true, force: true });

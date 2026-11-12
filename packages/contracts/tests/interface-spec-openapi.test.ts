@@ -177,4 +177,24 @@ describe('interface spec → OpenAPI 3.1', () => {
     expect(list['x-required-authorities']).toEqual(['ROLE_ADMIN', 'SCOPE_payments.read']);
     expect(exported['/payments/{id}']!.delete['x-access-rule']).toBe("hasRole('ADMIN') and #id > 0");
   });
+
+  // Spring `params = "cmd=Regist"` handlers are scanned as `/add.do?cmd=Regist`. OpenAPI has no query in a path key
+  // and one operation per path and method, so the plain handler is exported and the variant is reported.
+  it('exports handlers that share a URL once and says which variant was left out', () => {
+    const shared = InterfaceSpecDocumentSchema.parse({
+      schemaVersion: 1, kind: 'interface-spec', source: { codebaseName: 'instt' },
+      endpoints: [
+        { method: 'POST', path: '/instt/add.do', interfaceName: '등록 화면', handlerName: 'addView' },
+        { method: 'POST', path: '/instt/add.do?cmd=Regist', interfaceName: '등록', handlerName: 'add' },
+        { method: 'POST', path: '/instt/update.do?cmd=Modify', interfaceName: '수정', handlerName: 'update' },
+      ],
+    });
+    const { document, warnings } = interfaceSpecToOpenApi(shared);
+    const paths = document.paths as Record<string, Record<string, { operationId: string; parameters?: Array<Record<string, unknown>> }>>;
+    expect(Object.keys(paths).sort()).toEqual(['/instt/add.do', '/instt/update.do']);
+    expect(paths['/instt/add.do']!.post!.operationId).toBe('addView');
+    expect(paths['/instt/update.do']!.post!.parameters).toContainEqual(
+      { name: 'cmd', in: 'query', required: true, schema: { type: 'string', enum: ['Modify'] } });
+    expect(warnings.filter((warning) => warning.includes('/instt/add.do?cmd=Regist'))).toHaveLength(1);
+  });
 });

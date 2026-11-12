@@ -10,8 +10,11 @@ import { renderInterfaceSpecXlsx } from './doc-renderers/interface-spec/render-x
 import { renderInterfaceSpecHtml } from './doc-renderers/interface-spec/render-html.js';
 import { renderScreenSpecPptx } from './doc-renderers/screen-spec/render-pptx.js';
 import { renderScreenSpecHtml } from './doc-renderers/screen-spec/render-html.js';
+import { CODE_COMMANDS, runDocsCheck, runDocsScan } from './docs-cli-code.js';
 
 const USAGE = `Usage:
+  monofield docs scan  [--codebase <dir>] [--out <interface-spec.json>] [--xlsx <workbook.xlsx>] [--name-dict <terms.csv>] [--name <title>] [--include-audit-fields]
+  monofield docs check --base <git-revision> [--codebase <dir>] [--format text|markdown|json] [--lang ko|en] [--fail-on breaking|warning|never] [--out <report-file>]
   monofield docs build-ontology --project <id> [--project-path <module>] [--documents-file <JSON-array-file|->] [--prompt-file <path|->] [--json]
   monofield docs plan --project <id> [--inputs-file <JSON-array-file|->] [--rules-file <project-relative.json>] [--prompt-file <path|->] [--json]
   monofield docs graph --project <id> [--inputs-file <JSON-array-file>] [--json] [--daemon-url <url>]
@@ -24,6 +27,13 @@ const USAGE = `Usage:
   monofield docs export-openapi         --project <id> --input <project-relative.json> [--json] [--daemon-url <url>]
   monofield docs render-screen-spec     --input <screen-spec.json>    [--out <deck.pptx>]
   monofield docs preview-screen-spec    --input <screen-spec.json>    [--out <preview.html>]
+
+scan reads a Spring (Java or Kotlin) project and writes its interface spec, with
+no AI tool and no running app; --xlsx also writes the Excel workbook. check
+compares the code at a Git revision with the working tree from a caller's point
+of view, for pull requests and CI: exit 0 passed, 1 a change at or above
+--fail-on was found (default: breaking), 2 the check could not run. Both need
+Python 3.
 
 Renders a document JSON into its Korean SI-style deliverable (interface-spec
 → XLSX workbook, screen-spec → PPTX deck). Prints a JSON result on stdout.
@@ -115,6 +125,7 @@ export async function runDocsCli(args: string[]): Promise<DocsCliResult> {
     console.log(USAGE);
     return { exitCode: command ? 0 : 1 };
   }
+  if (CODE_COMMANDS.has(command)) return command === 'scan' ? runDocsScan(rest) : runDocsCheck(rest);
   if (
     command !== 'create-manual-interface-spec' &&
     command !== 'render-interface-spec' &&

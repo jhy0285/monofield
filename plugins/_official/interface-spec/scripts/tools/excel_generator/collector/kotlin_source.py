@@ -27,6 +27,7 @@ from tools.excel_generator.collector.controller_scanner import (
     _extract_mapping_paths,
     _javadoc_summary,
     _join_mapping_path,
+    mapping_condition,
 )
 from tools.excel_generator.collector.dto_expander import (
     JavaClass,
@@ -748,7 +749,7 @@ def scan_kotlin_controllers(codebase_path: Path, repo_root: Path, classes: dict[
                     auth = security.decide(method, mp, method_security, class_security)
                     note = "; ".join(n for n in (ANY_METHOD_NOTE if method == ANY_METHOD else "", auth.note) if n)
                     out.append(ApiSeed(
-                        method=method.upper(), path=mp,
+                        method=method.upper(), path=mp + mapping_condition(mapping),
                         controller_file=_controller_display_path(path, repo_root, codebase_path),
                         package_name=package, service_name="", controller_line=line_no, method_name=fm.group(1),
                         request_body_type=body_type, query_dto_type=", ".join(forms) or None,

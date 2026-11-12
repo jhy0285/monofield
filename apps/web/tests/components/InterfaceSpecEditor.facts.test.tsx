@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { InterfaceSpecDocumentSchema, type InterfaceSpecChangeCode, type ProjectFile } from '@open-design/contracts';
+import { INTERFACE_SPEC_CHANGE_LABELS, INTERFACE_SPEC_LEVEL_LABELS, InterfaceSpecDocumentSchema, type ProjectFile } from '@open-design/contracts';
 
 let documentText = '';
 const writes: string[] = [];
@@ -86,23 +86,19 @@ describe('InterfaceSpecEditor scanner facts', () => {
   });
 });
 
-// Every change the comparison can report has a label in the impact panel (a new code without one shows its raw key).
+// Every change the comparison can report has a label in the impact panel (a new code without one shows its raw key),
+// and the CLI report (`monofield docs check`) uses the same Korean and English words as the screen.
 describe('change labels', () => {
-  const codes: Record<InterfaceSpecChangeCode, true> = {
-    'endpoint-removed': true, 'endpoint-added': true, 'endpoint-methods-narrowed': true, 'endpoint-methods-widened': true, 'auth-required-added': true, 'auth-required-removed': true,
-    'auth-authorities-narrowed': true, 'auth-authorities-widened': true, 'auth-rule-changed': true,
-    'request-field-added-required': true, 'request-field-added-unresolved': true, 'request-field-added-optional': true,
-    'request-field-removed': true, 'request-field-became-required': true, 'request-field-became-optional': true,
-    'request-field-max-size-reduced': true, 'response-field-removed': true, 'response-field-added': true,
-    'response-field-became-optional': true, 'request-enum-value-added': true, 'request-enum-value-removed': true,
-    'response-enum-value-added': true, 'response-enum-value-removed': true, 'request-default-changed': true,
-    'field-type-changed': true,
-  };
-  it('names every change code in English and Korean', () => {
-    for (const code of Object.keys(codes)) {
+  it('names every change code and level the same way on screen and in the CLI report', () => {
+    for (const [code, label] of Object.entries(INTERFACE_SPEC_CHANGE_LABELS)) {
       const key = `docs.impact.compat.${code}` as keyof typeof en;
-      expect(en[key], code).toBeTruthy();
-      expect(ko[key], code).toBeTruthy();
+      expect(en[key], code).toBe(label.en);
+      expect(ko[key], code).toBe(label.ko);
+    }
+    for (const [level, label] of Object.entries(INTERFACE_SPEC_LEVEL_LABELS)) {
+      const key = `docs.impact.compat.level.${level}` as keyof typeof en;
+      expect(en[key], level).toBe(label.en);
+      expect(ko[key], level).toBe(label.ko);
     }
   });
 });

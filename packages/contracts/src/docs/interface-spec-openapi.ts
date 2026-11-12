@@ -161,6 +161,21 @@ function openApiPath(path: string): string {
   return path.replace(/:([A-Za-z_][\w]*)/g, '{$1}');
 }
 
+/**
+ * A scanned route may end in the request parameters its handler requires (`/add.do?cmd=Regist`, from Spring
+ * `params`). OpenAPI keeps a query out of the path key: the path is the part before `?`, the rest become required
+ * query parameters.
+ */
+function splitRouteCondition(path: string): { path: string; required: Record<string, unknown>[] } {
+  const at = path.indexOf('?');
+  if (at < 0) return { path, required: [] };
+  const required = path.slice(at + 1).split('&').filter(Boolean).map((condition) => {
+    const [name = '', value] = condition.split('=');
+    return { name, in: 'query', required: true, schema: value === undefined ? { type: 'string' } : { type: 'string', enum: [value] } };
+  });
+  return { path: path.slice(0, at), required };
+}
+
 function operationIdBase(endpoint: InterfaceEndpoint, method: string): string {
   const raw = endpoint.handlerName || endpoint.interfaceId || `${method}${endpoint.path}`;
   return raw.replace(/[^A-Za-z0-9_.-]+/g, '_').replace(/^_+|_+$/g, '') || method;
@@ -183,7 +198,8 @@ export function interfaceSpecToOpenApi(doc: InterfaceSpecDocument): InterfaceSpe
     if (supported.length !== methods.length) {
       warnings.push(`${endpoint.method} ${endpoint.path}: kept ${supported.join(', ').toUpperCase()} only.`);
     }
-    const path = openApiPath(endpoint.path);
+    const route = splitRouteCondition(endpoint.path);
+    const path = openApiPath(route.path);
     const scheme = endpoint.authRequired ? securitySchemeFor(endpoint.auth ?? doc.auth) : null;
     // `security: []` declares an operation public, so an auth-required endpoint
     // without an OpenAPI scheme (none detected, `undecided`, `custom`) leaves
@@ -195,7 +211,7 @@ export function interfaceSpecToOpenApi(doc: InterfaceSpecDocument): InterfaceSpe
     }
     if (scheme) securitySchemes[scheme[0]] = scheme[1];
 
-    const params: Record<string, unknown>[] = [];
+    const params: Record<string, unknown>[] = [...route.required];
     const bodyFields: InterfaceFieldSpec[] = [];
     const declaredPathParams = new Set<string>();
     for (const field of endpoint.requestFields) {
@@ -268,6 +284,10 @@ export function interfaceSpecToOpenApi(doc: InterfaceSpecDocument): InterfaceSpe
       };
       if (authUndecided) operation['x-auth-undecided'] = true;
       else operation.security = scheme ? [{ [scheme[0]]: [] }] : [];
+      if (paths[path]?.[method]) {
+        warnings.push(`${endpoint.method} ${endpoint.path}: OpenAPI holds one operation per path and method; ${method.toUpperCase()} ${path} is already exported, so this variant was left out.`);
+        continue;
+      }
       paths[path] = { ...(paths[path] ?? {}), [method]: operation };
     }
   }

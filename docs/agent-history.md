@@ -57,7 +57,7 @@ Entry template:
 
 ## Current state
 
-As of 2026-11-11.
+As of 2026-11-12.
 
 - Product: MonoField, a local Windows workbench that takes Codex or Claude Code
   CLI work to Korean SI deliverables (interface-spec XLSX, screen-spec PPTX,
@@ -66,6 +66,7 @@ As of 2026-11-11.
   phase A done).
 - Version: `0.11.7-preview.11` (root `package.json`), published on 2026-11-11 as a GitHub prerelease (preview channel, unsigned)
   from `b403fac` on `main`: Kotlin reading, the duplicate-row fix and method-list changes as one change, on top of preview.10.
+  Not released, on the branch only (2026-11-12): `monofield docs scan` / `docs check` and routes split by Spring `params`.
   Stable `latest` is still `v0.11.6`. Workspace packages are
   still named `@open-design/*`; env vars still use the `OD_*` prefix.
 - Shape: pnpm monorepo. `apps/daemon` (Express + SQLite, `monofield` CLI) and
@@ -306,6 +307,14 @@ exercise is unchanged by it.
 ## Open items
 
 Newest first within each group. Remove an item when it is done.
+
+Company use without an AI tool (see the 2026-11-12 Log entry; direction pending the user's answer):
+
+- Excel renderer: a sheet name taken from an interface name with `* ? : \ / [ ]` fails (eGovFrame). Needs a red test and a sanitizer.
+- Not built: the in-app "make from code without AI" entry (HTTP endpoint + contract type + UI + 19 locales), CI recipes
+  (GitHub Actions, GitLab) with an adoption guide, and a way for CI to get the CLI without a repository checkout.
+- A route with a `params` suffix is a new name for 15 eGovFrame handlers: documents scanned before this change pair those handlers
+  as removed + added on the first comparison.
 
 Interface-spec scanner and change analysis (see the 2026-11-11 Log entries):
 
@@ -548,6 +557,33 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-12 — `monofield docs scan` and `docs check` (no AI tool, no daemon); handlers split by `params` are separate routes (`ccr-8432aecf-n9xdfd`)
+
+- Why: the user will use MonoField at their company and delegated the direction. Barriers found: no in-product way to make a
+  specification without an AI tool, and no pull-request/CI check. Work in progress; the user then asked for an opinion on the
+  product direction (all-in-one app), so tasks 3 and 4 below wait for their answer.
+- Done: `apps/daemon/src/docs-cli-code.ts` adds two daemon-free commands to `runDocsCli`. `docs scan [--codebase] [--out] [--xlsx]
+  [--name-dict] [--name] [--include-audit-fields] [--scripts-dir]` writes the interface spec with the bundled Spring scanner
+  (default `docs/api.interface-spec.json` under the codebase) and refuses an empty result. `docs check --base <rev> [--codebase]
+  [--format text|markdown|json] [--lang ko|en] [--fail-on breaking|warning|never] [--out]` scans the code at a Git revision and the
+  working tree and compares them; exit 0 passed, 1 gate failed, 2 could not run. Services: `scanCodebase`,
+  `compareCodeWithRevision` (`services/document-rescan.ts`), `services/interface-spec-check-report.ts`,
+  `services/interface-spec-scripts.ts` (finds the scanner: flag, `MONOFIELD_INTERFACE_SPEC_SCRIPTS_DIR`, resource root, packaged
+  resources, then upward from the module). Change and level labels (ko/en) moved to
+  `packages/contracts/src/docs/interface-spec-change-labels.ts`; a web test keeps the `ko`/`en` locales equal to them.
+- Found by running the built CLI on eGovFrame (`e5c1347b`): 13 URLs are mapped twice and told apart by Spring `params`
+  (`"!cmd"` / `"cmd=Regist"`), which made 13 duplicate `METHOD path` keys, a fatal validation issue, so no Excel could be rendered.
+  Fix: `mapping_condition` in `controller_scanner.py` (used by `kotlin_source.py` too) appends what the caller must send as a query
+  suffix (`/add.do?cmd=Regist`); `!cmd` and `cmd!=x` stay the plain URL; security rules still match the plain path. The OpenAPI
+  export splits the suffix into required query parameters and reports a variant that collides (one operation per path and method).
+- Verified: `python3 -m unittest discover -s tests` in the plugin scripts 84 OK (2 new); `@open-design/contracts` 42 files / 332
+  tests; daemon `tests/docs-cli*` 3 files / 12 tests (6 new); web `InterfaceSpecEditor.facts` 4 tests; `pnpm guard`, `pnpm typecheck`
+  pass. Built CLI on eGovFrame: scan 4.6 s, JSON written, duplicate keys gone.
+- Not done / not run: full daemon and web suites; `docs check` on a real eGovFrame commit pair with the built CLI; the user
+  guide and release notes do not mention the commands yet; no release.
+- Still failing: `docs scan --xlsx` on eGovFrame stops with `Worksheet name … cannot include any of the following characters:
+  * ? : \ / [ ]` (an interface name with `:` used as a sheet name; pre-existing in the Excel renderer, hit in the app too).
 
 ### 2026-11-11 — 0.11.7-preview.11 published from `main` (`ccr-8432aecf-n9xdfd`)
 

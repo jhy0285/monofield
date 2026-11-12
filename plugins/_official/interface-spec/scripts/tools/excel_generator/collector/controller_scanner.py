@@ -275,6 +275,24 @@ def _extract_mapping_paths(anno: str, consts: dict[str, str]) -> tuple[str | Non
     return method, paths
 
 
+def mapping_condition(anno: str) -> str:
+    """The request parameters a mapping requires, as a query suffix: `params = "cmd=Regist"` -> `?cmd=Regist`.
+
+    Spring picks between handlers on one URL by `params`, so for a caller they are different calls and the suffix
+    keeps them different routes. Only what the caller must send is part of the route: `!cmd` and `cmd!=x` say what
+    must be absent, which is the plain URL.
+    """
+    if "(" not in anno or ")" not in anno:
+        return ""
+    inside = anno[anno.find("(") + 1: anno.rfind(")")]
+    found = re.search(r"\bparams\s*=\s*(\{[^}]*\}|\[[^\]]*\]|\"[^\"]*\")", inside)
+    if not found:
+        return ""
+    required = [c.strip() for c in re.findall(r'"([^"]*)"', found.group(1))]
+    required = [c for c in required if c and not c.startswith("!") and "!=" not in c]
+    return "?" + "&".join(required) if required else ""
+
+
 def _balanced_braces(text: str) -> int:
     depth = 0
     for i, ch in enumerate(text):
@@ -1151,10 +1169,12 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
 
                 method = None
                 mpaths = [""]
+                condition = ""
                 for a in pending:
                     if a.startswith(MAPPING_ANNOS):
                         method, mpaths = _extract_mapping_paths(a, local_consts)
                         if method:
+                            condition = mapping_condition(a)
                             break
                 method_name = _extract_method_name(sig)
                 method_security = [
@@ -1281,7 +1301,7 @@ def scan_controllers(codebase_path: Path, repo_root: Path) -> list[ApiSeed]:
                     out.append(
                         ApiSeed(
                             method=method.upper(),
-                            path=full_path,
+                            path=full_path + condition,
                             controller_file=_controller_display_path(path, repo_root, codebase_path),
                             package_name=package_name,
                             service_name=service_name,
