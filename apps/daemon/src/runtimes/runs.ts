@@ -37,6 +37,11 @@ export function createChatRunService({
   // external coding agent can `tail` the file in its own shell during
   // a long OD generation, instead of polling blindly and giving up.
   runsLogDir = null,
+  // Called once when a run is handed to its starter and once when it reaches a
+  // terminal status, whichever route or scheduler created it. The work log
+  // (services/run-outputs.ts) hangs here. A throwing hook never fails a run.
+  onStart = null as null | ((run: any) => void),
+  onFinish = null as null | ((run: any) => void),
 }) {
   const runs = new Map();
 
@@ -50,6 +55,9 @@ export function createChatRunService({
       assistantMessageId: typeof meta.assistantMessageId === 'string' && meta.assistantMessageId ? meta.assistantMessageId : null,
       clientRequestId: typeof meta.clientRequestId === 'string' && meta.clientRequestId ? meta.clientRequestId : null,
       agentId: typeof meta.agentId === 'string' && meta.agentId ? meta.agentId : null,
+      // The person's words for this turn and the model they picked, for the work log.
+      request: typeof meta.currentPrompt === 'string' && meta.currentPrompt.trim() ? meta.currentPrompt : null,
+      requestedModel: typeof meta.model === 'string' && meta.model ? meta.model : null,
       projectMetadata:
         meta.projectMetadata && typeof meta.projectMetadata === 'object' && !Array.isArray(meta.projectMetadata)
           ? meta.projectMetadata
@@ -207,6 +215,7 @@ export function createChatRunService({
     run.exitCode = code;
     run.signal = signal;
     run.updatedAt = Date.now();
+    try { onFinish?.(run); } catch (err) { console.warn('[runs] finish hook failed', err); }
     emit(run, 'end', { code, signal, status, resumable: run.resumable ?? false });
     for (const sse of run.clients) sse.end();
     run.clients.clear();
@@ -325,6 +334,7 @@ export function createChatRunService({
       ...(run.analyticsTelemetry ?? {}),
       startRequestedAt: Date.now(),
     };
+    try { onStart?.(run); } catch (err) { console.warn('[runs] start hook failed', err); }
     void starter(run).catch((err) => {
       fail(run, 'AGENT_EXECUTION_FAILED', err instanceof Error ? err.message : String(err));
     });

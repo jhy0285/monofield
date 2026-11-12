@@ -367,6 +367,15 @@ const SUBCOMMAND_MAP = {
     const { runRefsCli } = await import('./services/refs-cli.js');
     return runRefsCli(args, { baseUrl: cliDaemonBaseUrl, parseFlags, positionalArgs: collectCliPositionals });
   },
+  // The files AI runs left behind and the work log, against /api/run-outputs and /api/run-log.
+  outputs: async (args: string[]) => {
+    const { runOutputsCli } = await import('./services/outputs-cli.js');
+    return runOutputsCli(args, { baseUrl: cliDaemonBaseUrl, parseFlags, positionalArgs: collectCliPositionals });
+  },
+  usage: async (args: string[]) => {
+    const { runUsageCli } = await import('./services/outputs-cli.js');
+    return runUsageCli(args, { baseUrl: cliDaemonBaseUrl, parseFlags, positionalArgs: collectCliPositionals });
+  },
   // Settings → Execution permissions, against /api/execution-permissions.
   permissions: async (args: string[]) => {
     const { runPermissionsCli } = await import('./services/permissions-cli.js');

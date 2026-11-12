@@ -16,6 +16,7 @@ export type EntryHomeView =
   | 'projects'
   | 'open-work'
   | 'tasks'
+  | 'results'
   | 'plugins'
   | 'design-systems'
   | 'library'
@@ -106,6 +107,9 @@ export function parseRoute(pathname: string): Route {
   if (parts[0] === 'automations' || parts[0] === 'tasks') {
     return { kind: 'home', view: 'tasks' };
   }
+  if (parts[0] === 'results') {
+    return { kind: 'home', view: 'results' };
+  }
   if (parts[0] === 'open-work') {
     return { kind: 'home', view: 'open-work' };
   }
@@ -138,6 +142,7 @@ export function buildPath(route: Route): string {
     if (route.view === 'projects') return '/projects';
     if (route.view === 'open-work') return '/open-work';
     if (route.view === 'tasks') return '/automations';
+    if (route.view === 'results') return '/results';
     if (route.view === 'plugins') return '/plugins';
     if (route.view === 'design-systems') return '/design-systems';
     if (route.view === 'library') return LIBRARY_UI_VISIBLE ? '/library' : '/';

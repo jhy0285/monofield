@@ -656,6 +656,9 @@ import { registerJudgmentRoutes } from './routes/judgments.js';
 import { registerBrowserEvidenceRoutes } from './routes/browser-evidence.js';
 import { registerReaEvidenceRoutes } from './routes/rea-evidence.js';
 import { registerReferenceRoutes } from './routes/references.js';
+import { registerRunOutputRoutes } from './routes/run-outputs.js';
+import { createRunOutputStore } from './services/run-outputs.js';
+import { runFinishForWorkLog, runStartForWorkLog } from './services/run-work-log.js';
 import { registerCodeOntologyRoutes } from './routes/code-ontology.js';
 import { registerJavaToolsRoutes } from './routes/java-tools.js';
 import { JavaLanguageService } from './services/java/language-service.js';
@@ -4295,11 +4298,29 @@ export async function startServer({
     readAppConfig,
   });
   const { analyticsService } = telemetry;
+  // The work log and result shelf: every run, whoever created it, is written down
+  // and the files it left are copied (services/run-outputs.ts).
+  const runOutputs = createRunOutputStore({
+    db,
+    dataDir: RUNTIME_DATA_DIR,
+    projectRoot: (projectId) => {
+      const project = getProject(db, projectId);
+      return project ? resolveProjectDir(PROJECTS_DIR, projectId, project.metadata) : null;
+    },
+  });
+  void runOutputs.prune().catch(() => {});
   const design = {
     runs: createChatRunService({
       createSseResponse,
       createSseErrorPayload,
       runsLogDir: path.join(RUNTIME_DATA_DIR, 'runs'),
+      onStart: (run) => runOutputs.start(runStartForWorkLog(db, run, {
+        agentName: (agentId) => getAgentDef(agentId)?.name ?? null,
+        projectRoot: (projectId, metadata) => resolveProjectDir(PROJECTS_DIR, projectId, metadata),
+      })),
+      onFinish: (run) => {
+        void runOutputs.finish(runFinishForWorkLog(run)).catch((err) => console.warn('[run-outputs] finish failed', err));
+      },
     }),
     analytics: analyticsService,
     getAppVersion: () => telemetry.getCachedAppVersion()?.version ?? '0.0.0',
@@ -5378,6 +5399,7 @@ export async function startServer({
   registerBrowserEvidenceRoutes(app, { db, http: httpDeps, paths: pathDeps, projectFiles: projectFileDeps });
   registerReaEvidenceRoutes(app, { db, http: httpDeps, paths: pathDeps, projectFiles: projectFileDeps });
   registerReferenceRoutes(app, { db, http: httpDeps, paths: pathDeps, projectFiles: projectFileDeps });
+  registerRunOutputRoutes(app, { http: httpDeps, runOutputs });
   registerCodeOntologyRoutes(app, { db, http: httpDeps, paths: pathDeps, projectFiles: projectFileDeps, verification, schemaWatch });
   registerJavaToolsRoutes(app,{db,http:httpDeps,paths:pathDeps,projectFiles:projectFileDeps,javaLanguage,javaDebug,verification});
   registerPluginAssetRoutes(app, {

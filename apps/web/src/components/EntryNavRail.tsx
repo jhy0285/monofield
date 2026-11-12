@@ -20,6 +20,7 @@ export type EntryView =
   | 'projects'
   | 'open-work'
   | 'tasks'
+  | 'results'
   | 'plugins'
   | 'design-systems'
   | 'library'
@@ -171,6 +172,15 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose, 
             <Icon name="layers-filled" size={18} />
           </NavButton>
         ) : null}
+        <NavButton
+          active={view === 'results'}
+          ariaLabel={t('entry.navResults')}
+          tooltip={t('entry.navResults')}
+          onClick={() => selectView('results')}
+          testId="entry-nav-results"
+        >
+          <Icon name="history" size={18} />
+        </NavButton>
         <NavButton
           active={view === 'tasks'}
           ariaLabel={t('entry.navTasks')}

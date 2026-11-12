@@ -155,6 +155,7 @@ function reviveTab(value: unknown): WorkspaceChromeTab | null {
       || view === 'projects'
       || view === 'open-work'
       || view === 'tasks'
+      || view === 'results'
       || view === 'plugins'
       || view === 'design-systems'
       || view === 'integrations'
@@ -1184,6 +1185,7 @@ function displayTabFor(
     projects: t('entry.navProjects'),
     'open-work': t('entry.navOpenWork'),
     tasks: t('entry.navTasks'),
+    results: t('entry.navResults'),
     plugins: t('entry.navPlugins'),
     'design-systems': t('entry.navDesignSystems'),
     library: 'Library',
@@ -1196,6 +1198,7 @@ function displayTabFor(
     projects: 'folder',
     'open-work': 'globe',
     tasks: 'kanban',
+    results: 'history',
     plugins: 'grid',
     'design-systems': 'blocks',
     library: 'image',

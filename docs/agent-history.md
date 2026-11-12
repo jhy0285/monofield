@@ -67,6 +67,7 @@ As of 2026-11-12.
 - Version: `0.11.7-preview.11` (root `package.json`), published on 2026-11-11 as a GitHub prerelease (preview channel, unsigned)
   from `b403fac` on `main`: Kotlin reading, the duplicate-row fix and method-list changes as one change, on top of preview.10.
   Not released, on the branch only (2026-11-12): `monofield docs scan` / `docs check` and routes split by Spring `params`.
+  Also on the branch only: the work log and result shelf (Results view, `monofield outputs`, `monofield usage`).
   Stable `latest` is still `v0.11.6`. Workspace packages are
   still named `@open-design/*`; env vars still use the `OD_*` prefix.
 - Shape: pnpm monorepo. `apps/daemon` (Express + SQLite, `monofield` CLI) and
@@ -308,7 +309,16 @@ exercise is unchanged by it.
 
 Newest first within each group. Remove an item when it is done.
 
-Company use without an AI tool (see the 2026-11-12 Log entry; direction pending the user's answer):
+AI work board (see the 2026-11-12 "work log and result shelf" Log entry; direction set by the user):
+
+- Next, in the order agreed: an intranet mode (one setting that turns off outside calls and hides menus that are not needed,
+  verified with the network blocked); the board as the first screen (cards with status, tool, time, tokens, files; cards waiting
+  for an answer made obvious); then the test-result document plan (scenario → run with captures → result workbook).
+- Not built here: search over the content of conversations (only request text and file paths are searched), cost in money,
+  retention settings for kept copies, a per-run "before" copy of files that existed before the first recorded run.
+- Not verified: real Codex / Claude Code CLIs, Windows, the packaged app.
+
+Company use without an AI tool (see the 2026-11-12 "docs scan" Log entry):
 
 - Excel renderer: a sheet name taken from an interface name with `* ? : \ / [ ]` fails (eGovFrame). Needs a red test and a sanitizer.
 - Not built: the in-app "make from code without AI" entry (HTTP endpoint + contract type + UI + 19 locales), CI recipes
@@ -557,6 +567,48 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-12 — work log and result shelf: every AI run is recorded, the files it left are kept as versions (`ccr-8432aecf-n9xdfd`)
+
+- Why: the user showed slides of an "AI 자료보드" (requests to Codex/Claude and their files managed in one place: collect per
+  run, search by format/request/tool, versions, preview/download, history and token usage) and said none of it exists at their
+  company: build it into MonoField. Direction agreed in the conversation: this board first; the test-result document and the
+  deliverables-management ideas come after.
+- Done:
+  - Contract `packages/contracts/src/api/run-outputs.ts`: `RunLogEntry`, `RunOutput`, list/detail/restore/usage DTOs,
+    `runOutputFormat`, `isRunOutputPath` (documents, sheets, slides, images, data, web, media; in a development project data and web
+    files only under `docs/`).
+  - Daemon: `createChatRunService` gained `onStart` / `onFinish` hooks (`src/runtimes/runs.ts`) and keeps `request` and
+    `requestedModel` on the run. `src/services/run-outputs.ts` (tables `run_log`, `run_outputs`; copies addressed by SHA-256 under the
+    data root's `run-outputs/blobs/`; version numbers per project path; restore keeps what it replaces; `prune` removes copies of
+    deleted projects; rows left `running` by a stopped daemon are closed as failed). `src/services/run-work-log.ts` maps a run to the
+    log (request text, falling back to the conversation's newest user message for schedulers; usage from the run's last usage event,
+    input counted with its cached part). Routes `/api/run-outputs`, `/api/run-outputs/:id`, `/:id/content`, `/:id/restore`,
+    `/api/run-log`, `/api/run-log/usage` (`src/routes/run-outputs.ts`).
+  - CLI: `monofield outputs list|show|get|restore` and `monofield usage [runs]` (`src/services/outputs-cli.ts`), `--json` on all.
+  - Web: home rail entry and `/results` route; `apps/web/src/components/results/` (files tab with search, format/project/tool
+    filters, all-versions toggle, detail pane with image/text preview, versions, same-run files, open project, download, restore;
+    work-log tab with period totals, by tool, by project, the request list and a jump from a request to its files; re-reads every
+    4 s while a run is in progress). 71 keys in `types.ts` and all 19 locales.
+  - Docs: `docs/user-guide.ko.md` (developer step 6, PM "작업 기록과 토큰 사용량"), `apps/daemon/AGENTS.md` (module boundaries).
+- Found by running it for real: a Claude run made the daemon write `.mcp.json` into the project, and it was shelved as a result.
+  Hidden files and folders are now never copied (red test first). `out/` was wrongly in the ignored folders (red tests caught it).
+- Verified:
+  - `apps/daemon`: `tests/run-outputs.test.ts` 8, `tests/run-work-log.test.ts` 3, `tests/run-outputs-route-cli.test.ts` 2 (a
+    stand-in `codex` binary through `startServer`, `POST /api/runs`, HTTP and the built CLI). Full suite: not finished when this entry was written (the first attempt was stopped by a 10-minute limit; see the next entry for the result).
+  - `apps/web`: `tests/components/ResultsView.test.tsx` 5; full suite 419 files / 4029 tests passed (13 skipped).
+  - `pnpm guard`, `pnpm typecheck`, `pnpm i18n:check` pass.
+  - Live app (`pnpm tools-dev run web --namespace board`, isolated `OD_DATA_DIR`): five runs through stand-in `codex` and `claude`
+    binaries (four succeeded, one failed) left 8 results in 2 projects; `monofield usage` printed 182,500 tokens (input 167,900,
+    output 14,600, cache read 112,000) and "1 run(s) reported no usage"; the Results view was driven with Playwright (list, detail,
+    version switch, restore both directions, search, image preview, work log, jump to a request's files; no page or console errors)
+    in the light theme and with `data-theme="dark"`.
+- Not run / not done: real Codex or Claude Code CLIs (stand-ins only, so real token numbers were not compared with the vendors'
+  own counters); Windows; the packaged app; Playwright e2e under `e2e/ui`; no release.
+- Limits: two runs in one folder at once cannot be told apart (a file is shelved under the run that ends first); a file a run
+  changed that had no kept copy starts at v1 with the changed bytes (the bytes from before the first recorded run are not kept);
+  files over 64 MB are listed but not copied; usage is the last usage event of the run as the tool reported it; no cost in money;
+  lists read at most 50,000 rows and filter in memory.
 
 ### 2026-11-12 — `monofield docs scan` and `docs check` (no AI tool, no daemon); handlers split by `params` are separate routes (`ccr-8432aecf-n9xdfd`)
 

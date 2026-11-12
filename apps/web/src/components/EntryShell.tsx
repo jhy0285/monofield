@@ -90,6 +90,7 @@ import { CenteredLoader } from './Loading';
 import { DesignsTab } from './DesignsTab';
 import { DesignSystemsTab } from './DesignSystemsTab';
 import { EntryNavRail, type EntryView as EntryViewKind } from './EntryNavRail';
+import { ResultsView } from './results/ResultsView';
 import { LibrarySection } from './LibrarySection';
 import { HomeView } from './HomeView';
 import { EntryViewPane } from './EntryViewPane';
@@ -877,6 +878,9 @@ export function EntryShell({
                   onManagePlugins={() => changeView('plugins')}
                 />
               ) : null}
+            </EntryViewPane>
+            <EntryViewPane name="results" active={view === 'results'}>
+              {view === 'results' ? <ResultsView /> : null}
             </EntryViewPane>
             <EntryViewPane name="tasks" active={view === 'tasks'}>
               <TasksView
