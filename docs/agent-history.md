@@ -592,7 +592,8 @@ Code health:
   thread in each column (`monofield queue`: "1 running now · 1 waiting for your answer · 1 done · 1 failed"); Playwright drove
   board → thread files → grid → large view → conversation → new request. The only failed responses were the project screen's own
   `DESIGN.md` probe (404, existing behaviour).
-- Full daemon suite: still running when this entry was committed; the result is in the commit after this one.
+- Full daemon suite (729 s): 480 files / 5730 tests passed; 2 files failed with one test each, the recorded baseline failures
+  of this environment (`tests/mcp-spawn.test.ts`, `tests/run-resume-on-failure.test.ts`).
 - Not run / not done: real Codex CLI (stand-ins only), Windows, the packaged app, `e2e/ui`. The queue is not the app's start
   screen: `/` stays the home composer; an open work-queue tab is restored by the existing tab memory. No release.
 - Limits: a thread is one conversation, so two unrelated requests typed into one conversation share a card; a thread's status is
