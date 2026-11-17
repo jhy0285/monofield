@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, readFile, rm, utimes, writeFile } from 'node:fs/promise
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { closeDatabase, deleteProject, insertProject, openDatabase } from '../src/db.js';
+import { closeDatabase, deleteProject, insertConversation, insertProject, openDatabase } from '../src/db.js';
 import { createRunOutputStore, type RunOutputStore } from '../src/services/run-outputs.js';
 
 // The work log and the result shelf: every run is written down with what was asked and what it used, and every
@@ -34,13 +34,13 @@ describe('run outputs', () => {
     await writeFile(file, body);
   }
   /** One run: `work` is what the AI tool does to the project folder. */
-  async function run(runId: string, work: () => Promise<void>, extra: { agentId?: string; request?: string; status?: 'succeeded' | 'failed'; usage?: Record<string, number>; development?: boolean } = {}) {
+  async function run(runId: string, work: () => Promise<void>, extra: { agentId?: string; request?: string; status?: 'succeeded' | 'failed'; usage?: Record<string, number>; development?: boolean; conversationId?: string; needsReply?: boolean } = {}) {
     store.start({
-      runId, projectId: 'p1', conversationId: 'c1', agentId: extra.agentId ?? 'codex', agentName: extra.agentId === 'claude' ? 'Claude Code' : 'Codex',
+      runId, projectId: 'p1', conversationId: extra.conversationId ?? 'c1', agentId: extra.agentId ?? 'codex', agentName: extra.agentId === 'claude' ? 'Claude Code' : 'Codex',
       model: null, request: extra.request ?? '주문 API 명세서를 만들어 줘', root: project, development: extra.development ?? false,
     });
     await work();
-    return store.finish({ runId, status: extra.status ?? 'succeeded', usage: extra.usage ?? null });
+    return store.finish({ runId, status: extra.status ?? 'succeeded', usage: extra.usage ?? null, needsReply: extra.needsReply ?? false });
   }
 
   it('keeps a copy of each file a run created or changed, and leaves untouched files alone', async () => {
@@ -129,6 +129,34 @@ describe('run outputs', () => {
     expect(summary.byDay).toHaveLength(1);
     expect(store.runs({ status: 'failed' }).runs.map((entry) => entry.runId)).toEqual(['r3']);
     expect(store.runs({ q: '명세서' }).total).toBe(3);
+  });
+
+  it('numbers request threads and runs, and puts each thread on the board by what its newest run needs', async () => {
+    insertConversation(db, { id: 'c2', projectId: 'p1', title: '정산 배치 분석', createdAt: 1, updatedAt: 1 });
+    const tokens = (total: number) => ({ inputTokens: total - 10, outputTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: total });
+    await run('r1', () => put('out/orders.md', 'v1'), { usage: tokens(100) });
+    await run('r2', () => put('out/orders.md', 'v2'), { request: '환불 API도 넣을까요?', needsReply: true, usage: tokens(50) });
+    await run('r3', async () => {}, { conversationId: 'c2', request: '배치 로그를 분석해 줘', status: 'failed' });
+    await run('r4', () => put('out/flow.png', 'png'), { conversationId: 'c3', request: '흐름 그림을 그려 줘' });
+    store.start({ runId: 'r5', projectId: 'p1', conversationId: 'c4', agentId: 'codex', agentName: 'Codex', model: null, request: '테이블 목록을 정리해 줘', root: project, development: false });
+
+    expect(store.runs({}).runs.map((entry) => [entry.number, entry.issueNumber])).toEqual([[5, 4], [4, 3], [3, 2], [2, 1], [1, 1]]);
+    const queue = store.queue({});
+    expect(queue.running).toBe(1);
+    expect(queue.counts).toEqual({ running: 1, 'needs-reply': 1, done: 1, failed: 1 });
+    expect(queue.issues.map((issue) => [issue.number, issue.status, issue.title, issue.runCount, issue.outputCount, issue.totalTokens])).toEqual([
+      [4, 'running', '테이블 목록을 정리해 줘', 1, 0, 0],
+      [3, 'done', '흐름 그림을 그려 줘', 1, 1, 0],
+      [2, 'failed', '정산 배치 분석', 1, 0, 0],
+      [1, 'needs-reply', '주문 API 명세서를 만들어 줘', 2, 2, 150],
+    ]);
+    expect(queue.issues[3]!.lastRun).toMatchObject({ runId: 'r2', number: 2, needsReply: true });
+
+    // a result says which thread and run made it, and a thread's results can be listed on their own
+    expect(store.list({ conversationId: 'c1', allVersions: true }).outputs.map((output) => [output.path, output.version, output.runNumber, output.issueNumber, output.issueTitle]))
+      .toEqual([['out/orders.md', 2, 2, 1, '주문 API 명세서를 만들어 줘'], ['out/orders.md', 1, 1, 1, '주문 API 명세서를 만들어 줘']]);
+    expect(store.list({ conversationId: 'c3' }).total).toBe(1);
+    expect(store.runs({ conversationId: 'c2' }).runs.map((entry) => entry.runId)).toEqual(['r3']);
   });
 
   it('never copies hidden files: they are tool configuration and may hold credentials', async () => {

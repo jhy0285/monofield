@@ -22,6 +22,10 @@ import {
   type RunOutputRestoreResponse,
   type RunUsageBucket,
   type RunUsageSummaryResponse,
+  type WorkIssue,
+  type WorkIssueStatus,
+  type WorkQueueResponse,
+  workIssueStatus,
 } from '@open-design/contracts';
 
 type SqliteDb = Database.Database;
@@ -64,6 +68,8 @@ export interface RunFinish {
   runId: string;
   status: Exclude<RunLogStatus, 'running'>;
   usage: Partial<Omit<RunLogUsage, 'measured'>> | null;
+  /** The run ended by asking the person a question. */
+  needsReply?: boolean;
 }
 
 export type RunOutputStore = ReturnType<typeof createRunOutputStore>;
@@ -127,30 +133,39 @@ interface OutputRow {
   id: string; runId: string | null; projectId: string; projectName: string | null; conversationId: string | null; path: string;
   version: number; versionCount: number; change: RunOutputChange; sha256: string; size: number; stored: number; createdAt: number;
   agentId: string | null; agentName: string | null; request: string | null;
+  runNumber: number | null; issueNumber: number | null; issueTitle: string | null;
 }
 interface RunRow {
   runId: string; projectId: string | null; projectName: string | null; conversationId: string | null; agentId: string | null;
   agentName: string | null; model: string | null; request: string; status: RunLogStatus; startedAt: number; finishedAt: number | null;
   inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; totalTokens: number; measured: number;
-  outputCount: number;
+  outputCount: number; number: number; needsReply: number; issueNumber: number | null; issueTitle: string | null;
 }
+
+/** A thread is called by its conversation's title, or by the first thing asked in it. */
+const ISSUE_TITLE = `COALESCE(NULLIF(c.title, ''), (SELECT f.request FROM run_log f WHERE f.conversation_id = r.conversation_id ORDER BY f.started_at, f.number LIMIT 1))`;
+const ISSUE_JOINS = `
+    LEFT JOIN run_issues i ON i.conversation_id = r.conversation_id
+    LEFT JOIN conversations c ON c.id = r.conversation_id`;
 
 const OUTPUT_SELECT = `
   SELECT o.id, o.run_id AS runId, o.project_id AS projectId, p.name AS projectName, r.conversation_id AS conversationId,
          o.rel_path AS path, o.version, o.change, o.sha256, o.size, o.stored, o.created_at AS createdAt,
          r.agent_id AS agentId, r.agent_name AS agentName, r.request,
+         r.number AS runNumber, i.number AS issueNumber, ${ISSUE_TITLE} AS issueTitle,
          (SELECT COUNT(*) FROM run_outputs v WHERE v.project_id = o.project_id AND v.rel_path = o.rel_path) AS versionCount
     FROM run_outputs o
     LEFT JOIN run_log r ON r.run_id = o.run_id
-    LEFT JOIN projects p ON p.id = o.project_id`;
+    LEFT JOIN projects p ON p.id = o.project_id${ISSUE_JOINS}`;
 const RUN_SELECT = `
   SELECT r.run_id AS runId, r.project_id AS projectId, p.name AS projectName, r.conversation_id AS conversationId,
          r.agent_id AS agentId, r.agent_name AS agentName, r.model, r.request, r.status, r.started_at AS startedAt,
          r.finished_at AS finishedAt, r.input_tokens AS inputTokens, r.output_tokens AS outputTokens,
          r.cache_read_tokens AS cacheReadTokens, r.cache_write_tokens AS cacheWriteTokens, r.total_tokens AS totalTokens,
-         r.measured, r.output_count AS outputCount
+         r.measured, r.output_count AS outputCount, r.number, r.needs_reply AS needsReply,
+         i.number AS issueNumber, ${ISSUE_TITLE} AS issueTitle
     FROM run_log r
-    LEFT JOIN projects p ON p.id = r.project_id`;
+    LEFT JOIN projects p ON p.id = r.project_id${ISSUE_JOINS}`;
 
 function toOutput(row: OutputRow): RunOutput {
   return {
@@ -159,6 +174,7 @@ function toOutput(row: OutputRow): RunOutput {
     version: row.version, versionCount: row.versionCount, latest: row.version === row.versionCount, change: row.change,
     sha256: row.sha256, size: row.size, stored: row.stored === 1, createdAt: row.createdAt,
     agentId: row.agentId, agentName: row.agentName, request: row.request ?? '',
+    runNumber: row.runNumber, issueNumber: row.issueNumber, issueTitle: row.runId ? row.issueTitle : null,
   };
 }
 
@@ -167,6 +183,7 @@ function toRun(row: RunRow): RunLogEntry {
     runId: row.runId, projectId: row.projectId, projectName: row.projectName, conversationId: row.conversationId,
     agentId: row.agentId, agentName: row.agentName, model: row.model, request: row.request, status: row.status,
     startedAt: row.startedAt, finishedAt: row.finishedAt, outputCount: row.outputCount,
+    number: row.number, needsReply: row.needsReply === 1, issueNumber: row.issueNumber, issueTitle: row.issueNumber === null ? null : row.issueTitle,
     usage: {
       inputTokens: row.inputTokens, outputTokens: row.outputTokens, cacheReadTokens: row.cacheReadTokens,
       cacheWriteTokens: row.cacheWriteTokens, totalTokens: row.totalTokens, measured: row.measured === 1,
@@ -236,7 +253,22 @@ export function createRunOutputStore(deps: RunOutputStoreDeps) {
     );
     CREATE INDEX IF NOT EXISTS idx_run_outputs_created ON run_outputs(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_run_outputs_run ON run_outputs(run_id);
+    CREATE TABLE IF NOT EXISTS run_issues (
+      conversation_id TEXT PRIMARY KEY,
+      number INTEGER NOT NULL UNIQUE
+    );
   `);
+  // Columns added after the first build that had run_log.
+  const columns = new Set((db.prepare(`PRAGMA table_info(run_log)`).all() as Array<{ name: string }>).map((column) => column.name));
+  if (!columns.has('number')) {
+    db.exec(`ALTER TABLE run_log ADD COLUMN number INTEGER`);
+    db.exec(`UPDATE run_log SET number = (SELECT COUNT(*) FROM run_log e WHERE e.started_at < run_log.started_at OR (e.started_at = run_log.started_at AND e.rowid <= run_log.rowid))`);
+  }
+  if (!columns.has('needs_reply')) db.exec(`ALTER TABLE run_log ADD COLUMN needs_reply INTEGER NOT NULL DEFAULT 0`);
+  db.exec(`INSERT OR IGNORE INTO run_issues (conversation_id, number)
+           SELECT conversation_id, ROW_NUMBER() OVER (ORDER BY MIN(started_at), MIN(number)) + (SELECT COALESCE(MAX(number), 0) FROM run_issues)
+             FROM run_log WHERE conversation_id IS NOT NULL AND conversation_id NOT IN (SELECT conversation_id FROM run_issues)
+            GROUP BY conversation_id`);
   // Runs live in the daemon's memory, so a row still open when the store is created belongs to a daemon that stopped.
   db.prepare(`UPDATE run_log SET status = 'failed', finished_at = COALESCE(finished_at, ?) WHERE status = 'running'`).run(now());
 
@@ -275,10 +307,15 @@ export function createRunOutputStore(deps: RunOutputStoreDeps) {
   }
 
   function start(run: RunStart): void {
-    db.prepare(`INSERT OR REPLACE INTO run_log (run_id, project_id, conversation_id, agent_id, agent_name, model, request, root, status, started_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'running', ?)`)
-      .run(run.runId, run.projectId, run.conversationId, run.agentId, run.agentName, run.model,
-        run.request.replace(/\s+/g, ' ').trim().slice(0, RUN_REQUEST_MAX_CHARS), run.root, now());
+    db.transaction(() => {
+      if (run.conversationId) {
+        db.prepare(`INSERT OR IGNORE INTO run_issues (conversation_id, number) VALUES (?, (SELECT COALESCE(MAX(number), 0) + 1 FROM run_issues))`).run(run.conversationId);
+      }
+      db.prepare(`INSERT OR REPLACE INTO run_log (run_id, project_id, conversation_id, agent_id, agent_name, model, request, root, status, started_at, number)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, (SELECT COALESCE(MAX(number), 0) + 1 FROM run_log))`)
+        .run(run.runId, run.projectId, run.conversationId, run.agentId, run.agentName, run.model,
+          run.request.replace(/\s+/g, ' ').trim().slice(0, RUN_REQUEST_MAX_CHARS), run.root, now());
+    })();
     if (run.projectId && run.root) {
       baselines.set(run.runId, { root: run.root, projectId: run.projectId, development: run.development, files: listResultFiles(run.root, run.development) });
     }
@@ -304,9 +341,9 @@ export function createRunOutputStore(deps: RunOutputStoreDeps) {
     const usage = run.usage;
     const total = usage?.totalTokens ?? ((usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0));
     db.prepare(`UPDATE run_log SET status = ?, finished_at = ?, input_tokens = ?, output_tokens = ?, cache_read_tokens = ?, cache_write_tokens = ?,
-                total_tokens = ?, measured = ?, output_count = ? WHERE run_id = ?`)
+                total_tokens = ?, measured = ?, output_count = ?, needs_reply = ? WHERE run_id = ?`)
       .run(run.status, now(), usage?.inputTokens ?? 0, usage?.outputTokens ?? 0, usage?.cacheReadTokens ?? 0, usage?.cacheWriteTokens ?? 0,
-        total, usage && total > 0 ? 1 : 0, kept.length, run.runId);
+        total, usage && total > 0 ? 1 : 0, kept.length, run.status === 'succeeded' && run.needsReply ? 1 : 0, run.runId);
     return kept;
   }
 
@@ -315,7 +352,8 @@ export function createRunOutputStore(deps: RunOutputStoreDeps) {
     const rows = (db.prepare(`${OUTPUT_SELECT} ORDER BY o.created_at DESC, o.version DESC LIMIT 50000`).all() as OutputRow[]).map(toOutput)
       .filter((output) => query.allVersions || query.runId || output.latest)
       .filter((output) => !needle || output.path.toLowerCase().includes(needle) || output.request.toLowerCase().includes(needle))
-      .filter((output) => !query.runId || output.runId === query.runId);
+      .filter((output) => !query.runId || output.runId === query.runId)
+      .filter((output) => !query.conversationId || output.conversationId === query.conversationId);
     const matches = (output: RunOutput, skip?: 'project' | 'agent' | 'format') =>
       (skip === 'project' || !query.projectId || output.projectId === query.projectId)
       && (skip === 'agent' || !query.agentId || output.agentId === query.agentId)
@@ -334,10 +372,40 @@ export function createRunOutputStore(deps: RunOutputStoreDeps) {
 
   function matchingRuns(query: RunLogListQuery): RunLogEntry[] {
     const needle = query.q?.trim().toLowerCase() ?? '';
-    return (db.prepare(`${RUN_SELECT} ORDER BY r.started_at DESC, r.rowid DESC LIMIT 50000`).all() as RunRow[]).map(toRun)
+    return (db.prepare(`${RUN_SELECT} ORDER BY r.started_at DESC, r.number DESC LIMIT 50000`).all() as RunRow[]).map(toRun)
       .filter((run) => (!query.projectId || run.projectId === query.projectId) && (!query.agentId || run.agentId === query.agentId)
+        && (!query.conversationId || run.conversationId === query.conversationId)
         && (!query.status || run.status === query.status) && (query.from === undefined || run.startedAt >= query.from)
         && (query.to === undefined || run.startedAt < query.to) && (!needle || run.request.toLowerCase().includes(needle)));
+  }
+
+  /** The board: one entry per request thread, placed by what its newest run needs. */
+  function queue(query: Pick<RunLogListQuery, 'projectId' | 'agentId'>): WorkQueueResponse {
+    const issues = new Map<string, WorkIssue>();
+    const found = matchingRuns(query);
+    for (const run of found) {
+      if (!run.conversationId || run.issueNumber === null) continue;
+      const issue = issues.get(run.conversationId);
+      if (!issue) {
+        // Runs arrive newest first, so the first one seen for a thread is its newest.
+        issues.set(run.conversationId, {
+          number: run.issueNumber, conversationId: run.conversationId, projectId: run.projectId, projectName: run.projectName,
+          title: run.issueTitle || run.request, status: workIssueStatus(run), runCount: 1, outputCount: run.outputCount,
+          totalTokens: run.usage.totalTokens, lastRun: run, updatedAt: run.finishedAt ?? run.startedAt,
+        });
+      } else {
+        issue.runCount += 1;
+        issue.outputCount += run.outputCount;
+        issue.totalTokens += run.usage.totalTokens;
+      }
+    }
+    const counts: Record<WorkIssueStatus, number> = { running: 0, 'needs-reply': 0, done: 0, failed: 0 };
+    for (const issue of issues.values()) counts[issue.status] += 1;
+    return {
+      issues: [...issues.values()].sort((a, b) => b.updatedAt - a.updatedAt || b.number - a.number),
+      running: found.filter((run) => run.status === 'running').length,
+      counts,
+    };
   }
 
   function runs(query: RunLogListQuery): RunLogListResponse {
@@ -443,5 +511,5 @@ export function createRunOutputStore(deps: RunOutputStoreDeps) {
     return removed;
   }
 
-  return { start, finish, list, runs, usage, content, detail, restore, prune, output: outputById };
+  return { start, finish, list, runs, queue, usage, content, detail, restore, prune, output: outputById };
 }

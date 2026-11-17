@@ -2,11 +2,11 @@ import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type {
   RunLogEntry, RunLogListResponse, RunOutput, RunOutputDetailResponse, RunOutputListResponse, RunOutputRestoreResponse,
-  RunUsageBucket, RunUsageSummaryResponse,
+  RunUsageBucket, RunUsageSummaryResponse, WorkIssue, WorkQueueResponse,
 } from '@open-design/contracts';
 
 const OUTPUTS_USAGE = `Usage:
-  monofield outputs list    [--project <id>] [--agent <id>] [--format document|sheet|slides|image|data|web|media] [--run <run-id>]
+  monofield outputs list    [--project <id>] [--agent <id>] [--format document|sheet|slides|image|data|web|media] [--run <run-id>] [--issue <n>]
                             [--q <text>] [--all-versions] [--limit <n>] [--json]
   monofield outputs show    <output-id> [--json]
   monofield outputs get     <output-id> [--out <file>]
@@ -19,6 +19,13 @@ list shows the newest version of each file, newest first; --q matches the file p
 show prints one result with its versions, the run that made it and whether the project's file still equals it.
 get writes that version's bytes to --out (default: the file's name in the current folder).
 restore puts that version back into the project; what it replaces is kept first as a new version.`;
+
+const QUEUE_USAGE = `Usage:
+  monofield queue [--project <id>] [--agent <id>] [--status running|needs-reply|done|failed] [--json]
+
+The work queue: every request thread (a conversation with at least one AI run) with where it stands. running is still
+working, needs-reply ended on a question and waits for your answer, done finished, failed ended badly or was canceled.
+#<n> is the thread's number; see its files with monofield outputs list --issue <n>.`;
 
 const USAGE_USAGE = `Usage:
   monofield usage      [--project <id>] [--agent <id>] [--days <n>] [--json]
@@ -45,13 +52,14 @@ export function formatBytes(bytes: number): string {
 
 export function formatOutputLine(output: RunOutput): string {
   const version = output.versionCount > 1 ? ` v${output.version}/${output.versionCount}` : '';
-  return `${output.id}  ${output.path}${version}  ${formatBytes(output.size)}  ${when(output.createdAt)}  ${output.agentName ?? '-'}  ${output.projectName ?? output.projectId}`
+  const origin = output.issueNumber !== null && output.runNumber !== null ? `  #${output.issueNumber} run ${output.runNumber}` : '';
+  return `${output.id}  ${output.path}${version}  ${formatBytes(output.size)}  ${when(output.createdAt)}  ${output.agentName ?? '-'}  ${output.projectName ?? output.projectId}${origin}`
     + (output.request ? `\n    ${output.request}` : '');
 }
 
 export function formatRunLine(run: RunLogEntry): string {
   const tokens = run.usage.measured ? `${count(run.usage.totalTokens)} tokens` : 'no usage reported';
-  return `${when(run.startedAt)}  ${run.status.padEnd(9)}  ${(run.agentName ?? '-').padEnd(12)}  ${tokens}  ${run.outputCount} file(s)  ${run.projectName ?? '-'}`
+  return `run ${run.number}${run.issueNumber !== null ? ` #${run.issueNumber}` : ''}  ${when(run.startedAt)}  ${run.status.padEnd(9)}  ${(run.agentName ?? '-').padEnd(12)}  ${tokens}  ${run.outputCount} file(s)  ${run.projectName ?? '-'}`
     + `\n    ${run.request || '(no request text)'}`;
 }
 
@@ -100,7 +108,7 @@ const since = (days: unknown): number | undefined => {
 
 /** `monofield outputs …`, against /api/run-outputs. */
 export async function runOutputsCli(args: string[], helpers: Helpers): Promise<void> {
-  const strings = new Set(['daemon-url', 'project', 'agent', 'format', 'run', 'q', 'limit', 'out']);
+  const strings = new Set(['daemon-url', 'project', 'agent', 'format', 'run', 'issue', 'q', 'limit', 'out']);
   const flags = helpers.parseFlags(args, { string: strings, boolean: new Set(['json', 'help', 'all-versions']) });
   const [command, id, ...extra] = helpers.positionalArgs(args, strings);
   if (flags.help || !command || !['list', 'show', 'get', 'restore'].includes(command) || extra.length) {
@@ -112,7 +120,7 @@ export async function runOutputsCli(args: string[], helpers: Helpers): Promise<v
   if (command === 'list') {
     if (id) throw new Error('list takes no positional argument.');
     const result = await call<RunOutputListResponse>(root + search({
-      projectId: flags.project, agentId: flags.agent, format: flags.format, runId: flags.run, q: flags.q, allVersions: flags['all-versions'], limit: flags.limit,
+      conversationId: await issueConversation(root, flags.issue), projectId: flags.project, agentId: flags.agent, format: flags.format, runId: flags.run, q: flags.q, allVersions: flags['all-versions'], limit: flags.limit,
     }));
     if (flags.json) console.log(JSON.stringify(result, null, 2));
     else if (!result.outputs.length) console.log('No results yet. Files appear here after an AI run creates or changes them.');
@@ -148,6 +156,38 @@ export async function runOutputsCli(args: string[], helpers: Helpers): Promise<v
   if (flags.json) console.log(JSON.stringify(restored, null, 2));
   else console.log(`Restored ${restored.restored.path} to v${restored.restored.version}.`
     + (restored.savedBefore ? ` What it replaced is kept as v${restored.savedBefore.version} (${restored.savedBefore.id}).` : ''));
+}
+
+/** The conversation behind `--issue <n>`: results are filtered by thread, and people name a thread by its number. */
+async function issueConversation(outputsRoot: string, issue: unknown): Promise<string | undefined> {
+  if (typeof issue !== 'string' || !issue) return undefined;
+  const queue = await call<WorkQueueResponse>(outputsRoot.replace(/\/run-outputs$/, '/run-log/issues'));
+  const found = queue.issues.find((entry) => String(entry.number) === issue.replace(/^#/, ''));
+  if (!found) throw new Error(`No request thread #${issue.replace(/^#/, '')} (see monofield queue).`);
+  return found.conversationId;
+}
+
+export function formatIssueLine(issue: WorkIssue): string {
+  const tokens = issue.totalTokens ? `${count(issue.totalTokens)} tokens` : 'no usage reported';
+  return `#${issue.number}  ${issue.status.padEnd(11)}  ${issue.title}`
+    + `\n    ${issue.projectName ?? '-'} · ${issue.lastRun.agentName ?? '-'} · ${issue.runCount} run(s) · ${issue.outputCount} file(s) · ${tokens} · ${when(issue.updatedAt)}`;
+}
+
+/** `monofield queue`, against /api/run-log/issues. */
+export async function runQueueCli(args: string[], helpers: Helpers): Promise<void> {
+  const strings = new Set(['daemon-url', 'project', 'agent', 'status']);
+  const flags = helpers.parseFlags(args, { string: strings, boolean: new Set(['json', 'help']) });
+  if (flags.help || helpers.positionalArgs(args, strings).length) {
+    console.log(QUEUE_USAGE);
+    if (!flags.help) throw new Error('Use monofield queue --help.');
+    return;
+  }
+  const base = (await helpers.baseUrl(flags)).replace(/\/$/, '');
+  const queue = await call<WorkQueueResponse>(`${base}/api/run-log/issues${search({ projectId: flags.project, agentId: flags.agent })}`);
+  const issues = typeof flags.status === 'string' && flags.status ? queue.issues.filter((issue) => issue.status === flags.status) : queue.issues;
+  if (flags.json) { console.log(JSON.stringify({ ...queue, issues }, null, 2)); return; }
+  console.log(`${queue.running} running now · ${queue.counts['needs-reply']} waiting for your answer · ${queue.counts.done} done · ${queue.counts.failed} failed`);
+  if (issues.length) console.log(issues.map(formatIssueLine).join('\n'));
 }
 
 /** `monofield usage …`, against /api/run-log. */

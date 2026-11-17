@@ -27,6 +27,7 @@ export function runOutputListQuery(query: Request['query']): RunOutputListQuery 
   const format = text(query.format);
   return given<RunOutputListQuery>({
     projectId: text(query.projectId), runId: text(query.runId), agentId: text(query.agentId), q: text(query.q),
+    conversationId: text(query.conversationId),
     format: format && (RUN_OUTPUT_FORMATS as readonly string[]).includes(format) ? format as RunOutputFormat : undefined,
     allVersions: query.allVersions === '1' || query.allVersions === 'true' ? true : undefined,
     limit: whole(query.limit), offset: whole(query.offset),
@@ -36,7 +37,7 @@ export function runOutputListQuery(query: Request['query']): RunOutputListQuery 
 export function runLogListQuery(query: Request['query']): RunLogListQuery {
   const status = text(query.status);
   return given<RunLogListQuery>({
-    projectId: text(query.projectId), agentId: text(query.agentId), q: text(query.q),
+    projectId: text(query.projectId), agentId: text(query.agentId), q: text(query.q), conversationId: text(query.conversationId),
     status: status && (STATUSES as readonly string[]).includes(status) ? status as RunLogStatus : undefined,
     from: whole(query.from), to: whole(query.to), limit: whole(query.limit), offset: whole(query.offset),
   });
@@ -89,6 +90,10 @@ export function registerRunOutputRoutes(app: Express, deps: RegisterRunOutputRou
 
   app.get('/api/run-log', local, (req, res) => {
     try { res.set('Cache-Control', 'no-store').json(runOutputs.runs(runLogListQuery(req.query))); } catch (error) { fail(res, error); }
+  });
+  // The board: request threads by what their newest run needs.
+  app.get('/api/run-log/issues', local, (req, res) => {
+    try { res.set('Cache-Control', 'no-store').json(runOutputs.queue(runLogListQuery(req.query))); } catch (error) { fail(res, error); }
   });
   app.get('/api/run-log/usage', local, (req, res) => {
     try { res.set('Cache-Control', 'no-store').json(runOutputs.usage(runLogListQuery(req.query))); } catch (error) { fail(res, error); }

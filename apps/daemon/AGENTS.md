@@ -118,7 +118,8 @@ When adding a user-facing capability, close the loop in one change: contract typ
 - `src/services/run-outputs.ts` owns the `run_log` and `run_outputs` tables and the content-addressed copies under the daemon data root (`run-outputs/blobs/`, derived from `RUNTIME_DATA_DIR`). `src/services/run-work-log.ts` maps the in-memory run to what is recorded (request text, tool, usage from the run's events).
 - What counts as a result is decided in `packages/contracts/src/api/run-outputs.ts` (`isRunOutputPath`): documents, sheets, slides, images, data and web files; never source code, never hidden files or folders (tool configuration that may hold credentials).
 - `/api/run-outputs/:id/content` serves a kept file as an image or as plain text with a sandbox CSP, never as a page: the bytes were written by an AI tool and must not run in the app's origin.
-- Surfaces: `/api/run-outputs`, `/api/run-log` (`src/routes/run-outputs.ts`), `monofield outputs` and `monofield usage` (`src/services/outputs-cli.ts`), and the web Results view (`apps/web/src/components/results/`).
+- A request thread ("issue") is a conversation with at least one recorded run; `run_issues` numbers it once and `run_log.number` numbers runs. Its board status comes from its newest run (`workIssueStatus` in contracts): running, needs-reply (the turn ended on a `<question-form>`, detected with `runAskedUserQuestion`), done, failed. Do not add a second issue model.
+- Surfaces: `/api/run-outputs`, `/api/run-log`, `/api/run-log/issues` (`src/routes/run-outputs.ts`), `monofield queue`, `monofield outputs` and `monofield usage` (`src/services/outputs-cli.ts`), and the web work queue (`apps/web/src/components/results/`).
 
 ## Tests
 

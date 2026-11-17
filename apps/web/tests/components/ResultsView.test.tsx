@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { RunLogEntry, RunOutput } from '@open-design/contracts';
+import type { RunLogEntry, RunOutput, WorkIssue } from '@open-design/contracts';
 import { I18nProvider } from '../../src/i18n';
 import { ResultsView } from '../../src/components/results/ResultsView';
 import { en } from '../../src/i18n/locales/en';
@@ -12,22 +12,33 @@ const navigate = vi.fn();
 vi.mock('../../src/router', () => ({ navigate: (...args: unknown[]) => navigate(...args) }));
 
 const output = (extra: Partial<RunOutput>): RunOutput => ({
-  id: 'o2', runId: 'r2', projectId: 'p1', projectName: '주문 시스템', conversationId: 'c1', path: 'out/report.md', name: 'report.md', format: 'document',
+  id: 'o2', runId: 'r2', runNumber: 12, issueNumber: 3, issueTitle: '주문 보고서', projectId: 'p1', projectName: '주문 시스템', conversationId: 'c1', path: 'out/report.md', name: 'report.md', format: 'document',
   version: 2, versionCount: 2, latest: true, change: 'modified', sha256: 'b'.repeat(64), size: 2048, stored: true, createdAt: 1_800_000_000_000,
   agentId: 'claude', agentName: 'Claude Code', request: '환불 절을 추가해 줘', ...extra,
 });
 const V2 = output({});
-const V1 = output({ id: 'o1', runId: 'r1', version: 1, latest: false, change: 'created', agentId: 'codex', agentName: 'Codex CLI', request: '주문 보고서를 써 줘', sha256: 'a'.repeat(64) });
+const V1 = output({ id: 'o1', runId: 'r1', runNumber: 11, version: 1, latest: false, change: 'created', agentId: 'codex', agentName: 'Codex CLI', request: '주문 보고서를 써 줘', sha256: 'a'.repeat(64) });
 const RUN: RunLogEntry = {
-  runId: 'r2', projectId: 'p1', projectName: '주문 시스템', conversationId: 'c1', agentId: 'claude', agentName: 'Claude Code', model: null, request: '환불 절을 추가해 줘',
+  runId: 'r2', number: 12, issueNumber: 3, issueTitle: '주문 보고서', needsReply: false, projectId: 'p1', projectName: '주문 시스템', conversationId: 'c1', agentId: 'claude', agentName: 'Claude Code', model: null, request: '환불 절을 추가해 줘',
   status: 'succeeded', startedAt: 1_800_000_000_000, finishedAt: 1_800_000_060_000, outputCount: 1,
   usage: { inputTokens: 61500, outputTokens: 3900, cacheReadTokens: 52000, cacheWriteTokens: 0, totalTokens: 65400, measured: true },
 };
+
+const issue = (extra: Partial<WorkIssue>): WorkIssue => ({
+  number: 3, conversationId: 'c1', projectId: 'p1', projectName: '주문 시스템', title: '주문 보고서', status: 'done', runCount: 2, outputCount: 1,
+  totalTokens: 65400, lastRun: RUN, updatedAt: 1_800_000_060_000, ...extra,
+});
+const ISSUES: WorkIssue[] = [
+  issue({}),
+  issue({ number: 4, conversationId: 'c2', title: '환불 API도 넣을까요?', status: 'needs-reply', outputCount: 0, totalTokens: 0, lastRun: { ...RUN, runId: 'r3', number: 13, issueNumber: 4, needsReply: true, agentName: 'Codex CLI' } }),
+  issue({ number: 5, conversationId: 'c3', title: '정산 배치 분석', status: 'running', outputCount: 0, totalTokens: 0, lastRun: { ...RUN, runId: 'r4', number: 14, issueNumber: 5, status: 'running', finishedAt: null } }),
+];
 
 let calls: Array<{ url: string; method: string }>;
 let current: 'same' | 'changed';
 
 beforeEach(() => {
+  window.localStorage.clear();
   calls = [];
   current = 'changed';
   navigate.mockReset();
@@ -42,9 +53,10 @@ beforeEach(() => {
       return respond({ output: picked, versions: [V2, V1], sameRun: [], current: picked === V2 ? 'same' : current, run: RUN });
     }
     if (url.startsWith('/api/run-outputs')) {
-      const outputs = url.includes('runId=r2') ? [V2] : url.includes('q=') ? [] : [V2];
+      const outputs = url.includes('q=') ? [] : [V2];
       return respond({ outputs, total: outputs.length, facets: { projects: [{ id: 'p1', label: '주문 시스템', count: 1 }], agents: [{ id: 'claude', label: 'Claude Code', count: 1 }], formats: [{ id: 'document', label: 'document', count: 1 }] } });
     }
+    if (url.startsWith('/api/run-log/issues')) return respond({ issues: ISSUES, running: 1, counts: { running: 1, 'needs-reply': 1, done: 1, failed: 0 } });
     if (url.startsWith('/api/run-log/usage')) {
       const bucket = { key: 'claude', label: 'Claude Code', runs: 1, unmeasuredRuns: 0, inputTokens: 61500, outputTokens: 3900, cacheReadTokens: 52000, cacheWriteTokens: 0, totalTokens: 65400 };
       return respond({ from: null, to: null, totals: { ...bucket, key: 'all', label: 'all', succeeded: 1, failed: 0, canceled: 0, running: 0, outputs: 1 }, byAgent: [bucket], byProject: [{ ...bucket, key: 'p1', label: '주문 시스템' }], byDay: [] });
@@ -59,12 +71,19 @@ afterEach(() => {
 });
 
 const renderKo = () => render(<I18nProvider initial="ko"><ResultsView /></I18nProvider>);
+/** The view opens on the board; the file tests start from the files tab. */
+const renderFiles = () => {
+  renderKo();
+  fireEvent.click(screen.getByTestId('results-tab-files'));
+};
 
 describe('ResultsView', () => {
   it('lists results with the request and tool that made them, and shows versions for the picked file', async () => {
-    renderKo();
+    renderFiles();
     const row = await screen.findByRole('button', { name: /report\.md/ });
     expect(row.textContent).toContain('v2/2');
+    // which thread and run made it
+    expect(screen.getByText('주문 시스템 · #3 · 실행 12')).toBeTruthy();
     expect(screen.getByText('환불 절을 추가해 줘')).toBeTruthy();
     expect(screen.getByText('Claude Code')).toBeTruthy();
 
@@ -81,7 +100,7 @@ describe('ResultsView', () => {
   });
 
   it('restores an older version and says what happened to the file it replaced', async () => {
-    renderKo();
+    renderFiles();
     fireEvent.click(await screen.findByRole('button', { name: /report\.md/ }));
     const detail = await screen.findByTestId('results-detail');
     fireEvent.click(await within(detail).findByRole('button', { name: /^v1/ }));
@@ -93,7 +112,7 @@ describe('ResultsView', () => {
   });
 
   it('searches by text and says so when nothing matches', async () => {
-    renderKo();
+    renderFiles();
     await screen.findByRole('button', { name: /report\.md/ });
     fireEvent.change(screen.getByTestId('results-search'), { target: { value: '정산' } });
     await waitFor(() => expect(screen.getByText('조건에 맞는 결과물이 없습니다.')).toBeTruthy());
@@ -115,6 +134,47 @@ describe('ResultsView', () => {
     expect(calls.some((call) => call.url.includes('runId=r2'))).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: '전체 보기' }));
     await waitFor(() => expect(screen.queryByText('이 요청의 결과물: 환불 절을 추가해 줘')).toBeNull());
+  });
+
+  it('opens on the board: each thread under what it needs next, with a way to its conversation and its files', async () => {
+    renderKo();
+    const board = await screen.findByTestId('results-board');
+    expect(within(board).getByText('지금 실행 중 1')).toBeTruthy();
+    expect(within(screen.getByTestId('results-column-running')).getByText('정산 배치 분석')).toBeTruthy();
+    expect(within(screen.getByTestId('results-column-needs-reply')).getByText('환불 API도 넣을까요?')).toBeTruthy();
+    expect(within(screen.getByTestId('results-column-failed')).getByText('없음')).toBeTruthy();
+    const done = screen.getByTestId('results-column-done');
+    expect(done.textContent).toContain('#3');
+    expect(done.textContent).toContain('실행 2회 · 토큰 65,400');
+
+    fireEvent.click(within(done).getByRole('button', { name: /주문 보고서/ }));
+    expect(navigate).toHaveBeenCalledWith({ kind: 'project', projectId: 'p1', conversationId: 'c1', fileName: null });
+
+    fireEvent.click(within(done).getByRole('button', { name: '결과물 1개' }));
+    await waitFor(() => expect(screen.getByText('이 요청의 결과물: #3 주문 보고서')).toBeTruthy());
+    expect(calls.some((call) => call.url.includes('conversationId=c1'))).toBe(true);
+
+    fireEvent.click(screen.getByTestId('results-new-request'));
+    expect(navigate).toHaveBeenCalledWith({ kind: 'home', view: 'home' });
+  });
+
+  it('shows files as tiles and opens a larger view', async () => {
+    renderFiles();
+    await screen.findByRole('button', { name: /report\.md/ });
+    fireEvent.click(screen.getByTestId('results-layout-grid'));
+    const tile = await screen.findByRole('button', { name: /report\.md/ });
+    expect(tile.textContent).toContain('MD');
+    expect(tile.textContent).toContain('#3 · 실행 12');
+    expect(window.localStorage.getItem('monofield:results-layout')).toBe('grid');
+
+    fireEvent.click(tile);
+    const detail = await screen.findByTestId('results-detail');
+    await waitFor(() => expect(detail.querySelector('pre')?.textContent).toBe('# 주문 보고서\n'));
+    fireEvent.click(within(detail).getByRole('button', { name: '크게 보기' }));
+    const dialog = await screen.findByRole('dialog', { name: 'report.md' });
+    expect(dialog.querySelector('pre')?.textContent).toBe('# 주문 보고서\n');
+    fireEvent.click(within(dialog).getByRole('button', { name: '닫기' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
   it('has every label the view uses in Korean and English', () => {

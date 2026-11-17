@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Input, Select } from '@open-design/components';
+import { Button, Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle, Input, Select } from '@open-design/components';
 import {
   RUN_OUTPUT_FORMATS,
   type RunLogEntry,
@@ -11,6 +11,10 @@ import {
   type RunOutputListResponse,
   type RunUsageBucket,
   type RunUsageSummaryResponse,
+  WORK_ISSUE_STATUSES,
+  type WorkIssue,
+  type WorkIssueStatus,
+  type WorkQueueResponse,
 } from '@open-design/contracts';
 import { useI18n, useT } from '../../i18n';
 import type { Dict } from '../../i18n/types';
@@ -20,7 +24,8 @@ import styles from './ResultsView.module.css';
 
 type DictKey = keyof Dict;
 type Translate = ReturnType<typeof useT>;
-type Tab = 'files' | 'runs';
+type Tab = 'board' | 'files' | 'runs';
+type FilesLayout = 'list' | 'grid';
 
 const FORMAT_KEY: Record<RunOutputFormat, DictKey> = {
   document: 'results.format.document', sheet: 'results.format.sheet', slides: 'results.format.slides', image: 'results.format.image',
@@ -35,6 +40,11 @@ const CHANGE_KEY: Record<RunOutput['change'], DictKey> = {
 const CURRENT_KEY: Record<RunOutputDetailResponse['current'], DictKey> = {
   same: 'results.current.same', changed: 'results.current.changed', missing: 'results.current.missing',
 };
+const ISSUE_STATUS_KEY: Record<WorkIssueStatus, DictKey> = {
+  running: 'designs.status.running', 'needs-reply': 'results.board.needsReply', done: 'designs.status.succeeded', failed: 'results.board.failed',
+};
+const TAB_KEY: Record<Tab, DictKey> = { board: 'results.tabBoard', files: 'results.tabFiles', runs: 'results.tabRuns' };
+const LAYOUT_STORAGE_KEY = 'monofield:results-layout';
 const PREVIEW_TEXT_LIMIT = 200_000;
 const STATUSES: RunLogStatus[] = ['running', 'succeeded', 'failed', 'canceled'];
 
@@ -56,38 +66,118 @@ function useFormatters() {
   }, [locale]);
 }
 
+/** What the files tab is narrowed to after a jump from the board or the work log. */
+type FilesScope = { kind: 'run'; run: RunLogEntry } | { kind: 'issue'; issue: WorkIssue } | null;
+
 /**
- * The result shelf and the work log: files AI runs left, found by request, tool, project or format, with their
- * versions; and the runs themselves with what each tool reported using. The CLI reads the same data
- * (`monofield outputs`, `monofield usage`).
+ * The work queue: a board of request threads by what each needs next, the files AI runs left (found by request,
+ * tool, project or format, with their versions), and the work log with what each tool reported using. The CLI reads
+ * the same data (`monofield queue`, `monofield outputs`, `monofield usage`).
  */
 export function ResultsView() {
   const t = useT();
-  const [tab, setTab] = useState<Tab>('files');
-  const [runFilter, setRunFilter] = useState<RunLogEntry | null>(null);
+  const [tab, setTab] = useState<Tab>('board');
+  const [scope, setScope] = useState<FilesScope>(null);
+  const showFiles = (next: FilesScope) => { setScope(next); setTab('files'); };
 
   return (
     <div className={styles.page} data-testid="results-view">
       <header className={styles.hero}>
-        <h1 className={styles.title}>{t('results.title')}</h1>
-        <p className={styles.lede}>{t('results.subtitle')}</p>
+        <div>
+          <h1 className={styles.title}>{t('results.title')}</h1>
+          <p className={styles.lede}>{t('results.subtitle')}</p>
+        </div>
+        <Button variant="primary" onClick={() => navigate({ kind: 'home', view: 'home' })} data-testid="results-new-request">{t('results.board.newRequest')}</Button>
       </header>
       <div className={styles.tabs} role="tablist" aria-label={t('results.title')}>
-        {(['files', 'runs'] as const).map((id) => (
+        {(['board', 'files', 'runs'] as const).map((id) => (
           <button key={id} type="button" role="tab" aria-selected={tab === id} className={`${styles.tab} ${tab === id ? styles.tabActive : ''}`}
             onClick={() => setTab(id)} data-testid={`results-tab-${id}`}>
-            {t(id === 'files' ? 'results.tabFiles' : 'results.tabRuns')}
+            {t(TAB_KEY[id])}
           </button>
         ))}
       </div>
-      {tab === 'files'
-        ? <FilesPanel t={t} runFilter={runFilter} onClearRun={() => setRunFilter(null)} />
-        : <RunsPanel t={t} onShowFiles={(run) => { setRunFilter(run); setTab('files'); }} />}
+      {tab === 'board' ? <BoardPanel t={t} onShowFiles={(issue) => showFiles({ kind: 'issue', issue })} /> : null}
+      {tab === 'files' ? <FilesPanel t={t} scope={scope} onClearScope={() => setScope(null)} /> : null}
+      {tab === 'runs' ? <RunsPanel t={t} onShowFiles={(run) => showFiles({ kind: 'run', run })} /> : null}
     </div>
   );
 }
 
-function FilesPanel({ t, runFilter, onClearRun }: { t: Translate; runFilter: RunLogEntry | null; onClearRun: () => void }) {
+const issueLabel = (issue: Pick<WorkIssue, 'number' | 'title'>) => `#${issue.number} ${issue.title}`;
+
+function BoardPanel({ t, onShowFiles }: { t: Translate; onShowFiles: (issue: WorkIssue) => void }) {
+  const format = useFormatters();
+  const [queue, setQueue] = useState<WorkQueueResponse | null>(null);
+  const [error, setError] = useState('');
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    let live = true;
+    void resultsApi.queue().then((result) => {
+      if (!live) return;
+      if (result.ok) { setQueue(result.value); setError(''); } else setError(result.message);
+    });
+    return () => { live = false; };
+  }, [tick]);
+
+  // The board is a live view: quick while something runs, slow otherwise, so a request sent from another tab shows up.
+  const busy = (queue?.running ?? 0) > 0;
+  useEffect(() => {
+    const timer = window.setInterval(() => setTick((value) => value + 1), busy ? 3000 : 15000);
+    return () => window.clearInterval(timer);
+  }, [busy]);
+
+  if (error && !queue) return <p className={styles.error} role="alert">{t('results.loadFailed')} {error}</p>;
+  if (!queue) return null;
+  if (queue.issues.length === 0) return <p className={styles.empty}>{t('results.board.empty')}</p>;
+
+  return (
+    <div className={styles.board} data-testid="results-board">
+      <p className={`${styles.runner} ${busy ? styles.runnerBusy : ''}`} aria-live="polite">{t('results.board.running', { n: queue.running })}</p>
+      <div className={styles.columns}>
+        {WORK_ISSUE_STATUSES.map((status) => {
+          const issues = queue.issues.filter((issue) => issue.status === status);
+          return (
+            <section key={status} className={styles.column} aria-label={t(ISSUE_STATUS_KEY[status])} data-testid={`results-column-${status}`}>
+              <h2 className={styles.columnTitle}>
+                <span className={`${styles.dot} ${styles[`dot_${status}`] ?? ''}`} aria-hidden="true" />
+                {t(ISSUE_STATUS_KEY[status])}
+                <span className={styles.columnCount}>{issues.length}</span>
+              </h2>
+              {issues.length === 0 ? <p className={styles.columnEmpty}>{t('results.board.emptyColumn')}</p> : null}
+              {issues.map((issue) => (
+                <article key={issue.conversationId} className={styles.card}>
+                  <button type="button" className={styles.cardTitle} disabled={!issue.projectId || !issue.projectName}
+                    onClick={() => issue.projectId && navigate({ kind: 'project', projectId: issue.projectId, conversationId: issue.conversationId, fileName: null })}>
+                    <span className={styles.issueNumber}>#{issue.number}</span>
+                    <span>{issue.title}</span>
+                  </button>
+                  {issue.lastRun.request && issue.lastRun.request !== issue.title ? <p className={styles.cardRequest}>{issue.lastRun.request}</p> : null}
+                  <p className={styles.cardMeta}>
+                    {issue.projectName ?? t('results.deletedProject')} · {t('results.board.runs', { n: issue.runCount })}
+                    {issue.totalTokens ? ` · ${t('results.runs.tokens', { n: format.count(issue.totalTokens) })}` : ''}
+                  </p>
+                  <div className={styles.cardFoot}>
+                    {issue.lastRun.agentName ? <span className={styles.agent}>{issue.lastRun.agentName}</span> : null}
+                    <span className={styles.when}>{format.time(issue.updatedAt)}</span>
+                    {issue.outputCount > 0 ? <Button onClick={() => onShowFiles(issue)}>{t('results.runs.files', { n: issue.outputCount })}</Button> : null}
+                  </div>
+                </article>
+              ))}
+            </section>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function storedLayout(): FilesLayout {
+  try { return window.localStorage.getItem(LAYOUT_STORAGE_KEY) === 'grid' ? 'grid' : 'list'; } catch { return 'list'; }
+}
+
+function FilesPanel({ t, scope, onClearScope }: { t: Translate; scope: FilesScope; onClearScope: () => void }) {
   const format = useFormatters();
   const [q, setQ] = useState('');
   const [kind, setKind] = useState<RunOutputFormat | ''>('');
@@ -98,21 +188,27 @@ function FilesPanel({ t, runFilter, onClearRun }: { t: Translate; runFilter: Run
   const [error, setError] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
+  const [layout, setLayout] = useState<FilesLayout>(storedLayout);
   const search = useDebounced(q, 250);
+  const chooseLayout = (next: FilesLayout) => {
+    setLayout(next);
+    try { window.localStorage.setItem(LAYOUT_STORAGE_KEY, next); } catch { /* a remembered view is a convenience */ }
+  };
 
   useEffect(() => {
     let live = true;
     void resultsApi.list({
       ...(search.trim() ? { q: search.trim() } : {}), ...(kind ? { format: kind } : {}), ...(projectId ? { projectId } : {}),
-      ...(agentId ? { agentId } : {}), ...(allVersions ? { allVersions: true } : {}), ...(runFilter ? { runId: runFilter.runId } : {}), limit: 200,
+      ...(agentId ? { agentId } : {}), ...(allVersions ? { allVersions: true } : {}), ...(scope?.kind === 'run' ? { runId: scope.run.runId } : {}),
+      ...(scope?.kind === 'issue' ? { conversationId: scope.issue.conversationId } : {}), limit: 200,
     }).then((result) => {
       if (!live) return;
       if (result.ok) { setData(result.value); setError(''); } else setError(result.message);
     });
     return () => { live = false; };
-  }, [search, kind, projectId, agentId, allVersions, runFilter, reload]);
+  }, [search, kind, projectId, agentId, allVersions, scope, reload]);
 
-  const filtered = Boolean(search.trim() || kind || projectId || agentId || runFilter);
+  const filtered = Boolean(search.trim() || kind || projectId || agentId || scope);
   const outputs = data?.outputs ?? [];
 
   return (
@@ -140,19 +236,43 @@ function FilesPanel({ t, runFilter, onClearRun }: { t: Translate; runFilter: Run
             <input type="checkbox" checked={allVersions} onChange={(event) => setAllVersions(event.target.checked)} />
             {t('results.allVersions')}
           </label>
+          <span className={styles.layoutToggle} role="group" aria-label={`${t('results.viewList')} / ${t('results.viewGrid')}`}>
+            {(['list', 'grid'] as const).map((id) => (
+              <button key={id} type="button" aria-pressed={layout === id} className={layout === id ? styles.layoutActive : undefined} onClick={() => chooseLayout(id)}
+                data-testid={`results-layout-${id}`}>{t(id === 'list' ? 'results.viewList' : 'results.viewGrid')}</button>
+            ))}
+          </span>
           <span className={styles.total} aria-live="polite">{data ? t('results.count', { n: format.count(data.total) }) : ''}</span>
         </div>
-        {runFilter ? (
+        {scope ? (
           <p className={styles.runFilter}>
-            <span>{t('results.runFilter', { request: runFilter.request || t('results.runs.noRequest') })}</span>
-            <Button variant="ghost" onClick={onClearRun}>{t('results.runFilterClear')}</Button>
+            <span>{t('results.runFilter', { request: scope.kind === 'issue' ? issueLabel(scope.issue) : scope.run.request || t('results.runs.noRequest') })}</span>
+            <Button variant="ghost" onClick={onClearScope}>{t('results.runFilterClear')}</Button>
           </p>
         ) : null}
         {error ? <p className={styles.error} role="alert">{t('results.loadFailed')} {error}</p> : null}
         {data && outputs.length === 0 && !error ? (
           <p className={styles.empty}>{t(filtered ? 'results.emptyFiltered' : 'results.empty')}</p>
         ) : null}
-        {outputs.length > 0 ? (
+        {outputs.length > 0 && layout === 'grid' ? (
+          <ul className={styles.grid}>
+            {outputs.map((output) => (
+              <li key={output.id}>
+                <button type="button" className={`${styles.tile} ${output.id === selectedId ? styles.tileSelected : ''}`} aria-pressed={output.id === selectedId}
+                  onClick={() => setSelectedId(output.id)}>
+                  <span className={styles.thumb}>
+                    {output.stored && previewKind(output.name) === 'image'
+                      ? <img src={resultsApi.contentUrl(output.id)} alt="" loading="lazy" />
+                      : <span className={styles.thumbFormat}>{output.name.split('.').pop()?.toUpperCase()}</span>}
+                  </span>
+                  <span className={styles.tileName}>{output.name}{output.versionCount > 1 ? <span className={styles.version}>v{output.version}/{output.versionCount}</span> : null}</span>
+                  <span className={styles.tileMeta}>{origin(output, t) || output.projectName || t('results.deletedProject')} · {formatBytes(output.size)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {outputs.length > 0 && layout === 'list' ? (
           <div className={styles.tableWrap}>
             <table className={styles.table}>
               <thead>
@@ -173,7 +293,7 @@ function FilesPanel({ t, runFilter, onClearRun }: { t: Translate; runFilter: Run
                         <span className={styles.fileName}>{output.name}</span>
                         {output.versionCount > 1 ? <span className={styles.version}>v{output.version}/{output.versionCount}</span> : null}
                       </button>
-                      <span className={styles.project}>{output.projectName ?? t('results.deletedProject')}</span>
+                      <span className={styles.project}>{[output.projectName ?? t('results.deletedProject'), origin(output, t)].filter(Boolean).join(' · ')}</span>
                     </td>
                     <td><span className={styles.request}>{output.request || (output.change === 'before-restore' ? t('results.change.beforeRestore') : '')}</span></td>
                     <td>{output.agentName ? <span className={styles.agent}>{output.agentName}</span> : null}</td>
@@ -191,12 +311,18 @@ function FilesPanel({ t, runFilter, onClearRun }: { t: Translate; runFilter: Run
   );
 }
 
+/** "#3 · 실행 12": the thread and run a result came from, as people say it. */
+function origin(output: Pick<RunOutput, 'issueNumber' | 'runNumber'>, t: Translate): string {
+  return output.issueNumber !== null && output.runNumber !== null ? `#${output.issueNumber} · ${t('results.usage.runs')} ${output.runNumber}` : '';
+}
+
 function DetailPane({ t, id, onSelect, onChanged }: { t: Translate; id: string | null; onSelect: (id: string) => void; onChanged: () => void }) {
   const format = useFormatters();
   const [detail, setDetail] = useState<RunOutputDetailResponse | null>(null);
   const [text, setText] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [large, setLarge] = useState(false);
 
   const load = useCallback(async (target: string) => {
     const result = await resultsApi.detail(target);
@@ -208,6 +334,7 @@ function DetailPane({ t, id, onSelect, onChanged }: { t: Translate; id: string |
     setDetail(null);
     setText(null);
     setMessage('');
+    setLarge(false);
     if (id) void load(id);
   }, [id, load]);
 
@@ -247,6 +374,7 @@ function DetailPane({ t, id, onSelect, onChanged }: { t: Translate; id: string |
         <Button onClick={() => navigate({ kind: 'project', projectId: output.projectId, conversationId: output.conversationId, fileName: null })}
           disabled={!output.projectName}>{t('results.openProject')}</Button>
         {output.stored ? <a className={styles.linkButton} href={resultsApi.contentUrl(output.id, true)} download={output.name}>{t('results.download')}</a> : null}
+        {preview !== 'none' ? <Button onClick={() => setLarge(true)}>{t('results.enlarge')}</Button> : null}
         <Button variant="primary" onClick={() => void restore()} disabled={busy || !output.stored || detail.current === 'same'}>{t('results.restore')}</Button>
       </div>
       <p className={`${styles.current} ${detail.current === 'same' ? styles.currentSame : ''}`}>{t(CURRENT_KEY[detail.current])}</p>
@@ -259,7 +387,22 @@ function DetailPane({ t, id, onSelect, onChanged }: { t: Translate; id: string |
               : <p className={styles.hint}>{t('results.noPreview')}</p>}
       </div>
 
+      {large ? (
+        <Dialog onClose={() => setLarge(false)} ariaLabel={output.name} className={styles.largeDialog}>
+          <DialogHeader>
+            <DialogTitle>{output.name}</DialogTitle>
+          </DialogHeader>
+          <DialogBody className={styles.largeBody}>
+            {preview === 'image' ? <img src={resultsApi.contentUrl(output.id)} alt={output.name} /> : <pre>{text ?? ''}</pre>}
+          </DialogBody>
+          <DialogFooter>
+            <Button onClick={() => setLarge(false)}>{t('common.close')}</Button>
+          </DialogFooter>
+        </Dialog>
+      ) : null}
+
       <dl className={styles.meta}>
+        {output.issueNumber !== null && output.issueTitle ? <><dt>#{output.issueNumber}</dt><dd>{output.issueTitle}{output.runNumber !== null ? ` · ${t('results.usage.runs')} ${output.runNumber}` : ''}</dd></> : null}
         {output.request ? <><dt>{t('results.colRequest')}</dt><dd>{output.request}</dd></> : null}
         <dt>{t('results.metaProject')}</dt><dd>{output.projectName ?? t('results.deletedProject')}</dd>
         <dt>{t('results.metaPath')}</dt><dd className={styles.mono}>{output.path}</dd>

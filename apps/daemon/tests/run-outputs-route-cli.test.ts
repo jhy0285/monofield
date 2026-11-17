@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { RunLogListResponse, RunOutputDetailResponse, RunOutputListResponse, RunUsageSummaryResponse } from '@open-design/contracts';
+import type { RunLogListResponse, RunOutputDetailResponse, RunOutputListResponse, RunUsageSummaryResponse, WorkQueueResponse } from '@open-design/contracts';
 import { startServer } from '../src/server.js';
 
 const execute = promisify(execFile);
@@ -145,5 +145,19 @@ process.stdin.on('end', () => {
     const found = JSON.parse((await cli(['usage', 'runs', '--project', projectId, '--q', '환불', '--json'])).stdout) as RunLogListResponse;
     expect(found.runs.map((run) => run.request)).toEqual(['환불 절을 추가해 줘 REPORT:second draft']);
     expect((await fetch(`${started.url}/api/run-outputs/nope`)).status).toBe(404);
+  });
+
+  it('shows the thread on the board with its number, and lists a thread\'s files by that number', async () => {
+    const queue = await get<WorkQueueResponse>(`/api/run-log/issues?projectId=${projectId}`);
+    expect(queue.issues).toMatchObject([{ status: 'done', title: '주문 보고서를 써 줘 REPORT:first draft', runCount: 2, outputCount: 2, totalTokens: 3000, lastRun: { agentName: 'Codex CLI' } }]);
+    const issue = queue.issues[0]!;
+    expect(queue.counts.done).toBe(1);
+
+    const text = (await cli(['queue', '--project', projectId])).stdout;
+    expect(text).toContain(`#${issue.number}  done`);
+    expect(text).toMatch(/2 run\(s\) · 2 file\(s\) · 3,000 tokens/);
+    const byIssue = JSON.parse((await cli(['outputs', 'list', '--issue', String(issue.number), '--all-versions', '--json'])).stdout) as RunOutputListResponse;
+    expect(byIssue.outputs.map((output) => [output.path, output.version, output.issueNumber])).toEqual([['report.md', 2, issue.number], ['report.md', 1, issue.number]]);
+    await expect(cli(['outputs', 'list', '--issue', '999999'])).rejects.toThrow(/No request thread #999999/);
   });
 });

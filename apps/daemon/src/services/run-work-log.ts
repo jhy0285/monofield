@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3';
 import { getProject } from '../db.js';
 import { scanRunEventsForUsageAnalytics } from '../run-analytics-observability.js';
+import { runAskedUserQuestion } from '../runtimes/run-artifacts.js';
 import type { RunFinish, RunStart } from './run-outputs.js';
 
 /** The fields of the in-memory run object (runtimes/runs.ts) the work log reads. */
@@ -52,6 +53,8 @@ export function runFinishForWorkLog(run: WorkLogRun): RunFinish {
   return {
     runId: run.id,
     status: run.status === 'succeeded' || run.status === 'canceled' ? run.status : 'failed',
+    // A turn that ends on a question form leaves the thread waiting for the person, not finished.
+    needsReply: runAskedUserQuestion(run.events as Parameters<typeof runAskedUserQuestion>[0]),
     usage: measured ? {
       inputTokens: input ?? 0,
       outputTokens: usage.output_tokens ?? 0,

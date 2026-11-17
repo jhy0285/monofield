@@ -372,6 +372,10 @@ const SUBCOMMAND_MAP = {
     const { runOutputsCli } = await import('./services/outputs-cli.js');
     return runOutputsCli(args, { baseUrl: cliDaemonBaseUrl, parseFlags, positionalArgs: collectCliPositionals });
   },
+  queue: async (args: string[]) => {
+    const { runQueueCli } = await import('./services/outputs-cli.js');
+    return runQueueCli(args, { baseUrl: cliDaemonBaseUrl, parseFlags, positionalArgs: collectCliPositionals });
+  },
   usage: async (args: string[]) => {
     const { runUsageCli } = await import('./services/outputs-cli.js');
     return runUsageCli(args, { baseUrl: cliDaemonBaseUrl, parseFlags, positionalArgs: collectCliPositionals });

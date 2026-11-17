@@ -70,6 +70,19 @@ describe('work log on the run service', () => {
     });
   });
 
+  it('marks a turn that ended on a question form as waiting for an answer', async () => {
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1', agentId: 'codex', currentPrompt: '명세서를 만들어 줘' });
+    runs.start(run, async () => {
+      runs.emit(run, 'agent', { type: 'text_delta', delta: '<question-form id="scope" title="범위">\n{"questions":[{"id":"q1","label":"환불 API도 넣을까요?","type":"radio","options":["예","아니오"]}]}\n' });
+      runs.emit(run, 'agent', { type: 'text_delta', delta: '</question-form>' });
+      runs.finish(run, 'succeeded', 0, null);
+    });
+    await runs.wait(run);
+    await finished;
+    expect(store.runs({}).runs[0]).toMatchObject({ status: 'succeeded', needsReply: true, number: 1, issueNumber: 1 });
+    expect(store.queue({}).issues.map((issue) => issue.status)).toEqual(['needs-reply']);
+  });
+
   it('logs a run that has no project without looking at any folder', async () => {
     const run = runs.create({ agentId: 'codex', currentPrompt: '질문 하나' });
     runs.start(run, async () => { runs.finish(run, 'canceled', null, 'SIGTERM'); });

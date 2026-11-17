@@ -6,6 +6,7 @@ import type {
   RunOutputListResponse,
   RunOutputRestoreResponse,
   RunUsageSummaryResponse,
+  WorkQueueResponse,
 } from '@open-design/contracts';
 
 export type ResultsCall<T> = { ok: true; value: T } | { ok: false; message: string };
@@ -37,6 +38,8 @@ export const resultsApi = {
   detail: (id: string) => call<RunOutputDetailResponse>(`/api/run-outputs/${encodeURIComponent(id)}`),
   restore: (id: string) => call<RunOutputRestoreResponse>(`/api/run-outputs/${encodeURIComponent(id)}/restore`, { method: 'POST' }),
   contentUrl: (id: string, download = false) => `/api/run-outputs/${encodeURIComponent(id)}/content${download ? '?download=1' : ''}`,
+  /** The board: request threads by what their newest run needs. */
+  queue: () => call<WorkQueueResponse>('/api/run-log/issues'),
   runs: (query: RunLogListQuery) => call<RunLogListResponse>(`/api/run-log${search(query)}`),
   usage: (query: RunLogListQuery) => call<RunUsageSummaryResponse>(`/api/run-log/usage${search(query)}`),
 };

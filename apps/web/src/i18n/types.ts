@@ -1364,6 +1364,17 @@ export interface Dict {
   'results.title': string;
   'results.subtitle': string;
   'results.tabFiles': string;
+  'results.tabBoard': string;
+  'results.board.newRequest': string;
+  'results.board.running': string;
+  'results.board.needsReply': string;
+  'results.board.failed': string;
+  'results.board.emptyColumn': string;
+  'results.board.empty': string;
+  'results.board.runs': string;
+  'results.viewList': string;
+  'results.viewGrid': string;
+  'results.enlarge': string;
   'results.tabRuns': string;
   'results.searchPlaceholder': string;
   'results.allFormats': string;

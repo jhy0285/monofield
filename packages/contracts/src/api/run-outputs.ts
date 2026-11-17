@@ -22,6 +22,13 @@ export interface RunLogUsage {
 
 export interface RunLogEntry {
   runId: string;
+  /** Counts up with every recorded run, so a run can be named in conversation ("run 28"). */
+  number: number;
+  /** The request thread this run belongs to: its conversation, numbered the first time a run was recorded in it. */
+  issueNumber: number | null;
+  issueTitle: string | null;
+  /** The run ended by asking the person a question, so the thread waits for an answer. */
+  needsReply: boolean;
   projectId: string | null;
   /** Null when the project was deleted since. */
   projectName: string | null;
@@ -82,6 +89,9 @@ export interface RunOutput {
   id: string;
   /** Null for a copy kept before a restore: no run made it. */
   runId: string | null;
+  runNumber: number | null;
+  issueNumber: number | null;
+  issueTitle: string | null;
   projectId: string;
   projectName: string | null;
   conversationId: string | null;
@@ -109,6 +119,8 @@ export interface RunOutputFacet { id: string; label: string; count: number }
 
 export interface RunOutputListQuery {
   projectId?: string;
+  /** One request thread. */
+  conversationId?: string;
   runId?: string;
   agentId?: string;
   format?: RunOutputFormat;
@@ -148,6 +160,7 @@ export interface RunOutputRestoreResponse {
 
 export interface RunLogListQuery {
   projectId?: string;
+  conversationId?: string;
   agentId?: string;
   status?: RunLogStatus;
   /** Matches the request text. */
@@ -182,4 +195,42 @@ export interface RunUsageSummaryResponse {
   byAgent: RunUsageBucket[];
   byProject: RunUsageBucket[];
   byDay: RunUsageBucket[];
+}
+
+/**
+ * Where a request thread stands, from its newest run: still working, waiting for the person's answer, finished, or
+ * ended badly (failed or canceled).
+ */
+export type WorkIssueStatus = 'running' | 'needs-reply' | 'done' | 'failed';
+export const WORK_ISSUE_STATUSES: readonly WorkIssueStatus[] = ['running', 'needs-reply', 'done', 'failed'];
+
+/** One request thread on the board: a conversation with at least one recorded run. */
+export interface WorkIssue {
+  number: number;
+  conversationId: string;
+  projectId: string | null;
+  projectName: string | null;
+  /** The conversation's title, or the first request made in it. */
+  title: string;
+  status: WorkIssueStatus;
+  runCount: number;
+  outputCount: number;
+  /** Tokens the tools reported over all runs of the thread. */
+  totalTokens: number;
+  lastRun: RunLogEntry;
+  updatedAt: number;
+}
+
+export interface WorkQueueResponse {
+  /** Newest activity first. */
+  issues: WorkIssue[];
+  /** Runs in progress right now, over all threads. */
+  running: number;
+  counts: Record<WorkIssueStatus, number>;
+}
+
+export function workIssueStatus(run: Pick<RunLogEntry, 'status' | 'needsReply'>): WorkIssueStatus {
+  if (run.status === 'running') return 'running';
+  if (run.status !== 'succeeded') return 'failed';
+  return run.needsReply ? 'needs-reply' : 'done';
 }

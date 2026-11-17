@@ -57,7 +57,7 @@ Entry template:
 
 ## Current state
 
-As of 2026-11-12.
+As of 2026-11-17.
 
 - Product: MonoField, a local Windows workbench that takes Codex or Claude Code
   CLI work to Korean SI deliverables (interface-spec XLSX, screen-spec PPTX,
@@ -67,7 +67,7 @@ As of 2026-11-12.
 - Version: `0.11.7-preview.11` (root `package.json`), published on 2026-11-11 as a GitHub prerelease (preview channel, unsigned)
   from `b403fac` on `main`: Kotlin reading, the duplicate-row fix and method-list changes as one change, on top of preview.10.
   Not released, on the branch only (2026-11-12): `monofield docs scan` / `docs check` and routes split by Spring `params`.
-  Also on the branch only: the work log and result shelf (Results view, `monofield outputs`, `monofield usage`).
+  Also on the branch only: the work queue (board, results, work log; `monofield queue`, `monofield outputs`, `monofield usage`).
   Stable `latest` is still `v0.11.6`. Workspace packages are
   still named `@open-design/*`; env vars still use the `OD_*` prefix.
 - Shape: pnpm monorepo. `apps/daemon` (Express + SQLite, `monofield` CLI) and
@@ -311,9 +311,9 @@ Newest first within each group. Remove an item when it is done.
 
 AI work board (see the 2026-11-12 "work log and result shelf" Log entry; direction set by the user):
 
-- Next, in the order agreed: an intranet mode (one setting that turns off outside calls and hides menus that are not needed,
-  verified with the network blocked); the board as the first screen (cards with status, tool, time, tokens, files; cards waiting
-  for an answer made obvious); then the test-result document plan (scenario → run with captures → result workbook).
+- Next: check with the real Codex CLI on the user's company PC (they use it alone first); an intranet mode (one setting that
+  turns off outside calls and hides menus that are not needed, verified with the network blocked); then the test-result document
+  plan (scenario → run with captures → result workbook). The board itself is built (2026-11-17 entry).
 - Not built here: search over the content of conversations (only request text and file paths are searched), cost in money,
   retention settings for kept copies, a per-run "before" copy of files that existed before the first recorded run.
 - Not verified: real Codex / Claude Code CLIs, Windows, the packaged app.
@@ -567,6 +567,37 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-17 — work queue: a board of request threads, thread and run numbers, grid and large view (`ccr-8432aecf-n9xdfd`)
+
+- Why: the user wants the result screen of their "AI 자료보드" slide (one "작업 큐" screen with board and results tabs, issue and
+  run numbers, thumbnails, large view, a new-issue button). Their answers: they will use it alone first on a company PC, mainly
+  with the Codex CLI on an enterprise subscription; signing waits for the Microsoft Store.
+- Done:
+  - Contract: `RunLogEntry.number / issueNumber / issueTitle / needsReply`, `RunOutput.runNumber / issueNumber / issueTitle`,
+    `conversationId` filters, `WorkIssue`, `WorkQueueResponse`, `workIssueStatus`.
+  - Daemon: `run_issues` table (a conversation is numbered at its first recorded run), `run_log.number` and `needs_reply`
+    (columns added to an existing table on open, old rows numbered by start time); `needsReply` comes from
+    `runAskedUserQuestion(run.events)`; `store.queue()`; `GET /api/run-log/issues`; `monofield queue` and
+    `monofield outputs list --issue <n>`.
+  - Web: the view is now the work queue (`entry.navResults`, `results.title`, `results.subtitle` reworded in 19 locales, 11 keys
+    added). Tabs: board (four columns: running, needs your answer, done, failed or canceled; card = thread number, title, last
+    request, project, runs, tokens, tool, time; title opens the conversation, a button lists the thread's files; a "running now"
+    count; re-reads every 3 s while something runs, every 15 s otherwise), files (thread/run origin, list or grid with image
+    thumbnails remembered in `localStorage`, "크게 보기" dialog), work log. "새 요청" goes to the home composer.
+  - Docs: `docs/user-guide.ko.md` steps 6 and 7, `apps/daemon/AGENTS.md`.
+- Verified: daemon `tests/run-outputs.test.ts` 9, `tests/run-work-log.test.ts` 4, `tests/run-outputs-route-cli.test.ts` 3 (16 pass);
+  web `tests/components/ResultsView.test.tsx` 7; full web suite 419 files / 4031 tests passed (13 skipped); `pnpm guard`,
+  `pnpm typecheck`, `pnpm i18n:check` pass. Live app with stand-in `codex`/`claude` binaries: seven runs in four projects gave one
+  thread in each column (`monofield queue`: "1 running now · 1 waiting for your answer · 1 done · 1 failed"); Playwright drove
+  board → thread files → grid → large view → conversation → new request. The only failed responses were the project screen's own
+  `DESIGN.md` probe (404, existing behaviour).
+- Full daemon suite: still running when this entry was committed; the result is in the commit after this one.
+- Not run / not done: real Codex CLI (stand-ins only), Windows, the packaged app, `e2e/ui`. The queue is not the app's start
+  screen: `/` stays the home composer; an open work-queue tab is restored by the existing tab memory. No release.
+- Limits: a thread is one conversation, so two unrelated requests typed into one conversation share a card; a thread's status is
+  only its newest run; "needs your answer" is detected from a question form, not from a plain-text question; cards cannot be
+  dragged or closed by hand.
 
 ### 2026-11-12 — work log and result shelf: every AI run is recorded, the files it left are kept as versions (`ccr-8432aecf-n9xdfd`)
 
