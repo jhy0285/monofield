@@ -592,6 +592,22 @@ Code health:
 
 ## Log
 
+### 2026-11-18 — the daemon bundle leaves out React that the Vue compiler's engine table reached (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** publish 0.11.7-preview.12. Release run 44272826896 (from the commit before this one) got past esbuild but
+  stopped at the prebundle guard: the daemon sidecar bundle included `react` and `react-dom` inputs, which the policy forbids.
+- **Why:** `consolidate` inside `@vue/compiler-sfc` also `require`s engines that do resolve in the workspace (`react`,
+  `react-dom/server`, `ejs`, …), so esbuild bundled them instead of failing; the previous fix only listed the ones that failed.
+- **Changed:** `tools/pack/src/prebundle-externals.ts` adds `ejs`, `nunjucks`, `qejs`, `react`, `react-dom` and explains why
+  `lodash` stays bundled (esbuild makes an external package's subpaths external too, and `java-parser` imports
+  `lodash/camelCase.js`). `tools/pack/tests/prebundle-externals.test.ts` now checks the bundled compiler's inputs against
+  the daemon CLI and sidecar forbidden lists on Windows and macOS (red on the previous list: react inputs; green now) and that
+  `lodash` is not in the list.
+- **Verified:** a local bundle of the daemon sidecar and CLI made like
+  `tools/pack/src/win/app.ts` has 0 inputs matching either forbidden list and 32 lodash inputs; bundled `queue --help` runs;
+  bundled analyzers parse `.vue`, `.ts` and `.java` outside the repo. `pnpm guard` passes; tools-pack tests 226 passed
+  (9 skipped); typecheck passes. Windows packaging not run locally.
+
 ### 2026-11-18 — packaged daemon bundles the Vue compiler; the release build no longer stops (`ccr-8432aecf-n9xdfd`)
 
 - **Request:** publish 0.11.7-preview.12. Release run 44268950978 (attempt 2) stopped in `tools-pack win build`: esbuild could
