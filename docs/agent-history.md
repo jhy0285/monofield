@@ -64,10 +64,10 @@ As of 2026-11-18.
   reviewed spec diffs). It is an independent fork of the Apache-2.0 Open Design
   project; see `docs/adr/0002-upstream-maintenance.md` (status: Proposed, only
   phase A done).
-- Version: `0.11.7-preview.12` (root `package.json`), prepared on 2026-11-18 and not yet published: `monofield docs scan` /
-  `docs check`, routes split by Spring `params`, the work queue (board, results, work log; `monofield queue`, `outputs`, `usage`),
-  the check after every run (`monofield queue check`) and the Excel sheet-name fix. The last published preview is
-  `0.11.7-preview.11` (2026-11-11, from `b403fac`).
+- Version: `0.11.7-preview.12` (root `package.json`), published on 2026-11-18 from `bfa610e` (release run 44276317005):
+  `monofield docs scan` / `docs check`, routes split by Spring `params`, the work queue (board, results, work log;
+  `monofield queue`, `outputs`, `usage`), the check after every run (`monofield queue check`) and the Excel sheet-name fix.
+  Site, READMEs, user guide and `docs/releases/0.11.7-preview.12.md` point at it.
   Stable `latest` is still `v0.11.6`. Workspace packages are
   still named `@open-design/*`; env vars still use the `OD_*` prefix.
 - Shape: pnpm monorepo. `apps/daemon` (Express + SQLite, `monofield` CLI) and
@@ -592,6 +592,19 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-18 — 0.11.7-preview.12 published; site, READMEs, guide and notes pointed at it (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** "미리보기 먼저 내줘".
+- **Changed:** release `v0.11.7-preview.12` (prerelease, tag at `bfa610e`) from release run 44276317005 after two
+  packaging fixes (see the two prebundle entries below). The pin moved README.md, the site's index / guide / get-started /
+  README, `apps/monofield-site/tests/guide.test.ts` and `docs/user-guide.ko.md` to preview.12 (the guide's no-AI section
+  now uses `monofield docs scan` / `docs check`), and wrote `docs/releases/0.11.7-preview.12.md` with the source commit,
+  the run link and a known-issue line: the code map and Java class lookup fail in this installed build.
+- **Verified:** `gh api repos/jhy0285/monofield/releases/tags/v0.11.7-preview.12`: not a draft, prerelease, assets
+  setup.exe, portable.zip, payload.7z, latest.yml, SHA256SUMS.txt; the tag resolves to `bfa610e`. Site tests 27 passed.
+  The release body is the workflow default until this commit reaches `main` (`sync_release_notes` copies the notes file).
+- **Next agent:** the code-map fix (worker entries) lands after this commit and ships in the next preview.
 
 ### 2026-11-18 — the daemon bundle leaves out React that the Vue compiler's engine table reached (`ccr-8432aecf-n9xdfd`)
 

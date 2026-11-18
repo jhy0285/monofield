@@ -1,6 +1,6 @@
 # MonoField 사용 가이드
 
-0.11.7-preview.11 기준
+0.11.7-preview.12 기준
 
 MonoField는 Spring 코드를 읽어 인터페이스 명세서를 만들어 줘요. 코드가 바뀌면 어느 API가 바뀌었는지, 그 API를 쓰는 화면이나 다른 시스템이 깨지는지도 알려 줘요.
 
@@ -80,8 +80,6 @@ AI가 코드를 다 고치면 명세서 편집기에서 ① **Git 변경 분석*
 PM이나 팀장에게는 새 엑셀 파일과 변경 분석 화면 캡처를 보내면 끝이에요.
 
 ### 6. 맡긴 일이 어디까지 갔는지 보기
-
-다음 미리보기 버전부터 들어가는 기능이에요.
 
 왼쪽 메뉴의 **작업 큐**를 누르면 **보드**가 먼저 나와요. AI에게 보낸 요청이 대화 단위로 카드가 되고, 지금 상태에 따라 네 칸에 놓여요.
 
@@ -189,14 +187,15 @@ monofield outputs restore <결과물 ID>
 
 ### 외부 AI를 쓸 수 없는 현장이라면
 
-스캐너를 직접 돌리면 돼요. [GitHub 저장소](https://github.com/jhy0285/monofield)를 ZIP으로 받아 아래처럼 실행한 뒤 만들어진 JSON을 MonoField에서 여세요. 편집과 엑셀 내보내기, Git 변경 분석까지 AI 없이 돼요. 다만 명세서에 반영하는 건 편집기에서 직접 고치거나 스캐너를 다시 돌려야 해요.
+명령 하나로 코드에서 명세서와 엑셀을 바로 만들 수 있어요. 만들어진 JSON은 MonoField에서 열어 편집하고, Git 변경 분석까지 AI 없이 돼요. 다만 명세서에 반영하는 건 편집기에서 직접 고치거나 명령을 다시 돌려야 해요. Python 3가 필요해요.
 
 ```bat
-python <압축 푼 폴더>\plugins\_official\interface-spec\scripts\scan_spring.py ^
-  --codebase-path <프로젝트 폴더> ^
+monofield docs scan --codebase <프로젝트 폴더> ^
   --name-dict <프로젝트 폴더>\docs\term-dictionary.csv ^
-  --out <프로젝트 폴더>\docs\api.interface-spec.json
+  --xlsx <프로젝트 폴더>\docs\api.xlsx
 ```
+
+PR마다 API가 깨졌는지 보려면 `monofield docs check --codebase <프로젝트 폴더> --base origin/main`을 CI에 넣으세요. 호환성 깨짐이 있으면 실패(종료 코드 1)로 끝나고, `--format markdown --out api-check.md`로 PR 댓글용 표를 만들 수 있어요.
 
 ### 얼마나 믿을 만한가요
 
