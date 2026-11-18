@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 
 import type { ToolPackConfig } from "./config.js";
+import { VUE_SFC_TEMPLATE_ENGINE_EXTERNALS } from "./prebundle-externals.js";
 
 export const MAC_PREBUNDLED_APP_DIR_NAME = "prebundled";
 export const MAC_PREBUNDLE_META_DIR_NAME = "prebundle-meta";
@@ -48,7 +49,7 @@ export const MAC_PREBUNDLE_POLICIES = {
     label: "packaged main",
   },
   daemonCli: {
-    externals: ["better-sqlite3", "blake3-wasm"],
+    externals: ["better-sqlite3", "blake3-wasm", ...VUE_SFC_TEMPLATE_ENGINE_EXTERNALS],
     forbiddenInputs: [
       "/node_modules/@open-design/daemon/",
       "/node_modules/better-sqlite3/",
@@ -63,7 +64,7 @@ export const MAC_PREBUNDLE_POLICIES = {
     label: "daemon cli",
   },
   daemonSidecar: {
-    externals: ["better-sqlite3", "blake3-wasm"],
+    externals: ["better-sqlite3", "blake3-wasm", ...VUE_SFC_TEMPLATE_ENGINE_EXTERNALS],
     forbiddenInputs: [
       "/node_modules/@open-design/daemon/",
       "/node_modules/better-sqlite3/",

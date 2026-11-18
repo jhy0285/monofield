@@ -5,6 +5,8 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { VUE_SFC_TEMPLATE_ENGINE_EXTERNALS } from "../src/prebundle-externals.js";
+
 import {
   WIN_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER,
   WIN_PREBUNDLE_ESM_REQUIRE_BANNER,
@@ -75,8 +77,8 @@ describe("win standalone prebundle policy", () => {
   it("documents the explicit code-level bundle boundaries", () => {
     expect(WIN_PREBUNDLE_ESBUILD_TARGET).toBe("node24");
     expect(WIN_PREBUNDLE_POLICIES.packagedMain.externals).toEqual(["electron"]);
-    expect(WIN_PREBUNDLE_POLICIES.daemonCli.externals).toEqual(["better-sqlite3", "blake3-wasm"]);
-    expect(WIN_PREBUNDLE_POLICIES.daemonSidecar.externals).toEqual(["better-sqlite3", "blake3-wasm"]);
+    expect(WIN_PREBUNDLE_POLICIES.daemonCli.externals).toEqual(["better-sqlite3", "blake3-wasm", ...VUE_SFC_TEMPLATE_ENGINE_EXTERNALS]);
+    expect(WIN_PREBUNDLE_POLICIES.daemonSidecar.externals).toEqual(["better-sqlite3", "blake3-wasm", ...VUE_SFC_TEMPLATE_ENGINE_EXTERNALS]);
     expect(WIN_PREBUNDLE_POLICIES.webSidecar.externals).toEqual([]);
     expect(WIN_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER).toContain("createRequire");
     expect(WIN_PREBUNDLE_ESM_REQUIRE_BANNER).toContain("createRequire");

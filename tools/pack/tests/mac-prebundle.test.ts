@@ -5,6 +5,8 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { VUE_SFC_TEMPLATE_ENGINE_EXTERNALS } from "../src/prebundle-externals.js";
+
 import {
   MAC_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER,
   MAC_PREBUNDLE_ESM_REQUIRE_BANNER,
@@ -75,8 +77,8 @@ describe("mac standalone prebundle policy", () => {
   it("documents the explicit code-level bundle boundaries", () => {
     expect(MAC_PREBUNDLE_ESBUILD_TARGET).toBe("node24");
     expect(MAC_PREBUNDLE_POLICIES.packagedMain.externals).toEqual(["electron"]);
-    expect(MAC_PREBUNDLE_POLICIES.daemonCli.externals).toEqual(["better-sqlite3", "blake3-wasm"]);
-    expect(MAC_PREBUNDLE_POLICIES.daemonSidecar.externals).toEqual(["better-sqlite3", "blake3-wasm"]);
+    expect(MAC_PREBUNDLE_POLICIES.daemonCli.externals).toEqual(["better-sqlite3", "blake3-wasm", ...VUE_SFC_TEMPLATE_ENGINE_EXTERNALS]);
+    expect(MAC_PREBUNDLE_POLICIES.daemonSidecar.externals).toEqual(["better-sqlite3", "blake3-wasm", ...VUE_SFC_TEMPLATE_ENGINE_EXTERNALS]);
     expect(MAC_PREBUNDLE_POLICIES.webSidecar.externals).toEqual([]);
     expect(MAC_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER).toContain("createRequire");
     expect(MAC_PREBUNDLE_ESM_REQUIRE_BANNER).toContain("createRequire");

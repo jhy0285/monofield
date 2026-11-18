@@ -309,6 +309,15 @@ exercise is unchanged by it.
 
 Newest first within each group. Remove an item when it is done.
 
+Packaged app (2026-11-18, found while fixing the preview.12 build; not fixed):
+
+- The code ontology does not run in packaged builds. `apps/daemon/src/services/code-ontology.ts` starts
+  `new URL('./ontology/worker.js', import.meta.url)`; esbuild leaves that URL as is, and the prebundle ships no
+  `chunks/ontology/worker.js` (checked in a local bundle made like `tools/pack/src/win/app.ts`). Expected symptom: the code
+  map panel fails with a missing-module error in the installed app. Pre-existing since the worker landed; the run check is not
+  affected (it parses in-process). Fix idea: emit the worker as its own prebundle entry and resolve its path through one
+  helper in the daemon, with a tools-pack test that the URL resolves inside the bundle output.
+
 Languages, ontology and NVIDIA Auto Ontology (2026-11-18, user's requests; nothing built yet):
 
 - Languages: the user wants the popular ones (Vue, React, Python, JS, …). Ontology analyzers already read Java, Vue, TS/TSX,
@@ -582,6 +591,22 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-18 — packaged daemon bundles the Vue compiler; the release build no longer stops (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** publish 0.11.7-preview.12. Release run 44268950978 (attempt 2) stopped in `tools-pack win build`: esbuild could
+  not resolve 35 template engines (`velocityjs`, `dustjs-linkedin`, …) while prebundling the daemon.
+- **Why:** the check after every run (`apps/daemon/src/services/run-check.ts`) imports the ontology analyzers, so the daemon
+  bundle now reaches `@vue/compiler-sfc`, whose bundled `consolidate` `require`s those engines for `<template lang>`
+  preprocessing. Nothing in MonoField preprocesses templates.
+- **Changed:** `tools/pack/src/prebundle-externals.ts` lists the engines; the daemon CLI and sidecar policies in
+  `win-prebundle.ts` and `mac-prebundle.ts` mark them external. Test `tools/pack/tests/prebundle-externals.test.ts` bundles
+  the daemon's `@vue/compiler-sfc` with esbuild: fails without the list, passes with it.
+- **Verified:** `pnpm --filter @open-design/tools-pack test` 225 passed (9 skipped); `pnpm guard`, `pnpm typecheck` pass.
+  Locally bundled the daemon sidecar and CLI entries the way `tools/pack/src/win/app.ts` does (splitting, same banner and
+  externals): esbuild exits 0, and the bundled `queue --help` runs outside the repo. The bundled analyzers parsed a `.vue`, a
+  `.ts` and a `.java` file outside the repo. Windows packaging itself not run locally (the release run is the check).
+- **Found, not fixed:** see the packaged code-ontology worker item under Open items.
 
 ### 2026-11-18 — 0.11.7-preview.12 prepared (`ccr-8432aecf-n9xdfd`)
 
