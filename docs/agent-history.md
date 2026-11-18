@@ -309,16 +309,6 @@ exercise is unchanged by it.
 
 Newest first within each group. Remove an item when it is done.
 
-Packaged app (2026-11-18, found while fixing the preview.12 build; not fixed):
-
-- The code ontology does not run in packaged builds. `apps/daemon/src/services/code-ontology.ts` starts
-  `new URL('./ontology/worker.js', import.meta.url)`; esbuild leaves that URL as is, and the prebundle ships no
-  `chunks/ontology/worker.js`. Confirmed on a local bundle made like `tools/pack/src/win/app.ts`, started outside the repo:
-  `POST /api/projects/:id/ontology/build` answers `ONTOLOGY_ERROR` "Cannot find module …/chunks/ontology/worker.js", so the
-  code map panel fails the same way in the installed app. Pre-existing since the worker landed; the run check is not
-  affected (it parses in-process). Fix idea: emit the worker as its own prebundle entry and resolve its path through one
-  helper in the daemon, with a tools-pack test that the URL resolves inside the bundle output.
-
 Languages, ontology and NVIDIA Auto Ontology (2026-11-18, user's requests; nothing built yet):
 
 - Languages: the user wants the popular ones (Vue, React, Python, JS, …). Ontology analyzers already read Java, Vue, TS/TSX,
@@ -592,6 +582,28 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-18 — the code map and the Java source worker run in the packaged app (`ccr-8432aecf-n9xdfd`)
+
+- **Request:** the user asked to fix the code map (code ontology) failing in the installed app, found while fixing the
+  preview.12 build.
+- **Why:** the packaged daemon is one esbuild bundle. `new Worker(new URL('./ontology/worker.js', import.meta.url))` and
+  `services/java/source-info.ts`'s `./source-worker.js` pointed at files the bundle does not have, and
+  `services/ontology/build.ts` read its own analyzer source files to key the cache. Broken in every packaged build since
+  those workers landed.
+- **Changed:** `daemonWorkerUrl` in `apps/daemon/src/daemon-paths.ts` (uses `OD_DAEMON_WORKER_DIR/<name>.mjs` when set,
+  else the file beside the module); both workers use it. `analyzerImplementation` in `ontology/build.ts` hashes the file
+  holding the code when the analyzer files are not beside it. `tools/pack/src/daemon-prebundle.ts` renders the CLI, sidecar
+  and worker entries for Windows and macOS; the CLI and sidecar entries set `OD_DAEMON_WORKER_DIR` first (the sidecar entry
+  now loads the daemon with `await import`). The Windows packaged-app cache key schema went from 5 to 6. Notes in
+  `apps/daemon/AGENTS.md` and `tools/pack/AGENTS.md`.
+- **Verified:** `tools/pack/tests/daemon-prebundle.test.ts` bundles the daemon source like the prebundle and runs both
+  workers: red before the daemon change ("Cannot find module …/chunks/ontology/worker.js", then ENOENT on `build.js`),
+  green after. `apps/daemon/tests/daemon-worker-url.test.ts` 2 passed; daemon ontology/Java route tests 24 passed; tools-pack
+  tests 228 passed (9 skipped); daemon and tools-pack typecheck pass. Bundled the built daemon with the new entries, started
+  it outside the repo and `POST /api/projects/:id/ontology/build` returned a map (file 2, class 1, function 1, screen 1,
+  request 1, external 1; 461 ms). Windows packaging itself not run locally.
+- **Next agent:** ships in the preview after 0.11.7-preview.12, which was built from `bfa610e` without it.
 
 ### 2026-11-18 — 0.11.7-preview.12 published; site, READMEs, guide and notes pointed at it (`ccr-8432aecf-n9xdfd`)
 

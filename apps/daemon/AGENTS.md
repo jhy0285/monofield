@@ -95,6 +95,7 @@ Guidelines:
 - Use types from the implementation module or `packages/contracts` instead of restating response shapes by hand.
 - Keep `packages/contracts` pure. Do not move daemon-only Node, SQLite, Express, filesystem, or process types into contracts.
 - Daemon data paths must follow the root **Daemon data directory contract**. Route all daemon-owned data through `RUNTIME_DATA_DIR` or constants derived from it.
+- The packaged daemon is one esbuild bundle, so a file found through `new URL('./x', import.meta.url)` does not exist there. Start a worker thread with `daemonWorkerUrl(name, new URL('./worker.js', import.meta.url))` (`src/daemon-paths.ts`) and add the same name to `DAEMON_PREBUNDLE_WORKERS` in `tools/pack/src/daemon-prebundle.ts`; do not read other modules' source files at run time unless a bundled fallback exists (see `analyzerImplementation` in `src/services/ontology/build.ts`).
 
 ## CLI and Surface Parity
 

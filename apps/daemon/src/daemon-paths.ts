@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { resolveProjectRelativePath } from './home-expansion.js';
 
@@ -11,6 +12,10 @@ export const DAEMON_CLI_PATH_ENV = 'OD_DAEMON_CLI_PATH';
 export const MONOFIELD_DAEMON_CLI_PATH_ENV = 'MONOFIELD_DAEMON_CLI_PATH';
 export const RESOURCE_ROOT_ENV = 'OD_RESOURCE_ROOT';
 export const MONOFIELD_RESOURCE_ROOT_ENV = 'MONOFIELD_RESOURCE_ROOT';
+export const DAEMON_WORKER_DIR_ENV = 'OD_DAEMON_WORKER_DIR';
+
+/** Workers a bundled daemon carries as their own files; tools/pack/src/daemon-prebundle.ts emits the same names. */
+export type DaemonWorkerName = 'java-source-worker' | 'ontology-worker';
 
 function cleanOptionalPath(value: string | undefined): string | null {
   return typeof value === 'string' && value.trim().length > 0
@@ -27,6 +32,21 @@ export function resolveDaemonCliPath(env: NodeJS.ProcessEnv = process.env): stri
 
   const packageJsonPath = require.resolve('@open-design/daemon/package.json');
   return path.join(path.dirname(packageJsonPath), 'dist', 'cli.js');
+}
+
+/**
+ * The module a worker thread runs. In the daemon's own build a worker sits beside the module that starts it, which is
+ * `besideModule` (`new URL('./worker.js', import.meta.url)`). A bundled daemon has no such files, because esbuild
+ * leaves those URLs as they are: the packaged prebundle writes each worker as `<name>.mjs` and its entries name that
+ * folder in OD_DAEMON_WORKER_DIR.
+ */
+export function daemonWorkerUrl(
+  name: DaemonWorkerName,
+  besideModule: URL,
+  env: NodeJS.ProcessEnv = process.env,
+): URL {
+  const bundled = cleanOptionalPath(env[DAEMON_WORKER_DIR_ENV]);
+  return bundled ? pathToFileURL(path.join(bundled, `${name}.mjs`)) : besideModule;
 }
 
 function isPathWithin(base: string, target: string): boolean {

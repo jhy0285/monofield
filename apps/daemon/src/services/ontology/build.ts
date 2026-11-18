@@ -1,4 +1,4 @@
-import { constants } from 'node:fs';
+import { constants, existsSync } from 'node:fs';
 import { lstat, open, readdir, readFile, realpath, stat, mkdir, writeFile, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -8,6 +8,20 @@ import { workingProjectChanges } from '../document-impact.js';
 import { addBusinessDocuments, assembleOntology, businessRuleConflicts } from './graph.js';
 import { unit, type ParsedUnit } from './model.js';
 import { analyzerFor, ontologyAnalyzers } from './analyzers.js';
+
+const ANALYZER_MODULES = ['build', 'graph', 'analyzers', 'javascript', 'java', 'vue', 'model'] as const;
+
+/**
+ * The code an ontology cache entry is tied to. In the daemon's own build every analyzer module is a file beside this one
+ * and each is read. A bundled daemon has merged them into the file that holds this code, whose imports name
+ * content-hashed chunks, so that file stands for all of them.
+ */
+async function analyzerImplementation(): Promise<Buffer[]> {
+  const sourceExtension = import.meta.url.endsWith('.ts') ? 'ts' : 'js';
+  const beside = (module: string) => new URL(`./${module}.${sourceExtension}`, import.meta.url);
+  if (!existsSync(beside('model'))) return [await readFile(new URL(import.meta.url))];
+  return Promise.all(ANALYZER_MODULES.map(module => readFile(beside(module))));
+}
 
 const MAX_FILES = 2000, MAX_ENTRIES = 20000, MAX_BYTES = 32 * 1024 * 1024, MAX_FILE_BYTES = 512 * 1024, MAX_TIME_MS = 25000;
 const ignored = new Set(['node_modules', 'target', 'build', 'dist', 'out', 'coverage', 'vendor', 'generated', '__pycache__', 'venv']);
@@ -70,11 +84,8 @@ export async function buildOntology(job: OntologyJob): Promise<CodeOntologyRespo
   const hash = createHash('sha256').update('ontology-java3.0.1-babel7.29.8-vue3.5.43-v1\0').update(JSON.stringify(job.businessFiles));
   // Reuse is tied to the actual analyzer implementation, including bug fixes
   // that do not change a parser package version or the app's release number.
-  const sourceExtension = import.meta.url.endsWith('.ts') ? 'ts' : 'js';
   const implementation = createHash('sha256');
-  for (const module of ['build', 'graph', 'analyzers', 'javascript', 'java', 'vue', 'model']) {
-    const code = await readFile(new URL(`./${module}.${sourceExtension}`, import.meta.url)); hash.update(code); implementation.update(code);
-  }
+  for (const code of await analyzerImplementation()) { hash.update(code); implementation.update(code); }
   const parserSha256 = implementation.digest('hex');
   for (const name of names) {
     deadline();

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { Worker } from 'node:worker_threads';
 import type { CodeOntologyResponse } from '@open-design/contracts';
 import type { OntologyJob } from './ontology/build.js';
+import { daemonWorkerUrl } from '../daemon-paths.js';
 
 const active = new Set<string>();
 export async function buildCodeOntology(dataDir: string, projectId: string, root: string, projectPath: string,
@@ -15,7 +16,7 @@ export async function buildCodeOntology(dataDir: string, projectId: string, root
   const directory = path.join(dataDir, 'ontology'), cacheFile = path.join(directory, key + '.json');
   try {
     const result = await new Promise<CodeOntologyResponse>((resolve, reject) => {
-      const worker = new Worker(new URL('./ontology/worker.js', import.meta.url), { workerData: { root, projectPath, businessFiles, request, cacheFile } satisfies OntologyJob,
+      const worker = new Worker(daemonWorkerUrl('ontology-worker', new URL('./ontology/worker.js', import.meta.url)), { workerData: { root, projectPath, businessFiles, request, cacheFile } satisfies OntologyJob,
         resourceLimits: { maxOldGenerationSizeMb: 256 } });
       let settled = false;
       const finish = async (error?: Error, value?: CodeOntologyResponse) => {

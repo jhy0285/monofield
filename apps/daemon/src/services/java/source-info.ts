@@ -1,5 +1,6 @@
 import { Worker } from "node:worker_threads";
 import { createHash } from "node:crypto";
+import { daemonWorkerUrl } from "../../daemon-paths.js";
 let active = 0;
 /** A single bounded trusted syntax worker; project code never executes here. */
 export async function javaBreakpointClass(
@@ -11,7 +12,7 @@ export async function javaBreakpointClass(
   try {
     return await new Promise<string>((resolve, reject) => {
       const worker = new Worker(
-        new URL("./source-worker.js", import.meta.url),
+        daemonWorkerUrl("java-source-worker", new URL("./source-worker.js", import.meta.url)),
         {
           workerData: {
             file,

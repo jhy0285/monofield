@@ -4,6 +4,7 @@ import { dirname, join, relative } from "node:path";
 import { rebuild, type RebuildOptions } from "@electron/rebuild";
 
 import type { ToolPackConfig } from "../config.js";
+import { renderDaemonPrebundleEntrypoints } from "../daemon-prebundle.js";
 import {
   MAC_PREBUNDLE_ESM_REQUIRE_BANNER,
   MAC_PREBUNDLE_ESBUILD_TARGET,
@@ -78,36 +79,20 @@ async function buildPrebundledStandaloneRuntime(
   });
 
   await mkdir(dirname(paths.daemonSidecarPrebundleEntrypointPath), { recursive: true });
-  await writeFile(
-    paths.daemonSidecarPrebundleEntrypointPath,
-    `import ${JSON.stringify(
-      toRelativeImportSpecifier(
-        dirname(paths.daemonSidecarPrebundleEntrypointPath),
-        join(config.workspaceRoot, "apps", "daemon", "dist", "sidecar", "index.js"),
-      ),
-    )};\n`,
-    "utf8",
-  );
-  await writeFile(
-    paths.daemonCliPrebundleEntrypointPath,
-    [
-      'import { fileURLToPath } from "node:url";',
-      "const selfPath = fileURLToPath(import.meta.url);",
-      "process.env.OD_BIN ??= selfPath;",
-      "process.env.OD_DAEMON_CLI_PATH ??= selfPath;",
-      `await import(${JSON.stringify(
-        toRelativeImportSpecifier(
-          dirname(paths.daemonCliPrebundleEntrypointPath),
-          join(config.workspaceRoot, "apps", "daemon", "dist", "cli.js"),
-        ),
-      )});`,
-      "",
-    ].join("\n"),
-    "utf8",
-  );
+  const daemonEntrypoints = renderDaemonPrebundleEntrypoints({
+    cliEntrypointPath: paths.daemonCliPrebundleEntrypointPath,
+    daemonBuildRoot: join(config.workspaceRoot, "apps", "daemon", "dist"),
+    entrypointsDir: dirname(paths.daemonCliPrebundleEntrypointPath),
+    sidecarEntrypointPath: paths.daemonSidecarPrebundleEntrypointPath,
+    toImportSpecifier: toRelativeImportSpecifier,
+  });
+  for (const entry of [daemonEntrypoints.sidecar, daemonEntrypoints.cli, ...daemonEntrypoints.workers]) {
+    await writeFile(entry.path, entry.source, "utf8");
+  }
   await runEsbuild(config, [
     paths.daemonSidecarPrebundleEntrypointPath,
     paths.daemonCliPrebundleEntrypointPath,
+    ...daemonEntrypoints.workers.map((entry) => entry.path),
     "--bundle",
     "--splitting",
     "--platform=node",
