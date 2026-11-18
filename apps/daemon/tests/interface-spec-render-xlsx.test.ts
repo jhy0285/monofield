@@ -237,6 +237,31 @@ describe('renderInterfaceSpecXlsx', () => {
     expect(relsXml).not.toContain('TargetMode="External"');
   });
 
+  // eGovFrame interface names carry text such as "지식유형코드 중복 여부 체크(위치 : 1260.지식맵관리)"; Excel refuses a sheet
+  // name with any of * ? : \ / [ ] or one that starts or ends with an apostrophe.
+  it('turns any interface name into a sheet name Excel accepts and links the list to it', async () => {
+    const doc = sampleDocument();
+    doc.endpoints[0]!.interfaceName = '지식유형코드 중복 여부 체크(위치 : 1260.지식맵관리)';
+    doc.endpoints[1]!.interfaceName = "'경로 C:\\temp\\a? [b]'";
+    const result = await renderInterfaceSpecXlsx(doc);
+    const details = result.sheetTitles.slice(3);
+    expect(details).toHaveLength(2);
+    for (const title of details) {
+      expect(title).not.toMatch(/[*?:\\/[\]]/);
+      expect(title).not.toMatch(/^'|'$/);
+      expect(title.length).toBeGreaterThan(0);
+      expect(title.length).toBeLessThanOrEqual(31);
+    }
+    // the list's links are stored as internal locations and must name the sanitized sheets
+    const zip = await JSZip.loadAsync(result.buffer);
+    const xml = (await Promise.all(Object.keys(zip.files).filter((name) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name))
+      .map((name) => zip.file(name)!.async('string')))).join('\n');
+    const locations = [...xml.matchAll(/location="([^"]+)"/g)].map((match) => match[1]!.replace(/&apos;/g, "'").replace(/&amp;/g, '&'));
+    for (const title of details) expect(locations).toContain(`'${title.replace(/'/g, "''")}'!A1`);
+    // and the workbook opens again
+    expect((await readBack(result.buffer)).worksheets.map((ws) => ws.name)).toEqual(result.sheetTitles);
+  });
+
   it('refuses documents with fatal duplicate endpoint keys', async () => {
     const doc = sampleDocument();
     doc.endpoints.push({ ...doc.endpoints[0]! });

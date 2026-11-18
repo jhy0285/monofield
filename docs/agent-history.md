@@ -337,7 +337,6 @@ AI work board (see the 2026-11-12 "work log and result shelf" Log entry; directi
 
 Company use without an AI tool (see the 2026-11-12 "docs scan" Log entry):
 
-- Excel renderer: a sheet name taken from an interface name with `* ? : \ / [ ]` fails (eGovFrame). Needs a red test and a sanitizer.
 - Not built: the in-app "make from code without AI" entry (HTTP endpoint + contract type + UI + 19 locales), CI recipes
   (GitHub Actions, GitLab) with an adoption guide, and a way for CI to get the CLI without a repository checkout.
 - A route with a `params` suffix is a new name for 15 eGovFrame handlers: documents scanned before this change pair those handlers
@@ -584,6 +583,17 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-18 — Excel sheet names follow every Excel rule; eGovFrame renders to Excel (`ccr-8432aecf-n9xdfd`)
+
+- **Found:** `monofield docs scan --xlsx` on eGovFrame (`e5c1347b`) stopped with `Worksheet name … cannot include any of the following
+  characters: * ? : \ / [ ]`: an interface name from Javadoc (`지식유형코드 중복 여부 체크(위치 : 1260.지식맵관리)`) became a sheet name,
+  and `safeSheetTitle` only replaced `/ ? * [ ]`. The same failure hit the app's Excel export.
+- **Changed:** `excelSheetName` in `apps/daemon/src/doc-renderers/interface-spec/render-xlsx.ts` replaces all of `* ? : \ / [ ]`, cuts
+  to 31 characters, drops apostrophes at either end and falls back to `Sheet`; the list sheet's links use the same names.
+- **Verified:** red first, then green: `tests/interface-spec-render-xlsx.test.ts` 24 pass (new case checks the names, the stored
+  `location` links and that the workbook reopens). Built CLI on eGovFrame: 1,206 APIs, 3.7 MB workbook in 15.7 s, 1,210 sheets,
+  0 invalid names (read back with exceljs).
 
 ### 2026-11-18 — check after every run: what the run itself changed, Spring API compatibility, touched declarations (`ccr-8432aecf-n9xdfd`)
 

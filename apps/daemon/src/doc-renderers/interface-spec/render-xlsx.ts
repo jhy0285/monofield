@@ -48,9 +48,17 @@ import {
 // Naming helpers (ported from scratch_builder.py)
 // ---------------------------------------------------------------------------
 
+/**
+ * A sheet name Excel accepts: none of `* ? : \\ / [ ]`, no apostrophe at either end, 1 to 31 characters.
+ * Interface names are free text (eGovFrame Javadoc puts `위치 : 1260.지식맵관리` in them), so every rule applies.
+ */
+function excelSheetName(base: string): string {
+  const title = base.replace(/[*?:\\/[\]]/g, '_').slice(0, 31).replace(/^'+|'+$/g, '').trim();
+  return title || 'Sheet';
+}
+
 function safeSheetTitle(base: string, used: Set<string>): string {
-  let title = base.replace(/[/?*[\]]/g, '_');
-  if (title.length > 31) title = title.slice(0, 31);
+  const title = excelSheetName(base);
   if (!used.has(title)) {
     used.add(title);
     return title;
