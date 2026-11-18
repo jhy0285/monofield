@@ -20,6 +20,7 @@ import { useI18n, useT } from '../../i18n';
 import type { Dict } from '../../i18n/types';
 import { navigate } from '../../router';
 import { formatBytes, previewKind, resultsApi } from './api';
+import { CheckBadge, CheckDialog } from './RunCheck';
 import styles from './ResultsView.module.css';
 
 type DictKey = keyof Dict;
@@ -122,7 +123,8 @@ function BoardPanel({ t, onShowFiles }: { t: Translate; onShowFiles: (issue: Wor
   }, [tick]);
 
   // The board is a live view: quick while something runs, slow otherwise, so a request sent from another tab shows up.
-  const busy = (queue?.running ?? 0) > 0;
+  const [checkRun, setCheckRun] = useState<string | null>(null);
+  const busy = (queue?.running ?? 0) > 0 || Boolean(queue?.issues.some((issue) => issue.lastRun.check?.state === 'pending'));
   useEffect(() => {
     const timer = window.setInterval(() => setTick((value) => value + 1), busy ? 3000 : 15000);
     return () => window.clearInterval(timer);
@@ -158,6 +160,7 @@ function BoardPanel({ t, onShowFiles }: { t: Translate; onShowFiles: (issue: Wor
                     {issue.projectName ?? t('results.deletedProject')} · {t('results.board.runs', { n: issue.runCount })}
                     {issue.totalTokens ? ` · ${t('results.runs.tokens', { n: format.count(issue.totalTokens) })}` : ''}
                   </p>
+                  <CheckBadge check={issue.lastRun.check} onOpen={() => setCheckRun(issue.lastRun.runId)} />
                   <div className={styles.cardFoot}>
                     {issue.lastRun.agentName ? <span className={styles.agent}>{issue.lastRun.agentName}</span> : null}
                     <span className={styles.when}>{format.time(issue.updatedAt)}</span>
@@ -169,6 +172,7 @@ function BoardPanel({ t, onShowFiles }: { t: Translate; onShowFiles: (issue: Wor
           );
         })}
       </div>
+      {checkRun ? <CheckDialog runId={checkRun} onClose={() => setCheckRun(null)} /> : null}
     </div>
   );
 }
@@ -502,7 +506,8 @@ function RunsPanel({ t, onShowFiles }: { t: Translate; onShowFiles: (run: RunLog
   }, [days, search, status, tick]);
 
   // While something is still running, read the log again so its row and the totals settle without a reload.
-  const anyRunning = Boolean(runs?.runs.some((run) => run.status === 'running'));
+  const [checkRun, setCheckRun] = useState<string | null>(null);
+  const anyRunning = Boolean(runs?.runs.some((run) => run.status === 'running' || run.check?.state === 'pending'));
   useEffect(() => {
     if (!anyRunning) return;
     const timer = window.setInterval(() => setTick((value) => value + 1), 4000);
@@ -561,6 +566,7 @@ function RunsPanel({ t, onShowFiles }: { t: Translate; onShowFiles: (run: RunLog
                 {format.time(run.startedAt)} · {run.agentName ?? '—'} · {run.projectName ?? t('results.deletedProject')} ·{' '}
                 {run.usage.measured ? t('results.runs.tokens', { n: format.count(run.usage.totalTokens) }) : t('results.runs.noUsage')}
               </p>
+              {run.check ? <div className={styles.runCheck}><CheckBadge check={run.check} onOpen={() => setCheckRun(run.runId)} /></div> : null}
             </div>
             {run.outputCount > 0
               ? <Button onClick={() => onShowFiles(run)}>{t('results.runs.files', { n: run.outputCount })}</Button>
@@ -568,6 +574,7 @@ function RunsPanel({ t, onShowFiles }: { t: Translate; onShowFiles: (run: RunLog
           </li>
         ))}
       </ul>
+      {checkRun ? <CheckDialog runId={checkRun} onClose={() => setCheckRun(null)} /> : null}
     </div>
   );
 }

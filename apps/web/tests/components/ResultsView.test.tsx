@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { RunLogEntry, RunOutput, WorkIssue } from '@open-design/contracts';
+import type { RunCheckDetailResponse, RunCheckSummary, RunLogEntry, RunOutput, WorkIssue } from '@open-design/contracts';
 import { I18nProvider } from '../../src/i18n';
 import { ResultsView } from '../../src/components/results/ResultsView';
 import { en } from '../../src/i18n/locales/en';
@@ -24,12 +24,27 @@ const RUN: RunLogEntry = {
   usage: { inputTokens: 61500, outputTokens: 3900, cacheReadTokens: 52000, cacheWriteTokens: 0, totalTokens: 65400, measured: true },
 };
 
+const BREAKING: RunCheckSummary = {
+  state: 'done', reason: null, message: null, shared: false, files: 2,
+  api: { checked: true, level: 'breaking', counts: { breaking: 1, warning: 0, info: 0 }, endpoints: { before: 5, after: 5 } },
+  touched: { api: 1, screen: 0, table: 0, class: 1 },
+};
+const CHECK: RunCheckDetailResponse = {
+  runId: 'r2', number: 12, summary: BREAKING,
+  files: [{ path: 'src/order/dto/OrderResponse.java', status: 'modified' }, { path: 'docs/report.md', status: 'added' }],
+  apiChanges: [{ level: 'breaking', code: 'response-field-removed', route: 'GET /api/v1/orders/{orderId}', interfaceId: '', location: 'response', field: 'totalAmount' }],
+  touched: [
+    { kind: 'api', label: 'GET /api/v1/orders/{orderId}', path: 'src/order/OrderController.java', change: 'changed' },
+    { kind: 'class', label: 'kr.example.order.dto.OrderResponse', path: 'src/order/dto/OrderResponse.java', change: 'changed' },
+  ],
+};
+
 const issue = (extra: Partial<WorkIssue>): WorkIssue => ({
   number: 3, conversationId: 'c1', projectId: 'p1', projectName: '주문 시스템', title: '주문 보고서', status: 'done', runCount: 2, outputCount: 1,
   totalTokens: 65400, lastRun: RUN, updatedAt: 1_800_000_060_000, ...extra,
 });
 const ISSUES: WorkIssue[] = [
-  issue({}),
+  issue({ lastRun: { ...RUN, check: BREAKING } }),
   issue({ number: 4, conversationId: 'c2', title: '환불 API도 넣을까요?', status: 'needs-reply', outputCount: 0, totalTokens: 0, lastRun: { ...RUN, runId: 'r3', number: 13, issueNumber: 4, needsReply: true, agentName: 'Codex CLI' } }),
   issue({ number: 5, conversationId: 'c3', title: '정산 배치 분석', status: 'running', outputCount: 0, totalTokens: 0, lastRun: { ...RUN, runId: 'r4', number: 14, issueNumber: 5, status: 'running', finishedAt: null } }),
 ];
@@ -47,6 +62,7 @@ beforeEach(() => {
     calls.push({ url, method });
     const respond = (value: unknown) => new Response(JSON.stringify(value), { status: 200, headers: { 'content-type': 'application/json' } });
     if (url.endsWith('/content')) return new Response('# 주문 보고서\n', { status: 200 });
+    if (url === '/api/run-log/r2/check') return respond(CHECK);
     if (url.endsWith('/restore')) { current = 'same'; return respond({ restored: V1, savedBefore: output({ id: 'o3', version: 3, change: 'before-restore', runId: null }) }); }
     if (url.startsWith('/api/run-outputs/')) {
       const picked = url.includes('o1') ? V1 : V2;
@@ -173,6 +189,28 @@ describe('ResultsView', () => {
     fireEvent.click(within(detail).getByRole('button', { name: '크게 보기' }));
     const dialog = await screen.findByRole('dialog', { name: 'report.md' });
     expect(dialog.querySelector('pre')?.textContent).toBe('# 주문 보고서\n');
+    fireEvent.click(within(dialog).getByRole('button', { name: '닫기' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('shows what a run changed on its card, and the detail on click', async () => {
+    renderKo();
+    const done = await screen.findByTestId('results-column-done');
+    const badge = within(done).getByTestId('run-check-badge');
+    expect(badge.textContent).toBe('API 호환성 깨짐 1');
+    expect(badge.className).toMatch(/badge_breaking/);
+
+    fireEvent.click(badge);
+    const dialog = await screen.findByRole('dialog', { name: '실행 12: 바뀐 내용' });
+    await waitFor(() => expect(within(dialog).getByTestId('run-check-summary').textContent).toBe('API 호환성 깨짐 1'));
+    expect(dialog.textContent).toContain('이 실행이 바꾼 것만 봅니다.');
+    expect(dialog.textContent).toContain('API 5 → 5개');
+    const row = within(dialog).getByText('GET /api/v1/orders/{orderId}', { selector: 'td' }).closest('tr')!;
+    expect(row.textContent).toContain('응답 필드 삭제');
+    expect(row.textContent).toContain('totalAmount');
+    expect(dialog.textContent).toContain('건드린 항목');
+    expect(dialog.textContent).toContain('kr.example.order.dto.OrderResponse');
+    expect(dialog.textContent).toContain('바뀐 파일 (2)');
     fireEvent.click(within(dialog).getByRole('button', { name: '닫기' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });

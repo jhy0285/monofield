@@ -57,7 +57,7 @@ Entry template:
 
 ## Current state
 
-As of 2026-11-17.
+As of 2026-11-18.
 
 - Product: MonoField, a local Windows workbench that takes Codex or Claude Code
   CLI work to Korean SI deliverables (interface-spec XLSX, screen-spec PPTX,
@@ -68,6 +68,7 @@ As of 2026-11-17.
   from `b403fac` on `main`: Kotlin reading, the duplicate-row fix and method-list changes as one change, on top of preview.10.
   Not released, on the branch only (2026-11-12): `monofield docs scan` / `docs check` and routes split by Spring `params`.
   Also on the branch only: the work queue (board, results, work log; `monofield queue`, `monofield outputs`, `monofield usage`).
+  Also on the branch only: the check after every run (Git snapshots, Spring API compatibility, touched declarations; `monofield queue check`).
   Stable `latest` is still `v0.11.6`. Workspace packages are
   still named `@open-design/*`; env vars still use the `OD_*` prefix.
 - Shape: pnpm monorepo. `apps/daemon` (Express + SQLite, `monofield` CLI) and
@@ -308,6 +309,22 @@ exercise is unchanged by it.
 ## Open items
 
 Newest first within each group. Remove an item when it is done.
+
+Languages, ontology and NVIDIA Auto Ontology (2026-11-18, user's requests; nothing built yet):
+
+- Languages: the user wants the popular ones (Vue, React, Python, JS, …). Ontology analyzers already read Java, Vue, TS/TSX,
+  JS/JSX; Python is missing. API compatibility is Spring only; FastAPI/Django/Flask/Express/NestJS need route scanners (or an
+  OpenAPI file per side). Plan to propose: Python analyzer first, then FastAPI and Express/NestJS route scanners.
+- MonoField's DB features are PostgreSQL only (`apps/desktop/src/main/database-broker.ts`, `pg`); the user's company uses
+  PostgreSQL.
+- NVIDIA Auto Ontology (github.com/NVIDIA/auto-ontology, Apache-2.0, read at `a630ebd`, not run): reads DB metadata and profiles
+  each table with `SELECT * … LIMIT 1000` (`semantic/visit_enter.py`); sample values go into model prompts and embeddings
+  (`semantic/fk_suggester.py`, `semantic_fk.py`, `embed.py`); default model endpoints are NVIDIA's hosted API, so company data
+  leaves the network unless all four roles (REASONING, NON_REASONING, EMBED, RERANK) point to an in-house OpenAI-compatible
+  endpoint. PII detection sends column names only. Agent SQL on PostgreSQL runs in a READ ONLY transaction
+  (`connectors/postgres.py`). Compose publishes Postgres, pgAdmin and the web app on the host. Safe use: in-house model endpoint,
+  a read-only DB account, a non-production database, change default passwords, bind to localhost; connect to MonoField as an
+  external MCP server, not embedded.
 
 AI work board (see the 2026-11-12 "work log and result shelf" Log entry; direction set by the user):
 
@@ -567,6 +584,46 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-18 — check after every run: what the run itself changed, Spring API compatibility, touched declarations (`ccr-8432aecf-n9xdfd`)
+
+- Why: the user asked what MonoField gives over plain Codex/Claude Code when the models are the same. Agreed answer: checks
+  outside the model. They do Java/Spring code changes with the Codex CLI (enterprise subscription), use PostgreSQL, want all
+  popular languages and want NVIDIA Auto Ontology if it is safe (see Open items).
+- Done:
+  - `apps/daemon/src/services/run-check.ts`: at run start and end the folder is written as a Git tree via a temporary index
+    (`snapshotTree`: copy of the real index, `git add -A` with `RUNTIME_PATHS` excluded, `write-tree`); `changedFilesBetween`
+    (`diff --name-status -z -M`); `compareCodeTrees` (new in `document-rescan.ts`, both sides exported with `exportRevision`,
+    which now always creates the prefix folder); `touchedBetween` parses each changed file on both sides with the ontology
+    analyzers (Java, Vue, TS/TSX, JS/JSX) and reports APIs/screens/tables/classes as added/removed/changed. An API counts as
+    changed only when a code-carrying edited line (not blank, brace or comment) falls inside its handler region (annotation line
+    to the next API/class start). Concurrent runs in one repository are flagged `shared`. Non-Git development folders get
+    `skipped/not-git`; non-development non-Git folders get no check.
+  - `createChatRunService` (`runtimes/runs.ts`): `onStart` may return a promise; the agent starts when it settles or after
+    `startHookWaitMs` (5 s), and not at all if the run was stopped meanwhile.
+  - Store: `run_checks` table (summary, detail, search text), `RunLogEntry.check`, `checkDetail` (by run id or number), pending
+    checks become `failed/restarted` on open; work-log search also matches changed paths, touched labels and API routes.
+  - Surfaces: `GET /api/run-log/:runId/check`; `monofield queue check <run-number>` (exit 1 on a breaking change); check notes on
+    `monofield queue` and `monofield usage runs`; web badge on board cards and work-log rows (`components/results/RunCheck.tsx`)
+    with a detail dialog; 32 keys in 19 locales.
+  - Docs: `docs/user-guide.ko.md` ("실행이 끝나면 자동으로 검사해요"), `apps/daemon/AGENTS.md`.
+- Found while verifying: the daemon stages skills into the project folder (`.od-skills/`) after the start snapshot, so the first
+  end-to-end run charged 7 skill files to the agent. `RUNTIME_PATHS` (`.od-skills/`, `.mcp.json`, `.pi/sessions/`) are now
+  excluded from both snapshots (red test first).
+- Verified: daemon `tests/run-check.test.ts` 7, `tests/run-outputs.test.ts` 10, `tests/run-work-log.test.ts` 6,
+  `tests/run-outputs-route-cli.test.ts` 4 (one runs a stand-in `codex` that removes `totalAmount` in an imported Git folder of the
+  Spring fixture, through `startServer`, HTTP and the built CLI); web `tests/components/ResultsView.test.tsx` 8; full web suite
+  419 files / 4032 tests (13 skipped); `pnpm guard`, `pnpm typecheck`, `pnpm i18n:check` pass. Live app (`tools-dev`, namespace
+  `board`, isolated `OD_DATA_DIR`): three runs on the imported Spring sample gave "파일 1개 바뀜" (README), "API 추가 변경 1"
+  (cancel endpoint) and "API 호환성 깨짐 4" (totalAmount removed from 4 routes including the new one); `monofield queue check 3`
+  printed the four breaking rows and exited 1; Playwright drove board → badge → dialog and the work-log search for `cancel`; no
+  page errors.
+- Full daemon suite: still running when this entry was committed; the result is in the commit after this one.
+- Not run / not done: real Codex CLI, Windows (paths with backslashes in `RUNTIME_PATHS` matching are untested), the packaged app,
+  a large repository (snapshot cost on tens of thousands of files is not measured), `e2e/ui`. No release.
+- Limits: the API comparison is Spring only; touched declarations are per changed file (no call-graph propagation to callers);
+  Python files are not analyzed; `git add` leaves loose objects in the repository until git's own cleanup; untracked files git
+  ignores are invisible to the check.
 
 ### 2026-11-17 — work queue: a board of request threads, thread and run numbers, grid and large view (`ccr-8432aecf-n9xdfd`)
 

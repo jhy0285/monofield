@@ -1,4 +1,5 @@
 import type {
+  RunCheckDetailResponse,
   RunLogListQuery,
   RunLogListResponse,
   RunOutputDetailResponse,
@@ -40,6 +41,8 @@ export const resultsApi = {
   contentUrl: (id: string, download = false) => `/api/run-outputs/${encodeURIComponent(id)}/content${download ? '?download=1' : ''}`,
   /** The board: request threads by what their newest run needs. */
   queue: () => call<WorkQueueResponse>('/api/run-log/issues'),
+  /** What one run changed (by run id or run number). */
+  check: (run: string) => call<RunCheckDetailResponse>(`/api/run-log/${encodeURIComponent(run)}/check`),
   runs: (query: RunLogListQuery) => call<RunLogListResponse>(`/api/run-log${search(query)}`),
   usage: (query: RunLogListQuery) => call<RunUsageSummaryResponse>(`/api/run-log/usage${search(query)}`),
 };
