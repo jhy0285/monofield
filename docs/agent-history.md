@@ -313,8 +313,9 @@ Packaged app (2026-11-18, found while fixing the preview.12 build; not fixed):
 
 - The code ontology does not run in packaged builds. `apps/daemon/src/services/code-ontology.ts` starts
   `new URL('./ontology/worker.js', import.meta.url)`; esbuild leaves that URL as is, and the prebundle ships no
-  `chunks/ontology/worker.js` (checked in a local bundle made like `tools/pack/src/win/app.ts`). Expected symptom: the code
-  map panel fails with a missing-module error in the installed app. Pre-existing since the worker landed; the run check is not
+  `chunks/ontology/worker.js`. Confirmed on a local bundle made like `tools/pack/src/win/app.ts`, started outside the repo:
+  `POST /api/projects/:id/ontology/build` answers `ONTOLOGY_ERROR` "Cannot find module …/chunks/ontology/worker.js", so the
+  code map panel fails the same way in the installed app. Pre-existing since the worker landed; the run check is not
   affected (it parses in-process). Fix idea: emit the worker as its own prebundle entry and resolve its path through one
   helper in the daemon, with a tools-pack test that the URL resolves inside the bundle output.
 
