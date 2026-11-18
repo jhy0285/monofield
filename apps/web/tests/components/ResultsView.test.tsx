@@ -20,7 +20,7 @@ const V2 = output({});
 const V1 = output({ id: 'o1', runId: 'r1', runNumber: 11, version: 1, latest: false, change: 'created', agentId: 'codex', agentName: 'Codex CLI', request: '주문 보고서를 써 줘', sha256: 'a'.repeat(64) });
 const RUN: RunLogEntry = {
   runId: 'r2', number: 12, issueNumber: 3, issueTitle: '주문 보고서', needsReply: false, projectId: 'p1', projectName: '주문 시스템', conversationId: 'c1', agentId: 'claude', agentName: 'Claude Code', model: null, request: '환불 절을 추가해 줘',
-  status: 'succeeded', startedAt: 1_800_000_000_000, finishedAt: 1_800_000_060_000, outputCount: 1,
+  status: 'succeeded', startedAt: 1_800_000_000_000, finishedAt: 1_800_000_060_000, outputCount: 1, check: null,
   usage: { inputTokens: 61500, outputTokens: 3900, cacheReadTokens: 52000, cacheWriteTokens: 0, totalTokens: 65400, measured: true },
 };
 

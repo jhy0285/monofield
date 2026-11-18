@@ -159,6 +159,32 @@ describe('run outputs', () => {
     expect(store.runs({ conversationId: 'c2' }).runs.map((entry) => entry.runId)).toEqual(['r3']);
   });
 
+  it('keeps the check after a run with the run, finds runs by what they touched, and closes checks a restart cut off', async () => {
+    await run('r1', () => put('a.md', 'a'));
+    await run('r2', () => put('b.md', 'b'), { request: '취소 API를 추가해 줘' });
+    const touched = { api: 1, screen: 0, table: 0, class: 1 };
+    store.recordCheck('r2', {
+      summary: { state: 'done', reason: null, message: null, shared: false, files: 2, api: { checked: true, level: 'info', counts: { breaking: 0, warning: 0, info: 1 }, endpoints: { before: 5, after: 6 } }, touched },
+      files: [{ path: 'src/OrderController.java', status: 'modified' }, { path: 'src/OrderCancelRequest.java', status: 'added' }],
+      apiChanges: [{ level: 'info', code: 'endpoint-added', route: 'POST /api/v1/orders/{orderId}/cancel', interfaceId: '' }],
+      touched: [{ kind: 'api', label: 'POST /api/v1/orders/{orderId}/cancel', path: 'src/OrderController.java', change: 'added' }],
+    });
+    store.recordCheck('r1', { summary: { state: 'pending', reason: null, message: null, shared: false, files: 0, api: null, touched: { api: 0, screen: 0, table: 0, class: 0 } }, files: [], apiChanges: [], touched: [] });
+
+    const listed = store.runs({}).runs;
+    expect(listed.find((entry) => entry.runId === 'r2')?.check).toMatchObject({ state: 'done', files: 2, api: { level: 'info' } });
+    expect(store.queue({}).issues[0]!.lastRun.check?.touched).toEqual(touched);
+    expect(store.checkDetail('r2')).toMatchObject({ runId: 'r2', number: 2, files: [{ path: 'src/OrderController.java' }, { path: 'src/OrderCancelRequest.java' }] });
+    expect(store.checkDetail('nope')).toBeNull();
+    // the work log search reaches the files and APIs a run changed
+    expect(store.runs({ q: 'ordercancelrequest' }).runs.map((entry) => entry.runId)).toEqual(['r2']);
+    expect(store.runs({ q: '/cancel' }).runs.map((entry) => entry.runId)).toEqual(['r2']);
+
+    const reopened = createRunOutputStore({ db, dataDir: data, now: () => (clock += 1_000) });
+    expect(reopened.runs({}).runs.find((entry) => entry.runId === 'r1')?.check).toMatchObject({ state: 'failed', reason: 'restarted' });
+    expect(reopened.runs({}).runs.find((entry) => entry.runId === 'r2')?.check?.state).toBe('done');
+  });
+
   it('never copies hidden files: they are tool configuration and may hold credentials', async () => {
     const kept = await run('r1', async () => {
       await put('.mcp.json', '{"token":"secret"}');

@@ -658,6 +658,8 @@ import { registerReaEvidenceRoutes } from './routes/rea-evidence.js';
 import { registerReferenceRoutes } from './routes/references.js';
 import { registerRunOutputRoutes } from './routes/run-outputs.js';
 import { createRunOutputStore } from './services/run-outputs.js';
+import { createRunChecks } from './services/run-check.js';
+import { resolveInterfaceSpecScriptsDir } from './services/interface-spec-scripts.js';
 import { runFinishForWorkLog, runStartForWorkLog } from './services/run-work-log.js';
 import { registerCodeOntologyRoutes } from './routes/code-ontology.js';
 import { registerJavaToolsRoutes } from './routes/java-tools.js';
@@ -4309,17 +4311,27 @@ export async function startServer({
     },
   });
   void runOutputs.prune().catch(() => {});
+  const runChecks = createRunChecks({
+    record: (runId, record) => runOutputs.recordCheck(runId, record),
+    scriptsDir: () => resolveInterfaceSpecScriptsDir(),
+  });
   const design = {
     runs: createChatRunService({
       createSseResponse,
       createSseErrorPayload,
       runsLogDir: path.join(RUNTIME_DATA_DIR, 'runs'),
-      onStart: (run) => runOutputs.start(runStartForWorkLog(db, run, {
-        agentName: (agentId) => getAgentDef(agentId)?.name ?? null,
-        projectRoot: (projectId, metadata) => resolveProjectDir(PROJECTS_DIR, projectId, metadata),
-      })),
+      onStart: (run) => {
+        const started = runStartForWorkLog(db, run, {
+          agentName: (agentId) => getAgentDef(agentId)?.name ?? null,
+          projectRoot: (projectId, metadata) => resolveProjectDir(PROJECTS_DIR, projectId, metadata),
+        });
+        runOutputs.start(started);
+        // The check after a run snapshots the folder before the agent may write to it.
+        return runChecks.start({ runId: started.runId, root: started.root, development: started.development });
+      },
       onFinish: (run) => {
         void runOutputs.finish(runFinishForWorkLog(run)).catch((err) => console.warn('[run-outputs] finish failed', err));
+        void runChecks.finish(run.id).catch((err) => console.warn('[run-check] failed', err));
       },
     }),
     analytics: analyticsService,

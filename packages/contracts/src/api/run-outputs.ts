@@ -4,6 +4,11 @@
 //
 // Pure TypeScript: shared by the daemon, the web app and the `monofield outputs` / `monofield usage` CLI.
 
+import type {
+  InterfaceSpecChangeLevel,
+  InterfaceSpecCompatibilityChange,
+} from '../docs/interface-spec-compatibility.js';
+
 export type RunLogStatus = 'running' | 'succeeded' | 'failed' | 'canceled';
 
 /**
@@ -44,6 +49,8 @@ export interface RunLogEntry {
   usage: RunLogUsage;
   /** Files this run created or changed. */
   outputCount: number;
+  /** What the run changed in the code, checked when it ended; null when the run had no code folder to check. */
+  check: RunCheckSummary | null;
 }
 
 export const RUN_REQUEST_MAX_CHARS = 400;
@@ -233,4 +240,64 @@ export function workIssueStatus(run: Pick<RunLogEntry, 'status' | 'needsReply'>)
   if (run.status === 'running') return 'running';
   if (run.status !== 'succeeded') return 'failed';
   return run.needsReply ? 'needs-reply' : 'done';
+}
+
+/**
+ * The check after a run: the project folder is snapshotted as a Git tree when the run starts and when it ends (with a
+ * temporary index, so the person's index and files are untouched), and the difference between the two is exactly what
+ * the run changed. That difference is then read for API compatibility (Spring controllers, with the interface-spec
+ * scanner) and for what the changed files declare (APIs, screens, tables, classes, with the code-ontology analyzers).
+ */
+export type RunCheckState = 'pending' | 'done' | 'skipped' | 'failed';
+/** `not-git`: the folder is not in a Git repository. `restarted`: the app stopped before the check finished. */
+export type RunCheckReason = 'not-git' | 'restarted' | 'error';
+export type RunCheckFileStatus = 'added' | 'modified' | 'deleted' | 'renamed';
+export type RunTouchedKind = 'api' | 'screen' | 'table' | 'class';
+export const RUN_TOUCHED_KINDS: readonly RunTouchedKind[] = ['api', 'screen', 'table', 'class'];
+/**
+ * `added` / `removed`: the declaration appeared or disappeared. `changed`: an API whose handler lines the run edited, or
+ * a screen, table or class declared in a file the run edited.
+ */
+export type RunTouchedChange = 'added' | 'removed' | 'changed';
+
+/** Whether callers of the project's HTTP API would notice the run's change. */
+export type RunApiCheck =
+  | { checked: true; level: InterfaceSpecChangeLevel | 'none'; counts: Record<InterfaceSpecChangeLevel, number>; endpoints: { before: number; after: number } }
+  /** `no-python` / `no-scanner`: the comparison could not run here. `error`: it ran and failed (see `message`). */
+  | { checked: false; reason: 'no-python' | 'no-scanner' | 'error'; message?: string };
+
+export interface RunCheckSummary {
+  state: RunCheckState;
+  reason: RunCheckReason | null;
+  /** Why it failed, as the tool reported it. */
+  message: string | null;
+  /** Another run worked in the same repository at the same time, so some of the changes may be that run's. */
+  shared: boolean;
+  /** Files the run added, changed, removed or renamed (in the project folder). */
+  files: number;
+  /** Null when no Java, Kotlin or Spring XML file changed: nothing a caller of the API could see. */
+  api: RunApiCheck | null;
+  touched: Record<RunTouchedKind, number>;
+}
+
+export interface RunCheckFile { path: string; status: RunCheckFileStatus; from?: string }
+export interface RunTouchedItem { kind: RunTouchedKind; label: string; path: string; change: RunTouchedChange }
+
+export interface RunCheckDetailResponse {
+  runId: string;
+  number: number;
+  summary: RunCheckSummary;
+  files: RunCheckFile[];
+  apiChanges: InterfaceSpecCompatibilityChange[];
+  touched: RunTouchedItem[];
+}
+
+/** The level a person should look at first, for a badge on the run's card. */
+export function runCheckAttention(check: RunCheckSummary | null): 'breaking' | 'warning' | 'ok' | 'pending' | 'none' {
+  if (!check) return 'none';
+  if (check.state === 'pending') return 'pending';
+  if (check.state !== 'done') return 'none';
+  if (check.api?.checked && check.api.counts.breaking > 0) return 'breaking';
+  if (check.api?.checked && check.api.counts.warning > 0) return 'warning';
+  return 'ok';
 }

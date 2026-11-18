@@ -6,11 +6,18 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { RunLogListResponse, RunOutputDetailResponse, RunOutputListResponse, RunUsageSummaryResponse, WorkQueueResponse } from '@open-design/contracts';
+import type { RunCheckDetailResponse, RunLogListResponse, RunOutputDetailResponse, RunOutputListResponse, RunUsageSummaryResponse, WorkQueueResponse } from '@open-design/contracts';
+import { cp } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { startServer } from '../src/server.js';
 
 const execute = promisify(execFile);
 type Started = { url: string; server: Server; shutdown?: () => Promise<void> | void };
+const fixtures = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../plugins/_official/interface-spec/fixtures');
+function hasPython(): boolean {
+  try { return /Python 3\./.test(execFileSync('python3', ['--version'], { encoding: 'utf8' })); } catch { return false; }
+}
 
 // The whole path a person takes: ask an AI tool for something in a project, the tool writes files, and afterwards
 // the files and the request are found on the result shelf and in the work log, over HTTP and through the CLI.
@@ -40,6 +47,11 @@ process.stdin.on('end', () => {
   let found, last = 'empty';
   while ((found = marker.exec(stdin))) last = found[1].trim();
   fs.writeFileSync('report.md', '# ' + last + '\\n');
+  // REMOVE-TOTAL: the change a person would ask an AI to make in Spring code
+  if (stdin.includes('REMOVE-TOTAL')) {
+    const dto = 'src/main/java/kr/example/legacy/order/dto/OrderResponse.java';
+    fs.writeFileSync(dto, fs.readFileSync(dto, 'utf8').replace(/\\s*\\/\\*\\* 주문 금액 \\*\\/\\s*private Long totalAmount;/, ''));
+  }
   fs.writeFileSync('notes.py', 'print(1)\\n');
   console.log(JSON.stringify({ type: 'thread.started', thread_id: 't1' }));
   console.log(JSON.stringify({ type: 'turn.started' }));
@@ -145,6 +157,44 @@ process.stdin.on('end', () => {
     const found = JSON.parse((await cli(['usage', 'runs', '--project', projectId, '--q', '환불', '--json'])).stdout) as RunLogListResponse;
     expect(found.runs.map((run) => run.request)).toEqual(['환불 절을 추가해 줘 REPORT:second draft']);
     expect((await fetch(`${started.url}/api/run-outputs/nope`)).status).toBe(404);
+  });
+
+  it.skipIf(!hasPython())('checks what a run changed in a Git folder and reports a breaking API change over HTTP and the CLI', async () => {
+    const repo = path.join(dir, 'legacy-order');
+    await cp(path.join(fixtures, 'spring'), repo, { recursive: true });
+    const gitIn = (...args: string[]) => execFileSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', ...args], { cwd: repo, encoding: 'utf8' });
+    gitIn('init', '--quiet');
+    gitIn('add', '-A');
+    gitIn('commit', '--quiet', '--no-verify', '-m', 'baseline');
+    const imported = await fetch(`${started.url}/api/import/folder`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ baseDir: repo, name: '주문 레거시' }) });
+    expect(imported.status).toBe(200);
+    const { project, conversationId: importedConversation } = await imported.json() as { project: { id: string }; conversationId: string };
+
+    const response = await fetch(`${started.url}/api/runs`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ projectId: project.id, conversationId: importedConversation, assistantMessageId: `assistant_${randomUUID()}`, clientRequestId: `client_${randomUUID()}`,
+        agentId: 'codex', sessionMode: 'docs', message: '주문 금액 필드를 빼 줘 REMOVE-TOTAL', currentPrompt: '주문 금액 필드를 빼 줘 REMOVE-TOTAL' }),
+    });
+    expect(response.status).toBe(202);
+    const { runId } = await response.json() as { runId: string };
+    let detail: RunCheckDetailResponse | null = null;
+    for (let waited = 0; waited < 90_000 && detail?.summary.state !== 'done'; waited += 250) {
+      const answer = await fetch(`${started.url}/api/run-log/${runId}/check`);
+      detail = answer.ok ? await answer.json() as RunCheckDetailResponse : null;
+      if (detail?.summary.state !== 'done') await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    expect(detail?.summary).toMatchObject({ state: 'done', shared: false, api: { checked: true, level: 'breaking', counts: { breaking: 3 } } });
+    expect(detail?.files.map((file) => file.path).sort()).toEqual(['notes.py', 'report.md', 'src/main/java/kr/example/legacy/order/dto/OrderResponse.java']);
+    expect(detail?.touched).toEqual([{ kind: 'class', label: 'kr.example.legacy.order.dto.OrderResponse', path: 'src/main/java/kr/example/legacy/order/dto/OrderResponse.java', change: 'changed' }]);
+
+    // the board card's run carries the summary, and the CLI shows the detail and fails on a breaking change
+    const queue = await get<WorkQueueResponse>(`/api/run-log/issues?projectId=${project.id}`);
+    expect(queue.issues[0]?.lastRun.check).toMatchObject({ state: 'done', api: { level: 'breaking' } });
+    const failed = await cli(['queue', 'check', String(detail!.number)]).catch((error: { code?: number; stdout?: string }) => error);
+    expect((failed as { code?: number }).code).toBe(1);
+    expect((failed as { stdout: string }).stdout).toMatch(/3 file\(s\) changed · API 3 breaking[\s\S]*\[Breaking\] GET \/api\/v1\/orders\/\{orderId\} · Response field removed · totalAmount/);
+    expect((await cli(['usage', 'runs', '--project', project.id])).stdout).toContain('check: 3 file(s) changed · API 3 breaking');
+    expect((await fetch(`${started.url}/api/run-log/nope/check`)).status).toBe(404);
   });
 
   it('shows the thread on the board with its number, and lists a thread\'s files by that number', async () => {

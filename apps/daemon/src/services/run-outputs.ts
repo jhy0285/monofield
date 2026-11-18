@@ -4,10 +4,13 @@ import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
+import type { RunCheckRecord } from './run-check.js';
 import {
   RUN_REQUEST_MAX_CHARS,
   isRunOutputPath,
   runOutputFormat,
+  type RunCheckDetailResponse,
+  type RunCheckSummary,
   type RunLogEntry,
   type RunLogListQuery,
   type RunLogListResponse,
@@ -140,6 +143,7 @@ interface RunRow {
   agentName: string | null; model: string | null; request: string; status: RunLogStatus; startedAt: number; finishedAt: number | null;
   inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; totalTokens: number; measured: number;
   outputCount: number; number: number; needsReply: number; issueNumber: number | null; issueTitle: string | null;
+  checkSummary: string | null;
 }
 
 /** A thread is called by its conversation's title, or by the first thing asked in it. */
@@ -163,9 +167,10 @@ const RUN_SELECT = `
          r.finished_at AS finishedAt, r.input_tokens AS inputTokens, r.output_tokens AS outputTokens,
          r.cache_read_tokens AS cacheReadTokens, r.cache_write_tokens AS cacheWriteTokens, r.total_tokens AS totalTokens,
          r.measured, r.output_count AS outputCount, r.number, r.needs_reply AS needsReply,
-         i.number AS issueNumber, ${ISSUE_TITLE} AS issueTitle
+         i.number AS issueNumber, ${ISSUE_TITLE} AS issueTitle, k.summary_json AS checkSummary
     FROM run_log r
-    LEFT JOIN projects p ON p.id = r.project_id${ISSUE_JOINS}`;
+    LEFT JOIN projects p ON p.id = r.project_id${ISSUE_JOINS}
+    LEFT JOIN run_checks k ON k.run_id = r.run_id`;
 
 function toOutput(row: OutputRow): RunOutput {
   return {
@@ -183,6 +188,7 @@ function toRun(row: RunRow): RunLogEntry {
     runId: row.runId, projectId: row.projectId, projectName: row.projectName, conversationId: row.conversationId,
     agentId: row.agentId, agentName: row.agentName, model: row.model, request: row.request, status: row.status,
     startedAt: row.startedAt, finishedAt: row.finishedAt, outputCount: row.outputCount,
+    check: row.checkSummary ? JSON.parse(row.checkSummary) as RunCheckSummary : null,
     number: row.number, needsReply: row.needsReply === 1, issueNumber: row.issueNumber, issueTitle: row.issueNumber === null ? null : row.issueTitle,
     usage: {
       inputTokens: row.inputTokens, outputTokens: row.outputTokens, cacheReadTokens: row.cacheReadTokens,
@@ -253,6 +259,14 @@ export function createRunOutputStore(deps: RunOutputStoreDeps) {
     );
     CREATE INDEX IF NOT EXISTS idx_run_outputs_created ON run_outputs(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_run_outputs_run ON run_outputs(run_id);
+    CREATE TABLE IF NOT EXISTS run_checks (
+      run_id TEXT PRIMARY KEY,
+      state TEXT NOT NULL,
+      summary_json TEXT NOT NULL,
+      detail_json TEXT,
+      search_text TEXT NOT NULL DEFAULT '',
+      updated_at INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS run_issues (
       conversation_id TEXT PRIMARY KEY,
       number INTEGER NOT NULL UNIQUE
@@ -271,6 +285,11 @@ export function createRunOutputStore(deps: RunOutputStoreDeps) {
             GROUP BY conversation_id`);
   // Runs live in the daemon's memory, so a row still open when the store is created belongs to a daemon that stopped.
   db.prepare(`UPDATE run_log SET status = 'failed', finished_at = COALESCE(finished_at, ?) WHERE status = 'running'`).run(now());
+  // A check still pending belongs to a daemon that stopped before the run's snapshot could be compared.
+  for (const row of db.prepare(`SELECT run_id AS runId, summary_json AS summary FROM run_checks WHERE state = 'pending'`).all() as Array<{ runId: string; summary: string }>) {
+    const summary = { ...(JSON.parse(row.summary) as RunCheckSummary), state: 'failed', reason: 'restarted' } satisfies RunCheckSummary;
+    db.prepare(`UPDATE run_checks SET state = 'failed', summary_json = ?, updated_at = ? WHERE run_id = ?`).run(JSON.stringify(summary), now(), row.runId);
+  }
 
   const blobPath = (sha: string) => path.join(blobsDir, sha.slice(0, 2), sha);
   const outputById = (id: string): RunOutput | null => {
@@ -372,11 +391,37 @@ export function createRunOutputStore(deps: RunOutputStoreDeps) {
 
   function matchingRuns(query: RunLogListQuery): RunLogEntry[] {
     const needle = query.q?.trim().toLowerCase() ?? '';
+    const checked = needle
+      ? new Set((db.prepare(`SELECT run_id AS runId FROM run_checks WHERE instr(search_text, ?) > 0`).all(needle) as Array<{ runId: string }>).map((row) => row.runId))
+      : new Set<string>();
     return (db.prepare(`${RUN_SELECT} ORDER BY r.started_at DESC, r.number DESC LIMIT 50000`).all() as RunRow[]).map(toRun)
       .filter((run) => (!query.projectId || run.projectId === query.projectId) && (!query.agentId || run.agentId === query.agentId)
         && (!query.conversationId || run.conversationId === query.conversationId)
         && (!query.status || run.status === query.status) && (query.from === undefined || run.startedAt >= query.from)
-        && (query.to === undefined || run.startedAt < query.to) && (!needle || run.request.toLowerCase().includes(needle)));
+        && (query.to === undefined || run.startedAt < query.to) && (!needle || run.request.toLowerCase().includes(needle) || checked.has(run.runId)));
+  }
+
+  /** Stores what the check after a run found; the summary rides along with the run in every listing. */
+  function recordCheck(runId: string, record: RunCheckRecord): void {
+    const search = [...record.files.map((file) => file.path), ...record.touched.map((item) => item.label), ...record.apiChanges.map((change) => change.route)]
+      .join('\n').toLowerCase().slice(0, 200_000);
+    db.prepare(`INSERT INTO run_checks (run_id, state, summary_json, detail_json, search_text, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(run_id) DO UPDATE SET state = excluded.state, summary_json = excluded.summary_json, detail_json = excluded.detail_json,
+                search_text = excluded.search_text, updated_at = excluded.updated_at`)
+      .run(runId, record.summary.state, JSON.stringify(record.summary),
+        JSON.stringify({ files: record.files, apiChanges: record.apiChanges, touched: record.touched }), search, now());
+  }
+
+  /** A run named by its number (as `monofield queue check 12` does) or by its id. */
+  function checkDetail(runOrNumber: string): RunCheckDetailResponse | null {
+    const runId = /^\d+$/.test(runOrNumber)
+      ? (db.prepare(`SELECT run_id AS runId FROM run_log WHERE number = ?`).get(Number(runOrNumber)) as { runId: string } | undefined)?.runId ?? runOrNumber
+      : runOrNumber;
+    const row = db.prepare(`SELECT k.summary_json AS summary, k.detail_json AS detail, r.number FROM run_checks k JOIN run_log r ON r.run_id = k.run_id WHERE k.run_id = ?`)
+      .get(runId) as { summary: string; detail: string | null; number: number } | undefined;
+    if (!row) return null;
+    const detail = row.detail ? JSON.parse(row.detail) as Omit<RunCheckRecord, 'summary'> : { files: [], apiChanges: [], touched: [] };
+    return { runId, number: row.number, summary: JSON.parse(row.summary) as RunCheckSummary, ...detail };
   }
 
   /** The board: one entry per request thread, placed by what its newest run needs. */
@@ -511,5 +556,5 @@ export function createRunOutputStore(deps: RunOutputStoreDeps) {
     return removed;
   }
 
-  return { start, finish, list, runs, queue, usage, content, detail, restore, prune, output: outputById };
+  return { start, finish, list, runs, queue, usage, content, detail, restore, prune, recordCheck, checkDetail, output: outputById };
 }

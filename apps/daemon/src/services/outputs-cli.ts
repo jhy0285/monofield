@@ -2,8 +2,9 @@ import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type {
   RunLogEntry, RunLogListResponse, RunOutput, RunOutputDetailResponse, RunOutputListResponse, RunOutputRestoreResponse,
-  RunUsageBucket, RunUsageSummaryResponse, WorkIssue, WorkQueueResponse,
+  RunCheckDetailResponse, RunCheckSummary, RunUsageBucket, RunUsageSummaryResponse, WorkIssue, WorkQueueResponse,
 } from '@open-design/contracts';
+import { INTERFACE_SPEC_CHANGE_LABELS, INTERFACE_SPEC_LEVEL_LABELS } from '@open-design/contracts';
 
 const OUTPUTS_USAGE = `Usage:
   monofield outputs list    [--project <id>] [--agent <id>] [--format document|sheet|slides|image|data|web|media] [--run <run-id>] [--issue <n>]
@@ -22,10 +23,15 @@ restore puts that version back into the project; what it replaces is kept first 
 
 const QUEUE_USAGE = `Usage:
   monofield queue [--project <id>] [--agent <id>] [--status running|needs-reply|done|failed] [--json]
+  monofield queue check <run-number> [--json]
 
 The work queue: every request thread (a conversation with at least one AI run) with where it stands. running is still
 working, needs-reply ended on a question and waits for your answer, done finished, failed ended badly or was canceled.
-#<n> is the thread's number; see its files with monofield outputs list --issue <n>.`;
+#<n> is the thread's number; see its files with monofield outputs list --issue <n>.
+
+check shows what a run changed in a project folder that is a Git repository: the files, whether a caller of the
+project's API would notice (Spring controllers, compared with the interface-spec scanner, needs Python 3), and the
+APIs, screens, tables and classes the changed files declare. Changes the person made before the run are not counted.`;
 
 const USAGE_USAGE = `Usage:
   monofield usage      [--project <id>] [--agent <id>] [--days <n>] [--json]
@@ -57,10 +63,48 @@ export function formatOutputLine(output: RunOutput): string {
     + (output.request ? `\n    ${output.request}` : '');
 }
 
+/** A run's check in a few words, for one-line listings. */
+export function checkNote(check: RunCheckSummary | null): string {
+  if (!check) return '';
+  if (check.state === 'pending') return 'check: running';
+  if (check.state === 'skipped') return 'check: skipped (not a Git repository)';
+  if (check.state === 'failed') return `check: failed${check.reason === 'restarted' ? ' (the app restarted)' : ''}`;
+  const parts = [`${check.files} file(s) changed`];
+  if (check.api?.checked && check.api.level !== 'none') {
+    const { counts } = check.api;
+    parts.push(`API ${[counts.breaking ? `${counts.breaking} breaking` : '', counts.warning ? `${counts.warning} to review` : '', counts.info ? `${counts.info} additive` : ''].filter(Boolean).join(', ')}`);
+  } else if (check.api?.checked) parts.push('no API change');
+  else if (check.api) parts.push(`API not checked (${check.api.reason})`);
+  if (check.shared) parts.push('shared with another run');
+  return `check: ${parts.join(' · ')}`;
+}
+
+export function formatCheck(detail: RunCheckDetailResponse): string {
+  const { summary } = detail;
+  const lines = [`run ${detail.number} · ${checkNote(summary).replace(/^check: /, '')}`];
+  if (summary.message) lines.push(`  ${summary.message}`);
+  if (summary.api && !summary.api.checked && summary.api.message) lines.push(`  API check: ${summary.api.message}`);
+  if (summary.api?.checked) lines.push(`API: ${summary.api.endpoints.before} → ${summary.api.endpoints.after} endpoint(s)`);
+  for (const change of detail.apiChanges) {
+    const values = change.before !== undefined || change.after !== undefined ? ` ${change.before ?? '—'} → ${change.after ?? '—'}` : '';
+    lines.push(`  [${INTERFACE_SPEC_LEVEL_LABELS[change.level].en}] ${change.route} · ${INTERFACE_SPEC_CHANGE_LABELS[change.code].en}${change.field ? ` · ${change.field}` : ''}${values}`);
+  }
+  if (detail.touched.length) {
+    lines.push('touched:');
+    for (const item of detail.touched) lines.push(`  ${item.change.padEnd(7)}  ${item.kind.padEnd(6)}  ${item.label}`);
+  }
+  if (detail.files.length) {
+    lines.push('files:');
+    for (const file of detail.files) lines.push(`  ${file.status.padEnd(8)}  ${file.path}${file.from ? ` (from ${file.from})` : ''}`);
+  }
+  return lines.join('\n');
+}
+
 export function formatRunLine(run: RunLogEntry): string {
   const tokens = run.usage.measured ? `${count(run.usage.totalTokens)} tokens` : 'no usage reported';
   return `run ${run.number}${run.issueNumber !== null ? ` #${run.issueNumber}` : ''}  ${when(run.startedAt)}  ${run.status.padEnd(9)}  ${(run.agentName ?? '-').padEnd(12)}  ${tokens}  ${run.outputCount} file(s)  ${run.projectName ?? '-'}`
-    + `\n    ${run.request || '(no request text)'}`;
+    + `\n    ${run.request || '(no request text)'}`
+    + (run.check ? `\n    ${checkNote(run.check)}` : '');
 }
 
 function bucketLine(bucket: RunUsageBucket): string {
@@ -170,19 +214,27 @@ async function issueConversation(outputsRoot: string, issue: unknown): Promise<s
 export function formatIssueLine(issue: WorkIssue): string {
   const tokens = issue.totalTokens ? `${count(issue.totalTokens)} tokens` : 'no usage reported';
   return `#${issue.number}  ${issue.status.padEnd(11)}  ${issue.title}`
-    + `\n    ${issue.projectName ?? '-'} · ${issue.lastRun.agentName ?? '-'} · ${issue.runCount} run(s) · ${issue.outputCount} file(s) · ${tokens} · ${when(issue.updatedAt)}`;
+    + `\n    ${issue.projectName ?? '-'} · ${issue.lastRun.agentName ?? '-'} · ${issue.runCount} run(s) · ${issue.outputCount} file(s) · ${tokens} · ${when(issue.updatedAt)}`
+    + (issue.lastRun.check ? `\n    last run ${issue.lastRun.number}: ${checkNote(issue.lastRun.check)}` : '');
 }
 
 /** `monofield queue`, against /api/run-log/issues. */
 export async function runQueueCli(args: string[], helpers: Helpers): Promise<void> {
   const strings = new Set(['daemon-url', 'project', 'agent', 'status']);
   const flags = helpers.parseFlags(args, { string: strings, boolean: new Set(['json', 'help']) });
-  if (flags.help || helpers.positionalArgs(args, strings).length) {
+  const [command, target, ...extra] = helpers.positionalArgs(args, strings);
+  if (flags.help || (command && command !== 'check') || (command === 'check' && !target) || extra.length) {
     console.log(QUEUE_USAGE);
-    if (!flags.help) throw new Error('Use monofield queue --help.');
+    if (!flags.help) throw new Error('Use monofield queue [check <run-number>] --help.');
     return;
   }
   const base = (await helpers.baseUrl(flags)).replace(/\/$/, '');
+  if (command === 'check') {
+    const detail = await call<RunCheckDetailResponse>(`${base}/api/run-log/${encodeURIComponent(target!)}/check`);
+    console.log(flags.json ? JSON.stringify(detail, null, 2) : formatCheck(detail));
+    if (detail.summary.api?.checked && detail.summary.api.counts.breaking > 0) process.exitCode = 1;
+    return;
+  }
   const queue = await call<WorkQueueResponse>(`${base}/api/run-log/issues${search({ projectId: flags.project, agentId: flags.agent })}`);
   const issues = typeof flags.status === 'string' && flags.status ? queue.issues.filter((issue) => issue.status === flags.status) : queue.issues;
   if (flags.json) { console.log(JSON.stringify({ ...queue, issues }, null, 2)); return; }

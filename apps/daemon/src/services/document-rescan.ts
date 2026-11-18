@@ -79,7 +79,8 @@ export function findPython(candidates = defaultPythons()): Promise<{ command: st
   return found;
 }
 
-async function git(cwd: string, args: string[], options: { env?: NodeJS.ProcessEnv; input?: string } = {}): Promise<string> {
+/** Runs git without a pager, prompts or optional locks; rejects with git's message. */
+export async function git(cwd: string, args: string[], options: { env?: NodeJS.ProcessEnv; input?: string } = {}): Promise<string> {
   const child = execFile('git', ['--no-pager', ...args], {
     cwd, encoding: 'utf8', timeout: 120_000, maxBuffer: 64 * 1024 * 1024, windowsHide: true,
     env: { ...process.env, GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0', ...options.env },
@@ -113,6 +114,8 @@ async function exportRevision(codeRoot: string, revision: string, scratch: strin
     await git(top, ['read-tree', revision], { env });
     await git(top, ['checkout-index', '-z', '--stdin', `--prefix=${tree.split(path.sep).join('/')}/`], { env, input: files.join('\0') });
   }
+  // A side with no scanned sources is still a folder to scan: it has no endpoints.
+  await mkdir(path.join(tree, prefix), { recursive: true });
   return path.join(tree, prefix);
 }
 
@@ -156,9 +159,9 @@ export async function rescanCode(options: {
 
 async function scannerFor(scriptsDir: string, pythons?: RescanOptions['pythons']) {
   const script = path.join(scriptsDir, RESCAN_SCANNERS['static-spring']!);
-  await access(script).catch(() => { throw new Error(`the scanner is not installed (${script})`); });
+  await access(script).catch(() => { throw Object.assign(new Error(`the scanner is not installed (${script})`), { code: 'NO_SCANNER' }); });
   const python = await findPython(pythons);
-  if (!python) throw new Error('Python 3 was not found; install Python 3 and make `python` or `python3` available');
+  if (!python) throw Object.assign(new Error('Python 3 was not found; install Python 3 and make `python` or `python3` available'), { code: 'NO_PYTHON' });
   return { script, python };
 }
 
@@ -212,6 +215,31 @@ export async function compareCodeWithRevision(options: RescanOptions & { codeRoo
     const after = await scan(python, script, options.codeRoot, path.join(scratch, 'after.json'), timeout);
     return {
       baseRevision,
+      report: compareInterfaceSpecDocuments(before, after),
+      endpoints: { before: before.endpoints.length, after: after.endpoints.length },
+    };
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
+}
+
+/**
+ * What a caller of the API would notice between two snapshots of the code (any tree-ish: a commit, or a tree written
+ * from the working state). Both sides are checked out into temporary folders, so neither the person's checkout nor
+ * their index is touched. Throws an error with `code` `NO_SCANNER` or `NO_PYTHON` when it cannot run here.
+ */
+export async function compareCodeTrees(options: RescanOptions & { codeRoot: string; before: string; after: string }): Promise<{
+  report: InterfaceSpecCompatibilityReport; endpoints: { before: number; after: number };
+}> {
+  const { script, python } = await scannerFor(options.scriptsDir, options.pythons);
+  const timeout = options.timeoutMs ?? 300_000;
+  const scratch = await mkdtemp(path.join(os.tmpdir(), 'monofield-run-check-'));
+  try {
+    const beforeCode = await exportRevision(options.codeRoot, options.before, path.join(scratch, 'before'));
+    const afterCode = await exportRevision(options.codeRoot, options.after, path.join(scratch, 'after'));
+    const before = await scan(python, script, beforeCode, path.join(scratch, 'before.json'), timeout);
+    const after = await scan(python, script, afterCode, path.join(scratch, 'after.json'), timeout);
+    return {
       report: compareInterfaceSpecDocuments(before, after),
       endpoints: { before: before.endpoints.length, after: after.endpoints.length },
     };

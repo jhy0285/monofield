@@ -83,6 +83,43 @@ describe('work log on the run service', () => {
     expect(store.queue({}).issues.map((issue) => issue.status)).toEqual(['needs-reply']);
   });
 
+  it('starts the agent after the start hook settles, and not at all when the run was stopped meanwhile', async () => {
+    const order: string[] = [];
+    let release!: () => void;
+    const service = createChatRunService({
+      createSseResponse: () => ({ send() {}, end() {} }),
+      createSseErrorPayload: (code: string, message: string) => ({ code, message }),
+      onStart: () => new Promise<void>((resolve) => { release = () => { order.push('snapshot'); resolve(); }; }),
+    });
+    const first = service.create({ agentId: 'codex' });
+    service.start(first, async () => { order.push('agent'); service.finish(first, 'succeeded', 0, null); });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(order).toEqual([]);
+    release();
+    await service.wait(first);
+    expect(order).toEqual(['snapshot', 'agent']);
+
+    const stopped = service.create({ agentId: 'codex' });
+    service.start(stopped, async () => { order.push('stopped agent'); });
+    await service.cancel(stopped);
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(order).not.toContain('stopped agent');
+    expect(stopped.status).toBe('canceled');
+  });
+
+  it('does not wait forever for a start hook that never settles', async () => {
+    const service = createChatRunService({
+      createSseResponse: () => ({ send() {}, end() {} }),
+      createSseErrorPayload: (code: string, message: string) => ({ code, message }),
+      onStart: () => new Promise<void>(() => {}),
+      startHookWaitMs: 30,
+    });
+    const run = service.create({ agentId: 'codex' });
+    service.start(run, async () => { service.finish(run, 'succeeded', 0, null); });
+    expect(((await service.wait(run)) as { status: string }).status).toBe('succeeded');
+  });
+
   it('logs a run that has no project without looking at any folder', async () => {
     const run = runs.create({ agentId: 'codex', currentPrompt: '질문 하나' });
     runs.start(run, async () => { runs.finish(run, 'canceled', null, 'SIGTERM'); });

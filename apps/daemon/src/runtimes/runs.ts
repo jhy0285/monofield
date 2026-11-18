@@ -40,7 +40,10 @@ export function createChatRunService({
   // Called once when a run is handed to its starter and once when it reaches a
   // terminal status, whichever route or scheduler created it. The work log
   // (services/run-outputs.ts) hangs here. A throwing hook never fails a run.
-  onStart = null as null | ((run: any) => void),
+  // onStart may return a promise (the check after a run snapshots the folder
+  // first); the agent starts once it settles, or after startHookWaitMs.
+  onStart = null as null | ((run: any) => void | Promise<void>),
+  startHookWaitMs = 5_000,
   onFinish = null as null | ((run: any) => void),
 }) {
   const runs = new Map();
@@ -334,10 +337,22 @@ export function createChatRunService({
       ...(run.analyticsTelemetry ?? {}),
       startRequestedAt: Date.now(),
     };
-    try { onStart?.(run); } catch (err) { console.warn('[runs] start hook failed', err); }
-    void starter(run).catch((err) => {
-      fail(run, 'AGENT_EXECUTION_FAILED', err instanceof Error ? err.message : String(err));
-    });
+    let ready: void | Promise<void> = undefined;
+    try { ready = onStart?.(run); } catch (err) { console.warn('[runs] start hook failed', err); }
+    const begin = () => {
+      // Stopped while the start hook ran: nothing to start.
+      if (TERMINAL_RUN_STATUSES.has(run.status)) return;
+      void starter(run).catch((err) => {
+        fail(run, 'AGENT_EXECUTION_FAILED', err instanceof Error ? err.message : String(err));
+      });
+    };
+    if (ready && typeof (ready as Promise<void>).then === 'function') {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const waited = new Promise<void>((resolve) => { timer = setTimeout(resolve, startHookWaitMs); });
+      void Promise.race([(ready as Promise<void>).catch(() => undefined), waited]).then(() => { clearTimeout(timer); begin(); });
+    } else {
+      begin();
+    }
     return run;
   };
 

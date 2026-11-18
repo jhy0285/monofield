@@ -91,6 +91,14 @@ export function registerRunOutputRoutes(app: Express, deps: RegisterRunOutputRou
   app.get('/api/run-log', local, (req, res) => {
     try { res.set('Cache-Control', 'no-store').json(runOutputs.runs(runLogListQuery(req.query))); } catch (error) { fail(res, error); }
   });
+  // What the check after a run found: changed files, API compatibility, touched declarations.
+  app.get('/api/run-log/:runId/check', local, (req, res) => {
+    try {
+      const detail = runOutputs.checkDetail(String(req.params.runId));
+      if (!detail) return deps.http.sendApiError(res, 404, 'RUN_CHECK_NOT_FOUND', 'This run has no check (it had no code folder, or ran before checks existed).');
+      res.set('Cache-Control', 'no-store').json(detail);
+    } catch (error) { fail(res, error); }
+  });
   // The board: request threads by what their newest run needs.
   app.get('/api/run-log/issues', local, (req, res) => {
     try { res.set('Cache-Control', 'no-store').json(runOutputs.queue(runLogListQuery(req.query))); } catch (error) { fail(res, error); }
