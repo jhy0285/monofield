@@ -64,11 +64,10 @@ As of 2026-11-18.
   reviewed spec diffs). It is an independent fork of the Apache-2.0 Open Design
   project; see `docs/adr/0002-upstream-maintenance.md` (status: Proposed, only
   phase A done).
-- Version: `0.11.7-preview.11` (root `package.json`), published on 2026-11-11 as a GitHub prerelease (preview channel, unsigned)
-  from `b403fac` on `main`: Kotlin reading, the duplicate-row fix and method-list changes as one change, on top of preview.10.
-  Not released, on the branch only (2026-11-12): `monofield docs scan` / `docs check` and routes split by Spring `params`.
-  Also on the branch only: the work queue (board, results, work log; `monofield queue`, `monofield outputs`, `monofield usage`).
-  Also on the branch only: the check after every run (Git snapshots, Spring API compatibility, touched declarations; `monofield queue check`).
+- Version: `0.11.7-preview.12` (root `package.json`), prepared on 2026-11-18 and not yet published: `monofield docs scan` /
+  `docs check`, routes split by Spring `params`, the work queue (board, results, work log; `monofield queue`, `outputs`, `usage`),
+  the check after every run (`monofield queue check`) and the Excel sheet-name fix. The last published preview is
+  `0.11.7-preview.11` (2026-11-11, from `b403fac`).
   Stable `latest` is still `v0.11.6`. Workspace packages are
   still named `@open-design/*`; env vars still use the `OD_*` prefix.
 - Shape: pnpm monorepo. `apps/daemon` (Express + SQLite, `monofield` CLI) and
@@ -583,6 +582,14 @@ Code health:
   only is implemented). It cannot be verified without those databases.
 
 ## Log
+
+### 2026-11-18 — 0.11.7-preview.12 prepared (`ccr-8432aecf-n9xdfd`)
+
+- **Changed:** the five release package versions. Ships everything since preview.11: `docs scan` / `docs check`, routes split by
+  `params`, the work queue, the check after every run and the Excel sheet-name fix. The user asked for this preview to try the
+  work queue and the check with the real Codex CLI on their company PC.
+- **Next agent:** full CI on this commit, fast-forward `main`, dispatch `release-windows`, then pin the site, READMEs, guide and
+  `docs/releases/0.11.7-preview.12.md`.
 
 ### 2026-11-18 — Excel sheet names follow every Excel rule; eGovFrame renders to Excel (`ccr-8432aecf-n9xdfd`)
 
