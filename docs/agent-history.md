@@ -618,7 +618,8 @@ Code health:
   (cancel endpoint) and "API 호환성 깨짐 4" (totalAmount removed from 4 routes including the new one); `monofield queue check 3`
   printed the four breaking rows and exited 1; Playwright drove board → badge → dialog and the work-log search for `cancel`; no
   page errors.
-- Full daemon suite: still running when this entry was committed; the result is in the commit after this one.
+- Full daemon suite (707 s): 482 files / 5742 tests passed; 1 file failed with one test, `tests/mcp-spawn.test.ts`, a recorded
+  baseline failure of this environment (`tests/run-resume-on-failure.test.ts`, the other baseline failure, passed this time).
 - Not run / not done: real Codex CLI, Windows (paths with backslashes in `RUNTIME_PATHS` matching are untested), the packaged app,
   a large repository (snapshot cost on tens of thousands of files is not measured), `e2e/ui`. No release.
 - Limits: the API comparison is Spring only; touched declarations are per changed file (no call-graph propagation to callers);
